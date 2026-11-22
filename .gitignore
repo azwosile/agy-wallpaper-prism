@@ -1,0 +1,15 @@
+# Dependencies & OS artifacts
+node_modules/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Runtime & temporary test artifacts (note: sidecars/prism_studio/index.html is intentionally tracked!)
+*.log
+*.tmp
+*.tmp.*
+.studio-data/
+out-host/
+test/.tmp*/
+test/tmp*/
+test/out*/

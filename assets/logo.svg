@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none">
+  <defs>
+    <linearGradient id="prismFrame" x1="36" y1="30" x2="220" y2="226" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E2436" />
+      <stop offset="52%" stop-color="#121521" />
+      <stop offset="100%" stop-color="#0B0D14" />
+    </linearGradient>
+    <linearGradient id="prismRim" x1="32" y1="28" x2="224" y2="228" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#93C5FD" stop-opacity="0.85" />
+      <stop offset="50%" stop-color="#A58AF8" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#50A37B" stop-opacity="0.75" />
+    </linearGradient>
+    <linearGradient id="facetLeft" x1="72" y1="62" x2="128" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8AB4F8" />
+      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.72" />
+    </linearGradient>
+    <linearGradient id="facetRight" x1="128" y1="62" x2="188" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#CBA6F7" />
+      <stop offset="55%" stop-color="#7AA2F7" />
+      <stop offset="100%" stop-color="#50A37B" />
+    </linearGradient>
+    <linearGradient id="beam" x1="146" y1="126" x2="216" y2="156" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.92" />
+      <stop offset="45%" stop-color="#669DF6" stop-opacity="0.78" />
+      <stop offset="100%" stop-color="#A58AF8" stop-opacity="0.0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded glass island tile with >12% outer safety margin (28..228 inside 256) -->
+  <rect x="28" y="28" width="200" height="200" rx="46" fill="url(#prismFrame)" stroke="url(#prismRim)" stroke-width="5" />
+  <path d="M52 40H204" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="2.5" stroke-linecap="round" />
+
+  <!-- Subtle incoming light ray -->
+  <path d="M44 140L106 122" stroke="#E2E8F0" stroke-opacity="0.85" stroke-width="5" stroke-linecap="round" />
+
+  <!-- Dispersed spectral rays -->
+  <path d="M150 116L210 98" stroke="#669DF6" stroke-width="5" stroke-linecap="round" />
+  <path d="M154 128L212 128" stroke="#A58AF8" stroke-width="5" stroke-linecap="round" />
+  <path d="M150 140L208 158" stroke="#50A37B" stroke-width="5" stroke-linecap="round" />
+  <polygon points="148,112 212,94 212,162 148,144" fill="url(#beam)" opacity="0.26" />
+
+  <!-- Central faceted crystal diamond -->
+  <polygon points="128,58 76,132 128,198" fill="url(#facetLeft)" />
+  <polygon points="128,58 180,132 128,198" fill="url(#facetRight)" />
+  <polygon points="128,58 102,132 128,154 154,132" fill="#FFFFFF" fill-opacity="0.26" />
+  <polygon points="128,58 76,132 128,198 180,132" stroke="#F8FAFC" stroke-opacity="0.9" stroke-width="3.5" stroke-linejoin="round" />
+  <line x1="128" y1="58" x2="128" y2="198" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2" />
+  <line x1="76" y1="132" x2="180" y2="132" stroke="#FFFFFF" stroke-opacity="0.38" stroke-width="2" />
+</svg>

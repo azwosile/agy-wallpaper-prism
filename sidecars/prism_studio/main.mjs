@@ -1,0 +1,952 @@
+#!/usr/bin/env node
+// Unified Authoritative Backend for agy-wallpaper-prism (Sidecar HTTP Server + Passive CDP Bridge).
+// Serves Sidecar Studio UI (0 Agent Tokens) + all /api/* routes + Passive CDP Host Controller.
+
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { Readable } from 'node:stream';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import {
+  DEFAULT_DEBUG_PORT,
+  PLUGIN_ID,
+  PLUGIN_VERSION,
+  SCENE_PRESETS,
+  SCENE_PRESET_IDS,
+  SIDECAR_URI,
+} from '../../src/shared/schema.mjs';
+import { createWallpaperPrismEngine } from '../../src/engine/index.mjs';
+import * as hostModule from '../../src/host/index.mjs';
+import {
+  createDebugShortcut,
+  createPassiveCdpBridge,
+  disableNormalShortcutAutoLoad,
+  enableNormalShortcutAutoLoad,
+  inspectNormalShortcuts,
+} from './cdp-bridge.mjs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PLUGIN_ROOT = resolve(__dirname, '..', '..');
+const INDEX_HTML_PATH = join(__dirname, 'index.html');
+const MAX_JSON_BYTES = 16 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+
+const PRELOAD_SHIM_JS = `(function() {
+  var params = new URLSearchParams(window.location.search);
+  var boot = window.__SIDECAR_BOOT__ || {};
+  var token = params.get('token') || boot.token || '';
+  var conversationId = params.get('conversationId') || boot.conversationId || '';
+  var workspaceUris = [];
+  var wsListeners = new Set();
+
+  window.addEventListener('message', function(event) {
+    if (!event.data || typeof event.data !== 'object') return;
+    if (event.data.type === 'theme-change') {
+      var vars = (event.data.payload && event.data.payload.cssVariables) || {};
+      Object.keys(vars).forEach(function(k) {
+        document.documentElement.style.setProperty(k, vars[k]);
+      });
+      window.dispatchEvent(new CustomEvent('prism-host-theme', { detail: vars }));
+    } else if (event.data.type === 'prism-theme-sync') {
+      window.dispatchEvent(new CustomEvent('prism-theme-sync', { detail: event.data.payload || {} }));
+    } else if (event.data.type === 'workspace-change') {
+      var list = (event.data.payload && event.data.payload.workspaceUris) || [];
+      workspaceUris = Array.isArray(list) ? list.slice() : [];
+      wsListeners.forEach(function(fn) { try { fn(workspaceUris.slice()); } catch (_) {} });
+    }
+  });
+
+  function secureFetch(url, options) {
+    var init = Object.assign({}, options || {});
+    var headers = new Headers(init.headers || {});
+    if (token) headers.set('X-Sidecar-Token', token);
+    if (init.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    init.headers = headers;
+    return window.fetch(url, init);
+  }
+
+  if (!window.sidecar) {
+    window.sidecar = {
+      conversationId: conversationId,
+      fetch: secureFetch,
+      getWorkspaceUris: function() { return Promise.resolve(workspaceUris.slice()); },
+      onWorkspaceChange: function(fn) {
+        if (typeof fn !== 'function') return function() {};
+        wsListeners.add(fn);
+        return function() { wsListeners.delete(fn); };
+      },
+      ui: {
+        toggleAuxPane: function(req) {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'toggle-aux-pane', payload: req || {} }, '*');
+          }
+        }
+      }
+    };
+  }
+})();`;
+
+function resolveDefaultDataDir() {
+  if (process.env.AGY_PRISM_DATA_DIR) return resolve(process.env.AGY_PRISM_DATA_DIR);
+  return join(homedir(), '.agy-wallpaper-prism');
+}
+
+function injectBootIntoHtml(rawHtml, token = '', conversationId = '') {
+  const bootTag = `<script>window.__SIDECAR_BOOT__=${JSON.stringify({ token, conversationId })};</script>`;
+  let html = rawHtml.includes('</head>') ? rawHtml.replace('</head>', `${bootTag}\n</head>`) : `${bootTag}\n${rawHtml}`;
+  if (token) {
+    html = html.replace(/src=(["'])\/preload\.js\1/g, `src=$1/preload.js?token=${encodeURIComponent(token)}$1`);
+  }
+  return html;
+}
+
+function sendJson(res, status, payload, extraHeaders = {}) {
+  const body = JSON.stringify(payload);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+    ...extraHeaders,
+  });
+  res.end(body);
+}
+
+function readJsonBody(req, maxBytes = MAX_JSON_BYTES) {
+  return new Promise((resolvePromise, reject) => {
+    const chunks = [];
+    let total = 0;
+    req.on('data', (chunk) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        reject(new Error('JSON request body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (total === 0) {
+        resolvePromise({});
+        return;
+      }
+      try {
+        resolvePromise(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      } catch (err) {
+        reject(new Error(`Invalid JSON body: ${err.message}`));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function readRawBuffer(req, maxBytes = MAX_UPLOAD_BYTES) {
+  return new Promise((resolvePromise, reject) => {
+    const chunks = [];
+    let total = 0;
+    req.on('data', (chunk) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        reject(new Error(`Upload exceeds ${Math.round(maxBytes / (1024 * 1024))} MB limit`));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolvePromise(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+/**
+ * Create and start the unified Prism Studio HTTP server + Engine + optional Passive CDP Bridge.
+ */
+export async function createPrismStudioServer(options = {}) {
+  const dataDir = options.dataDir ? resolve(options.dataDir) : resolveDefaultDataDir();
+  const sidecarExecDataDir = process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR
+    ? resolve(process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR)
+    : dataDir;
+  mkdirSync(dataDir, { recursive: true });
+
+  const envPort = parseInt(
+    process.env.ANTIGRAVITY_SIDECAR_WEB_PORT ||
+      process.env.ANTIGRAVITY_SIDECAR_PORT ||
+      process.env.PORT ||
+      '',
+    10,
+  );
+  const listenPort = options.port !== undefined ? Number(options.port) : Number.isFinite(envPort) ? envPort : 0;
+  const authToken =
+    options.token !== undefined
+      ? String(options.token || '')
+      : String(
+          process.env.ANTIGRAVITY_SIDECAR_UI_TOKEN ||
+            process.env.ANTIGRAVITY_SIDECAR_AUTH_TOKEN ||
+            process.env.ANTIGRAVITY_SIDECAR_WEB_TOKEN ||
+            '',
+        );
+
+  const engine =
+    options.engine ||
+    (await createWallpaperPrismEngine({
+      dataDir,
+      pluginRoot: PLUGIN_ROOT,
+      sidecarDataDir: sidecarExecDataDir,
+    }));
+  if (typeof engine.init === 'function') {
+    await engine.init();
+  }
+
+  let cdpBridge = null;
+  const defaultSearchDirs = Array.isArray(options.shortcutSearchDirs) ? options.shortcutSearchDirs : null;
+  let cachedAutostart = null;
+  let cachedAutostartAt = 0;
+  let autostartRefreshPromise = null;
+
+  const getAutostartStatus = async ({ force = false, searchDirs = defaultSearchDirs, port = DEFAULT_DEBUG_PORT } = {}) => {
+    const useCustomDirs = Array.isArray(searchDirs) && searchDirs !== defaultSearchDirs;
+    if (!force && !useCustomDirs && cachedAutostart && Date.now() - cachedAutostartAt < 15_000) {
+      return cachedAutostart;
+    }
+    if (!force && !useCustomDirs && cachedAutostart) {
+      if (!autostartRefreshPromise) {
+        autostartRefreshPromise = inspectNormalShortcuts({ searchDirs: defaultSearchDirs, dataDir, port })
+          .then((res) => {
+            cachedAutostart = res;
+            cachedAutostartAt = Date.now();
+            return res;
+          })
+          .catch(() => cachedAutostart)
+          .finally(() => {
+            autostartRefreshPromise = null;
+          });
+      }
+      return cachedAutostart;
+    }
+    const fresh = await inspectNormalShortcuts({ searchDirs, dataDir, port });
+    if (!useCustomDirs) {
+      cachedAutostart = fresh;
+      cachedAutostartAt = Date.now();
+    }
+    return fresh;
+  };
+
+  const normalizeLibrary = async (refresh = false) => {
+    const raw = await engine.listLibrary({ refresh: Boolean(refresh) });
+    if (Array.isArray(raw)) {
+      return {
+        items: raw,
+        stats: { total: raw.length },
+      };
+    }
+    return {
+      items: Array.isArray(raw?.items) ? raw.items : [],
+      stats: raw?.stats && typeof raw.stats === 'object' ? raw.stats : { total: Array.isArray(raw?.items) ? raw.items.length : 0 },
+    };
+  };
+
+  const resolveActiveItem = async (cfg) => {
+    if (typeof engine.getActivePayload === 'function') {
+      const p = await engine.getActivePayload();
+      if (p && typeof p === 'object') {
+        if ('activeItem' in p) return p.activeItem;
+        if ('item' in p) return p.item;
+        if (p.id && p.kind) return p;
+      }
+    }
+    const activeId = cfg?.activeWallpaperId || cfg?.wallpaperId || '';
+    if (!activeId) return null;
+    const lib = await normalizeLibrary(false);
+    return lib.items.find((i) => i.id === activeId) || null;
+  };
+
+  const buildCanonicalState = async () => {
+    let config;
+    let activeItem = null;
+    let presets = [];
+    let stats = {};
+    let mediaOrigin = '';
+
+    // Fast O(1) state read (<0.3ms): engine.getActivePayload() returns in-memory config, activeItem, presets, and stats directly without re-scanning or re-mapping the library!
+    if (typeof engine.getActivePayload === 'function') {
+      const p = await engine.getActivePayload();
+      if (p && typeof p === 'object' && p.config) {
+        config = p.config;
+        activeItem = p.activeItem ?? null;
+        presets = Array.isArray(p.presets) ? p.presets : [];
+        stats = p.stats && typeof p.stats === 'object' ? p.stats : {};
+        mediaOrigin = String(p.mediaOrigin || '');
+      }
+    }
+    if (!config) {
+      config = await engine.getConfig();
+      activeItem = await resolveActiveItem(config);
+      const lib = await normalizeLibrary(false);
+      stats = lib.stats;
+      const presetsRaw = typeof engine.listPresets === 'function' ? await engine.listPresets() : [];
+      presets = Array.isArray(presetsRaw) ? presetsRaw : presetsRaw?.presets || [];
+      mediaOrigin = typeof engine.getMediaOrigin === 'function' ? engine.getMediaOrigin() : '';
+    }
+
+    const autostart =
+      options.inspectShortcuts === false
+        ? {
+            supported: process.platform === 'win32',
+            normalShortcutEnabled: false,
+            anyShortcutEnabled: false,
+            port: config.debugPort || DEFAULT_DEBUG_PORT,
+            sidecarAutoStartsOnBoot: true,
+            autoRestoreLastSettings: true,
+            shortcuts: [],
+            patchedShortcuts: [],
+          }
+        : await getAutostartStatus({ force: false, port: config.debugPort || DEFAULT_DEBUG_PORT });
+
+    const baseHostStatus = cdpBridge
+      ? cdpBridge.getStatus()
+      : {
+          phase: 'standby',
+          cdpReachable: false,
+          port: config.debugPort || DEFAULT_DEBUG_PORT,
+          pluginEnabled: true,
+          attachedTargets: [],
+          attachedCount: 0,
+          version: PLUGIN_VERSION,
+        };
+    const hostStatus = {
+      ...baseHostStatus,
+      normalShortcutEnabled: Boolean(autostart.normalShortcutEnabled),
+      anyShortcutEnabled: Boolean(autostart.anyShortcutEnabled),
+      patchedShortcuts: autostart.patchedShortcuts || [],
+      shortcuts: autostart.shortcuts || [],
+      sidecarAutoStartsOnBoot: true,
+      autoRestoreLastSettings: true,
+    };
+    return {
+      config,
+      activeItem,
+      skinEnabled: config.skinEnabled !== false,
+      presets,
+      hostStatus,
+      autostart,
+      normalShortcutEnabled: hostStatus.normalShortcutEnabled,
+      patchedShortcuts: hostStatus.patchedShortcuts,
+      sidecarAutoStartsOnBoot: true,
+      autoRestoreLastSettings: true,
+      stats,
+      mediaOrigin,
+      pid: process.pid,
+      version: PLUGIN_VERSION,
+      studioUri: SIDECAR_URI,
+    };
+  };
+
+  let pushScheduled = false;
+  const pushToHost = async () => {
+    if (!cdpBridge || pushScheduled) return;
+    pushScheduled = true;
+    try {
+      await cdpBridge.broadcastState().catch(() => {});
+    } finally {
+      pushScheduled = false;
+    }
+  };
+
+  const applyAnyPreset = async (presetId) => {
+    const id = String(presetId || '').trim();
+    if (!id) throw new Error('Missing presetId');
+    if (SCENE_PRESET_IDS.includes(id)) {
+      await engine.updateConfig({ ...SCENE_PRESETS[id].patch, skinEnabled: true });
+    } else if (typeof engine.applyPreset === 'function') {
+      await engine.applyPreset(id);
+      await engine.updateConfig({ skinEnabled: true });
+    } else {
+      throw new Error(`Unknown preset: ${id}`);
+    }
+    await pushToHost();
+    return buildCanonicalState();
+  };
+
+  const rpcHandlers = {
+    'state.get': () => buildCanonicalState(),
+    'bootstrap.get': () => buildCanonicalState(),
+    'library.list': async (params = {}) => normalizeLibrary(Boolean(params.refresh)),
+    'config.set': async (params = {}) => {
+      const patch = params.patch && typeof params.patch === 'object' ? params.patch : params;
+      await engine.updateConfig(patch, { debounce: true });
+      await pushToHost();
+      return buildCanonicalState();
+    },
+    'prefs.set': async (params = {}) => {
+      const patch = params.patch && typeof params.patch === 'object' ? params.patch : params;
+      await engine.updateConfig(patch, { debounce: true });
+      await pushToHost();
+      return buildCanonicalState();
+    },
+    'config.reset': async (params = {}) => {
+      await engine.resetConfig(params.scope || 'all');
+      await pushToHost();
+      return buildCanonicalState();
+    },
+    'prefs.reset': async (params = {}) => {
+      await engine.resetConfig(params.scope || 'all');
+      await pushToHost();
+      return buildCanonicalState();
+    },
+    'wallpaper.apply': async (params = {}) => {
+      const wid = String(params.wallpaperId || params.id || '');
+      await engine.applyWallpaper(wid, { ...(params.patch || {}), skinEnabled: true });
+      await pushToHost();
+      return buildCanonicalState();
+    },
+    'playlist.step': async (params = {}) => {
+      const dir = Number(params.direction) === -1 ? -1 : 1;
+      await engine.stepPlaylist(dir, String(params.reason || 'rpc'));
+      await pushToHost();
+      return buildCanonicalState();
+    },
+    'preset.apply': async (params = {}) => applyAnyPreset(params.presetId || params.id || params.name),
+    'accent.save': async (params = {}) => {
+      const cfg = await engine.getConfig();
+      const wid = String(params.wallpaperId || cfg.activeWallpaperId || '');
+      const entry = {
+        wallpaperId: wid,
+        darkHex: String(params.darkHex || '#669DF6'),
+        lightHex: String(params.lightHex || '#2563EB'),
+        tintRgb: String(params.tintRgb || '102, 157, 246'),
+      };
+      const prev = cfg.extractedAccent;
+      const prevCached = wid && cfg.accentCache ? cfg.accentCache[wid] : null;
+      if (
+        prev &&
+        prev.wallpaperId === entry.wallpaperId &&
+        prev.darkHex === entry.darkHex &&
+        prev.lightHex === entry.lightHex &&
+        prev.tintRgb === entry.tintRgb &&
+        (!wid || prevCached)
+      ) {
+        return { ok: true, extractedAccent: entry, unchanged: true };
+      }
+      const accentCache = { ...(cfg.accentCache || {}) };
+      if (wid) accentCache[wid] = entry;
+      await engine.updateConfig({ extractedAccent: entry, accentCache });
+      await pushToHost();
+      return { ok: true, extractedAccent: entry };
+    },
+    'skin.restore': async () => {
+      await engine.updateConfig({ skinEnabled: false });
+      await pushToHost();
+      return buildCanonicalState();
+    },
+    'autostart.get': async (params = {}) => {
+      const cfg = await engine.getConfig();
+      return getAutostartStatus({ force: Boolean(params.refresh), port: cfg.debugPort || DEFAULT_DEBUG_PORT });
+    },
+    'autostart.set': async (params = {}) => {
+      const enabled = params.enabled !== false;
+      const cfg = await engine.getConfig();
+      const port = Number(params.port || cfg.debugPort || DEFAULT_DEBUG_PORT);
+      const res = enabled
+        ? await enableNormalShortcutAutoLoad({ port, searchDirs: defaultSearchDirs, dataDir })
+        : await disableNormalShortcutAutoLoad({ searchDirs: defaultSearchDirs, dataDir });
+      cachedAutostart = res;
+      cachedAutostartAt = Date.now();
+      return { ok: res.ok, autostart: res, state: await buildCanonicalState() };
+    },
+    'studio.open': async () => ({ ok: true, uri: SIDECAR_URI }),
+  };
+
+  if (options.startCdp !== false && process.env.AGY_PRISM_DISABLE_CDP !== '1') {
+    cdpBridge = createPassiveCdpBridge({
+      getEngineState: buildCanonicalState,
+      hostScripts: hostModule,
+      rpcHandlers,
+      pollMs: options.cdpPollMs ?? 3000,
+      configPath: options.hostConfigPath || '',
+      profileDir: options.profileDir || '',
+      log: options.log || (() => {}),
+    });
+    await cdpBridge.start().catch(() => {});
+  }
+
+  if (engine.events && typeof engine.events.on === 'function') {
+    for (const evName of ['skin', 'state', 'wallpaper', 'rotation']) {
+      engine.events.on(evName, () => {
+        void pushToHost();
+      });
+    }
+  }
+
+  const validateToken = (req, urlObj) => {
+    if (!authToken) return true;
+    const headerTok = typeof req.headers['x-sidecar-token'] === 'string' ? req.headers['x-sidecar-token'].trim() : '';
+    const queryTok = (urlObj.searchParams.get('token') || '').trim();
+    return headerTok === authToken || queryTok === authToken;
+  };
+
+  const handleRequest = async (req, res) => {
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Sidecar-Token',
+      });
+      res.end();
+      return;
+    }
+
+    const urlObj = new URL(req.url || '/', 'http://127.0.0.1');
+    const pathname = urlObj.pathname;
+
+    // Static UI & Preload
+    if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
+      const indexHtml = existsSync(INDEX_HTML_PATH)
+        ? readFileSync(INDEX_HTML_PATH, 'utf8')
+        : '<!doctype html><html><body><div id="app">Run node scripts/build.mjs first.</div></body></html>';
+      const tok = urlObj.searchParams.get('token') || authToken;
+      const convId = urlObj.searchParams.get('conversationId') || '';
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(injectBootIntoHtml(indexHtml, tok, convId));
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/preload.js') {
+      res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(PRELOAD_SHIM_JS);
+      return;
+    }
+
+    if (req.method !== 'GET' && !validateToken(req, urlObj)) {
+      sendJson(res, 401, { ok: false, error: 'Unauthorized: missing or invalid X-Sidecar-Token' });
+      return;
+    }
+
+    // ---- GET APIs ----
+    if (req.method === 'GET' && pathname === '/api/bootstrap') {
+      sendJson(res, 200, await buildCanonicalState());
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/library') {
+      const refresh = urlObj.searchParams.get('refresh') === '1' || urlObj.searchParams.get('refresh') === 'true';
+      sendJson(res, 200, await normalizeLibrary(refresh));
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/status') {
+      const st = await buildCanonicalState();
+      sendJson(res, 200, {
+        ok: true,
+        hostStatus: st.hostStatus,
+        autostart: st.autostart,
+        normalShortcutEnabled: st.normalShortcutEnabled,
+        patchedShortcuts: st.patchedShortcuts,
+        sidecarAutoStartsOnBoot: true,
+        autoRestoreLastSettings: true,
+        stats: st.stats,
+        skinEnabled: st.skinEnabled,
+        activeItem: st.activeItem,
+        mediaOrigin: st.mediaOrigin,
+        pid: process.pid,
+        version: PLUGIN_VERSION,
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/host/autostart') {
+      const refresh = urlObj.searchParams.get('refresh') !== '0';
+      const cfg = await engine.getConfig();
+      const autostart = await getAutostartStatus({
+        force: refresh,
+        port: cfg.debugPort || DEFAULT_DEBUG_PORT,
+      });
+      sendJson(res, 200, {
+        ok: true,
+        ...autostart,
+        skinEnabled: cfg.skinEnabled !== false,
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/fs/browse') {
+      const targetPath = urlObj.searchParams.get('path') || '';
+      const result = await engine.browseDirs(targetPath);
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/presets/export') {
+      const id = urlObj.searchParams.get('id') || '';
+      const exported = await engine.exportPreset(id);
+      if (!exported) {
+        sendJson(res, 404, { ok: false, error: `Preset not found: ${id}` });
+        return;
+      }
+      sendJson(res, 200, exported, {
+        'Content-Disposition': `attachment; filename="prism-preset-${String(id).replace(/[^a-z0-9_-]/gi, '_')}.json"`,
+      });
+      return;
+    }
+
+    // ---- POST APIs ----
+    if (req.method === 'POST' && pathname === '/api/upload') {
+      const queryFilename = urlObj.searchParams.get('filename') || '';
+      const queryTitle = urlObj.searchParams.get('title') || '';
+      const ct = String(req.headers['content-type'] || '').toLowerCase();
+
+      let uploadRes;
+      if (ct.includes('application/json')) {
+        const body = await readJsonBody(req, 80 * 1024 * 1024);
+        const filename = String(body.filename || queryFilename || 'wallpaper.png');
+        const title = String(body.title || queryTitle || '');
+        let buf;
+        if (typeof body.dataUrl === 'string' && body.dataUrl.includes(',')) {
+          buf = Buffer.from(body.dataUrl.split(',')[1], 'base64');
+        } else if (typeof body.base64 === 'string') {
+          buf = Buffer.from(body.base64, 'base64');
+        } else {
+          throw new Error('Missing binary body or dataUrl');
+        }
+        uploadRes = await engine.uploadMedia({ filename, contentType: ct, streamOrBuffer: buf, title });
+      } else {
+        uploadRes = await engine.uploadMedia({
+          filename: queryFilename || 'wallpaper.bin',
+          contentType: ct || 'application/octet-stream',
+          streamOrBuffer: req,
+          title: queryTitle,
+        });
+      }
+      await pushToHost();
+      const state = await buildCanonicalState();
+      sendJson(res, 200, {
+        ok: true,
+        item: uploadRes?.item || uploadRes,
+        duplicate: Boolean(uploadRes?.duplicate),
+        state,
+      });
+      return;
+    }
+
+    if (req.method === 'POST') {
+      const body = await readJsonBody(req);
+
+      if (pathname === '/api/config') {
+        const patch = body && typeof body.patch === 'object' ? body.patch : body;
+        await engine.updateConfig(patch || {}, { debounce: true });
+        await pushToHost();
+        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        return;
+      }
+
+      if (pathname === '/api/config/reset') {
+        await engine.resetConfig(body?.scope || 'all');
+        await pushToHost();
+        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        return;
+      }
+
+      if (pathname === '/api/wallpaper/apply') {
+        const wallpaperId = String(body?.wallpaperId ?? body?.id ?? '');
+        const extraPatch = body?.patch && typeof body.patch === 'object' ? body.patch : {};
+        await engine.applyWallpaper(wallpaperId, { ...extraPatch, skinEnabled: true });
+        await pushToHost();
+        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        return;
+      }
+
+      if (pathname === '/api/playlist/step') {
+        const direction = Number(body?.direction) === -1 ? -1 : 1;
+        await engine.stepPlaylist(direction, String(body?.reason || 'manual'));
+        await pushToHost();
+        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        return;
+      }
+
+      if (pathname === '/api/preset/apply') {
+        const state = await applyAnyPreset(body?.presetId || body?.id || body?.name);
+        sendJson(res, 200, { ok: true, state });
+        return;
+      }
+
+      if (pathname === '/api/presets/save') {
+        const saved = await engine.savePreset({
+          name: String(body?.name || 'Custom Preset'),
+          description: String(body?.description || ''),
+        });
+        const preset = saved?.preset || saved;
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, preset, presets: state.presets, state });
+        return;
+      }
+
+      if (pathname === '/api/presets/delete') {
+        await engine.deletePreset(String(body?.id || ''));
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, presets: state.presets, state });
+        return;
+      }
+
+      if (pathname === '/api/presets/import') {
+        const rawPreset = body?.preset && typeof body.preset === 'object' ? body.preset : body;
+        const imported = await engine.importPreset(rawPreset);
+        const preset = imported?.preset || imported;
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, preset, presets: state.presets, state });
+        return;
+      }
+
+      if (pathname === '/api/wallpaper/props') {
+        await engine.updateUserProps(String(body?.wallpaperId || ''), body?.props || {});
+        await pushToHost();
+        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        return;
+      }
+
+      if (pathname === '/api/upload/remove') {
+        const wid = String(body?.wallpaperId || body?.id || '');
+        await engine.removeUpload(wid);
+        await pushToHost();
+        const lib = await normalizeLibrary(true);
+        sendJson(res, 200, { ok: true, items: lib.items, state: await buildCanonicalState() });
+        return;
+      }
+
+      if (pathname === '/api/storage/dir') {
+        const kind = String(body?.kind || '');
+        const dirPath = String(body?.path || '');
+        await engine.setStorageDir(kind, dirPath);
+        await pushToHost();
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, config: state.config, state });
+        return;
+      }
+
+      if (pathname === '/api/skin/restore') {
+        await engine.updateConfig({ skinEnabled: false });
+        await pushToHost();
+        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        return;
+      }
+
+      if (pathname === '/api/host/autostart') {
+        const enabled = body?.enabled !== false;
+        const cfg = await engine.getConfig();
+        const port = Number(body?.port || cfg.debugPort || DEFAULT_DEBUG_PORT);
+        const searchDirs = Array.isArray(body?.searchDirs) ? body.searchDirs : defaultSearchDirs;
+        const autostart = enabled
+          ? await enableNormalShortcutAutoLoad({ port, searchDirs, dataDir })
+          : await disableNormalShortcutAutoLoad({ searchDirs, dataDir });
+        if (searchDirs === defaultSearchDirs) {
+          cachedAutostart = autostart;
+          cachedAutostartAt = Date.now();
+        }
+        if (enabled && port !== cfg.debugPort) {
+          await engine.updateConfig({ debugPort: port });
+        }
+        const state = await buildCanonicalState();
+        sendJson(res, 200, {
+          ok: Boolean(autostart.ok),
+          autostart,
+          hostStatus: state.hostStatus,
+          normalShortcutEnabled: state.normalShortcutEnabled,
+          patchedShortcuts: state.patchedShortcuts,
+          sidecarAutoStartsOnBoot: true,
+          autoRestoreLastSettings: true,
+          state,
+        });
+        return;
+      }
+
+      if (pathname === '/api/host/shortcut') {
+        const port = Number(body?.port || DEFAULT_DEBUG_PORT);
+        const destDir = typeof body?.destDir === 'string' ? body.destDir : '';
+        const sc = await createDebugShortcut({ port, destDir });
+        cachedAutostartAt = 0;
+        const hostStatus = cdpBridge ? await cdpBridge.tick() : null;
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, shortcutPath: sc.shortcutPath, port: sc.port, hostStatus: state.hostStatus || hostStatus, state });
+        return;
+      }
+    }
+
+    sendJson(res, 404, { ok: false, error: `Route not found: ${req.method} ${pathname}` });
+  };
+
+  const server = createServer((req, res) => {
+    handleRequest(req, res).catch((err) => {
+      if (!res.headersSent) {
+        sendJson(res, 400, { ok: false, error: err?.message || String(err) });
+      }
+    });
+  });
+
+  await new Promise((resolvePromise, reject) => {
+    server.once('error', reject);
+    server.listen(listenPort, '127.0.0.1', () => resolvePromise());
+  });
+
+  const addr = server.address();
+  const actualPort = addr && typeof addr === 'object' ? addr.port : listenPort;
+  const origin = `http://127.0.0.1:${actualPort}`;
+
+  const serverInfoPath = join(dataDir, 'server_info.json');
+  try {
+    writeFileSync(
+      serverInfoPath,
+      `${JSON.stringify({ plugin: PLUGIN_ID, pid: process.pid, port: actualPort, token: authToken || null, startedAt: new Date().toISOString() }, null, 2)}\n`,
+      'utf8',
+    );
+  } catch {
+    /* non-fatal */
+  }
+
+  const close = async () => {
+    if (cdpBridge) {
+      await cdpBridge.stop({ removeSkin: true, removePanel: true }).catch(() => {});
+      cdpBridge = null;
+    }
+    if (typeof engine.close === 'function') {
+      await engine.close().catch(() => {});
+    }
+    try {
+      if (existsSync(serverInfoPath)) {
+        const info = JSON.parse(readFileSync(serverInfoPath, 'utf8'));
+        if (info?.pid === process.pid) rmSync(serverInfoPath, { force: true });
+      }
+    } catch {
+      /* ignore */
+    }
+    server.closeAllConnections?.();
+    await new Promise((r) => server.close(() => r()));
+  };
+
+  /** In-process HTTP request injector for sandboxed tests where outbound TCP loopback is blocked. */
+  const inject = async ({ method = 'GET', url = '/', headers = {}, body = null } = {}) => {
+    const lowerHeaders = {};
+    for (const [k, v] of Object.entries(headers || {})) {
+      lowerHeaders[k.toLowerCase()] = String(v);
+    }
+    let bodyBuf = Buffer.alloc(0);
+    if (Buffer.isBuffer(body)) bodyBuf = body;
+    else if (typeof body === 'string') bodyBuf = Buffer.from(body, 'utf8');
+    else if (body && typeof body === 'object') {
+      bodyBuf = Buffer.from(JSON.stringify(body), 'utf8');
+      if (!lowerHeaders['content-type']) lowerHeaders['content-type'] = 'application/json';
+    }
+
+    const req = Readable.from(bodyBuf.length > 0 ? [bodyBuf] : []);
+    req.method = String(method).toUpperCase();
+    req.url = String(url);
+    req.headers = lowerHeaders;
+    req.destroy = () => {};
+
+    let statusCode = 200;
+    const resHeaders = {};
+    const outChunks = [];
+    let ended = false;
+    let resolveDone;
+    const donePromise = new Promise((r) => {
+      resolveDone = r;
+    });
+
+    const res = {
+      headersSent: false,
+      writeHead(code, hdrs = {}) {
+        statusCode = code;
+        this.headersSent = true;
+        for (const [k, v] of Object.entries(hdrs)) resHeaders[k.toLowerCase()] = v;
+        return this;
+      },
+      write(chunk) {
+        if (chunk) outChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        return true;
+      },
+      end(chunk) {
+        if (ended) return;
+        ended = true;
+        if (chunk) outChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        const rawBody = Buffer.concat(outChunks);
+        const text = rawBody.toString('utf8');
+        resolveDone({
+          statusCode,
+          headers: resHeaders,
+          body: rawBody,
+          text,
+          json() {
+            return JSON.parse(text);
+          },
+        });
+      },
+    };
+
+    try {
+      await handleRequest(req, res);
+    } catch (err) {
+      if (!res.headersSent) sendJson(res, 400, { ok: false, error: err?.message || String(err) });
+    }
+    return donePromise;
+  };
+
+  return {
+    server,
+    port: actualPort,
+    origin,
+    token: authToken,
+    engine,
+    cdpBridge,
+    rpcHandlers,
+    getState: buildCanonicalState,
+    inject,
+    close,
+  };
+}
+
+function isMainEntry() {
+  try {
+    return Boolean(process.argv[1]) && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+  } catch {
+    return false;
+  }
+}
+
+if (isMainEntry()) {
+  const instance = await createPrismStudioServer();
+  console.log(
+    `[prism_studio] listening on ${instance.origin} (media=${instance.engine.getMediaOrigin?.() || 'n/a'}, pid=${process.pid})`,
+  );
+
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    instance.close().finally(() => process.exit(0));
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+
+  // Hot-reload under `restart_policy: "always"` when `install-local.mjs` updates `main.mjs` on disk
+  const selfFile = fileURLToPath(import.meta.url);
+  let bootMtimeMs = 0;
+  try {
+    bootMtimeMs = statSync(selfFile).mtimeMs;
+  } catch {
+    bootMtimeMs = 0;
+  }
+  if (bootMtimeMs > 0) {
+    const watchTimer = setInterval(() => {
+      try {
+        const cur = statSync(selfFile).mtimeMs;
+        if (cur > bootMtimeMs + 50) {
+          clearInterval(watchTimer);
+          shutdown();
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 4000);
+    watchTimer.unref?.();
+  }
+}
