@@ -1622,7 +1622,7 @@ function bootPrismStudioApp() {
             <span class="prism-section-chevron">▶</span>
             <span>${esc(tr('preset.profileTitle'))}</span>
           </div>
-          <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
+          <div style="display:flex;gap:5px">
             <button type="button" class="prism-btn prism-btn-sm" data-action="trigger-preset-import">📥 ${esc(tr('preset.import'))}</button>
           </div>
         </summary>
@@ -1677,7 +1677,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('layout.title'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="layoutMode,islandGap,workspacePad,cornerStyle,leftSidebarRadius,rightSidebarRadius,borders,shadows">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -1749,7 +1749,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('scheme.title'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="themeMode,themeFollow,colorScheme,accentMode,customAccent,wallTintMix">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -1843,7 +1843,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('glass.title'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="glassSurfaces,glassOpacity,glassBlur,glassFidelity,chatGlassFidelity,codeReadabilityMode,contrastFloor,caretColor">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -1926,7 +1926,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('optics.title'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="scrimOpacity,scrimColor,vignette,mediaOpacity,mediaBlur,mediaBrightness,mediaContrast,mediaSaturate,grainAlpha,filterPreset">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2027,7 +2027,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('ext.title'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="fxEnabled,parallaxEnabled,parallaxStrength">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2076,7 +2076,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('play.transitions'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="switchTransition,switchTransitionDir,switchTransitionSpeed,pictureSlideSeconds">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2118,7 +2118,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('tab.playback'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="playbackRate,fpsCap,sceneLive,sceneLiveFps,sceneAutoQuality,interactiveWeb">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2187,7 +2187,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('optics.fit'))} &amp; Free Framing</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="fit,flip,layerPosX,layerPosY,layerScale">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2246,7 +2246,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('play.autoPause'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="muted,volume,pauseOnHidden,pauseOnBlur,pauseOnBattery,pauseOnFullscreen,desktopSync">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2581,7 +2581,7 @@ function bootPrismStudioApp() {
       const model = computeLibraryModel();
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">🙈 ${esc(tr('lib.hidden'))} (${model.hiddenItems.length})</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -2626,7 +2626,7 @@ function bootPrismStudioApp() {
 
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">↻ ${esc(tr('lib.playlists'))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -2772,7 +2772,7 @@ function bootPrismStudioApp() {
 
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">⚙ ${esc(tr('lib.inspector'))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -2905,7 +2905,7 @@ function bootPrismStudioApp() {
       const fb = store.fsBrowser;
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">📂 ${esc(tr('host.browse'))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -3961,6 +3961,7 @@ function bootPrismStudioApp() {
           break;
         }
         case 'reset-module': {
+          e.preventDefault();
           const keys = (actEl.dataset.keys || '').split(',').filter(Boolean);
           const patch = {};
           for (const k of keys) {
@@ -4253,6 +4254,7 @@ function bootPrismStudioApp() {
         }
         case 'close-drawer':
         case 'backdrop-close': {
+          if (e.target !== actEl) return;
           store.drawer = null;
           renderActiveSurface();
           break;
@@ -4443,6 +4445,7 @@ function bootPrismStudioApp() {
           break;
         }
         case 'trigger-preset-import': {
+          e.preventDefault();
           document.getElementById('prism-preset-import-input')?.click();
           break;
         }

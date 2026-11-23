@@ -9,7 +9,7 @@
 (function agyPrismPanelMain() {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.0.2';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   var doc = W.document;
@@ -177,6 +177,8 @@
       kind_video: '视频',
       kind_web: '网页',
       kind_scene: '场景',
+      source_local: '本地',
+      loadMore: '展开更多',
       emptyLib: '暂无匹配壁纸，可在完整工作台中扫描或导入',
       rotateLabel: '自动轮播列表',
       nextBtn: '切换下一张',
@@ -242,6 +244,8 @@
       kind_video: 'Video',
       kind_web: 'Web',
       kind_scene: 'Scene',
+      source_local: 'Local',
+      loadMore: 'Load More',
       emptyLib: 'No matching wallpapers found. Open Full Studio to scan or upload.',
       rotateLabel: 'Auto-Rotate Playlist',
       nextBtn: 'Step Next',
@@ -306,13 +310,16 @@
   // ---------------------------------------------------------------------------
   // State & Helpers
   // ---------------------------------------------------------------------------
+  var PAGE_SIZE = 90;
   var ui = {
     open: false,
     tab: 'optics',
     drilldown: false,
     query: '',
     kindFilter: '',
+    localOnly: false,
     favOnly: false,
+    pageLimit: PAGE_SIZE,
     ratings: { everyone: true, pg13: true, mature: false, unrated: true },
     pos: null,
   };
@@ -746,7 +753,7 @@
     }
 
     if (!existing) {
-      existing = h('button', { id: PILL_ID, type: 'button', title: 'Wallpaper Prism (Ctrl+Alt+W)', onclick: function (e) { e.stopPropagation(); toggle(); } }, [
+      existing = h('button', { id: PILL_ID, type: 'button', title: 'Wallpaper Prism (Ctrl+Alt+W)', translate: 'no', 'data-no-translate': 'true', 'data-ag-no-i18n': '1', onclick: function (e) { e.stopPropagation(); toggle(); } }, [
         h('i'),
         h('span', { text: 'Prism' }),
       ]);
@@ -1074,6 +1081,7 @@
         clearTimeout(searchTimer);
         searchTimer = setTimeout(function () {
           ui.query = els.searchInp.value || '';
+          ui.pageLimit = PAGE_SIZE;
           renderLibraryGrid();
         }, 180);
       },
@@ -1097,6 +1105,7 @@
           class: 'pp-chip',
           onclick: function () {
             ui.kindFilter = k;
+            ui.pageLimit = PAGE_SIZE;
             renderAll();
           },
         });
@@ -1104,12 +1113,23 @@
         return c;
       })
     );
+    els.localChip = h('button', {
+      type: 'button',
+      class: 'pp-chip',
+      onclick: function () {
+        ui.localOnly = !ui.localOnly;
+        ui.pageLimit = PAGE_SIZE;
+        renderAll();
+      },
+    });
+    chipRow.appendChild(els.localChip);
     els.favChip = h('button', {
       type: 'button',
       class: 'pp-chip',
       text: '★',
       onclick: function () {
         ui.favOnly = !ui.favOnly;
+        ui.pageLimit = PAGE_SIZE;
         renderAll();
       },
     });
@@ -1310,7 +1330,7 @@
       foot,
     ]);
 
-    els.root = h('div', { id: ROOT_ID, 'data-open': 'false', 'data-conn': 'off', 'data-theme': 'dark' }, [els.orb, els.sheet]);
+    els.root = h('div', { id: ROOT_ID, 'data-open': 'false', 'data-conn': 'off', 'data-theme': 'dark', translate: 'no', 'data-no-translate': 'true', 'data-ag-no-i18n': '1' }, [els.orb, els.sheet]);
     attachHeaderDrag();
     return els.root;
   }
@@ -1370,12 +1390,15 @@
     var itemsArr = store.items || [];
     var firstId = itemsArr.length && itemsArr[0] ? itemsArr[0].id : '';
     var lastId = itemsArr.length && itemsArr[itemsArr.length - 1] ? itemsArr[itemsArr.length - 1].id : '';
+    var pageLimit = Math.max(PAGE_SIZE, Number(ui.pageLimit) || PAGE_SIZE);
     var gridSig = [
       getLang(),
       store.skinEnabled ? '1' : '0',
       activeId,
       ui.kindFilter,
+      ui.localOnly ? '1' : '0',
       ui.favOnly ? '1' : '0',
+      String(pageLimit),
       q,
       itemsArr.length,
       firstId,
@@ -1386,11 +1409,19 @@
     if (gridSig === lastGridSig) return;
     lastGridSig = gridSig;
 
+    var prevScrollTop = els.body ? els.body.scrollTop : 0;
     while (els.grid.firstChild) els.grid.removeChild(els.grid.firstChild);
 
     var filtered = (store.items || []).filter(function (it) {
       if (!it || hidden.indexOf(it.id) >= 0) return false;
       if (ui.kindFilter && it.kind !== ui.kindFilter) return false;
+      if (ui.localOnly) {
+        var src = String(it.source || '').toLowerCase();
+        var idStr = String(it.id || '');
+        if (src !== 'local' && src !== 'upload' && idStr.indexOf('loc-') !== 0 && idStr.indexOf('up-') !== 0) {
+          return false;
+        }
+      }
       if (ui.favOnly && favs.indexOf(it.id) < 0) return false;
       if (q) {
         var hay = (String(it.title || '') + ' ' + (Array.isArray(it.tags) ? it.tags.join(' ') : '')).toLowerCase();
@@ -1404,7 +1435,8 @@
       return;
     }
 
-    filtered.slice(0, 90).forEach(function (it) {
+    var shownCount = Math.min(filtered.length, pageLimit);
+    filtered.slice(0, shownCount).forEach(function (it) {
       var isCur = store.skinEnabled && activeId && it.id === activeId;
       var isFav = favs.indexOf(it.id) >= 0;
       var thumb = h('div', { class: 'pp-thumb' }, [h('span', { text: String(it.kind || 'IMG').toUpperCase() })]);
@@ -1457,6 +1489,30 @@
       );
       els.grid.appendChild(card);
     });
+
+    if (filtered.length > shownCount) {
+      var remaining = filtered.length - shownCount;
+      var step = Math.min(PAGE_SIZE, remaining);
+      var moreText =
+        getLang() === 'zh'
+          ? tr('loadMore') + '（已显示 ' + shownCount + ' / ' + filtered.length + '，+' + step + '）'
+          : tr('loadMore') + ' (' + shownCount + ' / ' + filtered.length + ', +' + step + ')';
+      var moreBtn = h('button', {
+        type: 'button',
+        class: 'pp-btn',
+        style: 'grid-column:1/-1;width:100%;margin-top:4px;',
+        text: moreText,
+        onclick: function () {
+          ui.pageLimit = shownCount + PAGE_SIZE;
+          renderLibraryGrid();
+        },
+      });
+      els.grid.appendChild(moreBtn);
+    }
+
+    if (els.body && prevScrollTop > 0 && shownCount > PAGE_SIZE) {
+      els.body.scrollTop = prevScrollTop;
+    }
   }
 
   function renderAll() {
@@ -1511,6 +1567,10 @@
       els.kindChips[k].textContent = tr('kind_' + k);
       els.kindChips[k].setAttribute('aria-pressed', ui.kindFilter === raw ? 'true' : 'false');
     });
+    if (els.localChip) {
+      els.localChip.textContent = tr('source_local');
+      els.localChip.setAttribute('aria-pressed', ui.localOnly ? 'true' : 'false');
+    }
     els.favChip.setAttribute('aria-pressed', ui.favOnly ? 'true' : 'false');
     if (ui.tab === 'library') renderLibraryGrid();
 

@@ -3,11 +3,13 @@
  * `scene.pkg` Video/Audio Extraction, Directory-Fenced Web Serving & Shim Injection (`media-server.mjs`)
  */
 
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { createReadStream, existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { dirname, extname, posix, relative, resolve, sep } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, extname, join, posix, relative, resolve, sep } from 'node:path';
 import { Writable } from 'node:stream';
 import { createMp4VfsKit, createVirtualSegmentStream } from './mp4-vfs.mjs';
 import {
@@ -40,6 +42,7 @@ const MIME_BY_EXT = Object.freeze({
   '.mp4': 'video/mp4',
   '.m4v': 'video/mp4',
   '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
   '.webm': 'video/webm',
   '.ogv': 'video/ogg',
   '.mp3': 'audio/mpeg',
@@ -225,6 +228,150 @@ export async function createMediaServer(opts = {}) {
   // Bounded LRU for extracted `scene.pkg` MP4 / audio buffers
   const scenePayloadCache = new Map();
   let sceneCacheBytes = 0;
+
+  // On-demand disk-cached video frame thumbnails via ffmpeg (concurrency-capped & deduplicated)
+  const THUMB_MAX_CONCURRENCY = 3;
+  const THUMB_FAIL_TTL_MS = 5 * 60 * 1000;
+  const thumbInflight = new Map();
+  const thumbFailedAt = new Map();
+  const thumbQueue = [];
+  let thumbActive = 0;
+  let cachedFfmpegBin = null;
+
+  function resolveFfmpegExe() {
+    if (cachedFfmpegBin !== null) return cachedFfmpegBin;
+    const envBin = String(process.env.FFMPEG_PATH || process.env.PRISM_FFMPEG_PATH || '').trim();
+    if (envBin) {
+      try {
+        if (existsSync(envBin)) {
+          cachedFfmpegBin = envBin;
+          return cachedFfmpegBin;
+        }
+      } catch { /* ignore */ }
+    }
+    cachedFfmpegBin = 'ffmpeg';
+    return cachedFfmpegBin;
+  }
+
+  function runThumbSlot(taskFn) {
+    return new Promise((resolveSlot) => {
+      const launch = () => {
+        thumbActive += 1;
+        Promise.resolve()
+          .then(taskFn)
+          .then(resolveSlot, () => resolveSlot(null))
+          .finally(() => {
+            thumbActive = Math.max(0, thumbActive - 1);
+            if (thumbQueue.length > 0 && thumbActive < THUMB_MAX_CONCURRENCY) {
+              const next = thumbQueue.shift();
+              if (next) next();
+            }
+          });
+      };
+      if (thumbActive < THUMB_MAX_CONCURRENCY) launch();
+      else thumbQueue.push(launch);
+    });
+  }
+
+  function execFfmpegFrame(bin, videoAbs, seekSec, outPath) {
+    return new Promise((resolveExec) => {
+      const args = [
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-y',
+        ...(seekSec > 0 ? ['-ss', String(seekSec)] : []),
+        '-i', videoAbs,
+        '-frames:v', '1',
+        '-vf', 'scale=480:-2:flags=fast_bilinear',
+        '-q:v', '4',
+        outPath,
+      ];
+      execFile(bin, args, { timeout: 12000, windowsHide: true }, (err) => {
+        if (err) {
+          resolveExec(false);
+          return;
+        }
+        try {
+          const st = statSync(outPath);
+          resolveExec(st.isFile() && st.size > 0);
+        } catch {
+          resolveExec(false);
+        }
+      });
+    });
+  }
+
+  function ensureVideoThumb(videoAbs, durationSec = 0) {
+    let st;
+    try {
+      const lst = lstatSync(videoAbs);
+      if (lst.isSymbolicLink() || !lst.isFile()) return Promise.resolve(null);
+      st = statSync(videoAbs);
+    } catch {
+      return Promise.resolve(null);
+    }
+
+    const baseCache = cacheDirGetter() || join(tmpdir(), 'agy-wallpaper-prism-cache');
+    const thumbDir = join(baseCache, 'thumbs');
+    const hash = createHash('sha1')
+      .update(`${videoAbs}|${st.size}|${Math.floor(st.mtimeMs)}`)
+      .digest('hex')
+      .slice(0, 24);
+    const outPath = join(thumbDir, `${hash}.jpg`);
+
+    try {
+      if (existsSync(outPath) && statSync(outPath).size > 0) {
+        return Promise.resolve(outPath);
+      }
+    } catch { /* regenerate */ }
+
+    const failedTs = thumbFailedAt.get(hash);
+    if (failedTs && Date.now() - failedTs < THUMB_FAIL_TTL_MS) {
+      return Promise.resolve(null);
+    }
+
+    if (thumbInflight.has(hash)) {
+      return thumbInflight.get(hash);
+    }
+
+    const job = runThumbSlot(async () => {
+      try {
+        mkdirSync(thumbDir, { recursive: true });
+      } catch {
+        return null;
+      }
+      const bin = resolveFfmpegExe();
+      const dur = Number(durationSec) || 0;
+      const primarySeek = dur >= 12 ? 5 : dur >= 3 ? 2 : 0;
+      const tmpPath = join(thumbDir, `${hash}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp.jpg`);
+
+      let ok = await execFfmpegFrame(bin, videoAbs, primarySeek, tmpPath);
+      if (!ok && primarySeek > 0) {
+        try { if (existsSync(tmpPath)) unlinkSync(tmpPath); } catch { /* ignore */ }
+        ok = await execFfmpegFrame(bin, videoAbs, 0, tmpPath);
+      }
+
+      if (!ok) {
+        try { if (existsSync(tmpPath)) unlinkSync(tmpPath); } catch { /* ignore */ }
+        thumbFailedAt.set(hash, Date.now());
+        return null;
+      }
+
+      try {
+        renameSync(tmpPath, outPath);
+        thumbFailedAt.delete(hash);
+        return outPath;
+      } catch {
+        try { if (existsSync(tmpPath)) unlinkSync(tmpPath); } catch { /* ignore */ }
+        return existsSync(outPath) ? outPath : null;
+      }
+    }).finally(() => {
+      thumbInflight.delete(hash);
+    });
+
+    thumbInflight.set(hash, job);
+    return job;
+  }
 
   function getCachedSceneBuffer(cacheKey, loaderFn) {
     const hit = scenePayloadCache.get(cacheKey);
@@ -485,11 +632,28 @@ export async function createMediaServer(opts = {}) {
         serveBufferWithRange(req, res, svg, 'image/svg+xml', '"builtin-prism-aurora-v1"');
         return;
       }
-      if (!fsMeta.previewAbs) {
-        sendJson(req, res, 404, { error: 'No preview image available' });
+      if (fsMeta.previewAbs) {
+        serveFileWithRange(req, res, fsMeta.previewAbs, { cacheControl: 'public, max-age=3600' });
         return;
       }
-      serveFileWithRange(req, res, fsMeta.previewAbs, { cacheControl: 'public, max-age=3600' });
+      if (entry.kind === 'video' && fsMeta.primaryAbs) {
+        ensureVideoThumb(fsMeta.primaryAbs, entry.durationSec)
+          .then((thumbAbs) => {
+            if (res.writableEnded || res.destroyed) return;
+            if (!thumbAbs) {
+              sendJson(req, res, 404, { error: 'No preview image available' });
+              return;
+            }
+            serveFileWithRange(req, res, thumbAbs, { cacheControl: 'public, max-age=86400' });
+          })
+          .catch(() => {
+            if (!res.writableEnded && !res.destroyed) {
+              sendJson(req, res, 500, { error: 'Video thumbnail generation failed' });
+            }
+          });
+        return;
+      }
+      sendJson(req, res, 404, { error: 'No preview image available' });
       return;
     }
 
@@ -704,7 +868,7 @@ export async function createMediaServer(opts = {}) {
       const encToken = encodeURIComponent(token);
       const fsMeta = raw._fs || {};
 
-      const thumbUrl = (fsMeta.previewAbs || fsMeta.isBuiltinAurora)
+      const thumbUrl = (fsMeta.previewAbs || fsMeta.isBuiltinAurora || (raw.kind === 'video' && fsMeta.primaryAbs))
         ? `${origin}/preview/${encToken}`
         : '';
       const sceneVideoUrl = fsMeta.hasSceneVideo ? `${origin}/scene-video/${encToken}` : '';
