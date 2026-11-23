@@ -3,15 +3,18 @@
 
 export const PLUGIN_ID = 'agy-wallpaper-prism';
 export const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-export const PLUGIN_VERSION = '1.1.0';
+export const PLUGIN_VERSION = '2.0.0';
 export const SIDECAR_ID = 'prism_studio';
 export const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 export const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 export const DEFAULT_DEBUG_PORT = 9339;
 
 export const PRISM_DOM = Object.freeze({
-  skinVersion: '1.0.0',
+  skinVersion: '2.0.0',
   skinAttr: 'data-agy-prism-skin',
+  glassAttr: 'data-agy-prism-glass',
+  wallpaperAttr: 'data-agy-prism-wallpaper',
+  staticStyleId: 'agy-prism-static-css',
   themeAttr: 'data-prism-theme',
   schemeAttr: 'data-prism-scheme',
   accentModeAttr: 'data-prism-accent-mode',
@@ -31,6 +34,8 @@ export const PRISM_DOM = Object.freeze({
   panelGlobal: '__agyPrismPanel',
 });
 
+export const STARTUP_MODES = Object.freeze(['gentle-auto', 'manual', 'static-css']);
+export const CANARY_STATES = Object.freeze(['idle', 'arming', 'healthy', 'tripped']);
 export const WALLPAPER_KINDS = Object.freeze(['image', 'video', 'slideshow', 'web', 'scene', 'none']);
 export const LIBRARY_KINDS = Object.freeze(['image', 'video', 'slideshow', 'web', 'scene']);
 export const CONTENT_RATINGS = Object.freeze(['everyone', 'pg13', 'mature', 'unrated']);
@@ -684,6 +689,7 @@ export const FACTORY_PRESETS = Object.freeze([
 export const DEFAULT_CONFIG = Object.freeze({
   // Master state & active wallpaper
   skinEnabled: true,
+  startupMode: 'gentle-auto',
   activeWallpaperId: '',
   wallpaperId: '',
   kind: 'image',
@@ -749,7 +755,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   sceneLive: true,
   sceneLiveFps: 30,
   sceneAutoQuality: true,
-  liveBootDelay: 0,
+  liveBootDelay: 1.5,
   interactiveWeb: false,
   switchTransition: 'fade',
   switchTransitionDir: 'left',
@@ -854,6 +860,7 @@ export const RESET_SCOPES = Object.freeze({
     'sceneLive',
     'sceneLiveFps',
     'sceneAutoQuality',
+    'startupMode',
     'liveBootDelay',
     'interactiveWeb',
     'switchTransition',
@@ -1094,9 +1101,13 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
   const fpsCap = [0, 30, 60].includes(fpsRaw) ? fpsRaw : 0;
   const sceneFpsRaw = num(merged.sceneLiveFps, 30, 15, 60, 0);
   const sceneLiveFps = [15, 30, 60].includes(sceneFpsRaw) ? sceneFpsRaw : 30;
+  const rawBootDelay = merged.liveBootDelay === 0 || merged.liveBootDelay === '0'
+    ? DEFAULT_CONFIG.liveBootDelay
+    : merged.liveBootDelay;
 
   return {
     skinEnabled: bool(merged.skinEnabled, DEFAULT_CONFIG.skinEnabled),
+    startupMode: oneOf(merged.startupMode, STARTUP_MODES, DEFAULT_CONFIG.startupMode),
     activeWallpaperId: activeId,
     wallpaperId: activeId,
     kind: oneOf(merged.kind, WALLPAPER_KINDS, DEFAULT_CONFIG.kind),
@@ -1159,7 +1170,7 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     sceneLive: bool(merged.sceneLive, DEFAULT_CONFIG.sceneLive),
     sceneLiveFps,
     sceneAutoQuality: bool(merged.sceneAutoQuality, DEFAULT_CONFIG.sceneAutoQuality),
-    liveBootDelay: num(merged.liveBootDelay, DEFAULT_CONFIG.liveBootDelay, 0, 30, 0),
+    liveBootDelay: num(rawBootDelay, DEFAULT_CONFIG.liveBootDelay, 0.5, 10, 1),
     interactiveWeb: bool(merged.interactiveWeb, DEFAULT_CONFIG.interactiveWeb),
     switchTransition: oneOf(merged.switchTransition, SWITCH_TRANSITIONS, DEFAULT_CONFIG.switchTransition),
     switchTransitionDir: oneOf(merged.switchTransitionDir, SWITCH_DIRECTIONS, DEFAULT_CONFIG.switchTransitionDir),

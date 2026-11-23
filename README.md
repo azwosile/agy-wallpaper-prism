@@ -1,7 +1,7 @@
 # Wallpaper Prism (`agy-wallpaper-prism`)
 
 > **Repository**: [https://github.com/azwosile/agy-wallpaper-prism](https://github.com/azwosile/agy-wallpaper-prism)  
-> **Version**: `1.1.0` · **Zero Agent Tokens** · **Zero `app.asar` Modification**
+> **Version**: `2.0.0` · **Zero Agent Tokens** · **Zero `app.asar` Modification**
 
 **Obsidian Prism Glass Skin & Wallpaper Engine Studio for Google Antigravity**  
 **适用于 Google Antigravity 的棱镜液态玻璃皮肤与动态壁纸工作台**
@@ -18,8 +18,10 @@
   - Automatic **Steam & Wallpaper Engine (`431960`)** Workshop + `defaultprojects` / `myprojects` discovery with `<15ms` cold-boot disk cache (`inventory-index.json`, `steam-roots.json`) and strict path-traversal containment.
   - Supports **Static Images**, **Multi-Image Slideshows**, **Looping Videos (`.mp4/.webm/.mov` with cached virtual `moov` faststart & HTTP `206` Range)**, **Interactive HTML/Web Wallpapers** (sandboxed with WE API shim & Focus Guard), and **`scene.pkg` Wallpapers** (cached `PKGV` + `LZ4` + `TEXB0004` embedded MP4/audio extraction & 5-stage fallback).
   - **Playlists & Smart Power Lifecycle**: `sequence` / `random` rotation on timer or `videoEnd`, 7 GPU switch transitions, `512 MB` SHA-256 deduplicated drag-and-drop uploads, and auto-pause on minimize (`1.2s` debounce), blur, or battery.
-- **Normal-Shortcut Auto-Load & Cold-Boot Restoration (`v1.1.0`)**:
-  - **Zero-Spawn Cold Boot**: Antigravity automatically boots `sidecars/prism_studio/main.mjs` (`restart_policy: "always"`) in the background on every launch and restores your last-used wallpaper, Prism scheme, and layout from `~/.agy-wallpaper-prism/config.json` with zero child-process spawns.
+- **Gentle Fail-Open CDP, Antigravity `2.34.0` `[data-browser-hole]` GPU Cutout & Boot Canary (`v2.0.0`)**:
+  - **Zero-Enable Ephemeral CDP & Lazy Quick Popover**: Zero `Page.enable`, `Runtime.enable`, `addScriptToEvaluateOnNewDocument`, or `addBinding`; 1-shot `<1.4 KB` post-hydration idle bootstrap (`1.5s` default settle) with lazy `Ctrl+Alt+W` `panel.js` loading and `z-index: -1` inert fail-open stage (*first-frame decoded before surface hollowing*).
+  - **Antigravity `2.34.0` Full Support**: `:where(...)` layout/modal specificity, inner `.dark`/`.light` token propagation, and synchronous `clip-path: path(...)` rounded island cutout over 3-layer `WebContentsView` `[data-browser-hole]` browser panes.
+  - **Two-Phase `fsync` Boot Canary & Instant Escape Hatch**: Co-keyed `ANTIGRAVITY_EXECUTABLE_DATA_DIR` storage with non-destructive `~/.agy-wallpaper-prism` migration, automatic Safe-Mode circuit breaker on unfinished boots, 3 selectable startup modes (`Gentle Auto 1.5s` / `Manual Wake` / `Static CSS`), and **`Ctrl+Alt+Shift+R` / `4× Esc`** instant strip.
   - **1-Click Normal Shortcut Auto-Load**: Enable in-place `--remote-debugging-port=9339` on your standard Desktop / Start Menu / Taskbar `Antigravity.lnk` (with lossless `shortcut-backup.json` restore) right inside the Studio UI — **zero session interruption**.
 
 ---
@@ -49,7 +51,7 @@ node scripts/install-local.mjs
 
 ```text
 agy-wallpaper-prism/
-├── plugin.json                     # Official 10-key Antigravity plugin manifest (v1.1.0)
+├── plugin.json                     # Official 10-key Antigravity plugin manifest (v2.0.0)
 ├── assets/logo.svg                 # Faceted Prism diamond vector icon
 ├── skills/wallpaper-prism/SKILL.md # On-demand agent navigation & CLI skill
 ├── src/

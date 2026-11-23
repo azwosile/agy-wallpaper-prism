@@ -9,6 +9,7 @@ import {
   copyFileSync,
   createWriteStream,
   existsSync,
+  fsyncSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -127,6 +128,129 @@ function makeError(message, statusCode = 400) {
   return err;
 }
 
+/**
+ * Crash-consistent synchronous JSON writer (`openSync` -> `writeSync` -> `fsyncSync` -> `closeSync` -> `renameSync`).
+ * Used for `canary.json` so pre-injection state hits disk before any CDP socket opens.
+ */
+export function writeFsyncJsonSync(targetPath, data) {
+  const dir = dirname(targetPath);
+  mkdirSync(dir, { recursive: true });
+  atomicSeq += 1;
+  const tmpPath = `${targetPath}.tmp${process.pid}.${Date.now()}.${atomicSeq}`;
+  const buf = Buffer.from(`${JSON.stringify(data, null, 2)}\n`, 'utf8');
+
+  const fd = openSync(tmpPath, 'w', 0o600);
+  try {
+    writeSync(fd, buf, 0, buf.length, 0);
+    fsyncSync(fd);
+  } finally {
+    try { closeSync(fd); } catch { /* ignore */ }
+  }
+
+  try {
+    renameSync(tmpPath, targetPath);
+  } catch (err) {
+    if (err && (err.code === 'EPERM' || err.code === 'EACCES' || err.code === 'EBUSY')) {
+      try {
+        if (existsSync(targetPath)) unlinkSync(targetPath);
+        renameSync(tmpPath, targetPath);
+        return;
+      } catch (retryErr) {
+        try { unlinkSync(tmpPath); } catch { /* ignore */ }
+        throw retryErr;
+      }
+    }
+    try { unlinkSync(tmpPath); } catch { /* ignore */ }
+    throw err;
+  }
+}
+
+/**
+ * Resolve the authoritative persistent data directory for Wallpaper Prism:
+ *   1. Explicit `explicitDir` (used by isolated unit/E2E tests)
+ *   2. `AGY_PRISM_DATA_DIR` override
+ *   3. `ANTIGRAVITY_EXECUTABLE_DATA_DIR` (injected by Antigravity into Sidecar runtime)
+ *   4. Deterministic `~/.gemini/antigravity/sidecar_data/agy-wallpaper-prism/prism_studio/data`
+ *      so external CLI (`host/cli.mjs`) resolves the exact same directory outside Sidecar env!
+ */
+export function resolveDefaultPrismDataDir(explicitDir = '') {
+  if (explicitDir && String(explicitDir).trim()) return resolve(String(explicitDir).trim());
+  if (process.env.AGY_PRISM_DATA_DIR && process.env.AGY_PRISM_DATA_DIR.trim()) {
+    return resolve(process.env.AGY_PRISM_DATA_DIR.trim());
+  }
+  if (process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR && process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR.trim()) {
+    return resolve(process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR.trim());
+  }
+  const appDataRoot = process.env.ANTIGRAVITY_APP_DATA_DIR?.trim()
+    ? resolve(process.env.ANTIGRAVITY_APP_DATA_DIR.trim())
+    : join(homedir(), '.gemini', 'antigravity');
+  return join(appDataRoot, 'sidecar_data', 'agy-wallpaper-prism', 'prism_studio', 'data');
+}
+
+/**
+ * Non-destructively migrate user config, presets, shortcut backups & uploads from legacy
+ * `~/.agy-wallpaper-prism` into `ANTIGRAVITY_EXECUTABLE_DATA_DIR` on first v2.0 boot.
+ * Never runs when an explicit test `dataDir` or `AGY_PRISM_DATA_DIR` is supplied.
+ */
+export function migrateLegacyPrismDataIfNeeded(targetDataDir) {
+  const legacyDir = join(homedir(), '.agy-wallpaper-prism');
+  const absTarget = resolve(targetDataDir);
+  if (absTarget.toLowerCase() === resolve(legacyDir).toLowerCase()) return false;
+  const markerPath = join(absTarget, '.migrated-from-legacy.json');
+  if (existsSync(markerPath) || existsSync(join(absTarget, 'config.json'))) return false;
+  if (!existsSync(legacyDir)) return false;
+
+  try {
+    mkdirSync(absTarget, { recursive: true });
+    for (const fileName of ['config.json', 'shortcut-backup.json']) {
+      const src = join(legacyDir, fileName);
+      const dst = join(absTarget, fileName);
+      if (existsSync(src) && !existsSync(dst)) {
+        try { copyFileSync(src, dst); } catch { /* non-fatal */ }
+      }
+    }
+
+    const legacyPresets = join(legacyDir, 'presets');
+    const dstPresets = join(absTarget, 'presets');
+    if (existsSync(legacyPresets)) {
+      mkdirSync(dstPresets, { recursive: true });
+      for (const f of readdirSync(legacyPresets)) {
+        if (!f.endsWith('.json') || f.includes('.tmp')) continue;
+        const s = join(legacyPresets, f);
+        const d = join(dstPresets, f);
+        if (!existsSync(d)) {
+          try { copyFileSync(s, d); } catch { /* ignore */ }
+        }
+      }
+    }
+
+    const legacyUploads = join(legacyDir, 'uploads');
+    const dstUploads = join(absTarget, 'uploads');
+    if (existsSync(legacyUploads)) {
+      mkdirSync(dstUploads, { recursive: true });
+      for (const f of readdirSync(legacyUploads)) {
+        if (f.endsWith('.tmp')) continue;
+        const s = join(legacyUploads, f);
+        const d = join(dstUploads, f);
+        if (!existsSync(d)) {
+          try {
+            if (lstatSync(s).isFile()) copyFileSync(s, d);
+          } catch { /* ignore */ }
+        }
+      }
+    }
+
+    writeAtomicJsonSync(markerPath, {
+      version: 2,
+      migratedAt: new Date().toISOString(),
+      from: legacyDir,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Crash-safe atomic JSON writer: `.tmp<pid>.<seq>` -> `renameSync` (zero blocking `fsync`). */
 export function writeAtomicJsonSync(targetPath, data) {
   const dir = dirname(targetPath);
@@ -241,11 +365,11 @@ function moveFileCrossDeviceSafe(srcFile, dstFile) {
 }
 
 export async function createPrismStore(opts = {}) {
-  const dataDir = resolve(
-    opts.dataDir
-    || process.env.AGY_PRISM_DATA_DIR
-    || join(homedir(), '.agy-wallpaper-prism'),
-  );
+  const hasExplicitDir = Boolean(opts.dataDir || process.env.AGY_PRISM_DATA_DIR);
+  const dataDir = resolveDefaultPrismDataDir(opts.dataDir || '');
+  if (!hasExplicitDir) {
+    migrateLegacyPrismDataIfNeeded(dataDir);
+  }
   const configPath = join(dataDir, 'config.json');
   const presetsDir = join(dataDir, 'presets');
   const defaultUploadsDir = join(dataDir, 'uploads');

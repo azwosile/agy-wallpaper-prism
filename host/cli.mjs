@@ -3,9 +3,13 @@
 // Communicates with the running Prism Studio Sidecar over loopback HTTP (or writes
 // config.json atomically when offline). NEVER kills or restarts Antigravity.exe.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import {
+  resolveDefaultPrismDataDir,
+  writeAtomicJsonSync,
+  writeFsyncJsonSync,
+} from '../src/engine/store.mjs';
 import {
   DEFAULT_CONFIG,
   DEFAULT_DEBUG_PORT,
@@ -26,9 +30,8 @@ import {
   resolveAntigravityExe,
 } from '../sidecars/prism_studio/cdp-bridge.mjs';
 
-export function resolvePrismDataDir() {
-  if (process.env.AGY_PRISM_DATA_DIR) return resolve(process.env.AGY_PRISM_DATA_DIR);
-  return join(homedir(), '.agy-wallpaper-prism');
+export function resolvePrismDataDir(explicitDir = '') {
+  return resolveDefaultPrismDataDir(explicitDir);
 }
 
 function readJsonSafe(fp) {
@@ -85,14 +88,7 @@ function writeOfflineConfigPatch(patch) {
   mkdirSync(dirname(cfgPath), { recursive: true });
   const prev = readJsonSafe(cfgPath) || DEFAULT_CONFIG;
   const next = sanitizeConfig(patch, prev);
-  const tmp = `${cfgPath}.tmp.${process.pid}.${Date.now()}`;
-  writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
-  writeFileSync(cfgPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
-  try {
-    if (existsSync(tmp)) writeFileSync(tmp, '', 'utf8');
-  } catch {
-    /* ignore */
-  }
+  writeAtomicJsonSync(cfgPath, next);
   return next;
 }
 
@@ -121,9 +117,10 @@ const cmd = args._[0] || 'status';
 if (cmd === 'status') {
   const live = await callSidecar('GET', '/api/status').catch(() => null);
   const dataDir = resolvePrismDataDir();
-  const cfg = live?.activeItem ? live : readJsonSafe(join(dataDir, 'config.json')) || DEFAULT_CONFIG;
+  const rawCfg = live?.config || readJsonSafe(join(dataDir, 'config.json')) || DEFAULT_CONFIG;
+  const canary = live?.canary || readJsonSafe(join(dataDir, 'canary.json')) || { state: 'idle' };
   const portFile = readDevToolsActivePort();
-  const cdpPort = portFile?.port || Number(args.port || DEFAULT_DEBUG_PORT);
+  const cdpPort = portFile?.port || Number(args.port || rawCfg.debugPort || DEFAULT_DEBUG_PORT);
   const cdp = await probeCdpPort(cdpPort);
   const autostart = live?.autostart || (await inspectNormalShortcuts({ dataDir, port: cdpPort }));
 
@@ -134,11 +131,32 @@ if (cmd === 'status') {
   console.log(
     `  normal shortcut ${autostart.normalShortcutEnabled ? `enabled (${autostart.patchedShortcuts.length} patched)` : `stock (${autostart.shortcuts.length} found — run enable-autostart)`}`,
   );
-  console.log(`  cold-boot sync  ready (sidecar restart_policy=always, config=${join(dataDir, 'config.json')})`);
+  console.log(`  startup mode    ${rawCfg.startupMode || 'gentle-auto'} (settle ${rawCfg.liveBootDelay ?? 1.5}s, canary=${canary.state || 'idle'})`);
+  console.log(`  data dir        ${dataDir}`);
   console.log(`  sidecar server  ${live ? `online (pid ${live.pid}, media ${live.mediaOrigin || 'n/a'})` : 'offline'}`);
-  console.log(`  skinEnabled     ${live ? live.skinEnabled : cfg.skinEnabled ?? true}`);
+  console.log(`  skinEnabled     ${live ? live.skinEnabled : rawCfg.skinEnabled ?? true}`);
   if (live?.activeItem) {
     console.log(`  active item     ${live.activeItem.title} [${live.activeItem.kind}]`);
+  }
+} else if (cmd === 'wake') {
+  const live = await callSidecar('POST', '/api/skin/wake', {}).catch(() => null);
+  if (live?.ok) {
+    console.log('[prism] gently awakened and mounted Prism skin via Sidecar');
+  } else {
+    writeOfflineConfigPatch({ skinEnabled: true });
+    console.log(`[prism] marked skinEnabled=true in ${resolvePrismDataDir()}/config.json (Sidecar offline)`);
+  }
+} else if (cmd === 'reset-canary') {
+  const live = await callSidecar('POST', '/api/canary/reset', {}).catch(() => null);
+  if (live?.ok) {
+    console.log(`[prism] cleared Canary Safe Mode and re-enabled skin (state=${live.canary?.state || 'idle'})`);
+  } else {
+    const dataDir = resolvePrismDataDir();
+    const canaryPath = join(dataDir, 'canary.json');
+    if (existsSync(canaryPath)) rmSync(canaryPath, { force: true });
+    else writeFsyncJsonSync(canaryPath, { version: 2, state: 'idle', unfinishedAttempts: [] });
+    writeOfflineConfigPatch({ skinEnabled: true });
+    console.log(`[prism] reset offline canary.json & enabled skin in ${dataDir}`);
   }
 } else if (cmd === 'enable-autostart') {
   const port = Number(args.port || DEFAULT_DEBUG_PORT);
@@ -183,7 +201,7 @@ if (cmd === 'status') {
   console.log(`[prism] created debuggable shortcut -> ${res.shortcutPath} (port ${res.port})`);
 } else {
   console.log(
-    'Usage: node host/cli.mjs <status | enable-autostart [--port 9339] | disable-autostart | preset <crystal|islands|focus|eco> | restore | create-shortcut [--port 9339]>',
+    'Usage: node host/cli.mjs <status | wake | reset-canary | enable-autostart [--port 9339] | disable-autostart | preset <crystal|islands|focus|eco> | restore | create-shortcut [--port 9339]>',
   );
   process.exit(2);
 }

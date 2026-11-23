@@ -9,9 +9,12 @@
 (function agyPrismPanelMain() {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '2.0.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
+  try {
+    if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
+  } catch (_) {}
   var doc = W.document;
 
   var API_KEY = '__agyPrismPanel';
@@ -743,6 +746,11 @@
     if (!hostSlot) {
       if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
       return false;
+    }
+
+    if (existing && existing.dataset && existing.dataset.prismLazyStub === '1') {
+      if (existing.parentNode) existing.parentNode.removeChild(existing);
+      existing = null;
     }
 
     if (!existing) {
@@ -1631,6 +1639,8 @@
     }
     ui.open = true;
     els.root.setAttribute('data-open', 'true');
+    els.root.setAttribute('data-browser-occluder', 'true');
+    if (els.sheet) els.sheet.setAttribute('data-browser-occluder', 'true');
     els.orb.setAttribute('aria-expanded', 'true');
     syncHostTheme();
     positionTriggersAndSheet();
@@ -1651,6 +1661,8 @@
     ui.drilldown = false;
     ui.open = false;
     els.root.setAttribute('data-open', 'false');
+    els.root.removeAttribute('data-browser-occluder');
+    if (els.sheet) els.sheet.removeAttribute('data-browser-occluder');
     els.orb.setAttribute('aria-expanded', 'false');
     if (lastFocus && lastFocus.isConnected && typeof lastFocus.focus === 'function') {
       try {
@@ -1768,7 +1780,11 @@
 
     housekeepTimer = setInterval(function () {
       if (destroyed) return;
-      heal();
+      var mode = String(cfgVal('triggerMode') || 'both');
+      var wantPill = mode === 'pill' || mode === 'both';
+      if (!els.root.isConnected || !doc.getElementById(STYLE_ID) || (wantPill && !doc.getElementById(PILL_ID))) {
+        heal();
+      }
     }, 2500);
 
     if (W.__AGY_PRISM_PANEL_BOOT__) {

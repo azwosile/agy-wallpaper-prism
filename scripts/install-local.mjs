@@ -3,10 +3,12 @@
 // ~/.gemini/config/plugins/agy-wallpaper-prism (NEVER uses NTFS junctions, which
 // Antigravity's GetAllPlugins silently skips on Windows).
 
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { resolveDefaultPrismDataDir } from '../src/engine/store.mjs';
 import { buildStudioBundle } from './build.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -30,7 +32,12 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
   if (existsSync(dstDir) && lstatSync(dstDir).isSymbolicLink()) {
     rmSync(dstDir, { recursive: true, force: true });
   }
+  const stampPath = join(dstDir, '.prism-install-id');
+  const existingStamp = existsSync(stampPath) ? readFileSync(stampPath, 'utf8').trim() : '';
   mkdirSync(dstDir, { recursive: true });
+  if (!existingStamp) {
+    writeFileSync(stampPath, `${randomUUID()}\n`, 'utf8');
+  }
 
   const itemsToCopy = [
     'plugin.json',
@@ -79,19 +86,26 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
     throw new Error('Destination directory must be a real directory, not a symlink/junction');
   }
 
-  // Trigger clean Sidecar hot-restart under `restart_policy: "always"` when installing into default host root
+  // Trigger clean in-process Sidecar host script reload (never SIGTERM under `restart_policy: "on-failure"`)
   if (!destRoot) {
     try {
-      const serverInfoPath = join(homedir(), '.agy-wallpaper-prism', 'server_info.json');
+      const serverInfoPath = join(resolveDefaultPrismDataDir(), 'server_info.json');
       if (existsSync(serverInfoPath)) {
         const info = JSON.parse(readFileSync(serverInfoPath, 'utf8'));
-        const pid = Number(info?.pid);
-        if (info?.plugin === 'agy-wallpaper-prism' && Number.isInteger(pid) && pid > 0 && pid !== process.pid) {
-          process.kill(pid, 'SIGTERM');
+        const port = Number(info?.port);
+        if (info?.plugin === 'agy-wallpaper-prism' && Number.isInteger(port) && port > 0) {
+          const headers = { 'Content-Type': 'application/json' };
+          if (info.token) headers['X-Sidecar-Token'] = info.token;
+          await fetch(`http://127.0.0.1:${port}/api/host/reload`, {
+            method: 'POST',
+            headers,
+            body: '{}',
+            signal: AbortSignal.timeout(1500),
+          }).catch(() => {});
         }
       }
     } catch {
-      /* best-effort hot reload; never fail installation */
+      /* best-effort live reload; never fail installation */
     }
   }
 

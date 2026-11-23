@@ -2,9 +2,9 @@
 // Unified Authoritative Backend for agy-wallpaper-prism (Sidecar HTTP Server + Passive CDP Bridge).
 // Serves Sidecar Studio UI (0 Agent Tokens) + all /api/* routes + Passive CDP Host Controller.
 
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -17,9 +17,10 @@ import {
   SCENE_PRESET_IDS,
   SIDECAR_URI,
 } from '../../src/shared/schema.mjs';
-import { createWallpaperPrismEngine } from '../../src/engine/index.mjs';
+import { createWallpaperPrismEngine, resolveDefaultPrismDataDir } from '../../src/engine/index.mjs';
 import * as hostModule from '../../src/host/index.mjs';
 import {
+  createCanaryController,
   createDebugShortcut,
   createPassiveCdpBridge,
   disableNormalShortcutAutoLoad,
@@ -90,9 +91,25 @@ const PRELOAD_SHIM_JS = `(function() {
   }
 })();`;
 
-function resolveDefaultDataDir() {
-  if (process.env.AGY_PRISM_DATA_DIR) return resolve(process.env.AGY_PRISM_DATA_DIR);
-  return join(homedir(), '.agy-wallpaper-prism');
+function resolveDefaultDataDir(explicitDir = '') {
+  return resolveDefaultPrismDataDir(explicitDir);
+}
+
+function buildFallbackStaticCss(skinPayload = {}) {
+  const cfg = skinPayload?.config || {};
+  const tok = skinPayload?.tokensPreview?.dark || {};
+  const item = skinPayload?.activeItem || null;
+  const imgUrl = item && (item.kind === 'image' || item.thumbUrl) ? String(item.mediaUrl || item.thumbUrl || '') : '';
+  const safeImg = imgUrl ? `url(${JSON.stringify(imgUrl)})` : 'none';
+  const baseRgb = tok.baseRgb || '14, 14, 17';
+  const sidebarAlpha = Number(cfg.glassOpacity ?? 0.78).toFixed(2);
+  return [
+    'html:not([data-has-browser-hole="true"]) { background-color: #09090b; }',
+    'html[data-has-browser-hole="true"], html[data-has-browser-hole="true"] body { background: transparent !important; }',
+    'body { isolation: isolate; background: transparent !important; }',
+    `body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background-image: ${safeImg}; background-size: cover; background-position: center; opacity: ${Number(cfg.mediaOpacity ?? 1)}; clip-path: var(--prism-hole-clip, none); }`,
+    `body:not([data-has-browser-hole="true"]) { --background: rgba(${baseRgb}, ${sidebarAlpha}); --sidebar: rgba(${baseRgb}, ${sidebarAlpha}); --primary: ${tok.accent || '#669DF6'}; }`,
+  ].join('\n');
 }
 
 function injectBootIntoHtml(rawHtml, token = '', conversationId = '') {
@@ -165,11 +182,17 @@ function readRawBuffer(req, maxBytes = MAX_UPLOAD_BYTES) {
  * Create and start the unified Prism Studio HTTP server + Engine + optional Passive CDP Bridge.
  */
 export async function createPrismStudioServer(options = {}) {
-  const dataDir = options.dataDir ? resolve(options.dataDir) : resolveDefaultDataDir();
+  const dataDir = resolveDefaultDataDir(options.dataDir || '');
   const sidecarExecDataDir = process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR
     ? resolve(process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR)
     : dataDir;
   mkdirSync(dataDir, { recursive: true });
+
+  const hostCapToken = options.hostCapToken
+    ? String(options.hostCapToken)
+    : randomBytes(32).toString('hex');
+  let localSessionAwake = false;
+  let boundOrigin = '';
 
   const envPort = parseInt(
     process.env.ANTIGRAVITY_SIDECAR_WEB_PORT ||
@@ -199,6 +222,17 @@ export async function createPrismStudioServer(options = {}) {
   if (typeof engine.init === 'function') {
     await engine.init();
   }
+
+  const canaryController = createCanaryController({
+    dataDir,
+    pluginRoot: PLUGIN_ROOT,
+    onTripSafeMode: async () => {
+      localSessionAwake = false;
+      await engine.updateConfig({ skinEnabled: false });
+      await engine.store?.flush?.();
+    },
+  });
+  await canaryController.evaluateBoot('');
 
   let cdpBridge = null;
   const defaultSearchDirs = Array.isArray(options.shortcutSearchDirs) ? options.shortcutSearchDirs : null;
@@ -305,37 +339,54 @@ export async function createPrismStudioServer(options = {}) {
           }
         : await getAutostartStatus({ force: false, port: config.debugPort || DEFAULT_DEBUG_PORT });
 
+    const canary = cdpBridge ? cdpBridge.getCanary() : canaryController.getStatus();
+    const startupMode = config.startupMode || 'gentle-auto';
+    const sessionAwake =
+      canary.state === 'tripped'
+        ? false
+        : cdpBridge
+          ? cdpBridge.isSessionAwake(startupMode)
+          : startupMode !== 'manual' || localSessionAwake;
+
     const baseHostStatus = cdpBridge
       ? cdpBridge.getStatus()
       : {
-          phase: 'standby',
+          phase: canary.state === 'tripped' ? 'tripped' : startupMode === 'manual' && !sessionAwake ? 'manual-standby' : 'standby',
           cdpReachable: false,
           port: config.debugPort || DEFAULT_DEBUG_PORT,
           pluginEnabled: true,
+          canary,
+          sessionAwake,
           attachedTargets: [],
           attachedCount: 0,
           version: PLUGIN_VERSION,
         };
     const hostStatus = {
       ...baseHostStatus,
+      canary,
+      sessionAwake,
+      startupMode,
+      liveBootDelay: config.liveBootDelay ?? 1.5,
       normalShortcutEnabled: Boolean(autostart.normalShortcutEnabled),
       anyShortcutEnabled: Boolean(autostart.anyShortcutEnabled),
       patchedShortcuts: autostart.patchedShortcuts || [],
       shortcuts: autostart.shortcuts || [],
-      sidecarAutoStartsOnBoot: true,
-      autoRestoreLastSettings: true,
+      sidecarAutoStartsOnBoot: startupMode !== 'manual',
+      autoRestoreLastSettings: startupMode !== 'manual',
     };
     return {
       config,
       activeItem,
-      skinEnabled: config.skinEnabled !== false,
+      skinEnabled: config.skinEnabled !== false && canary.state !== 'tripped',
+      canary,
+      sessionAwake,
       presets,
       hostStatus,
       autostart,
       normalShortcutEnabled: hostStatus.normalShortcutEnabled,
       patchedShortcuts: hostStatus.patchedShortcuts,
-      sidecarAutoStartsOnBoot: true,
-      autoRestoreLastSettings: true,
+      sidecarAutoStartsOnBoot: hostStatus.sidecarAutoStartsOnBoot,
+      autoRestoreLastSettings: hostStatus.autoRestoreLastSettings,
       stats,
       mediaOrigin,
       pid: process.pid,
@@ -398,8 +449,10 @@ export async function createPrismStudioServer(options = {}) {
     },
     'wallpaper.apply': async (params = {}) => {
       const wid = String(params.wallpaperId || params.id || '');
+      localSessionAwake = true;
       await engine.applyWallpaper(wid, { ...(params.patch || {}), skinEnabled: true });
-      await pushToHost();
+      if (cdpBridge) await cdpBridge.wake();
+      else await pushToHost();
       return buildCanonicalState();
     },
     'playlist.step': async (params = {}) => {
@@ -408,7 +461,12 @@ export async function createPrismStudioServer(options = {}) {
       await pushToHost();
       return buildCanonicalState();
     },
-    'preset.apply': async (params = {}) => applyAnyPreset(params.presetId || params.id || params.name),
+    'preset.apply': async (params = {}) => {
+      localSessionAwake = true;
+      const st = await applyAnyPreset(params.presetId || params.id || params.name);
+      if (cdpBridge) await cdpBridge.wake();
+      return st;
+    },
     'accent.save': async (params = {}) => {
       const cfg = await engine.getConfig();
       const wid = String(params.wallpaperId || cfg.activeWallpaperId || '');
@@ -441,6 +499,46 @@ export async function createPrismStudioServer(options = {}) {
       await pushToHost();
       return buildCanonicalState();
     },
+    'skin.panicRestore': async () => {
+      localSessionAwake = false;
+      await engine.updateConfig({ skinEnabled: false });
+      await engine.store?.flush?.();
+      await pushToHost();
+      return { ok: true, skinEnabled: false, state: await buildCanonicalState() };
+    },
+    'skin.wake': async () => {
+      localSessionAwake = true;
+      await engine.updateConfig({ skinEnabled: true });
+      if (cdpBridge) await cdpBridge.wake();
+      else await pushToHost();
+      const state = await buildCanonicalState();
+      return { ok: true, sessionAwake: true, state };
+    },
+    'canary.get': async () => ({ ok: true, canary: cdpBridge ? cdpBridge.getCanary() : canaryController.getStatus() }),
+    'canary.healthy': async (params = {}) => {
+      const next = cdpBridge
+        ? cdpBridge.markCanaryHealthy(String(params.targetId || ''))
+        : canaryController.markHealthy(String(params.targetId || ''));
+      return { ok: true, canary: next };
+    },
+    'canary.rollback': async (params = {}) => {
+      localSessionAwake = false;
+      const reason = String(params.reason || 'root_watchdog_rollback');
+      const targetId = String(params.targetId || '');
+      const next = cdpBridge
+        ? await cdpBridge.rollbackCanary(reason, targetId)
+        : await canaryController.rollback(reason, targetId);
+      const state = await buildCanonicalState();
+      return { ok: true, canary: next, state };
+    },
+    'canary.reset': async () => {
+      localSessionAwake = true;
+      await engine.updateConfig({ skinEnabled: true });
+      const next = cdpBridge ? await cdpBridge.resetCanary() : canaryController.reset();
+      await pushToHost();
+      const state = await buildCanonicalState();
+      return { ok: true, canary: next, state };
+    },
     'autostart.get': async (params = {}) => {
       const cfg = await engine.getConfig();
       return getAutostartStatus({ force: Boolean(params.refresh), port: cfg.debugPort || DEFAULT_DEBUG_PORT });
@@ -464,12 +562,17 @@ export async function createPrismStudioServer(options = {}) {
       getEngineState: buildCanonicalState,
       hostScripts: hostModule,
       rpcHandlers,
+      getHostOrigin: () => boundOrigin,
+      capToken: hostCapToken,
+      dataDir,
+      pluginRoot: PLUGIN_ROOT,
+      canaryController,
+      cdpPort: options.cdpPort || 0,
       pollMs: options.cdpPollMs ?? 3000,
       configPath: options.hostConfigPath || '',
       profileDir: options.profileDir || '',
       log: options.log || (() => {}),
     });
-    await cdpBridge.start().catch(() => {});
   }
 
   if (engine.events && typeof engine.events.on === 'function') {
@@ -487,19 +590,127 @@ export async function createPrismStudioServer(options = {}) {
     return headerTok === authToken || queryTok === authToken;
   };
 
+  const verifyHostCapToken = (candidate) => {
+    const a = Buffer.from(String(candidate || ''), 'utf8');
+    const b = Buffer.from(hostCapToken, 'utf8');
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
+
   const handleRequest = async (req, res) => {
+    const urlObj = new URL(req.url || '/', 'http://127.0.0.1');
+    const pathname = urlObj.pathname;
+    const reqOrigin = typeof req.headers.origin === 'string' && req.headers.origin ? req.headers.origin : '*';
+
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': reqOrigin,
+        Vary: 'Origin',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Sidecar-Token',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Sidecar-Token, X-Prism-Token, Cache-Control',
+        'Access-Control-Allow-Private-Network': 'true',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
       });
       res.end();
       return;
     }
 
-    const urlObj = new URL(req.url || '/', 'http://127.0.0.1');
-    const pathname = urlObj.pathname;
+    // ---- Capability-Fenced Direct Host Bridge Routes (`/host/<256bitCapToken>/*`) ----
+    const hostMatch = /^\/host\/([a-zA-Z0-9_-]{16,128})\/(stage\.js|panel\.js|static\.css|rpc|events)$/.exec(pathname);
+    if (hostMatch) {
+      const [, reqCap, asset] = hostMatch;
+      const hostHeaders = {
+        'Access-Control-Allow-Origin': reqOrigin,
+        Vary: 'Origin',
+        'Access-Control-Allow-Private-Network': 'true',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      };
+      if (!verifyHostCapToken(reqCap)) {
+        sendJson(res, 403, { ok: false, error: 'Forbidden: invalid host capability token' }, hostHeaders);
+        return;
+      }
+
+      if (req.method === 'GET' && asset === 'stage.js') {
+        const st = await buildCanonicalState();
+        const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
+          skinEnabled: st.skinEnabled,
+          slides: st.activeItem?.slides,
+        });
+        const body = `window.__AGY_PRISM_BOOT_PAYLOAD__ = ${JSON.stringify(skinPayload)};\n${hostModule.getHostSkinScript()}\n`;
+        res.writeHead(200, { ...hostHeaders, 'Content-Type': 'text/javascript; charset=utf-8' });
+        res.end(body);
+        return;
+      }
+
+      if (req.method === 'GET' && asset === 'panel.js') {
+        const st = await buildCanonicalState();
+        const lib = await normalizeLibrary(false);
+        const bootObj = { ...st, items: lib.items, connected: true };
+        const openNow = urlObj.searchParams.get('open') === '1';
+        const suffix = openNow
+          ? '\nif (window.__agyPrismPanel && typeof window.__agyPrismPanel.open === "function") { window.__agyPrismPanel.open(); }\n'
+          : '\n';
+        const body = `window.__AGY_PRISM_PANEL_BOOT__ = ${JSON.stringify(bootObj)};\n${hostModule.getHostPanelScript()}${suffix}`;
+        res.writeHead(200, { ...hostHeaders, 'Content-Type': 'text/javascript; charset=utf-8' });
+        res.end(body);
+        return;
+      }
+
+      if (req.method === 'GET' && asset === 'static.css') {
+        const st = await buildCanonicalState();
+        const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
+          skinEnabled: st.skinEnabled,
+          slides: st.activeItem?.slides,
+        });
+        const css =
+          typeof hostModule.buildStaticCssSheet === 'function'
+            ? hostModule.buildStaticCssSheet(skinPayload)
+            : buildFallbackStaticCss(skinPayload);
+        res.writeHead(200, { ...hostHeaders, 'Content-Type': 'text/css; charset=utf-8' });
+        res.end(css);
+        return;
+      }
+
+      if (req.method === 'POST' && asset === 'rpc') {
+        const parsed = await readJsonBody(req);
+        const id = parsed?.id ?? null;
+        const method = String(parsed?.method || '');
+        const params = parsed?.params && typeof parsed.params === 'object' ? parsed.params : {};
+        const handler = rpcHandlers[method];
+        if (typeof handler !== 'function') {
+          sendJson(res, 200, { id, ok: false, error: `Unknown RPC method: ${method}` }, hostHeaders);
+          return;
+        }
+        try {
+          const result = await handler(params);
+          sendJson(res, 200, { id, ok: true, result: result === undefined ? null : result }, hostHeaders);
+        } catch (err) {
+          sendJson(res, 200, { id, ok: false, error: err?.message || String(err) }, hostHeaders);
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && asset === 'events') {
+        const isInMemory = typeof req.socket?.setNoDelay !== 'function';
+        res.writeHead(200, {
+          ...hostHeaders,
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          Connection: isInMemory ? 'close' : 'keep-alive',
+        });
+        if (cdpBridge) {
+          await cdpBridge.registerSseClient(req, res, isInMemory);
+        } else {
+          const st = await buildCanonicalState();
+          const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
+            skinEnabled: st.skinEnabled,
+          });
+          res.write(`retry: 2500\ndata: ${JSON.stringify({ event: 'state', startupMode: st.config.startupMode, skinEnabled: st.skinEnabled, skinPayload, data: st })}\n\n`);
+          res.end();
+        }
+        return;
+      }
+    }
 
     // Static UI & Preload
     if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
@@ -527,6 +738,11 @@ export async function createPrismStudioServer(options = {}) {
     // ---- GET APIs ----
     if (req.method === 'GET' && pathname === '/api/bootstrap') {
       sendJson(res, 200, await buildCanonicalState());
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/canary') {
+      sendJson(res, 200, { ok: true, canary: cdpBridge ? cdpBridge.getCanary() : canaryController.getStatus() });
       return;
     }
 
@@ -651,8 +867,10 @@ export async function createPrismStudioServer(options = {}) {
       if (pathname === '/api/wallpaper/apply') {
         const wallpaperId = String(body?.wallpaperId ?? body?.id ?? '');
         const extraPatch = body?.patch && typeof body.patch === 'object' ? body.patch : {};
+        localSessionAwake = true;
         await engine.applyWallpaper(wallpaperId, { ...extraPatch, skinEnabled: true });
-        await pushToHost();
+        if (cdpBridge) await cdpBridge.wake();
+        else await pushToHost();
         sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
         return;
       }
@@ -731,6 +949,26 @@ export async function createPrismStudioServer(options = {}) {
         return;
       }
 
+      if (pathname === '/api/skin/wake') {
+        const out = await rpcHandlers['skin.wake']();
+        sendJson(res, 200, out);
+        return;
+      }
+
+      if (pathname === '/api/canary/reset') {
+        const out = await rpcHandlers['canary.reset']();
+        sendJson(res, 200, out);
+        return;
+      }
+
+      if (pathname === '/api/host/reload') {
+        hostModule.getHostSkinScript?.({ reload: true });
+        hostModule.getHostPanelScript?.({ reload: true });
+        await pushToHost();
+        sendJson(res, 200, { ok: true, reloaded: true, state: await buildCanonicalState() });
+        return;
+      }
+
       if (pathname === '/api/host/autostart') {
         const enabled = body?.enabled !== false;
         const cfg = await engine.getConfig();
@@ -791,6 +1029,11 @@ export async function createPrismStudioServer(options = {}) {
   const addr = server.address();
   const actualPort = addr && typeof addr === 'object' ? addr.port : listenPort;
   const origin = `http://127.0.0.1:${actualPort}`;
+  boundOrigin = origin;
+
+  if (cdpBridge) {
+    await cdpBridge.start().catch(() => {});
+  }
 
   const serverInfoPath = join(dataDir, 'server_info.json');
   try {
@@ -895,6 +1138,9 @@ export async function createPrismStudioServer(options = {}) {
     port: actualPort,
     origin,
     token: authToken,
+    hostCapToken,
+    hostBaseUrl: `${origin}/host/${hostCapToken}`,
+    canary: canaryController,
     engine,
     cdpBridge,
     rpcHandlers,
@@ -927,26 +1173,37 @@ if (isMainEntry()) {
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
 
-  // Hot-reload under `restart_policy: "always"` when `install-local.mjs` updates `main.mjs` on disk
-  const selfFile = fileURLToPath(import.meta.url);
-  let bootMtimeMs = 0;
-  try {
-    bootMtimeMs = statSync(selfFile).mtimeMs;
-  } catch {
-    bootMtimeMs = 0;
+  // Clean in-process host script hot-reload (never exits 0 under `restart_policy: "on-failure"`!)
+  const watchedFiles = [
+    join(PLUGIN_ROOT, 'src', 'host', 'wallpaper-inject.js'),
+    join(PLUGIN_ROOT, 'src', 'host', 'panel-inject.js'),
+  ];
+  const mtimes = new Map();
+  for (const wf of watchedFiles) {
+    try {
+      if (existsSync(wf)) mtimes.set(wf, statSync(wf).mtimeMs);
+    } catch {
+      /* ignore */
+    }
   }
-  if (bootMtimeMs > 0) {
-    const watchTimer = setInterval(() => {
+  const watchTimer = setInterval(() => {
+    let changed = false;
+    for (const wf of watchedFiles) {
       try {
-        const cur = statSync(selfFile).mtimeMs;
-        if (cur > bootMtimeMs + 50) {
-          clearInterval(watchTimer);
-          shutdown();
-        }
+        if (!existsSync(wf)) continue;
+        const cur = statSync(wf).mtimeMs;
+        const prev = mtimes.get(wf) || 0;
+        if (prev > 0 && cur > prev + 50) changed = true;
+        mtimes.set(wf, cur);
       } catch {
         /* ignore */
       }
-    }, 4000);
-    watchTimer.unref?.();
-  }
+    }
+    if (changed) {
+      hostModule.getHostSkinScript?.({ reload: true });
+      hostModule.getHostPanelScript?.({ reload: true });
+      void instance.cdpBridge?.broadcastState?.().catch(() => {});
+    }
+  }, 4000);
+  watchTimer.unref?.();
 }

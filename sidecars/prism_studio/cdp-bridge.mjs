@@ -2,10 +2,12 @@
 // Zero writes to Antigravity's installation (never touches app.asar or ~/.gemini/config/config.json).
 
 import { execFile } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { homedir } from 'node:os';
 import { basename, delimiter, dirname, join, resolve } from 'node:path';
+import { resolveDefaultPrismDataDir, writeFsyncJsonSync } from '../../src/engine/store.mjs';
 import {
   DEFAULT_DEBUG_PORT,
   PLUGIN_ID,
@@ -13,6 +15,8 @@ import {
   PRISM_DOM,
   SIDECAR_URI,
 } from '../../src/shared/schema.mjs';
+
+export { resolveDefaultPrismDataDir };
 
 const NATIVE_BINDING = '__agyPrismNativeSend';
 
@@ -117,8 +121,20 @@ export function readDevToolsActivePort(profileDir) {
   }
 }
 
-/** Strictly read-only check of ~/.gemini/config/config.json for plugin enablement. */
-export function isPluginEnabledInHostConfig(configPath) {
+/** Strictly read-only, fail-closed check of ~/.gemini/config/config.json for plugin & sidecar enablement. */
+export function isPluginEnabledInHostConfig(configPath, pluginRoot = '') {
+  const checkPluginManifest = () => {
+    if (!pluginRoot) return true;
+    try {
+      const mf = join(resolve(pluginRoot), 'plugin.json');
+      if (!existsSync(mf)) return true;
+      const parsed = JSON.parse(readFileSync(mf, 'utf8').replace(/^\uFEFF/, ''));
+      return parsed?.disabled !== true;
+    } catch {
+      return false;
+    }
+  };
+
   const fp =
     configPath ||
     join(
@@ -126,12 +142,18 @@ export function isPluginEnabledInHostConfig(configPath) {
       'config.json',
     );
   try {
-    if (!existsSync(fp)) return true;
+    if (!existsSync(fp)) return checkPluginManifest();
     const raw = JSON.parse(readFileSync(fp, 'utf8').replace(/^\uFEFF/, ''));
     if (raw?.plugins?.[PLUGIN_ID]?.enabled === false) return false;
-    return true;
-  } catch {
-    return true;
+    if (raw?.sidecars?.[`${PLUGIN_ID}/prism_studio`]?.enabled === false) return false;
+    return checkPluginManifest();
+  } catch (err) {
+    // In sandboxed test harnesses without ~/.gemini/config read access, fall back to plugin.json;
+    // on corrupt JSON or explicit configPath read failure, fail closed (false).
+    if (!configPath && err && (err.code === 'EACCES' || err.code === 'EPERM')) {
+      return checkPluginManifest();
+    }
+    return false;
   }
 }
 
@@ -188,12 +210,6 @@ export async function createDebugShortcut({ port = DEFAULT_DEBUG_PORT, destDir =
 }
 
 // ------------------------------------------------ Normal Shortcut In-Place Auto-Load
-
-function resolveDefaultPrismDataDir(explicitDir = '') {
-  if (explicitDir) return resolve(explicitDir);
-  if (process.env.AGY_PRISM_DATA_DIR) return resolve(process.env.AGY_PRISM_DATA_DIR);
-  return join(homedir(), '.agy-wallpaper-prism');
-}
 
 /** Pure helper: append or update `--remote-debugging-port=<port>` idempotently without duplicating flags. */
 export function patchDebugArg(argsStr = '', port = DEFAULT_DEBUG_PORT) {
@@ -797,72 +813,219 @@ export function selectHubTargets(targets = []) {
   return scored[0] && scored[0].score > 0 ? [scored[0].t] : [];
 }
 
+function encodeWsClientTextFrame(text) {
+  const payload = Buffer.from(String(text), 'utf8');
+  const len = payload.length;
+  const mask = randomBytes(4);
+  let header;
+  if (len < 126) {
+    header = Buffer.alloc(6);
+    header[0] = 0x81;
+    header[1] = 0x80 | len;
+    mask.copy(header, 2);
+  } else if (len < 65536) {
+    header = Buffer.alloc(8);
+    header[0] = 0x81;
+    header[1] = 0x80 | 126;
+    header.writeUInt16BE(len, 2);
+    mask.copy(header, 4);
+  } else {
+    header = Buffer.alloc(14);
+    header[0] = 0x81;
+    header[1] = 0x80 | 127;
+    header.writeBigUInt64BE(BigInt(len), 2);
+    mask.copy(header, 10);
+  }
+  const masked = Buffer.allocUnsafe(len);
+  for (let i = 0; i < len; i += 1) {
+    masked[i] = payload[i] ^ mask[i & 3];
+  }
+  return Buffer.concat([header, masked]);
+}
+
+function encodeWsClientCloseFrame() {
+  const mask = randomBytes(4);
+  return Buffer.from([0x88, 0x80, mask[0], mask[1], mask[2], mask[3]]);
+}
+
+/**
+ * Lightweight raw RFC-6455 loopback WebSocket session (omits `Origin` header for clean
+ * Chromium DevTools loopback etiquette and supports ephemeral 1-shot `Runtime.evaluate`).
+ */
 export class CdpSession {
-  constructor(ws) {
-    this.ws = ws;
+  constructor(socket, initialHead = Buffer.alloc(0)) {
+    this.socket = socket;
     this.nextId = 1;
     this.pending = new Map();
     this.handlers = new Map();
     this.closeHandlers = [];
     this.closed = false;
+    this._rxBuf = initialHead.length > 0 ? Buffer.from(initialHead) : Buffer.alloc(0);
+    this._fragChunks = [];
 
-    ws.addEventListener('message', (ev) => {
-      let msg;
-      try {
-        msg = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data));
-      } catch {
-        return;
-      }
-      if (msg.id != null && this.pending.has(msg.id)) {
-        const entry = this.pending.get(msg.id);
-        this.pending.delete(msg.id);
-        if (msg.error) entry.reject(new Error(msg.error.message || 'CDP error'));
-        else entry.resolve(msg.result);
-        return;
-      }
-      if (msg.method) {
-        for (const fn of this.handlers.get(msg.method) || []) {
-          try {
-            fn(msg.params || {});
-          } catch {
-            /* isolate listener errors */
-          }
-        }
-      }
+    socket.on('data', (chunk) => {
+      this._rxBuf = this._rxBuf.length === 0 ? chunk : Buffer.concat([this._rxBuf, chunk]);
+      this._drainFrames();
     });
 
-    ws.addEventListener('close', () => {
+    const handleSocketDone = () => {
+      if (this.closed) return;
       this.closed = true;
-      for (const { reject } of this.pending.values()) reject(new Error('CDP socket closed'));
+      for (const { reject } of this.pending.values()) {
+        reject(new Error('CDP socket closed'));
+      }
       this.pending.clear();
       for (const fn of this.closeHandlers.splice(0)) {
-        try {
-          fn();
-        } catch {
-          /* ignore */
-        }
+        try { fn(); } catch { /* ignore */ }
       }
-    });
-    ws.addEventListener('error', () => {});
+    };
+
+    socket.on('close', handleSocketDone);
+    socket.on('end', handleSocketDone);
+    socket.on('error', () => {});
   }
 
-  static async connect(wsUrl, timeoutMs = 5000) {
-    const ws = new WebSocket(wsUrl);
-    await new Promise((resolvePromise, reject) => {
-      const timer = setTimeout(() => reject(new Error(`CDP WebSocket timeout: ${wsUrl}`)), timeoutMs);
-      ws.addEventListener('open', () => {
-        clearTimeout(timer);
-        resolvePromise();
-      });
-      ws.addEventListener('error', () => {
-        clearTimeout(timer);
-        reject(new Error(`CDP WebSocket error: ${wsUrl}`));
-      });
-    });
-    return new CdpSession(ws);
+  _drainFrames() {
+    while (this._rxBuf.length >= 2) {
+      const b0 = this._rxBuf[0];
+      const b1 = this._rxBuf[1];
+      const fin = (b0 & 0x80) !== 0;
+      const opcode = b0 & 0x0f;
+      const isMasked = (b1 & 0x80) !== 0;
+      let payloadLen = b1 & 0x7f;
+      let offset = 2;
+
+      if (payloadLen === 126) {
+        if (this._rxBuf.length < 4) return;
+        payloadLen = this._rxBuf.readUInt16BE(2);
+        offset = 4;
+      } else if (payloadLen === 127) {
+        if (this._rxBuf.length < 10) return;
+        payloadLen = Number(this._rxBuf.readBigUInt64BE(2));
+        offset = 10;
+      }
+
+      const maskLen = isMasked ? 4 : 0;
+      if (this._rxBuf.length < offset + maskLen + payloadLen) return;
+
+      let body = this._rxBuf.subarray(offset + maskLen, offset + maskLen + payloadLen);
+      if (isMasked) {
+        const mask = this._rxBuf.subarray(offset, offset + 4);
+        const unmasked = Buffer.allocUnsafe(payloadLen);
+        for (let i = 0; i < payloadLen; i += 1) unmasked[i] = body[i] ^ mask[i & 3];
+        body = unmasked;
+      }
+      this._rxBuf = this._rxBuf.subarray(offset + maskLen + payloadLen);
+
+      if (opcode === 0x08) {
+        this.close();
+        return;
+      }
+      if (opcode === 0x09) {
+        // Ping -> Pong
+        const pongMask = randomBytes(4);
+        const pong = Buffer.alloc(6 + body.length);
+        pong[0] = 0x8a;
+        pong[1] = 0x80 | Math.min(125, body.length);
+        pongMask.copy(pong, 2);
+        for (let i = 0; i < Math.min(125, body.length); i += 1) pong[6 + i] = body[i] ^ pongMask[i & 3];
+        try { this.socket.write(pong); } catch { /* ignore */ }
+        continue;
+      }
+      if (opcode === 0x0a) continue;
+
+      if (opcode === 0x01 || opcode === 0x00) {
+        this._fragChunks.push(Buffer.from(body));
+        if (!fin) continue;
+        const fullText = Buffer.concat(this._fragChunks).toString('utf8');
+        this._fragChunks = [];
+        this._dispatchMessage(fullText);
+      }
+    }
   }
 
-  send(method, params = {}, timeoutMs = 12000) {
+  _dispatchMessage(rawText) {
+    let msg;
+    try {
+      msg = JSON.parse(rawText);
+    } catch {
+      return;
+    }
+    if (msg.id != null && this.pending.has(msg.id)) {
+      const entry = this.pending.get(msg.id);
+      this.pending.delete(msg.id);
+      if (msg.error) entry.reject(new Error(msg.error.message || 'CDP error'));
+      else entry.resolve(msg.result);
+      return;
+    }
+    if (msg.method) {
+      for (const fn of this.handlers.get(msg.method) || []) {
+        try { fn(msg.params || {}); } catch { /* isolate */ }
+      }
+    }
+  }
+
+  static async connect(wsUrl, timeoutMs = 3500) {
+    const u = new URL(wsUrl);
+    const port = Number(u.port || 80);
+    const host = u.hostname || '127.0.0.1';
+    const pathAndQuery = `${u.pathname || '/'}${u.search || ''}`;
+    const wsKey = randomBytes(16).toString('base64');
+
+    return new Promise((resolvePromise, reject) => {
+      let settled = false;
+      const req = httpRequest({
+        host,
+        port,
+        path: pathAndQuery,
+        method: 'GET',
+        headers: {
+          Connection: 'Upgrade',
+          Upgrade: 'websocket',
+          'Sec-WebSocket-Version': '13',
+          'Sec-WebSocket-Key': wsKey,
+        },
+        timeout: timeoutMs,
+      });
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try { req.destroy(); } catch { /* ignore */ }
+        reject(new Error(`CDP WebSocket timeout: ${wsUrl}`));
+      }, timeoutMs);
+
+      req.on('upgrade', (_res, socket, head) => {
+        if (settled) {
+          try { socket.destroy(); } catch { /* ignore */ }
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        socket.setNoDelay?.(true);
+        resolvePromise(new CdpSession(socket, head));
+      });
+
+      req.on('response', (res) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        res.resume();
+        reject(new Error(`CDP upgrade rejected (${res.statusCode}): ${wsUrl}`));
+      });
+
+      req.on('error', (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      });
+
+      req.end();
+    });
+  }
+
+  send(method, params = {}, timeoutMs = 4500) {
     if (this.closed) return Promise.reject(new Error('CDP session closed'));
     const id = this.nextId++;
     return new Promise((resolvePromise, reject) => {
@@ -881,7 +1044,7 @@ export class CdpSession {
         },
       });
       try {
-        this.ws.send(JSON.stringify({ id, method, params }));
+        this.socket.write(encodeWsClientTextFrame(JSON.stringify({ id, method, params })));
       } catch (err) {
         clearTimeout(timer);
         this.pending.delete(id);
@@ -900,13 +1063,17 @@ export class CdpSession {
     else this.closeHandlers.push(fn);
   }
 
-  async evaluate(expression, { returnByValue = true, awaitPromise = false } = {}) {
-    const res = await this.send('Runtime.evaluate', {
-      expression,
-      returnByValue,
-      awaitPromise,
-      userGesture: true,
-    });
+  async evaluate(expression, { returnByValue = true, awaitPromise = false, timeoutMs = 4000 } = {}) {
+    const res = await this.send(
+      'Runtime.evaluate',
+      {
+        expression,
+        returnByValue,
+        awaitPromise,
+        userGesture: true,
+      },
+      timeoutMs,
+    );
     if (res?.exceptionDetails) {
       throw new Error(res.exceptionDetails.exception?.description || res.exceptionDetails.text || 'Evaluate failed');
     }
@@ -917,22 +1084,307 @@ export class CdpSession {
     if (this.closed) return;
     this.closed = true;
     try {
-      this.ws.close();
+      this.socket.write(encodeWsClientCloseFrame());
+    } catch {
+      /* ignore */
+    }
+    try {
+      this.socket.end();
+      setTimeout(() => {
+        try { this.socket.destroy(); } catch { /* ignore */ }
+      }, 40).unref?.();
     } catch {
       /* ignore */
     }
   }
 }
 
+/**
+ * Ephemeral 1-shot `Runtime.evaluate` helper: connects raw loopback WS, evaluates in main-frame
+ * default context with zero inspector domain enablement, and always closes in `finally`.
+ */
+export async function evaluateTargetEphemeral(wsUrl, expression, opts = {}) {
+  const session = await CdpSession.connect(wsUrl, opts.connectTimeoutMs || 2800);
+  try {
+    return await session.evaluate(expression, opts);
+  } finally {
+    session.close();
+  }
+}
+
+// --------------------------------------------------------- Canary & Install Co-Keying
+
+export function readInstallStamp(pluginRoot = '') {
+  if (!pluginRoot) return '';
+  try {
+    const absRoot = resolve(pluginRoot);
+    const stampFile = join(absRoot, '.prism-install-id');
+    if (existsSync(stampFile)) {
+      return readFileSync(stampFile, 'utf8').trim().slice(0, 120);
+    }
+    if (existsSync(absRoot)) {
+      const st = statSync(absRoot);
+      return `dir-${Math.round(st.birthtimeMs || st.ctimeMs || 0)}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return '';
+}
+
+const CANARY_WINDOW_MS = 90_000;
+
+export function createCanaryController({
+  dataDir = '',
+  pluginRoot = '',
+  onTripSafeMode = async () => {},
+} = {}) {
+  const resolvedDir = resolveDefaultPrismDataDir(dataDir);
+  const canaryPath = join(resolvedDir, 'canary.json');
+  const currentInstallId = readInstallStamp(pluginRoot);
+
+  const defaultCanary = () => ({
+    version: 2,
+    state: 'idle',
+    browserSessionId: '',
+    windowTargetId: '',
+    sidecarPid: process.pid,
+    boundInstallId: currentInstallId || '',
+    lastArmTs: 0,
+    lastHealthyTs: 0,
+    trippedAt: 0,
+    trippedReason: null,
+    unfinishedAttempts: [],
+  });
+
+  const readDisk = () => {
+    try {
+      if (!existsSync(canaryPath)) return defaultCanary();
+      const raw = JSON.parse(readFileSync(canaryPath, 'utf8').replace(/^\uFEFF/, ''));
+      if (!raw || typeof raw !== 'object') return defaultCanary();
+      return {
+        version: 2,
+        state: ['idle', 'arming', 'healthy', 'tripped'].includes(raw.state) ? raw.state : 'idle',
+        browserSessionId: String(raw.browserSessionId || ''),
+        windowTargetId: String(raw.windowTargetId || ''),
+        sidecarPid: Number(raw.sidecarPid) || 0,
+        boundInstallId: String(raw.boundInstallId || ''),
+        lastArmTs: Number(raw.lastArmTs) || 0,
+        lastHealthyTs: Number(raw.lastHealthyTs) || 0,
+        trippedAt: Number(raw.trippedAt) || 0,
+        trippedReason: raw.trippedReason ? String(raw.trippedReason) : null,
+        unfinishedAttempts: Array.isArray(raw.unfinishedAttempts)
+          ? raw.unfinishedAttempts.map(Number).filter((n) => Number.isFinite(n) && n > 0)
+          : [],
+      };
+    } catch {
+      return defaultCanary();
+    }
+  };
+
+  let stateObj = readDisk();
+
+  const persistFsync = (next) => {
+    stateObj = next;
+    writeFsyncJsonSync(canaryPath, next);
+    return { ...stateObj };
+  };
+
+  const evaluateBoot = async (browserSessionId = '') => {
+    stateObj = readDisk();
+    const now = Date.now();
+    const recentUnfinished = stateObj.unfinishedAttempts.filter((ts) => now - ts <= CANARY_WINDOW_MS);
+
+    // 1. Fresh reinstall co-key detection: if plugin folder was deleted & reinstalled with a new stamp,
+    // reset skinEnabled to false cleanly so ghost external state never re-injects uninvited.
+    if (
+      currentInstallId &&
+      stateObj.boundInstallId &&
+      stateObj.boundInstallId !== currentInstallId
+    ) {
+      const resetState = persistFsync({
+        ...defaultCanary(),
+        boundInstallId: currentInstallId,
+      });
+      await onTripSafeMode('plugin_reinstalled_fresh');
+      return resetState;
+    }
+
+    if (stateObj.state === 'tripped') {
+      await onTripSafeMode(stateObj.trippedReason || 'already_tripped');
+      return { ...stateObj };
+    }
+
+    // 2. Unfinished `arming` left by a different browserSessionId or dead prior sidecar PID -> Trip Safe Mode!
+    const fromPriorSession =
+      stateObj.state === 'arming' &&
+      ((browserSessionId && stateObj.browserSessionId && stateObj.browserSessionId !== browserSessionId) ||
+        (!browserSessionId && stateObj.sidecarPid !== process.pid && (stateObj.browserSessionId || stateObj.sidecarPid > 0)));
+
+    if (fromPriorSession) {
+      const updatedAttempts = [...recentUnfinished, stateObj.lastArmTs || now];
+      const tripped = persistFsync({
+        ...stateObj,
+        state: 'tripped',
+        sidecarPid: process.pid,
+        boundInstallId: currentInstallId || stateObj.boundInstallId,
+        trippedAt: now,
+        trippedReason: 'unfinished_boot_arming',
+        unfinishedAttempts: updatedAttempts.slice(-6),
+      });
+      await onTripSafeMode('unfinished_boot_arming');
+      return tripped;
+    }
+
+    // 3. Sliding-window circuit breaker: >= 2 unfinished boot attempts within 90s -> Trip Safe Mode!
+    if (recentUnfinished.length >= 2) {
+      const tripped = persistFsync({
+        ...stateObj,
+        state: 'tripped',
+        sidecarPid: process.pid,
+        boundInstallId: currentInstallId || stateObj.boundInstallId,
+        trippedAt: now,
+        trippedReason: 'rapid_unfinished_restarts_90s',
+        unfinishedAttempts: recentUnfinished.slice(-6),
+      });
+      await onTripSafeMode('rapid_unfinished_restarts_90s');
+      return tripped;
+    }
+
+    if (!stateObj.boundInstallId && currentInstallId) {
+      persistFsync({ ...stateObj, boundInstallId: currentInstallId, unfinishedAttempts: recentUnfinished });
+    }
+    return { ...stateObj };
+  };
+
+  const arm = (browserSessionId = '', windowTargetId = '') => {
+    const cur = readDisk();
+    const now = Date.now();
+    const recent = cur.unfinishedAttempts.filter((ts) => now - ts <= CANARY_WINDOW_MS);
+    recent.push(now);
+    return persistFsync({
+      ...cur,
+      state: 'arming',
+      browserSessionId: String(browserSessionId || cur.browserSessionId || `pid-${process.pid}`),
+      windowTargetId: String(windowTargetId || ''),
+      sidecarPid: process.pid,
+      boundInstallId: currentInstallId || cur.boundInstallId || '',
+      lastArmTs: now,
+      trippedReason: null,
+      unfinishedAttempts: recent.slice(-6),
+    });
+  };
+
+  const markHealthy = (windowTargetId = '') => {
+    const cur = readDisk();
+    if (cur.state === 'tripped') return { ...cur };
+    const now = Date.now();
+    // Pop the successfully completed arm timestamp so healthy boots never accumulate toward circuit breaker
+    const remaining = cur.unfinishedAttempts.filter((ts) => ts !== cur.lastArmTs && now - ts <= CANARY_WINDOW_MS);
+    return persistFsync({
+      ...cur,
+      state: 'healthy',
+      windowTargetId: String(windowTargetId || cur.windowTargetId || ''),
+      sidecarPid: process.pid,
+      boundInstallId: currentInstallId || cur.boundInstallId || '',
+      lastHealthyTs: now,
+      trippedReason: null,
+      unfinishedAttempts: remaining,
+    });
+  };
+
+  const rollback = async (reason = 'root_watchdog_rollback', windowTargetId = '') => {
+    const cur = readDisk();
+    const now = Date.now();
+    const tripped = persistFsync({
+      ...cur,
+      state: 'tripped',
+      windowTargetId: String(windowTargetId || cur.windowTargetId || ''),
+      sidecarPid: process.pid,
+      boundInstallId: currentInstallId || cur.boundInstallId || '',
+      trippedAt: now,
+      trippedReason: String(reason || 'root_watchdog_rollback'),
+    });
+    await onTripSafeMode(tripped.trippedReason);
+    return tripped;
+  };
+
+  const reset = () => {
+    return persistFsync({
+      ...defaultCanary(),
+      state: 'idle',
+      boundInstallId: currentInstallId || stateObj.boundInstallId || '',
+      lastHealthyTs: stateObj.lastHealthyTs || 0,
+    });
+  };
+
+  return {
+    canaryPath,
+    getStatus: () => ({ ...readDisk() }),
+    evaluateBoot,
+    arm,
+    markHealthy,
+    rollback,
+    reset,
+  };
+}
+
 // --------------------------------------------------------- Page Bootstrap & Cleanup
 
+function safeJsonLiteral(value) {
+  return JSON.stringify(value).replace(/[\u2028\u2029<]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+export const REMOVE_SKIN_EXPR = `(function(){
+  try { if (window.${PRISM_DOM.skinGlobal} && typeof window.${PRISM_DOM.skinGlobal}.destroy === 'function') window.${PRISM_DOM.skinGlobal}.destroy(); } catch (_) {}
+  try {
+    ['agy-prism-css', 'agy-prism-static-css', 'agy-prism-caret-css', 'agy-prism-stage', 'agy-prism-fx-canvas', 'agy-prism-stage-loader'].forEach(function(id){
+      var n = document.getElementById(id); if (n) n.remove();
+    });
+    var r = document.documentElement;
+    [
+      ${JSON.stringify(PRISM_DOM.skinAttr)},
+      ${JSON.stringify(PRISM_DOM.glassAttr)},
+      ${JSON.stringify(PRISM_DOM.wallpaperAttr)},
+      ${JSON.stringify(PRISM_DOM.themeAttr)},
+      ${JSON.stringify(PRISM_DOM.schemeAttr)},
+      ${JSON.stringify(PRISM_DOM.accentModeAttr)},
+      ${JSON.stringify(PRISM_DOM.layoutAttr)},
+      ${JSON.stringify(PRISM_DOM.cornersAttr)},
+      ${JSON.stringify(PRISM_DOM.bordersAttr)},
+      ${JSON.stringify(PRISM_DOM.shadowsAttr)},
+      ${JSON.stringify(PRISM_DOM.kindAttr)},
+      'data-prism-glass',
+      'data-prism-code-mode'
+    ].forEach(function(a){ r.removeAttribute(a); });
+  } catch (_) {}
+  return true;
+})()`;
+
+export const REMOVE_PANEL_EXPR = `(function(){
+  try { if (window.${PRISM_DOM.panelGlobal} && typeof window.${PRISM_DOM.panelGlobal}.destroy === 'function') window.${PRISM_DOM.panelGlobal}.destroy(); } catch (_) {}
+  try {
+    ['agy-prism-popover', 'agy-prism-popover-css', 'agy-prism-pill', 'agy-prism-pill-css', 'agy-prism-panel-loader'].forEach(function(id){
+      var n = document.getElementById(id); if (n) n.remove();
+    });
+    if (document.documentElement) document.documentElement.removeAttribute('data-agy-prism-panel');
+    document.querySelectorAll('.' + ${JSON.stringify(PRISM_DOM.cornerOrbClass)}).forEach(function(el){ el.remove(); });
+  } catch (_) {}
+  return true;
+})()`;
+
 /**
- * Installs a universal `window.__agyPrismCall` bridge supporting BOTH:
- *   1) Two-arg Promise style: `await window.__agyPrismCall('playlist.step', { direction: 1 })`
- *   2) JSON envelope style:   `window.__agyPrismCall(JSON.stringify({ id, method, params }))`
+ * Installs a universal `window.__agyPrismCall` bridge supporting:
+ *   1) Direct loopback HTTP `/host/<capToken>/rpc` (default in Gentle v2.0 — zero CDP bindings!)
+ *   2) Fallback `window.__agyPrismNativeSend` compatibility for isolated unit test harnesses
  */
-export function buildRpcBootstrapSource() {
+export function buildRpcBootstrapSource({ rpcUrl = '', capToken = '' } = {}) {
   return `;(function(){
+    if (window.top && window !== window.top) return;
+    if (${JSON.stringify(Boolean(rpcUrl))}) {
+      window.__agyPrismRpcUrl = ${safeJsonLiteral(rpcUrl)};
+      window.__agyPrismCapToken = ${safeJsonLiteral(capToken)};
+    }
     if (window.__agyPrismRpcBooted && typeof window.${PRISM_DOM.bindingName} === 'function') return;
     window.__agyPrismRpcBooted = true;
     var seq = 1;
@@ -965,6 +1417,17 @@ export function buildRpcBootstrapSource() {
         reqObj = { id: 'p_' + (seq++) + '_' + Date.now(), method: String(arg1 || ''), params: arg2 && typeof arg2 === 'object' ? arg2 : {} };
       }
       if (reqObj.id == null) reqObj.id = 'p_' + (seq++);
+      var httpRpc = window.__agyPrismRpcUrl || '';
+      if (httpRpc && typeof window.fetch === 'function') {
+        return window.fetch(httpRpc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Prism-Token': window.__agyPrismCapToken || '' },
+          body: JSON.stringify(reqObj)
+        }).then(function(r){ return r.json(); }).then(function(env){
+          if (env && env.ok === false) throw new Error(env.error || 'RPC error');
+          return env ? env.result : null;
+        });
+      }
       return new Promise(function(resolve, reject) {
         var timer = setTimeout(function() {
           if (pending.has(reqObj.id)) {
@@ -982,7 +1445,7 @@ export function buildRpcBootstrapSource() {
           } else {
             clearTimeout(timer);
             pending.delete(reqObj.id);
-            reject(new Error('Prism CDP bridge not connected'));
+            reject(new Error('Prism bridge not connected'));
           }
         } catch (err) {
           clearTimeout(timer);
@@ -994,64 +1457,86 @@ export function buildRpcBootstrapSource() {
   })();`;
 }
 
-function deferUntilBody(code) {
-  return `;(function(){
-    var run = function(){ try { ${code} } catch (e) { try { console.warn('[agy-prism]', e); } catch (_) {} } };
-    if (document && document.documentElement && document.body) { run(); return; }
-    document.addEventListener('DOMContentLoaded', run, { once: true });
-  })();`;
+/**
+ * Compact (<1.4 KB) 1-shot Gentle Host Micro-Bootstrap:
+ *   - Top-frame guard (`window === window.top`)
+ *   - Dependency-free `Ctrl+Alt+Shift+R` & `4x Escape` (`900ms`) emergency panic strip
+ *   - `window.__agyPrismCall` over `/host/<capToken>/rpc` + `EventSource('/host/<capToken>/events')`
+ *   - Lazy `Ctrl+Alt+W` & `#agy-prism-pill` stub (`0 KB` `panel.js` overhead until summoned!)
+ *   - Idle async `<script src=".../stage.js">` (or `<link rel="stylesheet" href=".../static.css">`)
+ */
+export function buildHostMicroBootstrap({
+  hostOrigin,
+  capToken,
+  triggerMode = 'both',
+  startupMode = 'gentle-auto',
+  skinEnabled = true,
+} = {}) {
+  const base = `${String(hostOrigin || '').replace(/\/+$/, '')}/host/${capToken}`;
+  const showStubPill = triggerMode !== 'shortcut-only' ? 1 : 0;
+  const isStatic = startupMode === 'static-css' ? 1 : 0;
+  const isSkinOn = skinEnabled !== false ? 1 : 0;
+  return [
+    ';(function(){var W=window,D=document;if(W.top&&W!==W.top)return{ok:false};',
+    `var B=${safeJsonLiteral(base)},T=${safeJsonLiteral(capToken)};`,
+    'W.__agyPrismHostBase=B;W.__agyPrismCapToken=T;W.__agyPrismRpcUrl=B+"/rpc";W.__agyPrismBootstrapped=true;',
+    'function strip(){try{W.__agyPrism&&W.__agyPrism.destroy&&W.__agyPrism.destroy()}catch(_){}try{W.__agyPrismPanel&&W.__agyPrismPanel.destroy&&W.__agyPrismPanel.destroy()}catch(_){}D.querySelectorAll(\'[id^="agy-prism-"],.prism-corner-orb\').forEach(function(e){e.remove()});var r=D.documentElement;if(r)Array.from(r.attributes).forEach(function(a){if(/^data-(?:agy-)?prism/.test(a.name))r.removeAttribute(a.name)})}',
+    'function rpc(m,p){var o=typeof m==="string"&&m[0]==="{"?JSON.parse(m):{id:"r"+Date.now(),method:m,params:p||{}};return W.fetch(B+"/rpc",{method:"POST",headers:{"Content-Type":"application/json","X-Prism-Token":T},body:JSON.stringify(o)}).then(function(r){return r.json()}).then(function(e){if(e&&e.ok===false)throw Error(e.error||"rpc");return e?e.result:null})}',
+    'W.__agyPrismCall=rpc;W.__agyPrismPanicStrip=function(w){strip();W.__agyPrismBootstrapped=false;rpc("skin.panicRestore",{reason:w||"panic"}).catch(function(){})};',
+    'function sum(){if(W.__agyPrismPanel&&W.__agyPrismPanel.toggle)return W.__agyPrismPanel.toggle();if(D.getElementById("agy-prism-panel-loader"))return;var p=D.getElementById("agy-prism-pill");if(p&&p.dataset.prismLazyStub==="1")p.remove();ld("agy-prism-panel-loader","/panel.js?open=1")}',
+    'W.__agyPrismSummonPanel=sum;function ld(id,u){if(D.getElementById(id))return;var s=D.createElement("script");s.id=id;s.async=true;s.src=B+u+(u.indexOf("?")>0?"&":"?")+"t="+Date.now();(D.head||D.documentElement).appendChild(s)}',
+    'function css(){var l=D.getElementById("agy-prism-static-css");if(!l){l=D.createElement("link");l.id="agy-prism-static-css";l.rel="stylesheet";(D.head||D.documentElement).appendChild(l)}l.href=B+"/static.css?t="+Date.now()}',
+    'if(!W.__agyPrismKeysBound){W.__agyPrismKeysBound=true;var esc=[];W.addEventListener("keydown",function(e){var k=String(e.key||""),c=(e.ctrlKey||e.metaKey)&&e.altKey;if(c&&e.shiftKey&&k.toLowerCase()==="r"){e.preventDefault();e.stopPropagation();W.__agyPrismPanicStrip("Ctrl+Alt+Shift+R");return}if(k==="Escape"&&!e.repeat){var n=Date.now();esc=esc.filter(function(t){return n-t<=900});esc.push(n);if(esc.length>=4){esc=[];e.preventDefault();e.stopPropagation();W.__agyPrismPanicStrip("4x-Escape");return}}else if(k!=="Escape")esc=[];if(c&&!e.shiftKey&&k.toLowerCase()==="w"){if(W.__agyPrismPanel&&W.__agyPrismPanel.toggle)return;e.preventDefault();e.stopPropagation();sum()}},true)}',
+    `if(${showStubPill}&&!W.__agyPrismPanel&&!D.getElementById("agy-prism-pill")&&D.body){var b=D.createElement("button");b.id="agy-prism-pill";b.type="button";b.dataset.prismLazyStub="1";b.textContent="\\u25C6 Prism";b.style.cssText="all:initial;cursor:pointer;font:500 11px/18px system-ui,sans-serif;padding:2px 8px;border-radius:999px;color:#cbd5e1;background:rgba(20,20,26,.72);border:1px solid rgba(255,255,255,.14);z-index:44;";var f=D.querySelector(".agy-composer-footer,[data-testid=\\"agent-input-box\\"] footer");if(f)f.appendChild(b);else{b.style.position="fixed";b.style.right="14px";b.style.bottom="10px";D.body.appendChild(b)}b.onclick=function(e){e.preventDefault();e.stopPropagation();sum()}}`,
+    'if(W.EventSource&&(!W.__agyPrismSse||W.__agyPrismSse.readyState===2)){try{var es=new W.EventSource(B+"/events");W.__agyPrismSse=es;es.onmessage=function(v){try{var m=JSON.parse(v.data);if(m.skinEnabled===false)return strip();if(m.startupMode==="static-css"){W.__agyPrism&&W.__agyPrism.destroy&&W.__agyPrism.destroy();css()}else{var sl=D.getElementById("agy-prism-static-css");if(sl)sl.remove();if(W.__agyPrism&&W.__agyPrism.applyPayload&&m.skinPayload)W.__agyPrism.applyPayload(m.skinPayload);else ld("agy-prism-stage-loader","/stage.js")}W.__agyPrismPanel&&W.__agyPrismPanel.syncState&&m.data&&W.__agyPrismPanel.syncState(m.data)}catch(_){}}}catch(_){}}',
+    `if(${isSkinOn}){var go=function(){${isStatic}?(css()):(W.__agyPrism||ld("agy-prism-stage-loader","/stage.js"))};W.requestIdleCallback?W.requestIdleCallback(go,{timeout:250}):setTimeout(go,16)}`,
+    'return{ok:true}})()',
+  ].join('');
 }
 
-export const REMOVE_SKIN_EXPR = `(function(){
-  try { if (window.${PRISM_DOM.skinGlobal} && typeof window.${PRISM_DOM.skinGlobal}.destroy === 'function') window.${PRISM_DOM.skinGlobal}.destroy(); } catch (_) {}
-  try {
-    var st = document.getElementById(${JSON.stringify(PRISM_DOM.styleId)}); if (st) st.remove();
-    var ct = document.getElementById('agy-prism-caret-css'); if (ct) ct.remove();
-    var sg = document.getElementById(${JSON.stringify(PRISM_DOM.stageId)}); if (sg) sg.remove();
-    var fx = document.getElementById('agy-prism-fx-canvas'); if (fx) fx.remove();
-    var r = document.documentElement;
-    [
-      ${JSON.stringify(PRISM_DOM.skinAttr)},
-      ${JSON.stringify(PRISM_DOM.themeAttr)},
-      ${JSON.stringify(PRISM_DOM.schemeAttr)},
-      ${JSON.stringify(PRISM_DOM.accentModeAttr)},
-      ${JSON.stringify(PRISM_DOM.layoutAttr)},
-      ${JSON.stringify(PRISM_DOM.cornersAttr)},
-      ${JSON.stringify(PRISM_DOM.bordersAttr)},
-      ${JSON.stringify(PRISM_DOM.shadowsAttr)},
-      ${JSON.stringify(PRISM_DOM.kindAttr)}
-    ].forEach(function(a){ r.removeAttribute(a); });
-  } catch (_) {}
-  return true;
+// Compact (<320 B) read-only Hub readiness probe (0 DOM mutations, 0 inspector domains)
+const HUB_READINESS_PROBE_EXPR = `(function(){
+if(window.top&&window!==window.top)return{ready:false};
+if(document.readyState!=='complete')return{ready:false,booted:Boolean(window.__agyPrismBootstrapped)};
+var r=document.getElementById('root')||document.querySelector('.monaco-workbench');
+if(!r||!r.childElementCount)return{ready:false,booted:Boolean(window.__agyPrismBootstrapped)};
+var b=r.getBoundingClientRect();
+return{ready:b.width>=200&&b.height>=150,w:Math.round(b.width),h:Math.round(b.height),booted:Boolean(window.__agyPrismBootstrapped),skin:Boolean(window.__agyPrism||document.getElementById('agy-prism-static-css'))};
 })()`;
 
-export const REMOVE_PANEL_EXPR = `(function(){
-  try { if (window.${PRISM_DOM.panelGlobal} && typeof window.${PRISM_DOM.panelGlobal}.destroy === 'function') window.${PRISM_DOM.panelGlobal}.destroy(); } catch (_) {}
-  try {
-    var p = document.getElementById(${JSON.stringify(PRISM_DOM.popoverId)}); if (p) p.remove();
-    var s = document.getElementById(${JSON.stringify(PRISM_DOM.popoverStyleId)}); if (s) s.remove();
-    var pill = document.getElementById(${JSON.stringify(PRISM_DOM.pillId)}); if (pill) pill.remove();
-    document.querySelectorAll('.' + ${JSON.stringify(PRISM_DOM.cornerOrbClass)}).forEach(function(el){ el.remove(); });
-  } catch (_) {}
-  return true;
-})()`;
-
-function safeJsonLiteral(value) {
-  return JSON.stringify(value).replace(/[\u2028\u2029<]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
-}
-
-// --------------------------------------------------------- Passive CDP Controller
+// --------------------------------------------------------- Ephemeral Gentle CDP Bridge
 
 export function createPassiveCdpBridge({
   getEngineState, // async () => { config, activeItem, skinEnabled, presets, stats, mediaOrigin }
-  hostScripts, // { getHostSkinScript(), getHostPanelScript(), buildClientSkinPayload(config, activeItem, mediaOrigin) }
-  rpcHandlers, // Record<method, async (params) => result>
+  hostScripts, // { getHostSkinScript(), getHostPanelScript(), buildClientSkinPayload(), buildStaticCssSheet?() }
+  rpcHandlers,
+  getHostOrigin = () => '',
+  capToken = '',
+  dataDir = '',
+  pluginRoot = '',
+  canaryController = null,
+  onTripSafeMode = async () => {},
+  cdpPort = 0,
   pollMs = 3000,
   configPath = '',
   profileDir = '',
   log = () => {},
 } = {}) {
-  const attached = new Map(); // targetId -> { target, session, scriptIds: { rpc, skin, panel } }
+  const canary =
+    canaryController ||
+    createCanaryController({
+      dataDir,
+      pluginRoot,
+      onTripSafeMode,
+    });
+
+  const activeTargets = new Map(); // targetId -> { target, browserSessionId, mode, mountedAt }
+  const firstReadyAt = new Map(); // targetId -> timestamp ms
+  const settleTimers = new Map(); // targetId -> Timeout
+  const sseClients = new Set(); // Set<ServerResponse>
+  let sessionAwake = false;
+  let sessionForcedWake = false;
+  let bootCanaryChecked = false;
   let timer = null;
   let stopped = false;
   let tickInFlight = null;
@@ -1059,230 +1544,314 @@ export function createPassiveCdpBridge({
   let lastStatus = {
     phase: 'standby',
     cdpReachable: false,
-    port: DEFAULT_DEBUG_PORT,
+    port: cdpPort || DEFAULT_DEBUG_PORT,
     browser: '',
+    browserSessionId: '',
     pluginEnabled: true,
+    sessionAwake: false,
     attachedTargets: [],
     version: PLUGIN_VERSION,
     lastCheckAt: null,
   };
 
-  const replaceDocScript = async (entry, key, source) => {
-    const prev = entry.scriptIds[key];
-    if (prev) {
-      await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: prev }).catch(() => {});
-      entry.scriptIds[key] = null;
-    }
-    if (!source) return;
-    const res = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source }).catch(() => null);
-    entry.scriptIds[key] = res?.identifier || null;
+  const clearSettleTimers = () => {
+    for (const t of settleTimers.values()) clearTimeout(t);
+    settleTimers.clear();
   };
 
-  const buildPagePushBundle = async () => {
+  const buildEnvelopePayload = async () => {
     const st = await getEngineState();
-    const skinScript = hostScripts?.getHostSkinScript ? hostScripts.getHostSkinScript() : '';
-    const panelScript = hostScripts?.getHostPanelScript ? hostScripts.getHostPanelScript() : '';
+    const startupMode = st.config?.startupMode || 'gentle-auto';
+    const skinEnabled = st.skinEnabled !== false && canary.getStatus().state !== 'tripped';
     const skinPayload = hostScripts?.buildClientSkinPayload
       ? hostScripts.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
-          skinEnabled: st.skinEnabled,
+          skinEnabled,
           slides: st.activeItem?.slides,
         })
-      : { config: st.config, activeItem: st.activeItem, mediaOrigin: st.mediaOrigin, skinEnabled: st.skinEnabled };
-    return { st, skinScript, panelScript, skinPayload };
-  };
-
-  const syncEntry = async (entry, bundle = null) => {
-    if (entry.session.closed) return;
-    const { st, skinScript, panelScript, skinPayload } = bundle || (await buildPagePushBundle());
-    const rpcSrc = buildRpcBootstrapSource();
-    await replaceDocScript(entry, 'rpc', rpcSrc);
-    await entry.session.evaluate(rpcSrc).catch(() => {});
-
-    // 1. Panel (always available while plugin is enabled so Ctrl+Alt+W can re-enable skin after Restore)
-    if (panelScript) {
-      const panelState = {
+      : { config: st.config, activeItem: st.activeItem, mediaOrigin: st.mediaOrigin, skinEnabled };
+    return {
+      event: 'state',
+      startupMode,
+      skinEnabled,
+      skinPayload,
+      data: {
         config: st.config,
         activeItem: st.activeItem,
-        skinEnabled: Boolean(st.skinEnabled),
+        skinEnabled,
         presets: st.presets || [],
         stats: st.stats || {},
         mediaOrigin: st.mediaOrigin || '',
         hostStatus: getStatus(),
-        studioUri: SIDECAR_URI,
-      };
-      const panelBoot = deferUntilBody(`${panelScript};\nif (window.${PRISM_DOM.panelGlobal} && typeof window.${PRISM_DOM.panelGlobal}.syncState === 'function') window.${PRISM_DOM.panelGlobal}.syncState(${safeJsonLiteral(panelState)});`);
-      await replaceDocScript(entry, 'panel', panelBoot);
-      await entry.session.evaluate(panelBoot).catch((err) => log(`panel eval warn: ${err.message}`));
-    }
-
-    // 2. Skin (strictly gated on st.skinEnabled !== false!)
-    if (st.skinEnabled !== false && skinScript) {
-      const applyExpr = `if (window.${PRISM_DOM.skinGlobal} && typeof window.${PRISM_DOM.skinGlobal}.applyPayload === 'function') window.${PRISM_DOM.skinGlobal}.applyPayload(${safeJsonLiteral(skinPayload)});`;
-      const fullSkinBoot = deferUntilBody(`${skinScript};\n${applyExpr}`);
-      await replaceDocScript(entry, 'skin', fullSkinBoot);
-      // Fast-path: if __agyPrism is already mounted, call applyPayload in-place without re-running full IIFE
-      const updatedInPlace = await entry.session
-        .evaluate(
-          `(function(){ if (window.${PRISM_DOM.skinGlobal} && typeof window.${PRISM_DOM.skinGlobal}.applyPayload === 'function') { window.${PRISM_DOM.skinGlobal}.applyPayload(${safeJsonLiteral(skinPayload)}); return true; } return false; })()`,
-        )
-        .catch(() => false);
-      if (!updatedInPlace) {
-        await entry.session.evaluate(fullSkinBoot).catch((err) => log(`skin eval warn: ${err.message}`));
-      }
-    } else {
-      await replaceDocScript(entry, 'skin', null);
-      await entry.session.evaluate(REMOVE_SKIN_EXPR).catch(() => {});
-    }
-  };
-
-  const attachTarget = async (target) => {
-    if (attached.has(target.id)) return attached.get(target.id);
-    const session = await CdpSession.connect(target.webSocketDebuggerUrl);
-    const entry = {
-      target,
-      session,
-      scriptIds: { rpc: null, skin: null, panel: null },
-    };
-    attached.set(target.id, entry);
-
-    session.onClose(() => {
-      if (attached.get(target.id) === entry) attached.delete(target.id);
-    });
-
-    await session.send('Page.enable').catch(() => {});
-    await session.send('Runtime.enable').catch(() => {});
-    await session.send('Runtime.addBinding', { name: NATIVE_BINDING }).catch(() => {});
-
-    session.on('Runtime.executionContextsCleared', () => {
-      session.send('Runtime.addBinding', { name: NATIVE_BINDING }).catch(() => {});
-    });
-
-    session.on('Page.loadEventFired', () => {
-      syncEntry(entry).catch((err) => log(`reload heal warn: ${err.message}`));
-    });
-
-    session.on('Runtime.bindingCalled', async (ev) => {
-      if (!ev || ev.name !== NATIVE_BINDING) return;
-      let parsed;
-      try {
-        parsed = JSON.parse(String(ev.payload || '{}'));
-      } catch {
-        return;
-      }
-      const id = parsed?.id ?? null;
-      const method = String(parsed?.method || '');
-      const params = parsed?.params && typeof parsed.params === 'object' ? parsed.params : {};
-      const handler = rpcHandlers && typeof rpcHandlers[method] === 'function' ? rpcHandlers[method] : null;
-      let reply;
-      if (!handler) {
-        reply = { id, ok: false, error: `Unknown RPC method: ${method}` };
-      } else {
-        try {
-          const result = await handler(params);
-          reply = { id, ok: true, result: result === undefined ? null : result };
-        } catch (err) {
-          reply = { id, ok: false, error: err?.message || String(err) };
-        }
-      }
-      if (!session.closed) {
-        await session
-          .evaluate(`window.__agyPrismRpcResolve && window.__agyPrismRpcResolve(${safeJsonLiteral(reply)})`)
-          .catch(() => {});
-      }
-    });
-
-    try {
-      await syncEntry(entry);
-      log(`CDP attached: ${String(target.url || '').slice(0, 90)}`);
-      return entry;
-    } catch (err) {
-      attached.delete(target.id);
-      session.close();
-      throw err;
-    }
-  };
-
-  const detachAll = async ({ removeSkin = true, removePanel = true } = {}) => {
-    for (const entry of [...attached.values()]) {
-      if (!entry.session.closed) {
-        await replaceDocScript(entry, 'rpc', null);
-        await replaceDocScript(entry, 'skin', null);
-        await replaceDocScript(entry, 'panel', null);
-        if (removeSkin) await entry.session.evaluate(REMOVE_SKIN_EXPR).catch(() => {});
-        if (removePanel) await entry.session.evaluate(REMOVE_PANEL_EXPR).catch(() => {});
-      }
-      entry.session.close();
-    }
-    attached.clear();
-  };
-
-  const broadcastState = async () => {
-    if (attached.size === 0) return;
-    const bundle = await buildPagePushBundle();
-    const stateEnvelope = {
-      event: 'state',
-      data: {
-        config: bundle.st.config,
-        activeItem: bundle.st.activeItem,
-        skinEnabled: Boolean(bundle.st.skinEnabled),
-        presets: bundle.st.presets || [],
-        stats: bundle.st.stats || {},
-        mediaOrigin: bundle.st.mediaOrigin || '',
-        hostStatus: getStatus(),
+        canary: canary.getStatus(),
+        sessionAwake: isSessionAwake(startupMode),
         studioUri: SIDECAR_URI,
       },
     };
-    for (const entry of [...attached.values()]) {
-      if (entry.session.closed) continue;
-      await syncEntry(entry, bundle).catch(() => {});
-      await entry.session
-        .evaluate(`window.__agyPrismRpcResolve && window.__agyPrismRpcResolve(${safeJsonLiteral(stateEnvelope)})`)
-        .catch(() => {});
+  };
+
+  function isSessionAwake(startupMode = 'gentle-auto') {
+    if (canary.getStatus().state === 'tripped') return false;
+    return startupMode !== 'manual' || sessionAwake;
+  }
+
+  const registerSseClient = async (req, res, isInMemoryProbe = false) => {
+    const initial = await buildEnvelopePayload();
+    if (isInMemoryProbe) {
+      res.write(`retry: 2500\ndata: ${JSON.stringify(initial)}\n\n`);
+      res.end();
+      return;
+    }
+    sseClients.add(res);
+    res.write(`retry: 2500\ndata: ${JSON.stringify(initial)}\n\n`);
+    const ka = setInterval(() => {
+      try {
+        res.write(': keepalive\n\n');
+      } catch {
+        clearInterval(ka);
+        sseClients.delete(res);
+      }
+    }, 15_000);
+    ka.unref?.();
+
+    const cleanup = () => {
+      clearInterval(ka);
+      const hadClients = sseClients.delete(res);
+      // When Hub reloads (Ctrl+R), EventSource closes -> re-verify & gently re-mount after settle!
+      if (hadClients && sseClients.size === 0 && !stopped) {
+        activeTargets.clear();
+        firstReadyAt.clear();
+        const t = setTimeout(() => {
+          if (!stopped) void tick();
+        }, 600);
+        t.unref?.();
+      }
+    };
+    req.on('close', cleanup);
+    res.on('close', cleanup);
+  };
+
+  const candidatePorts = async (st) => {
+    if (Number.isInteger(Number(cdpPort)) && Number(cdpPort) > 0) {
+      return [Number(cdpPort)];
+    }
+    const configured = Number(st?.config?.debugPort || DEFAULT_DEBUG_PORT);
+    const set = new Set([configured, DEFAULT_DEBUG_PORT]);
+    const pf = readDevToolsActivePort(profileDir);
+    // Never hijack shared port 9222 uninvited on cold boot unless configured or manually awakened!
+    if (pf?.port && (pf.port === configured || sessionForcedWake)) {
+      set.add(pf.port);
+    }
+    return [...set].filter((n) => Number.isInteger(n) && n > 0 && n <= 65535);
+  };
+
+  const injectTargetOnce = async (target, browserSessionId, st, immediateWake = false) => {
+    if (stopped) return false;
+    const hostOrigin = String(getHostOrigin() || '').trim();
+    if (!hostOrigin || !capToken) return false;
+
+    const canaryCheck = await canary.evaluateBoot(browserSessionId);
+    if (canaryCheck.state === 'tripped') return false;
+
+    const probe = await evaluateTargetEphemeral(target.webSocketDebuggerUrl, HUB_READINESS_PROBE_EXPR).catch(() => null);
+    if (!probe?.ready) return false;
+
+    const startupMode = st?.config?.startupMode || 'gentle-auto';
+    const skinEnabled = st?.skinEnabled !== false;
+    const settleMs = immediateWake ? 0 : Math.round(Math.max(0.5, Number(st?.config?.liveBootDelay ?? 1.5)) * 1000);
+
+    if (!probe.booted) {
+      if (settleMs > 0) {
+        const firstSeen = firstReadyAt.get(target.id) || 0;
+        const now = Date.now();
+        if (!firstSeen) {
+          firstReadyAt.set(target.id, now);
+          if (!settleTimers.has(target.id)) {
+            const tm = setTimeout(() => {
+              settleTimers.delete(target.id);
+              if (!stopped) void tick();
+            }, settleMs + 30);
+            tm.unref?.();
+            settleTimers.set(target.id, tm);
+          }
+          return false;
+        }
+        if (now - firstSeen < settleMs) {
+          return false;
+        }
+      }
+
+      // Re-verify #root after settle window + fsync canary `arming` BEFORE 1-shot bootstrap eval!
+      const recheck = await evaluateTargetEphemeral(target.webSocketDebuggerUrl, HUB_READINESS_PROBE_EXPR).catch(() => null);
+      if (!recheck?.ready) {
+        firstReadyAt.delete(target.id);
+        return false;
+      }
+
+      if (skinEnabled) {
+        canary.arm(browserSessionId, target.id);
+      }
+
+      const bootstrapSrc = buildHostMicroBootstrap({
+        hostOrigin,
+        capToken,
+        triggerMode: st?.config?.triggerMode || 'both',
+        startupMode,
+        skinEnabled,
+      });
+
+      await evaluateTargetEphemeral(target.webSocketDebuggerUrl, bootstrapSrc);
+      log(`Gentle 1-shot bootstrap mounted on ${String(target.url || '').slice(0, 80)}`);
+
+      // Backup server-side health confirmation in case static-css mode is used or stage.js already finished
+      if (skinEnabled) {
+        const healthDelay = startupMode === 'static-css' ? 1800 : 8500;
+        const hTimer = setTimeout(async () => {
+          if (stopped || canary.getStatus().state !== 'arming') return;
+          const okProbe = await evaluateTargetEphemeral(target.webSocketDebuggerUrl, HUB_READINESS_PROBE_EXPR).catch(() => null);
+          if (okProbe?.ready) {
+            canary.markHealthy(target.id);
+          }
+        }, healthDelay);
+        hTimer.unref?.();
+      }
+    }
+
+    activeTargets.set(target.id, {
+      target,
+      browserSessionId,
+      mode: startupMode,
+      mountedAt: Date.now(),
+    });
+    return true;
+  };
+
+  const cleanupTargetsEphemeral = async ({ removeSkin = true, removePanel = true } = {}) => {
+    const entries = [...activeTargets.values()];
+    activeTargets.clear();
+    firstReadyAt.clear();
+    clearSettleTimers();
+    for (const entry of entries) {
+      const exprs = [];
+      if (removeSkin) exprs.push(REMOVE_SKIN_EXPR);
+      if (removePanel) exprs.push(REMOVE_PANEL_EXPR);
+      if (exprs.length > 0 && entry.target?.webSocketDebuggerUrl) {
+        await evaluateTargetEphemeral(entry.target.webSocketDebuggerUrl, exprs.join(';')).catch(() => {});
+      }
     }
   };
 
-  const candidatePorts = async () => {
-    const set = new Set();
-    const pf = readDevToolsActivePort(profileDir);
-    if (pf?.port) set.add(pf.port);
-    try {
-      const st = await getEngineState();
-      if (st?.config?.debugPort) set.add(Number(st.config.debugPort));
-    } catch {
-      /* ignore */
+  const broadcastState = async () => {
+    const envelope = await buildEnvelopePayload();
+    const serialized = `data: ${JSON.stringify(envelope)}\n\n`;
+    let pushedViaSse = false;
+    for (const res of [...sseClients]) {
+      try {
+        res.write(serialized);
+        pushedViaSse = true;
+      } catch {
+        sseClients.delete(res);
+      }
     }
-    set.add(DEFAULT_DEBUG_PORT);
-    return [...set].filter((n) => Number.isInteger(n) && n > 0 && n <= 65535);
+
+    // Fallback ephemeral push when SSE has no open socket (e.g. immediately after Restore or before EventSource opens)
+    if (!pushedViaSse && activeTargets.size > 0) {
+      for (const [tid, entry] of [...activeTargets.entries()]) {
+        if (!entry.target?.webSocketDebuggerUrl) continue;
+        if (!envelope.skinEnabled) {
+          await evaluateTargetEphemeral(entry.target.webSocketDebuggerUrl, REMOVE_SKIN_EXPR).catch(() => {
+            activeTargets.delete(tid);
+          });
+        } else if (envelope.startupMode === 'static-css') {
+          const hostOrigin = String(getHostOrigin() || '').replace(/\/+$/, '');
+          const expr = `(function(){if(window.__agyPrism&&window.__agyPrism.destroy)window.__agyPrism.destroy();var l=document.getElementById('agy-prism-static-css');if(!l){l=document.createElement('link');l.id='agy-prism-static-css';l.rel='stylesheet';(document.head||document.documentElement).appendChild(l);}l.href=${safeJsonLiteral(`${hostOrigin}/host/${capToken}/static.css?t=${Date.now()}`)};})()`;
+          await evaluateTargetEphemeral(entry.target.webSocketDebuggerUrl, expr).catch(() => {});
+        } else {
+          const expr = `(function(){if(window.__agyPrism&&window.__agyPrism.applyPayload){window.__agyPrism.applyPayload(${safeJsonLiteral(envelope.skinPayload)});return true;}return false;})()`;
+          const applied = await evaluateTargetEphemeral(entry.target.webSocketDebuggerUrl, expr).catch(() => null);
+          if (applied === false) {
+            await injectTargetOnce(entry.target, entry.browserSessionId, envelope.data, true).catch(() => {});
+          }
+        }
+      }
+    }
   };
 
   const bootedAtMs = Date.now();
   let idleTickCount = 0;
 
-  const runTick = async () => {
+  const runTick = async ({ immediateWake = false } = {}) => {
     if (stopped) return getStatus();
-    const pluginEnabled = isPluginEnabledInHostConfig(configPath);
+
+    if (!bootCanaryChecked) {
+      bootCanaryChecked = true;
+      await canary.evaluateBoot('');
+    }
+
+    const pluginEnabled = isPluginEnabledInHostConfig(configPath, pluginRoot);
     if (!pluginEnabled) {
-      if (attached.size > 0) await detachAll({ removeSkin: true, removePanel: true });
+      if (activeTargets.size > 0) await cleanupTargetsEphemeral({ removeSkin: true, removePanel: true });
       lastStatus = {
         ...lastStatus,
         phase: 'disabled',
         cdpReachable: false,
         pluginEnabled: false,
+        sessionAwake: false,
         attachedTargets: [],
         lastCheckAt: new Date().toISOString(),
       };
-      return lastStatus;
+      return getStatus();
     }
 
-    // Fast-path standby guard: after initial 20s boot window, if not attached and no DevToolsActivePort file exists,
-    // skip opening TCP probe sockets on 3 out of 4 ticks to keep idle overhead near zero.
+    const st = await getEngineState();
+    const startupMode = st?.config?.startupMode || 'gentle-auto';
+    const canaryStatus = canary.getStatus();
+
+    if (canaryStatus.state === 'tripped') {
+      lastStatus = {
+        ...lastStatus,
+        phase: 'tripped',
+        pluginEnabled: true,
+        sessionAwake: false,
+        attachedTargets: [],
+        lastCheckAt: new Date().toISOString(),
+      };
+      return getStatus();
+    }
+
+    // Option 1 (`manual` mode): zero boot CDP probes until explicitly awakened!
+    if (startupMode === 'manual' && !sessionAwake && !immediateWake) {
+      lastStatus = {
+        ...lastStatus,
+        phase: 'manual-standby',
+        cdpReachable: false,
+        pluginEnabled: true,
+        sessionAwake: false,
+        attachedTargets: [],
+        lastCheckAt: new Date().toISOString(),
+      };
+      return getStatus();
+    }
+
+    // Steady-state zero-CDP polling while SSE is connected!
+    if (!immediateWake && activeTargets.size > 0 && sseClients.size > 0) {
+      lastStatus = {
+        ...lastStatus,
+        phase: 'attached',
+        cdpReachable: true,
+        pluginEnabled: true,
+        sessionAwake: true,
+        lastCheckAt: new Date().toISOString(),
+      };
+      return getStatus();
+    }
+
     const portFile = readDevToolsActivePort(profileDir);
     idleTickCount += 1;
-    if (attached.size === 0 && !portFile && Date.now() - bootedAtMs > 20_000 && idleTickCount % 4 !== 0) {
-      return lastStatus;
+    if (!immediateWake && activeTargets.size === 0 && !portFile && Date.now() - bootedAtMs > 20_000 && idleTickCount % 4 !== 0) {
+      return getStatus();
     }
 
-    const ports = await candidatePorts();
+    const ports = await candidatePorts(st);
     let activeProbe = null;
     for (const p of ports) {
       const pr = await probeCdpPort(p);
@@ -1293,35 +1862,66 @@ export function createPassiveCdpBridge({
     }
 
     if (!activeProbe) {
-      if (attached.size > 0) await detachAll({ removeSkin: false, removePanel: false });
+      activeTargets.clear();
+      firstReadyAt.clear();
       lastStatus = {
         ...lastStatus,
         phase: 'standby',
         cdpReachable: false,
         port: ports[0] || DEFAULT_DEBUG_PORT,
         browser: '',
+        browserSessionId: '',
         pluginEnabled: true,
+        sessionAwake: isSessionAwake(startupMode),
         attachedTargets: [],
         lastCheckAt: new Date().toISOString(),
       };
-      return lastStatus;
+      return getStatus();
+    }
+
+    const browserSessionId = String(activeProbe.webSocketDebuggerUrl || `cdp:${activeProbe.port}`);
+    const canaryAfterProbe = await canary.evaluateBoot(browserSessionId);
+    if (canaryAfterProbe.state === 'tripped') {
+      lastStatus = {
+        ...lastStatus,
+        phase: 'tripped',
+        cdpReachable: true,
+        port: activeProbe.port,
+        browser: activeProbe.browser,
+        browserSessionId,
+        pluginEnabled: true,
+        sessionAwake: false,
+        attachedTargets: [],
+        lastCheckAt: new Date().toISOString(),
+      };
+      return getStatus();
     }
 
     try {
       const targets = await listCdpTargets(activeProbe.port, activeProbe.host || '127.0.0.1');
       const hubs = selectHubTargets(targets);
+      const liveIds = new Set(hubs.map((h) => h.id));
+      for (const oldId of [...activeTargets.keys()]) {
+        if (!liveIds.has(oldId)) activeTargets.delete(oldId);
+      }
+
       for (const h of hubs) {
-        if (!attached.has(h.id)) {
-          await attachTarget(h).catch((err) => log(`attach warn: ${err.message}`));
+        if (!activeTargets.has(h.id) || immediateWake) {
+          await injectTargetOnce(h, browserSessionId, st, immediateWake).catch((err) => log(`gentle mount warn: ${err.message}`));
         }
       }
+
+      if (activeTargets.size > 0) sessionAwake = true;
+
       lastStatus = {
-        phase: attached.size > 0 ? 'attached' : 'standby',
+        phase: activeTargets.size > 0 ? 'attached' : 'standby',
         cdpReachable: true,
         port: activeProbe.port,
         browser: activeProbe.browser,
+        browserSessionId,
         pluginEnabled: true,
-        attachedTargets: [...attached.values()].map((e) => String(e.target.url || '')),
+        sessionAwake: isSessionAwake(startupMode),
+        attachedTargets: [...activeTargets.values()].map((e) => String(e.target.url || '')),
         version: PLUGIN_VERSION,
         lastCheckAt: new Date().toISOString(),
       };
@@ -1333,12 +1933,12 @@ export function createPassiveCdpBridge({
         lastCheckAt: new Date().toISOString(),
       };
     }
-    return lastStatus;
+    return getStatus();
   };
 
-  const tick = () => {
+  const tick = (opts = {}) => {
     if (!tickInFlight) {
-      tickInFlight = runTick().finally(() => {
+      tickInFlight = runTick(opts).finally(() => {
         tickInFlight = null;
       });
     }
@@ -1347,12 +1947,11 @@ export function createPassiveCdpBridge({
 
   const scheduleNext = () => {
     if (stopped || pollMs <= 0) return;
-    // Gentle adaptive backoff: 900ms when CDP is up and waiting for Hub splash -> 1500ms during initial boot -> 5000ms steady-state
     let delayMs = Math.max(pollMs, 5000);
-    if (attached.size === 0 && lastStatus.cdpReachable) {
-      delayMs = Math.min(900, pollMs);
-    } else if (attached.size === 0 && Date.now() - bootedAtMs < 15_000) {
-      delayMs = Math.min(1500, pollMs);
+    if (activeTargets.size === 0 && lastStatus.cdpReachable && lastStatus.phase !== 'tripped' && lastStatus.phase !== 'manual-standby') {
+      delayMs = Math.min(1200, pollMs);
+    } else if (activeTargets.size === 0 && Date.now() - bootedAtMs < 15_000) {
+      delayMs = Math.min(1800, pollMs);
     }
     timer = setTimeout(() => {
       tick().finally(scheduleNext);
@@ -1361,16 +1960,44 @@ export function createPassiveCdpBridge({
   };
 
   function getStatus() {
-    const isAttached = attached.size > 0;
+    const isAttached = activeTargets.size > 0;
+    const canaryStatus = canary.getStatus();
     return {
       ...lastStatus,
-      attachedCount: attached.size,
+      canary: canaryStatus,
+      sessionAwake: canaryStatus.state === 'tripped' ? false : (sessionAwake || isAttached),
+      attachedCount: activeTargets.size,
       attached: isAttached,
       cdpConnected: isAttached,
     };
   }
 
   return {
+    canary,
+    getCanary: () => canary.getStatus(),
+    isSessionAwake: (mode) => isSessionAwake(mode),
+    markCanaryHealthy: (targetId) => canary.markHealthy(targetId),
+    rollbackCanary: async (reason, targetId) => {
+      const res = await canary.rollback(reason, targetId);
+      await cleanupTargetsEphemeral({ removeSkin: true, removePanel: false });
+      return res;
+    },
+    resetCanary: async () => {
+      const next = canary.reset();
+      sessionAwake = true;
+      sessionForcedWake = true;
+      await runTick({ immediateWake: true });
+      await broadcastState();
+      return next;
+    },
+    wake: async () => {
+      sessionAwake = true;
+      sessionForcedWake = true;
+      await runTick({ immediateWake: true });
+      await broadcastState();
+      return getStatus();
+    },
+    registerSseClient,
     async start() {
       stopped = false;
       await tick();
@@ -1386,8 +2013,13 @@ export function createPassiveCdpBridge({
         clearTimeout(timer);
         timer = null;
       }
+      clearSettleTimers();
+      for (const res of [...sseClients]) {
+        try { res.end(); } catch { /* ignore */ }
+      }
+      sseClients.clear();
       if (tickInFlight) await tickInFlight.catch(() => {});
-      await detachAll({ removeSkin, removePanel });
+      await cleanupTargetsEphemeral({ removeSkin, removePanel });
       lastStatus = {
         ...lastStatus,
         phase: 'stopped',

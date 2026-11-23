@@ -59,6 +59,34 @@ export function invokeServerInMemory(serverOrHandler, { method = 'GET', url = '/
     let settled = false;
 
     const origWriteHead = res.writeHead.bind(res);
+    let sseTimer = null;
+    const isSseResponse = () => {
+      const ct = String(explicitHeaders['content-type'] || res.getHeader('content-type') || '').toLowerCase();
+      return ct.includes('text/event-stream');
+    };
+    const settleResponse = () => {
+      if (settled) return;
+      settled = true;
+      if (sseTimer) {
+        clearTimeout(sseTimer);
+        sseTimer = null;
+      }
+      const outHeaders = { ...res.getHeaders(), ...explicitHeaders };
+      const finalBuf = Buffer.concat(bodyChunks);
+      queueMicrotask(() => {
+        req.emit('close');
+        res.emit('finish');
+        res.emit('close');
+        resolve({
+          status: res.statusCode || statusCode || 200,
+          headers: outHeaders,
+          body: finalBuf,
+          text: () => finalBuf.toString('utf8'),
+          json: () => JSON.parse(finalBuf.toString('utf8')),
+        });
+      });
+    };
+
     res.writeHead = function patchedWriteHead(code, statusMsgOrHeaders, maybeHeaders) {
       statusCode = Number(code) || 200;
       const hdrs =
@@ -68,12 +96,25 @@ export function invokeServerInMemory(serverOrHandler, { method = 'GET', url = '/
       for (const [hk, hv] of Object.entries(hdrs)) {
         explicitHeaders[hk.toLowerCase()] = hv;
       }
-      return origWriteHead(code, statusMsgOrHeaders, maybeHeaders);
+      const out = origWriteHead(code, statusMsgOrHeaders, maybeHeaders);
+      if (isSseResponse() && !sseTimer) {
+        sseTimer = setTimeout(settleResponse, 35);
+      }
+      return out;
     };
 
     res.write = function patchedWrite(chunk, encoding, cb) {
       if (chunk) {
         bodyChunks.push(Buffer.isBuffer(chunk) ? Buffer.from(chunk) : Buffer.from(chunk, encoding || 'utf8'));
+      }
+      if (isSseResponse()) {
+        const joined = Buffer.concat(bodyChunks).toString('utf8');
+        if (joined.includes('data:') && joined.includes('\n\n')) {
+          if (sseTimer) clearTimeout(sseTimer);
+          sseTimer = setTimeout(settleResponse, 8);
+        } else if (!sseTimer) {
+          sseTimer = setTimeout(settleResponse, 35);
+        }
       }
       if (typeof encoding === 'function') encoding();
       else if (typeof cb === 'function') cb();
@@ -84,22 +125,7 @@ export function invokeServerInMemory(serverOrHandler, { method = 'GET', url = '/
       if (chunk && typeof chunk !== 'function') {
         bodyChunks.push(Buffer.isBuffer(chunk) ? Buffer.from(chunk) : Buffer.from(chunk, encoding || 'utf8'));
       }
-      if (!settled) {
-        settled = true;
-        const outHeaders = { ...res.getHeaders(), ...explicitHeaders };
-        const finalBuf = Buffer.concat(bodyChunks);
-        queueMicrotask(() => {
-          res.emit('finish');
-          res.emit('close');
-          resolve({
-            status: res.statusCode || statusCode || 200,
-            headers: outHeaders,
-            body: finalBuf,
-            text: () => finalBuf.toString('utf8'),
-            json: () => JSON.parse(finalBuf.toString('utf8')),
-          });
-        });
-      }
+      settleResponse();
       if (typeof chunk === 'function') chunk();
       else if (typeof encoding === 'function') encoding();
       else if (typeof cb === 'function') cb();

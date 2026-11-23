@@ -475,6 +475,18 @@ button, input, select, textarea {
 .prism-status-pill[data-status="off"] .prism-status-dot {
   background: var(--prism-fg-faint);
 }
+.prism-status-pill[data-status="tripped"] {
+  border-color: rgba(var(--prism-danger-rgb), 0.55);
+  background: rgba(var(--prism-danger-rgb), 0.14);
+  color: var(--prism-danger);
+}
+.prism-status-pill[data-status="tripped"] .prism-status-dot {
+  background: var(--prism-danger);
+  box-shadow: 0 0 8px rgba(var(--prism-danger-rgb), 0.75);
+}
+.prism-status-pill[data-status="manual"] .prism-status-dot {
+  background: var(--prism-accent);
+}
 
 .prism-lang-btn {
   height: 24px;
@@ -2199,6 +2211,178 @@ button, input, select, textarea {
   border-top: 1px solid var(--prism-border-hairline);
 }
 
+/* ==========================================================================
+   v2.0.0 Startup Strategy Cards, Canary Circuit-Breaker & Panic Callout
+   ========================================================================== */
+.prism-safety-banner[data-tone="tripped"] {
+  background: linear-gradient(90deg, rgba(var(--prism-danger-rgb), 0.18) 0%, rgba(var(--prism-danger-rgb), 0.09) 100%);
+  border-bottom-color: rgba(var(--prism-danger-rgb), 0.46);
+  box-shadow: inset 0 1px 0 rgba(var(--prism-danger-rgb), 0.25);
+}
+
+.prism-safety-banner[data-tone="manual-wake"] {
+  background: linear-gradient(90deg, rgba(var(--prism-accent-rgb), 0.16) 0%, rgba(var(--prism-accent-rgb), 0.07) 100%);
+  border-bottom-color: rgba(var(--prism-accent-rgb), 0.38);
+}
+
+.prism-btn-danger-solid {
+  background: var(--prism-danger) !important;
+  border-color: var(--prism-danger) !important;
+  color: #FFFFFF !important;
+  font-weight: 600;
+  box-shadow: 0 4px 14px -4px rgba(var(--prism-danger-rgb), 0.55);
+}
+.prism-btn-danger-solid:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.prism-canary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--prism-r-pill);
+  font-family: var(--prism-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-ctl-bg);
+  color: var(--prism-fg-2);
+  white-space: nowrap;
+}
+.prism-canary-badge[data-canary-state="healthy"] {
+  color: var(--prism-ok);
+  border-color: rgba(var(--prism-ok-rgb), 0.45);
+  background: rgba(var(--prism-ok-rgb), 0.14);
+}
+.prism-canary-badge[data-canary-state="arming"] {
+  color: var(--prism-warn);
+  border-color: rgba(var(--prism-warn-rgb), 0.48);
+  background: rgba(var(--prism-warn-rgb), 0.14);
+}
+.prism-canary-badge[data-canary-state="tripped"] {
+  color: var(--prism-danger);
+  border-color: rgba(var(--prism-danger-rgb), 0.55);
+  background: rgba(var(--prism-danger-rgb), 0.16);
+}
+
+.prism-startup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+  gap: 8px;
+}
+
+.prism-startup-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 10px 11px;
+  border-radius: var(--prism-r-card);
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-ctl-bg);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--prism-dur-fast) ease, background var(--prism-dur-fast) ease, transform var(--prism-dur-fast) ease;
+}
+.prism-startup-card:hover {
+  background: var(--prism-ctl-hover);
+  border-color: rgba(var(--prism-pt-rgb), 0.22);
+  transform: translateY(-1px);
+}
+.prism-startup-card.is-active {
+  border-color: var(--prism-accent);
+  background: var(--prism-accent-soft);
+  background-image: var(--prism-sheen);
+  box-shadow: 0 0 0 1px rgba(var(--prism-accent-rgb), 0.28), inset 0 1px 0 var(--prism-specular-top);
+}
+
+.prism-startup-card-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.prism-startup-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--prism-fg);
+}
+.prism-startup-radio {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--prism-fg-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.prism-startup-card.is-active .prism-startup-radio {
+  border-color: var(--prism-accent);
+  background: var(--prism-accent);
+  box-shadow: inset 0 0 0 2.5px rgb(var(--prism-tint-1-rgb));
+}
+.prism-startup-badge {
+  font-family: var(--prism-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid var(--prism-accent-border);
+  background: rgba(var(--prism-accent-rgb), 0.14);
+  color: var(--prism-accent);
+}
+.prism-startup-card-desc {
+  font-size: 11px;
+  line-height: 1.42;
+  color: var(--prism-fg-muted);
+}
+.prism-startup-card.is-active .prism-startup-card-desc {
+  color: var(--prism-fg-2);
+}
+
+.prism-panic-callout {
+  padding: 8px 11px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid rgba(var(--prism-accent-rgb), 0.30);
+  background: rgba(var(--prism-accent-rgb), 0.07);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+}
+.prism-kbd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.prism-kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 21px;
+  padding: 0 7px;
+  border-radius: 5px;
+  border: 1px solid var(--prism-border-popover);
+  background: var(--prism-card-bg);
+  box-shadow: inset 0 1px 0 var(--prism-specular-top), 0 1px 2px rgba(0, 0, 0, 0.22);
+  font-family: var(--prism-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--prism-fg);
+  white-space: nowrap;
+}
+
 </style>
 </head>
 <body>
@@ -2215,18 +2399,21 @@ button, input, select, textarea {
     <div class="prism-boot-shell">
       <div class="prism-boot-glyph" aria-hidden="true">◆</div>
       <div class="prism-boot-title">Wallpaper Prism Studio</div>
-      <div class="prism-boot-sub">Initializing Obsidian Prism optical deck…</div>
+      <div class="prism-boot-sub">Initializing Obsidian Prism v2.0 optical deck…</div>
     </div>
   </div>
 
   <script id="prism-studio-bundle">
 (() => {
   // agy-wallpaper-prism/src/shared/schema.mjs
-  var PLUGIN_VERSION = "1.1.0";
+  var PLUGIN_VERSION = "2.0.0";
   var DEFAULT_DEBUG_PORT = 9339;
   var PRISM_DOM = Object.freeze({
-    skinVersion: "1.0.0",
+    skinVersion: "2.0.0",
     skinAttr: "data-agy-prism-skin",
+    glassAttr: "data-agy-prism-glass",
+    wallpaperAttr: "data-agy-prism-wallpaper",
+    staticStyleId: "agy-prism-static-css",
     themeAttr: "data-prism-theme",
     schemeAttr: "data-prism-scheme",
     accentModeAttr: "data-prism-accent-mode",
@@ -2245,6 +2432,8 @@ button, input, select, textarea {
     skinGlobal: "__agyPrism",
     panelGlobal: "__agyPrismPanel"
   });
+  var STARTUP_MODES = Object.freeze(["gentle-auto", "manual", "static-css"]);
+  var CANARY_STATES = Object.freeze(["idle", "arming", "healthy", "tripped"]);
   var WALLPAPER_KINDS = Object.freeze(["image", "video", "slideshow", "web", "scene", "none"]);
   var LIBRARY_KINDS = Object.freeze(["image", "video", "slideshow", "web", "scene"]);
   var CONTENT_RATINGS = Object.freeze(["everyone", "pg13", "mature", "unrated"]);
@@ -2886,6 +3075,7 @@ button, input, select, textarea {
   var DEFAULT_CONFIG = Object.freeze({
     // Master state & active wallpaper
     skinEnabled: true,
+    startupMode: "gentle-auto",
     activeWallpaperId: "",
     wallpaperId: "",
     kind: "image",
@@ -2946,7 +3136,7 @@ button, input, select, textarea {
     sceneLive: true,
     sceneLiveFps: 30,
     sceneAutoQuality: true,
-    liveBootDelay: 0,
+    liveBootDelay: 1.5,
     interactiveWeb: false,
     switchTransition: "fade",
     switchTransitionDir: "left",
@@ -3047,6 +3237,7 @@ button, input, select, textarea {
       "sceneLive",
       "sceneLiveFps",
       "sceneAutoQuality",
+      "startupMode",
       "liveBootDelay",
       "interactiveWeb",
       "switchTransition",
@@ -3247,8 +3438,10 @@ button, input, select, textarea {
     const fpsCap = [0, 30, 60].includes(fpsRaw) ? fpsRaw : 0;
     const sceneFpsRaw = num(merged.sceneLiveFps, 30, 15, 60, 0);
     const sceneLiveFps = [15, 30, 60].includes(sceneFpsRaw) ? sceneFpsRaw : 30;
+    const rawBootDelay = merged.liveBootDelay === 0 || merged.liveBootDelay === "0" ? DEFAULT_CONFIG.liveBootDelay : merged.liveBootDelay;
     return {
       skinEnabled: bool(merged.skinEnabled, DEFAULT_CONFIG.skinEnabled),
+      startupMode: oneOf(merged.startupMode, STARTUP_MODES, DEFAULT_CONFIG.startupMode),
       activeWallpaperId: activeId,
       wallpaperId: activeId,
       kind: oneOf(merged.kind, WALLPAPER_KINDS, DEFAULT_CONFIG.kind),
@@ -3304,7 +3497,7 @@ button, input, select, textarea {
       sceneLive: bool(merged.sceneLive, DEFAULT_CONFIG.sceneLive),
       sceneLiveFps,
       sceneAutoQuality: bool(merged.sceneAutoQuality, DEFAULT_CONFIG.sceneAutoQuality),
-      liveBootDelay: num(merged.liveBootDelay, DEFAULT_CONFIG.liveBootDelay, 0, 30, 0),
+      liveBootDelay: num(rawBootDelay, DEFAULT_CONFIG.liveBootDelay, 0.5, 10, 1),
       interactiveWeb: bool(merged.interactiveWeb, DEFAULT_CONFIG.interactiveWeb),
       switchTransition: oneOf(merged.switchTransition, SWITCH_TRANSITIONS, DEFAULT_CONFIG.switchTransition),
       switchTransitionDir: oneOf(merged.switchTransitionDir, SWITCH_DIRECTIONS, DEFAULT_CONFIG.switchTransitionDir),
@@ -3539,6 +3732,32 @@ button, input, select, textarea {
       "host.trigger.pill": "\u4EC5\u8F93\u5165\u6846\u5E95\u680F\u80F6\u56CA",
       "host.trigger.corner": "\u4EC5\u89D2\u843D\u73BB\u7483\u5FAE\u6807",
       "host.trigger.shortcut": "\u4EC5\u5FEB\u6377\u952E Ctrl+Alt+W",
+      "host.startupTitle": "\u542F\u52A8\u6302\u8F7D\u7B56\u7565\u4E0E\u91D1\u4E1D\u96C0\u5B89\u5168\u5B88\u62A4",
+      "host.startupMode": "\u542F\u52A8\u6302\u8F7D\u7B56\u7565",
+      "host.startup.gentleAuto": "\u6E29\u548C\u81EA\u52A8\u6062\u590D",
+      "host.startup.gentleAutoBadge": "\u9ED8\u8BA4 \xB7 1.5s",
+      "host.startup.gentleAutoDesc": "\u7B49\u5F85\u7A97\u53E3 #root \u5C31\u7EEA\u7A33\u5B9A\u540E\u518D\u9759\u9ED8\u6302\u8F7D\uFF0C\u9996\u5E27\u89E3\u7801\u6210\u529F\u624D\u900F\u51FA\u80CC\u666F\uFF0C\u5F02\u5E38\u81EA\u52A8\u7194\u65AD\u56DE\u9000",
+      "host.startup.manual": "\u7EAF\u624B\u52A8\u6309\u9700\u5524\u9192",
+      "host.startup.manualDesc": "\u51B7\u542F\u52A8\u96F6 CDP \u6CE8\u5165\u3001100% \u539F\u751F\u754C\u9762\uFF0C\u4EC5\u5728\u70B9\u5F00\u5DE5\u4F5C\u53F0\u624B\u52A8\u5524\u9192\u6216\u5207\u6362\u58C1\u7EB8\u65F6\u70B9\u4EAE",
+      "host.startup.staticCss": "\u6781\u7B80\u7EAF\u9759\u6001 CSS",
+      "host.startup.staticCssDesc": "\u4EC5\u6CE8\u5165\u8F7B\u91CF\u8272\u5F69\u53D8\u91CF\u4E0E\u9759\u6001\u80CC\u666F\u56FE\uFF0C\u96F6\u89C6\u9891/\u7F51\u9875 DOM \u56FE\u5C42\u4E0E\u96F6 GPU \u5E38\u9A7B\u5F00\u9500",
+      "host.liveBootDelay": "\u542F\u52A8\u7A33\u5B9A\u7B49\u5F85",
+      "host.liveBootDelayHint": "\u5BBF\u4E3B\u7A97\u53E3\u4EA4\u4E92\u5C31\u7EEA\u540E\u7B49\u5F85 {sec}s \u518D\u6E29\u548C\u6302\u8F7D",
+      "host.panicShortcutTitle": "\u7D27\u6025\u5265\u79BB\u5FEB\u6377\u952E",
+      "host.panicShortcutHint": "\u4EFB\u610F\u65F6\u523B\u6309 Ctrl+Alt+Shift+R \u6216\u8FDE\u6309 4 \u6B21 Esc \u5373\u53EF\u77AC\u65F6\u5265\u79BB\u5168\u90E8\u68F1\u955C\u56FE\u5C42\u5E76\u6062\u590D\u539F\u751F\u5916\u89C2",
+      "host.wakeBannerTitle": "\u7EAF\u624B\u52A8\u6309\u9700\u5524\u9192\u5F85\u673A\u4E2D",
+      "host.wakeBannerDesc": "\u672C\u6B21\u51B7\u542F\u52A8\u4FDD\u6301 100% \u539F\u751F\u96F6\u6CE8\u5165\uFF0C\u70B9\u51FB\u53F3\u4FA7\u6309\u94AE\u5373\u53EF\u6E29\u548C\u70B9\u4EAE\u58C1\u7EB8\u4E0E\u68F1\u955C\u76AE\u80A4\u3002",
+      "host.wakeNow": "\u2728 \u7ACB\u5373\u6E29\u548C\u5524\u9192\u68F1\u955C\u76AE\u80A4",
+      "host.wakeSuccessToast": "\u5DF2\u6E29\u548C\u5524\u9192\u5E76\u6302\u8F7D\u68F1\u955C\u76AE\u80A4",
+      "canary.badgeLabel": "\u91D1\u4E1D\u96C0\u5B88\u62A4",
+      "canary.state.healthy": "\u2713 Healthy",
+      "canary.state.arming": "\u25CC Arming",
+      "canary.state.idle": "\u2022 Idle",
+      "canary.state.tripped": "\u26A0 Tripped",
+      "canary.trippedBannerTitle": "\u26A0 \u542F\u52A8\u91D1\u4E1D\u96C0\u5DF2\u81EA\u52A8\u89E6\u53D1\u5B89\u5168\u7194\u65AD\u4FDD\u62A4",
+      "canary.trippedBannerDesc": "\u68C0\u6D4B\u5230\u4E0A\u6B21\u542F\u52A8\u672A\u5B8C\u6210\u5065\u5EB7\u6821\u9A8C\u6216\u77ED\u65F6\u8FDE\u7EED\u91CD\u542F\uFF0C\u5DF2\u81EA\u52A8\u505C\u7528\u76AE\u80A4\u6CE8\u5165\u4EE5\u786E\u4FDD\u5BBF\u4E3B\u7EAF\u51C0\u542F\u52A8\u3002\u60A8\u7684\u58C1\u7EB8\u5E93\u4E0E\u9884\u8BBE\u5747\u5B8C\u597D\u65E0\u635F\u3002",
+      "canary.resetAndWake": "\u26A1 \u89E3\u9664\u5B89\u5168\u7194\u65AD\u5E76\u91CD\u65B0\u70B9\u4EAE",
+      "canary.resetToast": "\u5DF2\u89E3\u9664\u5B89\u5168\u7194\u65AD\u5E76\u91CD\u65B0\u70B9\u4EAE\u68F1\u955C\u76AE\u80A4",
       "host.storageTitle": "\u5B58\u50A8\u4E0E\u626B\u63CF\u76EE\u5F55\u7BA1\u7406",
       "host.uploadDir": "\u4E0A\u4F20\u4E0E\u81EA\u5B9A\u4E49\u9879\u76EE\u76EE\u5F55",
       "host.cacheDir": "\u7F29\u7565\u56FE\u4E0E\u8F6C\u7801\u7F13\u5B58\u76EE\u5F55",
@@ -3739,6 +3958,32 @@ button, input, select, textarea {
       "host.trigger.pill": "Composer Footer Pill Only",
       "host.trigger.corner": "Corner Glass Orb Only",
       "host.trigger.shortcut": "Shortcut Ctrl+Alt+W Only",
+      "host.startupTitle": "Startup Mount Strategy & Boot Canary Guard",
+      "host.startupMode": "Startup Mount Strategy",
+      "host.startup.gentleAuto": "Gentle Auto-Restore",
+      "host.startup.gentleAutoBadge": "Default \xB7 1.5s",
+      "host.startup.gentleAutoDesc": "Waits for #root idle readiness, gates hollowing on first decoded frame, with boot canary circuit-breaker",
+      "host.startup.manual": "Manual On-Demand Wake",
+      "host.startup.manualDesc": "Zero CDP injection on cold boot \u2014 Antigravity starts 100% stock until manually awakened",
+      "host.startup.staticCss": "Minimal Static CSS",
+      "host.startup.staticCssDesc": "Pure CSS variables and static background image only \u2014 zero <video>/<iframe> DOM layers",
+      "host.liveBootDelay": "Boot Settle Delay",
+      "host.liveBootDelayHint": "Settle {sec}s after Hub ready before gentle mount",
+      "host.panicShortcutTitle": "Emergency Strip Shortcut",
+      "host.panicShortcutHint": "Press Ctrl+Alt+Shift+R or 4\xD7 Esc anytime to strip all Prism layers immediately and restore stock UI",
+      "host.wakeBannerTitle": "Manual On-Demand Mode \u2014 Skin Standby",
+      "host.wakeBannerDesc": "Antigravity booted 100% stock with zero injection. Click Wake to gently mount Prism now.",
+      "host.wakeNow": "\u2728 Wake & Mount Prism Now",
+      "host.wakeSuccessToast": "Prism skin gently awakened and mounted",
+      "canary.badgeLabel": "Boot Canary",
+      "canary.state.healthy": "\u2713 Healthy",
+      "canary.state.arming": "\u25CC Arming",
+      "canary.state.idle": "\u2022 Idle",
+      "canary.state.tripped": "\u26A0 Tripped",
+      "canary.trippedBannerTitle": "\u26A0 Boot Canary Tripped Safe Mode Automatically",
+      "canary.trippedBannerDesc": "Detected an unfinished startup check or rapid restarts and paused injection so Antigravity booted cleanly. Your library and presets are intact.",
+      "canary.resetAndWake": "\u26A1 Clear Safe Mode & Re-enable Skin",
+      "canary.resetToast": "Safe Mode cleared \u2014 Prism skin re-enabled",
       "host.storageTitle": "Storage & Library Directories",
       "host.uploadDir": "Uploads & Local Projects Folder",
       "host.cacheDir": "Thumbnails & Transcode Cache Folder",
@@ -3924,6 +4169,16 @@ button, input, select, textarea {
       items: [],
       presets: [...FACTORY_PRESETS],
       hostStatus: { debuggable: false, attached: false, cdpPort: DEFAULT_DEBUG_PORT, targets: 0 },
+      canary: {
+        state: "idle",
+        trippedReason: "",
+        lastArmTs: 0,
+        lastHealthyTs: 0,
+        browserSessionId: ""
+      },
+      sessionAwake: false,
+      canaryBusy: false,
+      wakeBusy: false,
       autostart: {
         normalShortcutEnabled: false,
         anyShortcutEnabled: false,
@@ -4516,6 +4771,21 @@ button, input, select, textarea {
       }
       if (s.hostStatus && typeof s.hostStatus === "object") {
         store.hostStatus = { ...store.hostStatus, ...s.hostStatus };
+      }
+      const canarySrc = (s.canary && typeof s.canary === "object" ? s.canary : null) || (s.hostStatus?.canary && typeof s.hostStatus.canary === "object" ? s.hostStatus.canary : null);
+      if (canarySrc) {
+        const nextState = CANARY_STATES.includes(canarySrc.state) ? canarySrc.state : store.canary.state || "idle";
+        store.canary = {
+          ...store.canary,
+          ...canarySrc,
+          state: nextState,
+          trippedReason: String(canarySrc.trippedReason || "")
+        };
+      }
+      if (typeof s.sessionAwake === "boolean") {
+        store.sessionAwake = s.sessionAwake;
+      } else if (typeof s.hostStatus?.sessionAwake === "boolean") {
+        store.sessionAwake = s.hostStatus.sessionAwake;
       }
       const autoSrc = (s.autostart && typeof s.autostart === "object" ? s.autostart : null) || {};
       const hsSrc = (s.hostStatus && typeof s.hostStatus === "object" ? s.hostStatus : null) || {};
@@ -5812,6 +6082,32 @@ button, input, select, textarea {
       const port = hs.cdpPort || hs.port || store.config.debugPort || DEFAULT_DEBUG_PORT;
       const auto = store.autostart;
       const normalReady = Boolean(auto.normalShortcutEnabled);
+      const startupMode = STARTUP_MODES.includes(store.config.startupMode) ? store.config.startupMode : "gentle-auto";
+      const bootDelaySec = Math.min(5, Math.max(0.5, Number(store.config.liveBootDelay ?? DEFAULT_CONFIG.liveBootDelay ?? 1.5)));
+      const canaryState = CANARY_STATES.includes(store.canary?.state) ? store.canary.state : "idle";
+      const canaryStateLabel = tr(`canary.state.${canaryState}`);
+      const canaryDotColor = canaryState === "healthy" ? "var(--prism-ok)" : canaryState === "tripped" ? "var(--prism-danger)" : canaryState === "arming" ? "var(--prism-warn)" : "var(--prism-fg-faint)";
+      const startupCards = [
+        {
+          id: "gentle-auto",
+          title: tr("host.startup.gentleAuto"),
+          badge: Math.abs(bootDelaySec - 1.5) < 0.04 ? tr("host.startup.gentleAutoBadge") : `${curLocale() === "zh" ? "\u5EF6\u8FDF" : "Delay"} \xB7 ${bootDelaySec.toFixed(1)}s`,
+          desc: tr("host.startup.gentleAutoDesc")
+        },
+        {
+          id: "manual",
+          title: tr("host.startup.manual"),
+          badge: "",
+          desc: tr("host.startup.manualDesc")
+        },
+        {
+          id: "static-css",
+          title: tr("host.startup.staticCss"),
+          badge: "",
+          desc: tr("host.startup.staticCssDesc")
+        }
+      ];
+      const defaultBaseDataDir = store.stats.dataDir || "~/.gemini/antigravity/sidecar_data/agy-wallpaper-prism/prism_studio/data";
       const shortcutsList = Array.isArray(auto.shortcuts) && auto.shortcuts.length > 0 ? auto.shortcuts : (auto.patchedShortcuts || []).map((p) => ({
         path: p,
         name: String(p).split(/[\\/]/).pop() || p,
@@ -5822,6 +6118,80 @@ button, input, select, textarea {
       }));
       const model = computeLibraryModel();
       return `
+      <!-- v2.0.0 Startup Strategy, Boot Delay, Canary Circuit-Breaker & Panic Shortcut Card -->
+      <div id="prism-startup-safety-card" class="prism-card" style="display:flex;flex-direction:column;gap:11px;${canaryState === "tripped" ? "border-color:rgba(var(--prism-danger-rgb),0.55)" : ""}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="prism-status-dot" style="background:${canaryDotColor}"></span>
+            <strong style="font-size:13px">${esc(tr("host.startupTitle"))}</strong>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span id="prism-canary-badge" class="prism-canary-badge" data-canary-state="${esc(canaryState)}" title="${esc(store.canary?.trippedReason || "")}">
+              <span>${esc(tr("canary.badgeLabel"))}:</span>
+              <strong>${esc(canaryStateLabel)}</strong>
+            </span>
+            ${canaryState === "tripped" ? `<button type="button" class="prism-btn prism-btn-sm prism-btn-danger-solid" data-action="reset-canary" ${store.canaryBusy ? "disabled" : ""}>
+                     ${esc(tr("canary.resetAndWake"))}
+                   </button>` : startupMode === "manual" && !store.sessionAwake ? `<button type="button" class="prism-btn prism-btn-sm prism-btn-primary" data-action="wake-skin" ${store.wakeBusy ? "disabled" : ""}>
+                       ${esc(tr("host.wakeNow"))}
+                     </button>` : ""}
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span class="prism-ctl-name">${esc(tr("host.startupMode"))}</span>
+          <div class="prism-startup-grid" role="radiogroup" aria-label="${esc(tr("host.startupMode"))}">
+            ${startupCards.map(
+        (sc) => `
+              <button type="button" role="radio" aria-checked="${startupMode === sc.id ? "true" : "false"}"
+                      class="prism-startup-card ${startupMode === sc.id ? "is-active" : ""}"
+                      data-startup-card="${esc(sc.id)}"
+                      data-action="set-enum" data-key="startupMode" data-val="${esc(sc.id)}">
+                <div class="prism-startup-card-top">
+                  <span class="prism-startup-card-title">
+                    <span class="prism-startup-radio" aria-hidden="true"></span>
+                    <span>${esc(sc.title)}</span>
+                  </span>
+                  ${sc.badge ? `<span class="prism-startup-badge">[${esc(sc.badge)}]</span>` : ""}
+                </div>
+                <span class="prism-startup-card-desc">${esc(sc.desc)}</span>
+              </button>
+            `
+      ).join("")}
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:3px;padding-top:4px;border-top:1px solid var(--prism-border-hairline);${startupMode === "manual" ? "opacity:0.68" : ""}">
+          ${renderSliderRow({
+        key: "liveBootDelay",
+        label: tr("host.liveBootDelay"),
+        value: bootDelaySec,
+        defaultValue: DEFAULT_CONFIG.liveBootDelay,
+        min: 0.5,
+        max: 5,
+        step: 0.1,
+        scale: 1,
+        decimals: 1,
+        suffix: "s"
+      })}
+          <span id="prism-boot-delay-hint" class="prism-ctl-hint">
+            ${esc(tr("host.liveBootDelayHint", { sec: bootDelaySec.toFixed(1) }))}
+          </span>
+        </div>
+
+        <div id="prism-panic-shortcut-callout" class="prism-panic-callout">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 220px">
+            <strong style="font-size:12px;color:var(--prism-fg)">\u{1F6E1} ${esc(tr("host.panicShortcutTitle"))}</strong>
+            <span style="color:var(--prism-fg-2);line-height:1.4">${esc(tr("host.panicShortcutHint"))}</span>
+          </div>
+          <div class="prism-kbd-group">
+            <kbd class="prism-kbd">Ctrl+Alt+Shift+R</kbd>
+            <span style="color:var(--prism-fg-muted);font-size:11px">/</span>
+            <kbd class="prism-kbd">4\xD7 Esc</kbd>
+          </div>
+        </div>
+      </div>
+
       <!-- Normal Shortcut Auto-Load & Cold-Boot Auto-Restore Card -->
       <div id="prism-autostart-card" class="prism-card" style="display:flex;flex-direction:column;gap:10px;border-color:${normalReady ? "rgba(var(--prism-ok-rgb),0.45)" : "rgba(var(--prism-warn-rgb),0.45)"}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
@@ -5839,8 +6209,8 @@ button, input, select, textarea {
         </div>
 
         <div id="prism-autorestore-badge" class="prism-autorestore-strip">
-          <span style="color:var(--prism-ok);font-weight:700">\u2713</span>
-          <span>${esc(tr("host.autoRestoreReady"))}</span>
+          <span style="color:${startupMode === "manual" ? "var(--prism-accent)" : "var(--prism-ok)"};font-weight:700">${startupMode === "manual" ? "\u2756" : "\u2713"}</span>
+          <span>${esc(startupMode === "manual" ? tr("host.startup.manualDesc") : tr("host.autoRestoreReady"))}</span>
         </div>
 
         ${shortcutsList.length > 0 ? `
@@ -5941,7 +6311,7 @@ button, input, select, textarea {
           <div class="prism-ctl-row">
             <div class="prism-ctl-label">
               <span class="prism-ctl-name">${esc(tr("host.uploadDir"))}</span>
-              <span class="prism-ctl-hint" style="word-break:break-all">${esc(store.config.uploadDir || store.stats.uploadDir || "~/.agy-wallpaper-prism/uploads")}</span>
+              <span class="prism-ctl-hint" style="word-break:break-all">${esc(store.config.uploadDir || store.stats.uploadDir || `${defaultBaseDataDir}/uploads`)}</span>
             </div>
             <button type="button" class="prism-btn prism-btn-sm" data-action="open-fs-browser" data-kind="uploadDir">\u{1F4C2} ${esc(tr("host.browse"))}</button>
           </div>
@@ -5949,7 +6319,7 @@ button, input, select, textarea {
           <div class="prism-ctl-row">
             <div class="prism-ctl-label">
               <span class="prism-ctl-name">${esc(tr("host.cacheDir"))}</span>
-              <span class="prism-ctl-hint" style="word-break:break-all">${esc(store.config.cacheDir || store.stats.cacheDir || "~/.agy-wallpaper-prism/cache")}</span>
+              <span class="prism-ctl-hint" style="word-break:break-all">${esc(store.config.cacheDir || store.stats.cacheDir || `${defaultBaseDataDir}/cache`)}</span>
             </div>
             <button type="button" class="prism-btn prism-btn-sm" data-action="open-fs-browser" data-kind="cacheDir">\u{1F4C2} ${esc(tr("host.browse"))}</button>
           </div>
@@ -6390,36 +6760,88 @@ button, input, select, textarea {
       ).join("");
     }
     function renderAutostartBannerHtml() {
+      const out = [];
+      const canaryTripped = store.canary?.state === "tripped";
+      const isManualSleeping = !canaryTripped && store.config.startupMode === "manual" && !store.sessionAwake;
+      if (canaryTripped) {
+        out.push(`
+        <div id="prism-canary-tripped-banner" class="prism-autostart-banner prism-safety-banner" data-tone="tripped" role="alert">
+          <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;flex:1 1 260px">
+            <span class="prism-status-dot" style="background:var(--prism-danger);margin-top:4px;flex-shrink:0"></span>
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+              <strong style="font-size:12px;color:var(--prism-danger)">${esc(tr("canary.trippedBannerTitle"))}</strong>
+              <span style="color:var(--prism-fg-2);line-height:1.4">${esc(tr("canary.trippedBannerDesc"))}${store.canary.trippedReason ? ` (${esc(store.canary.trippedReason)})` : ""}</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            <button id="prism-canary-reset-btn" type="button" class="prism-btn prism-btn-sm prism-btn-danger-solid"
+                    data-action="reset-canary" ${store.canaryBusy ? "disabled" : ""}>
+              ${esc(tr("canary.resetAndWake"))}
+            </button>
+          </div>
+        </div>
+      `);
+      } else if (isManualSleeping) {
+        out.push(`
+        <div id="prism-manual-wake-banner" class="prism-autostart-banner prism-safety-banner" data-tone="manual-wake">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 240px">
+            <span class="prism-status-dot" style="background:var(--prism-accent);flex-shrink:0"></span>
+            <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;min-width:0">
+              <strong style="font-size:12px;color:var(--prism-fg)">${esc(tr("host.wakeBannerTitle"))}</strong>
+              <span style="color:var(--prism-fg-2)">${esc(tr("host.wakeBannerDesc"))}</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            <button id="prism-manual-wake-btn" type="button" class="prism-btn prism-btn-sm prism-btn-primary"
+                    data-action="wake-skin" ${store.wakeBusy ? "disabled" : ""}>
+              ${esc(tr("host.wakeNow"))}
+            </button>
+          </div>
+        </div>
+      `);
+      }
       const attached = isHostAttached();
-      if (attached || store.autostart.bannerDismissed) return "";
-      const ready = Boolean(store.autostart.normalShortcutEnabled);
-      return `
-      <div class="prism-autostart-banner" data-tone="${ready ? "ready" : "pending"}">
-        <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 220px">
-          <span class="prism-status-dot" style="background:${ready ? "var(--prism-ok)" : "var(--prism-warn)"}"></span>
-          <span style="overflow:hidden;text-overflow:ellipsis">${esc(ready ? tr("host.autostartReady") : tr("host.autostartPending"))}</span>
+      if (!canaryTripped && !isManualSleeping && !attached && !store.autostart.bannerDismissed) {
+        const ready = Boolean(store.autostart.normalShortcutEnabled);
+        out.push(`
+        <div class="prism-autostart-banner" data-tone="${ready ? "ready" : "pending"}">
+          <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 220px">
+            <span class="prism-status-dot" style="background:${ready ? "var(--prism-ok)" : "var(--prism-warn)"}"></span>
+            <span style="overflow:hidden;text-overflow:ellipsis">${esc(ready ? tr("host.autostartReady") : tr("host.autostartPending"))}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            ${!ready ? `<button type="button" class="prism-btn prism-btn-sm prism-btn-primary"
+                           data-action="set-autostart" data-enabled="true" ${store.autostart.busy ? "disabled" : ""}>
+                     \u26A1 ${esc(tr("host.enableAutostart"))}
+                   </button>` : `<button type="button" class="prism-btn prism-btn-sm" data-action="switch-tab" data-tab="system">
+                     \u2713 ${esc(curLocale() === "zh" ? "\u67E5\u770B\u81EA\u542F\u8BE6\u60C5" : "Details")}
+                   </button>`}
+            <button type="button" class="prism-icon-btn" style="width:22px;height:22px"
+                    data-action="dismiss-autostart-banner" title="${esc(tr("common.close"))}">\u2715</button>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-          ${!ready ? `<button type="button" class="prism-btn prism-btn-sm prism-btn-primary"
-                         data-action="set-autostart" data-enabled="true" ${store.autostart.busy ? "disabled" : ""}>
-                   \u26A1 ${esc(tr("host.enableAutostart"))}
-                 </button>` : `<button type="button" class="prism-btn prism-btn-sm" data-action="switch-tab" data-tab="system">
-                   \u2713 ${esc(curLocale() === "zh" ? "\u67E5\u770B\u81EA\u542F\u8BE6\u60C5" : "Details")}
-                 </button>`}
-          <button type="button" class="prism-icon-btn" style="width:22px;height:22px"
-                  data-action="dismiss-autostart-banner" title="${esc(tr("common.close"))}">\u2715</button>
-        </div>
-      </div>
-    `;
+      `);
+      }
+      return out.join("");
     }
     function updateTopStatusIndicators() {
       const pill = document.getElementById("prism-top-status-pill");
       const txt = document.getElementById("prism-top-status-text");
       const attached = isHostAttached();
+      const canaryTripped = store.canary?.state === "tripped";
+      const isManualSleeping = !canaryTripped && store.config.startupMode === "manual" && !store.sessionAwake;
       if (pill && txt) {
         const ready = Boolean(store.autostart.normalShortcutEnabled);
-        pill.dataset.status = !store.skinEnabled ? "off" : attached ? "attached" : "standby";
-        txt.textContent = !store.skinEnabled ? tr("status.skinOff") : attached ? tr("status.connected") : ready ? `${tr("status.standby")} \xB7 \u2713` : tr("status.standby");
+        if (canaryTripped) {
+          pill.dataset.status = "tripped";
+          txt.textContent = tr("canary.state.tripped");
+        } else if (isManualSleeping) {
+          pill.dataset.status = "manual";
+          txt.textContent = tr("host.startup.manual");
+        } else {
+          pill.dataset.status = !store.skinEnabled ? "off" : attached ? "attached" : "standby";
+          txt.textContent = !store.skinEnabled ? tr("status.skinOff") : attached ? tr("status.connected") : ready ? `${tr("status.standby")} \xB7 \u2713` : tr("status.standby");
+        }
       }
       const bannerHost = document.getElementById("prism-autostart-banner-host");
       if (bannerHost) {
@@ -7042,9 +7464,15 @@ button, input, select, textarea {
             }
             row.dataset.dirty = Math.abs(rawVal - defRaw) > 1e-3 ? "true" : "false";
           }
+          if (sliderKey === "liveBootDelay") {
+            const delayHint = document.getElementById("prism-boot-delay-hint");
+            if (delayHint) {
+              delayHint.textContent = tr("host.liveBootDelayHint", { sec: rawVal.toFixed(1) });
+            }
+          }
           syncPairedSlidersInDom(sliderKey, rawVal, tEl);
           const extraPatch = sliderKey === "volume" && rawVal > 0 && getEffectiveConfig().muted ? { volume: rawVal, muted: false, audioEnabled: true } : { [sliderKey]: rawVal };
-          queueConfigPatch(extraPatch, false);
+          queueConfigPatch(extraPatch, false, sliderKey !== "liveBootDelay");
           return;
         }
         const weSliderKey = tEl.dataset.weSlider;
@@ -7252,7 +7680,11 @@ button, input, select, textarea {
             if (!key) return;
             const numCandidate = key === "fpsCap" || key === "sceneLiveFps" ? Number(val) : val;
             const patch = key === "layoutMode" || key === "colorScheme" ? { [key]: numCandidate, preset: "custom" } : { [key]: numCandidate };
-            queueConfigPatch(patch, true, key !== "triggerMode" && key !== "rotationOrder" && key !== "rotationTrigger");
+            queueConfigPatch(
+              patch,
+              true,
+              key !== "triggerMode" && key !== "rotationOrder" && key !== "rotationTrigger" && key !== "startupMode"
+            );
             renderActiveSurface();
             break;
           }
@@ -7844,6 +8276,47 @@ button, input, select, textarea {
             renderActiveSurface();
             break;
           }
+          case "wake-skin": {
+            store.wakeBusy = true;
+            renderActiveSurface();
+            try {
+              const res = await apiJson("/api/skin/wake", { method: "POST", body: {} });
+              ingestServerState(res);
+              store.sessionAwake = true;
+              store.skinEnabled = true;
+              store.wakeBusy = false;
+              showToast(tr("host.wakeSuccessToast"), "ok", 4200);
+              renderActiveSurface();
+              ensureStandbyStatusPoll();
+            } catch (err) {
+              store.wakeBusy = false;
+              showToast(err.message || "Wake failed", "danger");
+              renderActiveSurface();
+            }
+            break;
+          }
+          case "reset-canary": {
+            store.canaryBusy = true;
+            renderActiveSurface();
+            try {
+              const res = await apiJson("/api/canary/reset", { method: "POST", body: {} });
+              ingestServerState(res);
+              if (!res?.canary && !res?.state?.canary) {
+                store.canary = { ...store.canary, state: "idle", trippedReason: "" };
+              }
+              store.sessionAwake = true;
+              store.skinEnabled = true;
+              store.canaryBusy = false;
+              showToast(tr("canary.resetToast"), "ok", 4500);
+              renderActiveSurface();
+              ensureStandbyStatusPoll();
+            } catch (err) {
+              store.canaryBusy = false;
+              showToast(err.message || "Canary reset failed", "danger");
+              renderActiveSurface();
+            }
+            break;
+          }
           case "refresh-status": {
             try {
               const st = await apiJson("/api/status");
@@ -8019,21 +8492,28 @@ button, input, select, textarea {
       });
     }
     function ensureStandbyStatusPoll() {
-      if (statusPollTimer || isHostAttached()) return;
+      const needsCanaryWatch = () => store.canary?.state === "arming";
+      if (statusPollTimer || isHostAttached() && !needsCanaryWatch()) return;
       statusPollTimer = setInterval(async () => {
         if (document.hidden) return;
-        if (isHostAttached()) {
+        if (isHostAttached() && !needsCanaryWatch()) {
           clearInterval(statusPollTimer);
           statusPollTimer = null;
           return;
         }
         try {
           const wasAttached = isHostAttached();
+          const prevCanaryState = store.canary?.state || "idle";
           const st = await apiJson("/api/status");
           ingestServerState(st);
           updateTopStatusIndicators();
-          if (!wasAttached && isHostAttached()) {
-            if (store.activeTab === "system") renderActiveSurface();
+          const canaryChanged = (store.canary?.state || "idle") !== prevCanaryState;
+          if (!wasAttached && isHostAttached() || canaryChanged) {
+            if (store.activeTab === "system" || store.canary?.state === "tripped") {
+              renderActiveSurface();
+            }
+          }
+          if (isHostAttached() && !needsCanaryWatch()) {
             clearInterval(statusPollTimer);
             statusPollTimer = null;
           }

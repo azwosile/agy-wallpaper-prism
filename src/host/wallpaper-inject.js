@@ -1,26 +1,31 @@
-// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism).
+// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.0.0).
 //
-// Self-contained ES2020 browser IIFE injected over CDP (`Page.addScriptToEvaluateOnNewDocument`
-// + `Runtime.evaluate`) or loaded directly in headless verification harnesses.
-// Zero module imports, zero external network calls, zero `app.asar` modifications.
+// Gentle Fail-Open ES2020 browser IIFE loaded post-hydration (`stage.js`) or in headless verification harnesses.
+// Zero `Page.enable`/`Runtime.enable`, zero `app.asar` modifications, `z-index: -1` inert stage,
+// strict Frame-1 Media-Ready Gate, and synchronous `2.34.0` `[data-browser-hole]` rounded GPU cutout.
 //
 // Exposes `window.__agyPrism = { version, applyPayload, updateConfig, destroy, extractAccent,
-// stepSlideshow, setPaused, heal, status, receive }`.
+// stepSlideshow, setPaused, syncBrowserHoles, heal, status, receive }`.
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '2.0.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
+  if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
   var doc = W.document;
 
   var API_KEY = '__agyPrism';
   var BINDING_KEY = '__agyPrismCall';
   var STAGE_ID = 'agy-prism-stage';
   var STYLE_ID = 'agy-prism-css';
+  var STATIC_STYLE_ID = 'agy-prism-static-css';
   var CARET_STYLE_ID = 'agy-prism-caret-css';
   var FX_CANVAS_ID = 'agy-prism-fx-canvas';
   var ROOT_ATTR = 'data-agy-prism-skin';
+  var GLASS_ATTR = 'data-agy-prism-glass';
+  var WALLPAPER_ATTR = 'data-agy-prism-wallpaper';
+  var ACTIVE_HOLE_SEL = '[data-browser-hole]:not([data-browser-hole="false"])';
 
   // Preserve state or tear down an older kernel cleanly before mounting.
   var prev = W[API_KEY];
@@ -299,14 +304,14 @@
     "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
 
   // Verified Antigravity 2.0 / 2.34.0 Hub + VS Code Workbench Selectors
-  // Explicit exclusions protect sibling plugins and modal dialogs.
+  // Explicit exclusions protect sibling plugins and modal/menu/popover overlays.
   var SIBLING_EXCLUDE =
     ':not(#gemini-neko-pet-root):not(#gemini-neko-observer-modal):not(#gemini-neko-stats-bar):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(#' +
     STAGE_ID +
-    '):not(.settings-modal-backdrop):not(.settings-modal-container):not(.agy-dialog):not([role="dialog"])';
+    '):not(.settings-modal-backdrop):not(.settings-modal-container):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
 
   var DIALOG_DESCENDANT_EXCLUDE =
-    ':not(.settings-modal-backdrop *):not(.settings-modal-container *):not(.agy-dialog *):not([role="dialog"] *)';
+    ':not(.settings-modal-backdrop *):not(.settings-modal-container *):not(.agy-dialog *):not([role="dialog"] *):not([role="alertdialog"] *):not([role="menu"] *):not([role="listbox"] *):not([data-radix-popper-content-wrapper] *):not(.agy-popover *):not(.quick-input-widget *)';
 
   var HOLLOW_SURFACES = [
     '#root',
@@ -315,7 +320,7 @@
     '#root > div > div > div' + SIBLING_EXCLUDE,
     '.agy-shell',
     '.agy-inset-shell',
-    '.agy-sheet',
+    '.agy-sheet:not([data-browser-occluder])',
     '.browser-hole-ancestor',
     '.browser-hole-opaque' + SIBLING_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
     '.agy-sheet[data-sheet-inset] [data-main-content-body]',
@@ -324,10 +329,8 @@
     '.agy-inset-shell .agy-sheet[data-sheet-inset] [data-main-content-header]',
     '[data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane]',
     '[data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane] > [data-pane-id]',
-    '[data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane] > [data-pane-id] > :first-child',
     '.agy-inset-shell > [data-split-root] > [data-split-sash]',
     'body[data-has-browser-hole="true"]',
-    '[class*="bg-background"]:not([role="dialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])' + SIBLING_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
     '.monaco-workbench',
     '.monaco-workbench .monaco-grid-view',
     '.monaco-workbench .monaco-split-view2 > .monaco-scrollable-element > .split-view-container > .split-view-view',
@@ -515,6 +518,7 @@
 
   var state = {
     skinEnabled: true,
+    wallpaperReady: false,
     cfg: {},
     item: null,
     mediaOrigin: '',
@@ -544,6 +548,9 @@
     lastSidecarSig: '',
     lastStructuralSig: '',
     lastCaretSig: '',
+    lastHoleClip: '',
+    watchdog15Timer: 0,
+    watchdog80Timer: 0,
     appliedVars: {},
     parallaxTargetX: 0,
     parallaxTargetY: 0,
@@ -557,6 +564,11 @@
 
   var domObs = null;
   var themeObs = null;
+  var holeAttrObs = null;
+  var holeSubObs = null;
+  var holeResizeObs = null;
+  var holeRaf = 0;
+  var holeRafUntil = 0;
   var themeMq = null;
   var themeDebounce = 0;
   var batteryObj = null;
@@ -1117,7 +1129,12 @@
       '--prism-r-card': R.card + 'px',
       '--prism-r-ctl': R.ctl + 'px',
       '--prism-r-xs': R.xs + 'px',
-      '--prism-stage-bg': 'rgb(' + S.shade + ')',
+      '--prism-native-floor': isLight ? '#f7f7f8' : '#070708',
+      '--prism-stage-bg': 'transparent',
+      '--prism-wall-image':
+        state.item && resolveEffectiveKind(state.item, cfg) === 'image' && (state.item.mediaUrl || state.item.thumbUrl)
+          ? 'url(' + JSON.stringify(String(state.item.mediaUrl || state.item.thumbUrl)) + ')'
+          : 'none',
       '--prism-media-fit': fitCss,
       '--prism-media-pos': cfg.posX + '% ' + cfg.posY + '%',
       '--prism-media-opacity': cfg.mediaOpacity.toFixed(3),
@@ -1139,7 +1156,6 @@
       state.effectiveTheme,
       cfg.colorScheme === 'host-native' ? 'host' : 'prism',
       cfg.layoutMode,
-      cfg.interactiveWeb ? 'iw1' : 'iw0',
     ].join('|');
 
     return {
@@ -1173,25 +1189,60 @@
           root.style.removeProperty(k);
         }
       }
+      root.style.removeProperty('--prism-hole-clip');
     }
     state.appliedVars = {};
+    state.lastHoleClip = '';
   }
 
   function buildStructuralPrismCss(cfg, tok) {
-    var G = 'html[' + ROOT_ATTR + ']';
+    var GG = 'html[' + GLASS_ATTR + '="ready"]';
+    var GW = 'html[' + WALLPAPER_ATTR + '="ready"]';
+    var NOT_HOLE = ':not([data-has-browser-hole="true"]):not([data-browser-hole])';
     var isLight = tok.isLight;
     var out = [];
 
+    // 1. Root Safety Floor & 2.34.0 3-Layer [data-browser-hole] Alpha=0 Yield
+    // Keep solid native theme floor on <html> ONLY when wallpaper is decoded AND no browser hole is open.
+    // Whenever [data-has-browser-hole="true"] is active, <html> & <body> yield immediately to alpha = 0!
     out.push(
-      G + ', ' + G + ' body {\n' +
+      GW + ':not([data-has-browser-hole="true"]):not(:has(> body[data-has-browser-hole="true"])) {\n' +
+      '  background-color: var(--prism-native-floor, #070708) !important;\n' +
+      '  background-image: none !important;\n' +
+      '}\n' +
+      GW + ' body {\n' +
+      '  isolation: isolate;\n' +
       '  background-color: transparent !important;\n' +
       '  background-image: none !important;\n' +
+      '}\n' +
+      'html[data-has-browser-hole="true"],\n' +
+      'html[data-has-browser-hole="true"] body,\n' +
+      'body[data-has-browser-hole="true"],\n' +
+      GW + ' [data-has-browser-hole="true"]' + SIBLING_EXCLUDE + ',\n' +
+      GW + ' ' + ACTIVE_HOLE_SEL + ' {\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '}\n' +
+      GW + '[data-prism-kind="image"] body:not(:has(> #' + STAGE_ID + ' .agy-prism-media-wrap))::before {\n' +
+      '  content: "";\n' +
+      '  position: fixed;\n' +
+      '  inset: 0;\n' +
+      '  z-index: -2;\n' +
+      '  pointer-events: none !important;\n' +
+      '  background-image: var(--prism-wall-image, none);\n' +
+      '  background-size: var(--prism-media-fit, cover);\n' +
+      '  background-position: var(--prism-media-pos, 50% 50%);\n' +
+      '  background-repeat: no-repeat;\n' +
+      '  opacity: var(--prism-media-opacity, 1);\n' +
+      '  filter: var(--prism-media-filter, none);\n' +
+      '  clip-path: var(--prism-hole-clip, none);\n' +
       '}'
     );
 
+    // 2. Fail-Open Token Overrides (strictly gated on GW so broken/404 media keeps 100% solid native surfaces!)
     out.push(
-      G + ' body,\n' +
-      G + ' :where(#root, #root > div, #root .dark, #root .light, #root .theme-dark, #root .theme-light, .agy-shell, .agy-inset-shell, .agy-sheet, [data-split-panes] [data-testid="pane-titlebar-toolbar"])' +
+      GW + ' body,\n' +
+      GW + ' :where(#root, #root > div, #root .dark, #root .light, #root .theme-dark, #root .theme-light, .agy-shell, .agy-inset-shell, .agy-sheet:not([data-browser-occluder]), [data-split-panes] [data-testid="pane-titlebar-toolbar"])' +
       ':where(' + SIBLING_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE + ') {\n' +
       '  --background: transparent !important;\n' +
       '  --color-background: transparent !important;\n' +
@@ -1237,15 +1288,27 @@
       '}'
     );
 
+    // 3. Inert Fail-Open Stage at z-index: -1 (0 mouse/focus interception, transparent background, GPU cutout clip)
     out.push(
       '#' + STAGE_ID + ' {\n' +
-      '  position: fixed;\n' +
-      '  inset: 0;\n' +
-      '  z-index: 0;\n' +
-      '  overflow: hidden;\n' +
-      '  pointer-events: ' + (cfg.interactiveWeb ? 'auto' : 'none') + ';\n' +
-      '  background-color: var(--prism-stage-bg);\n' +
+      '  position: fixed !important;\n' +
+      '  inset: 0 !important;\n' +
+      '  z-index: -1 !important;\n' +
+      '  overflow: hidden !important;\n' +
+      '  pointer-events: none !important;\n' +
+      '  user-select: none !important;\n' +
+      '  -webkit-user-select: none !important;\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  clip-path: var(--prism-hole-clip, none);\n' +
       '  contain: layout paint style;\n' +
+      '}\n' +
+      '#' + STAGE_ID + ' *, #' + FX_CANVAS_ID + ' {\n' +
+      '  pointer-events: none !important;\n' +
+      '  user-select: none !important;\n' +
+      '}\n' +
+      '#' + FX_CANVAS_ID + ' {\n' +
+      '  clip-path: var(--prism-hole-clip, none);\n' +
       '}\n' +
       '#' + STAGE_ID + ' .agy-prism-media-wrap {\n' +
       '  position: absolute;\n' +
@@ -1267,38 +1330,44 @@
       '  opacity: var(--prism-media-opacity);\n' +
       '  filter: var(--prism-media-filter);\n' +
       '  transform: var(--prism-media-transform);\n' +
-      '  pointer-events: ' + (cfg.interactiveWeb ? 'auto' : 'none') + ';\n' +
       '}\n' +
       '#' + STAGE_ID + ' .agy-prism-scrim {\n' +
       '  position: absolute;\n' +
       '  inset: 0;\n' +
-      '  pointer-events: none;\n' +
       '  background: var(--prism-scrim-bg);\n' +
-      '  opacity: var(--prism-scrim-opacity);\n' +
+      '  opacity: 0;\n' +
       '  transition: background 240ms ease, opacity 180ms ease;\n' +
+      '}\n' +
+      GW + ' #' + STAGE_ID + ' .agy-prism-scrim {\n' +
+      '  opacity: var(--prism-scrim-opacity);\n' +
       '}\n' +
       '#' + STAGE_ID + ' .agy-prism-vignette {\n' +
       '  position: absolute;\n' +
       '  inset: 0;\n' +
-      '  pointer-events: none;\n' +
-      '  display: var(--prism-vignette-display);\n' +
+      '  display: none;\n' +
       '  background: var(--prism-vignette-bg);\n' +
+      '}\n' +
+      GW + ' #' + STAGE_ID + ' .agy-prism-vignette {\n' +
+      '  display: var(--prism-vignette-display);\n' +
       '}\n' +
       '#' + STAGE_ID + ' .agy-prism-grain {\n' +
       '  position: absolute;\n' +
       '  inset: 0;\n' +
-      '  pointer-events: none;\n' +
-      '  display: var(--prism-grain-display);\n' +
+      '  display: none;\n' +
       '  opacity: var(--prism-grain-alpha);\n' +
       '  background-image: ' + GRAIN_SVG + ';\n' +
       '  background-repeat: repeat;\n' +
+      '}\n' +
+      GW + ' #' + STAGE_ID + ' .agy-prism-grain {\n' +
+      '  display: var(--prism-grain-display);\n' +
       '}'
     );
 
+    // 4. Hollow Outer Layout Wrappers ONLY When Wallpaper Frame Is Decoded (`GW`)
     out.push(
-      G + ' #root, ' + G + ' .monaco-workbench { position: relative; z-index: 1; }\n' +
+      GW + ' #root, ' + GW + ' .monaco-workbench { position: relative; z-index: 1; }\n' +
       HOLLOW_SURFACES.map(function (sel) {
-        return G + ' :where(' + sel + ')';
+        return GW + ' :where(' + sel + ')';
       }).join(',\n') +
       ' {\n' +
       '  background-color: transparent !important;\n' +
@@ -1306,22 +1375,11 @@
       '}'
     );
 
-    if (cfg.interactiveWeb) {
-      out.push(
-        G + ' #root { pointer-events: none; }\n' +
-        G + ' .agy-sidebar, ' + G + ' [data-testid="sidebar-split"], ' + G + ' [data-testid="agent-input-box"], ' +
-        G + ' .surface-composer-card, ' + G + ' .agy-composer, ' + G + ' [data-testid="conversation-view"] > *, ' +
-        G + ' [data-testid="aux-pane-split"] > div:last-child, ' + G + ' header, ' + G + ' button, ' + G + ' a, ' + G + ' input, ' + G + ' textarea {\n' +
-        '  pointer-events: auto;\n' +
-        '}'
-      );
-    }
-
     var sbHostList = GLASS_CARRIER_SIDEBARS.map(function (s) {
-      return G + ' ' + s;
+      return GW + ' ' + s + NOT_HOLE;
     }).join(',\n');
     var sbBeforeList = GLASS_CARRIER_SIDEBARS.map(function (s) {
-      return G + ' ' + s + '::before';
+      return GW + ' ' + s + NOT_HOLE + '::before';
     }).join(',\n');
 
     out.push(
@@ -1349,10 +1407,10 @@
     );
 
     var compHostList = GLASS_CARRIER_COMPOSERS.map(function (s) {
-      return G + ' ' + s;
+      return GW + ' ' + s;
     }).join(',\n');
     var compBeforeList = GLASS_CARRIER_COMPOSERS.map(function (s) {
-      return G + ' ' + s + '::before';
+      return GW + ' ' + s + '::before';
     }).join(',\n');
 
     out.push(
@@ -1382,59 +1440,62 @@
     );
 
     out.push(
-      G + ' [data-testid="conversation-view"] {\n' +
+      GW + ' [data-testid="conversation-view"] {\n' +
       '  background-color: var(--prism-surface-chat) !important;\n' +
       '  backdrop-filter: none !important;\n' +
       '}\n' +
-      G + ' .monaco-workbench .part.editor > .content,\n' +
-      G + ' .monaco-workbench .editor-group-container,\n' +
-      G + ' .monaco-workbench .part.panel,\n' +
-      G + ' [data-testid="background-task-command"] {\n' +
+      GW + ' [data-testid="browser-error-overlay"] {\n' +
+      '  background-color: var(--prism-surface-editor) !important;\n' +
+      '}\n' +
+      GW + ' .monaco-workbench .part.editor > .content,\n' +
+      GW + ' .monaco-workbench .editor-group-container,\n' +
+      GW + ' .monaco-workbench .part.panel,\n' +
+      GW + ' [data-testid="background-task-command"] {\n' +
       '  background-color: var(--prism-surface-editor) !important;\n' +
       '  backdrop-filter: none !important;\n' +
       '}\n' +
-      G + ' .monaco-editor,\n' +
-      G + ' .monaco-editor .margin,\n' +
-      G + ' .monaco-editor-background,\n' +
-      G + ' .monaco-editor .view-lines,\n' +
-      G + ' .xterm,\n' +
-      G + ' .xterm .xterm-viewport,\n' +
-      G + ' .xterm .xterm-screen {\n' +
+      GW + ' .monaco-editor,\n' +
+      GW + ' .monaco-editor .margin,\n' +
+      GW + ' .monaco-editor-background,\n' +
+      GW + ' .monaco-editor .view-lines,\n' +
+      GW + ' .xterm,\n' +
+      GW + ' .xterm .xterm-viewport,\n' +
+      GW + ' .xterm .xterm-screen {\n' +
       '  background-color: transparent !important;\n' +
       '  backdrop-filter: none !important;\n' +
       '}\n' +
-      G + ' pre,\n' +
-      G + ' .code-block,\n' +
-      G + ' .md-code-block {\n' +
+      GW + ' pre,\n' +
+      GW + ' .code-block,\n' +
+      GW + ' .md-code-block {\n' +
       '  background-color: var(--prism-surface-code-block) !important;\n' +
       '  border: 1px solid var(--prism-border-card) !important;\n' +
       '  border-radius: var(--prism-r-ctl) !important;\n' +
       '  backdrop-filter: var(--prism-code-backdrop) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-code-backdrop) !important;\n' +
       '}\n' +
-      G + ' pre code, ' + G + ' .md-code-block pre { background: transparent !important; border: none !important; backdrop-filter: none !important; }'
+      GW + ' pre code, ' + GW + ' .md-code-block pre { background: transparent !important; border: none !important; backdrop-filter: none !important; }'
     );
 
     if (cfg.layoutMode === 'islands') {
       out.push(
-        G + '[data-prism-layout="islands"] .agy-shell {\n' +
+        GW + '[data-prism-layout="islands"] .agy-shell {\n' +
         '  padding: var(--prism-workspace-pad) !important;\n' +
         '  gap: var(--prism-island-gap) !important;\n' +
         '  box-sizing: border-box !important;\n' +
         '}\n' +
-        G + '[data-prism-layout="islands"] [data-testid="sidebar-split"] > div:first-child,\n' +
-        G + '[data-prism-layout="islands"] .agy-sidebar {\n' +
+        GW + '[data-prism-layout="islands"] [data-testid="sidebar-split"] > div:first-child' + NOT_HOLE + ',\n' +
+        GW + '[data-prism-layout="islands"] .agy-sidebar' + NOT_HOLE + ' {\n' +
         '  border-radius: var(--prism-r-left-island) !important;\n' +
         '  border: 1px solid var(--prism-border-island) !important;\n' +
         '  box-shadow: var(--prism-shadow-island) !important;\n' +
         '}\n' +
-        G + '[data-prism-layout="islands"] :is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2) {\n' +
+        GW + '[data-prism-layout="islands"] :is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2) {\n' +
         '  width: var(--prism-island-gap) !important;\n' +
         '  background: transparent !important;\n' +
         '  border: none !important;\n' +
         '  position: relative;\n' +
         '}\n' +
-        G + '[data-prism-layout="islands"] :is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2):hover::after {\n' +
+        GW + '[data-prism-layout="islands"] :is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2):hover::after {\n' +
         '  content: "";\n' +
         '  position: absolute;\n' +
         '  top: 50%; left: 50%;\n' +
@@ -1444,19 +1505,19 @@
         '  background: var(--prism-accent);\n' +
         '  opacity: 0.78;\n' +
         '}\n' +
-        G + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] > div:first-child,\n' +
-        G + '[data-prism-layout="islands"] .agy-shell > main {\n' +
+        GW + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] > div:first-child' + NOT_HOLE + ',\n' +
+        GW + '[data-prism-layout="islands"] .agy-shell > main' + NOT_HOLE + ' {\n' +
         '  border-radius: var(--prism-r-island) !important;\n' +
         '  border: 1px solid var(--prism-border-island) !important;\n' +
         '  box-shadow: var(--prism-shadow-island) !important;\n' +
         '  background-color: var(--prism-surface-chat);\n' +
         '}\n' +
-        G + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] > div:last-child:not([hidden]):not([aria-hidden="true"]) {\n' +
+        GW + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] > div:last-child:not([hidden]):not([aria-hidden="true"])' + NOT_HOLE + ' {\n' +
         '  border-radius: var(--prism-r-right-island) !important;\n' +
         '  border: 1px solid var(--prism-border-island) !important;\n' +
         '  box-shadow: var(--prism-shadow-island) !important;\n' +
         '}\n' +
-        G + '[data-prism-layout="islands"] .monaco-workbench :is(.part.activitybar, .part.sidebar, .part.editor .editor-group-container, .part.panel, .part.auxiliarybar) {\n' +
+        GW + '[data-prism-layout="islands"] .monaco-workbench :is(.part.activitybar, .part.sidebar, .part.editor .editor-group-container, .part.panel, .part.auxiliarybar) {\n' +
         '  margin: calc(var(--prism-island-gap) * 0.5) !important;\n' +
         '  border-radius: var(--prism-r-island) !important;\n' +
         '  border: 1px solid var(--prism-border-island) !important;\n' +
@@ -1465,24 +1526,29 @@
       );
     } else {
       out.push(
-        G + '[data-prism-layout="flush"] :is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2) {\n' +
+        GW + '[data-prism-layout="flush"] :is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2) {\n' +
         '  width: 1px !important;\n' +
         '  background-color: var(--prism-border-hairline) !important;\n' +
         '}\n' +
-        G + '[data-prism-layout="flush"] .agy-sidebar {\n' +
+        GW + '[data-prism-layout="flush"] .agy-sidebar' + NOT_HOLE + ' {\n' +
         '  border-right: 1px solid var(--prism-border-hairline) !important;\n' +
         '}'
       );
     }
 
+    // 5. Solid Popovers, Menus & 2.34.0 Settings Modal Floor (>= 0.96 alpha, zero [class*="bg-background"] hover clobber)
     out.push(
-      G + ' .settings-modal-backdrop {\n' +
+      GG + ' .settings-modal-backdrop {\n' +
       '  background-color: ' + (isLight ? 'rgba(15, 23, 42, 0.28)' : 'rgba(0, 0, 0, 0.45)') + ' !important;\n' +
       '  backdrop-filter: blur(12px) saturate(120%) !important;\n' +
       '  -webkit-backdrop-filter: blur(12px) saturate(120%) !important;\n' +
+      '}\n' +
+      GG + '[data-has-browser-hole="true"] .settings-modal-backdrop,\n' +
+      GG + ' body[data-has-browser-hole="true"] .settings-modal-backdrop {\n' +
+      '  background-color: ' + (isLight ? 'rgba(15, 23, 42, 0.42)' : 'rgba(0, 0, 0, 0.58)') + ' !important;\n' +
       '}\n\n' +
       SOLID_POPOVERS.map(function (s) {
-        return G + ' ' + s;
+        return GG + ' ' + s;
       }).join(',\n') +
       ' {\n' +
       '  --background: var(--prism-surface-popover) !important;\n' +
@@ -1495,15 +1561,17 @@
       '  border: 1px solid var(--prism-border-popover) !important;\n' +
       '  box-shadow: inset 0 1px 0 var(--prism-specular-top), var(--prism-shadow-popover) !important;\n' +
       '}\n\n' +
-      G + ' :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal)) [class*="bg-background"] {\n' +
-      '  background-color: var(--prism-surface-popover) !important;\n' +
+      GG + ' :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {\n' +
+      '  --background: var(--prism-surface-popover) !important;\n' +
+      '  --color-background: var(--prism-surface-popover) !important;\n' +
+      '  --content: var(--prism-surface-popover) !important;\n' +
       '}'
     );
 
     out.push(
-      G + ' ::selection { background-color: var(--prism-selection-bg) !important; color: inherit; }\n' +
-      G + ' ::-webkit-scrollbar-track { background: transparent !important; }\n' +
-      G + ' ::-webkit-scrollbar-thumb { background: var(--prism-scroll-thumb) !important; border-radius: 999px; }'
+      GG + ' ::selection { background-color: var(--prism-selection-bg) !important; color: inherit; }\n' +
+      GW + ' ::-webkit-scrollbar-track { background: transparent !important; }\n' +
+      GG + ' ::-webkit-scrollbar-thumb { background: var(--prism-scroll-thumb) !important; border-radius: 999px; }'
     );
 
     return out.join('\n\n');
@@ -1525,14 +1593,311 @@
       (doc.head || doc.documentElement).appendChild(existing);
     }
     existing.textContent =
-      'html[' + ROOT_ATTR + '] :is(textarea, input:not([type="range"]):not([type="checkbox"]):not([type="color"]), [contenteditable="true"]) { caret-color: ' +
+      'html[' + GLASS_ATTR + '="ready"] :is(textarea, input:not([type="range"]):not([type="checkbox"]):not([type="color"]), [contenteditable="true"]) { caret-color: ' +
       color +
       ' !important; }\n' +
-      'html[' + ROOT_ATTR + '] .monaco-editor .cursors-layer > .cursor { background-color: ' +
+      'html[' + GLASS_ATTR + '="ready"] .monaco-editor .cursors-layer > .cursor { background-color: ' +
       color +
       ' !important; border-color: ' +
       color +
       ' !important; }';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Antigravity 2.34.0 3-Layer `[data-browser-hole]` Synchronous Rounded GPU Cutout
+  // ---------------------------------------------------------------------------
+  function fmtNum(n) {
+    var r = Math.round(Number(n) * 100) / 100;
+    return Number.isFinite(r) ? String(r) : '0';
+  }
+
+  function parseCornerPx(raw) {
+    var m = /^([\d.]+)px/.exec(String(raw || '').trim());
+    return m ? Math.max(0, Number(m[1])) : 0;
+  }
+
+  function measureClippedBrowserHole(holeEl, vw, vh) {
+    if (!holeEl || !holeEl.getBoundingClientRect) return null;
+    try {
+      var hcs = getComputedStyle(holeEl);
+      if (hcs.display === 'none' || hcs.visibility === 'hidden') return null;
+      var raw = holeEl.getBoundingClientRect();
+      if (raw.width <= 0.5 || raw.height <= 0.5) return null;
+
+      var left = Math.max(0, raw.left);
+      var top = Math.max(0, raw.top);
+      var right = Math.min(vw, raw.right);
+      var bottom = Math.min(vh, raw.bottom);
+      var tl = parseCornerPx(hcs.borderTopLeftRadius);
+      var tr = parseCornerPx(hcs.borderTopRightRadius);
+      var br = parseCornerPx(hcs.borderBottomRightRadius);
+      var bl = parseCornerPx(hcs.borderBottomLeftRadius);
+
+      var anc = holeEl.parentElement;
+      while (anc && anc !== doc.body && anc !== doc.documentElement) {
+        var acs = getComputedStyle(anc);
+        if (acs.display === 'none' || acs.visibility === 'hidden') return null;
+        var ovX = acs.overflowX || acs.overflow || 'visible';
+        var ovY = acs.overflowY || acs.overflow || 'visible';
+        if (ovX !== 'visible' || ovY !== 'visible') {
+          var ar = anc.getBoundingClientRect();
+          var bTop = parseFloat(acs.borderTopWidth) || 0;
+          var bRight = parseFloat(acs.borderRightWidth) || 0;
+          var bBot = parseFloat(acs.borderBottomWidth) || 0;
+          var bLeft = parseFloat(acs.borderLeftWidth) || 0;
+          var inLeft = ar.left + bLeft;
+          var inTop = ar.top + bTop;
+          var inRight = ar.right - bRight;
+          var inBottom = ar.bottom - bBot;
+
+          if (ovX !== 'visible') {
+            left = Math.max(left, inLeft);
+            right = Math.min(right, inRight);
+          }
+          if (ovY !== 'visible') {
+            top = Math.max(top, inTop);
+            bottom = Math.min(bottom, inBottom);
+          }
+
+          var atl = parseCornerPx(acs.borderTopLeftRadius);
+          var atr = parseCornerPx(acs.borderTopRightRadius);
+          var abr = parseCornerPx(acs.borderBottomRightRadius);
+          var abl = parseCornerPx(acs.borderBottomLeftRadius);
+          var eps = 2.5;
+          var touchL = Math.abs(left - inLeft) <= eps || Math.abs(left - ar.left) <= bLeft + eps;
+          var touchR = Math.abs(right - inRight) <= eps || Math.abs(right - ar.right) <= bRight + eps;
+          var touchT = Math.abs(top - inTop) <= eps || Math.abs(top - ar.top) <= bTop + eps;
+          var touchB = Math.abs(bottom - inBottom) <= eps || Math.abs(bottom - ar.bottom) <= bBot + eps;
+          if (touchT && touchL && atl > tl) tl = atl;
+          if (touchT && touchR && atr > tr) tr = atr;
+          if (touchB && touchR && abr > br) br = abr;
+          if (touchB && touchL && abl > bl) bl = abl;
+        }
+        anc = anc.parentElement;
+      }
+
+      var w = right - left;
+      var h = bottom - top;
+      if (w <= 0.5 || h <= 0.5) return null;
+
+      var scale = Math.min(
+        1,
+        tl + tr > 0 ? w / (tl + tr) : 1,
+        bl + br > 0 ? w / (bl + br) : 1,
+        tl + bl > 0 ? h / (tl + bl) : 1,
+        tr + br > 0 ? h / (tr + br) : 1
+      );
+      return {
+        x: left,
+        y: top,
+        w: w,
+        h: h,
+        tl: tl * scale,
+        tr: tr * scale,
+        br: br * scale,
+        bl: bl * scale,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function buildCcwRoundedHolePath(r) {
+    var x = r.x;
+    var y = r.y;
+    var x2 = r.x + r.w;
+    var y2 = r.y + r.h;
+    var tl = r.tl > 0.4 ? r.tl : 0;
+    var tr = r.tr > 0.4 ? r.tr : 0;
+    var br = r.br > 0.4 ? r.br : 0;
+    var bl = r.bl > 0.4 ? r.bl : 0;
+
+    return (
+      'M' + fmtNum(x + tl) + ',' + fmtNum(y) +
+      (tl > 0 ? 'A' + fmtNum(tl) + ',' + fmtNum(tl) + ' 0 0 0 ' + fmtNum(x) + ',' + fmtNum(y + tl) : '') +
+      'V' + fmtNum(y2 - bl) +
+      (bl > 0 ? 'A' + fmtNum(bl) + ',' + fmtNum(bl) + ' 0 0 0 ' + fmtNum(x + bl) + ',' + fmtNum(y2) : '') +
+      'H' + fmtNum(x2 - br) +
+      (br > 0 ? 'A' + fmtNum(br) + ',' + fmtNum(br) + ' 0 0 0 ' + fmtNum(x2) + ',' + fmtNum(y2 - br) : '') +
+      'V' + fmtNum(y + tr) +
+      (tr > 0 ? 'A' + fmtNum(tr) + ',' + fmtNum(tr) + ' 0 0 0 ' + fmtNum(x2 - tr) + ',' + fmtNum(y) : '') +
+      'Z'
+    );
+  }
+
+  function disconnectHoleActiveObservers() {
+    if (holeSubObs) {
+      try { holeSubObs.disconnect(); } catch (_) {}
+      holeSubObs = null;
+    }
+    if (holeResizeObs) {
+      try { holeResizeObs.disconnect(); } catch (_) {}
+      holeResizeObs = null;
+    }
+    if (holeRaf) {
+      W.cancelAnimationFrame(holeRaf);
+      holeRaf = 0;
+    }
+    holeRafUntil = 0;
+  }
+
+  function armHoleTransitionRaf(durationMs) {
+    var until = Date.now() + Math.min(600, Math.max(120, Number(durationMs) || 360));
+    if (until > holeRafUntil) holeRafUntil = until;
+    if (holeRaf) return;
+    var step = function () {
+      holeRaf = 0;
+      if (destroyed || !state.skinEnabled) return;
+      syncBrowserHoleCutout();
+      if (Date.now() < holeRafUntil || (doc.body && doc.body.querySelector('[data-split-transition]'))) {
+        holeRaf = W.requestAnimationFrame(step);
+      }
+    };
+    holeRaf = W.requestAnimationFrame(step);
+  }
+
+  function ensureHoleActiveObservers(holeNodes) {
+    if (!holeSubObs && W.MutationObserver && doc.body) {
+      holeSubObs = new MutationObserver(function (muts) {
+        if (destroyed || !state.skinEnabled) return;
+        syncBrowserHoleCutout();
+        for (var i = 0; i < muts.length; i += 1) {
+          if (muts[i].attributeName === 'data-split-transition') {
+            armHoleTransitionRaf(560);
+            break;
+          }
+        }
+      });
+      try {
+        holeSubObs.observe(doc.body, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+          attributeFilter: ['style', 'class', 'hidden', 'aria-hidden', 'data-browser-hole', 'data-has-browser-hole', 'data-split-transition'],
+        });
+      } catch (_) {}
+    }
+
+    if (W.ResizeObserver) {
+      if (!holeResizeObs) {
+        holeResizeObs = new ResizeObserver(function () {
+          if (destroyed || !state.skinEnabled) return;
+          syncBrowserHoleCutout();
+        });
+      } else {
+        try { holeResizeObs.disconnect(); } catch (_) {}
+      }
+      try {
+        if (doc.body) holeResizeObs.observe(doc.body);
+        for (var i = 0; i < holeNodes.length; i += 1) {
+          var hEl = holeNodes[i];
+          holeResizeObs.observe(hEl);
+          var sheet = hEl.closest && hEl.closest('.agy-sheet, .aux-drawer-popup');
+          if (sheet) holeResizeObs.observe(sheet);
+          var pane = hEl.closest && hEl.closest('[data-pane-id], [data-split-sized], [data-testid="aux-pane-split"]');
+          if (pane) holeResizeObs.observe(pane);
+        }
+      } catch (_) {}
+    }
+  }
+
+  function syncBrowserHoleCutout() {
+    var root = doc.documentElement;
+    var body = doc.body;
+    if (!root || !state.skinEnabled) return '';
+
+    var hasAttr =
+      root.getAttribute('data-has-browser-hole') === 'true' ||
+      Boolean(body && body.getAttribute('data-has-browser-hole') === 'true');
+    var holeNodes = doc.querySelectorAll ? doc.querySelectorAll(ACTIVE_HOLE_SEL) : [];
+
+    if (!hasAttr && (!holeNodes || holeNodes.length === 0)) {
+      disconnectHoleActiveObservers();
+      if (state.lastHoleClip !== '') {
+        state.lastHoleClip = '';
+        root.style.removeProperty('--prism-hole-clip');
+        var stClear = doc.getElementById(STAGE_ID);
+        if (stClear) stClear.style.clipPath = '';
+        var fxClear = doc.getElementById(FX_CANVAS_ID);
+        if (fxClear) fxClear.style.clipPath = '';
+      }
+      return '';
+    }
+
+    ensureHoleActiveObservers(holeNodes);
+
+    var vw = Math.max(1, W.innerWidth || root.clientWidth || 1440);
+    var vh = Math.max(1, W.innerHeight || root.clientHeight || 900);
+    var subpaths = [];
+    for (var i = 0; i < holeNodes.length; i += 1) {
+      var m = measureClippedBrowserHole(holeNodes[i], vw, vh);
+      if (m) subpaths.push(buildCcwRoundedHolePath(m));
+    }
+
+    var nextClip = subpaths.length > 0 ? 'path("M0,0H' + fmtNum(vw) + 'V' + fmtNum(vh) + 'H0Z ' + subpaths.join(' ') + '")' : '';
+    if (nextClip !== state.lastHoleClip) {
+      state.lastHoleClip = nextClip;
+      if (nextClip) root.style.setProperty('--prism-hole-clip', nextClip);
+      else root.style.removeProperty('--prism-hole-clip');
+    }
+    var stageEl = doc.getElementById(STAGE_ID);
+    if (stageEl && stageEl.style.clipPath !== nextClip) stageEl.style.clipPath = nextClip;
+    var fxEl = doc.getElementById(FX_CANVAS_ID);
+    if (fxEl && fxEl.style.clipPath !== nextClip) fxEl.style.clipPath = nextClip;
+    return nextClip;
+  }
+
+  function setWallpaperReady(ready) {
+    var next = Boolean(ready && state.skinEnabled && !destroyed);
+    state.wallpaperReady = next;
+    var root = doc.documentElement;
+    if (root) {
+      if (next) {
+        if (root.getAttribute(WALLPAPER_ATTR) !== 'ready') root.setAttribute(WALLPAPER_ATTR, 'ready');
+      } else {
+        root.removeAttribute(WALLPAPER_ATTR);
+      }
+    }
+    if (next) syncBrowserHoleCutout();
+  }
+
+  function clearRootWatchdogTimers() {
+    clearTimeout(state.watchdog15Timer);
+    clearTimeout(state.watchdog80Timer);
+    state.watchdog15Timer = 0;
+    state.watchdog80Timer = 0;
+  }
+
+  function isHostRootHealthy() {
+    var r = doc.getElementById('root') || (doc.querySelector && doc.querySelector('.monaco-workbench'));
+    if (!r) return true;
+    var b = r.getBoundingClientRect();
+    return b.width >= 100 && b.height >= 100;
+  }
+
+  function armPostMountWatchdog() {
+    if (destroyed || !state.skinEnabled) return;
+    if (state._watchdogReported || state.watchdog15Timer || state.watchdog80Timer) return;
+    state.watchdog15Timer = setTimeout(function () {
+      state.watchdog15Timer = 0;
+      if (destroyed || !state.skinEnabled) return;
+      if (!isHostRootHealthy()) {
+        state._watchdogReported = true;
+        callHostRpc('canary.rollback', { reason: 'root_collapsed_1500ms' });
+        destroy();
+      }
+    }, 1500);
+    state.watchdog80Timer = setTimeout(function () {
+      state.watchdog80Timer = 0;
+      if (destroyed || !state.skinEnabled) return;
+      state._watchdogReported = true;
+      if (!isHostRootHealthy()) {
+        callHostRpc('canary.rollback', { reason: 'root_collapsed_8000ms' });
+        destroy();
+      } else {
+        callHostRpc('canary.healthy', {});
+      }
+    }, 8000);
   }
 
   // ---------------------------------------------------------------------------
@@ -1603,8 +1968,14 @@
       stage = doc.createElement('div');
       stage.id = STAGE_ID;
       stage.setAttribute('data-agy-prism-layer', '1');
-      stage.setAttribute('aria-hidden', 'true');
       doc.body.insertBefore(stage, doc.body.firstChild);
+    }
+    stage.inert = true;
+    stage.setAttribute('inert', '');
+    stage.setAttribute('aria-hidden', 'true');
+    stage.setAttribute('tabindex', '-1');
+    if (state.lastHoleClip && stage.style.clipPath !== state.lastHoleClip) {
+      stage.style.clipPath = state.lastHoleClip;
     }
     if (!stage.querySelector('.agy-prism-scrim')) {
       var scrim = doc.createElement('div');
@@ -1918,17 +2289,25 @@
     var cfg = state.cfg;
     var item = state.item;
     var effKind = resolveEffectiveKind(item, cfg);
-    var rawMediaUrl = String((item && (item.mediaUrl || item.thumbUrl)) || cfg.sourceUrl || '').trim();
-    if (effKind === 'video' && item && item.sceneVideoUrl && (!rawMediaUrl || /\/preview\//i.test(rawMediaUrl))) {
-      rawMediaUrl = String(item.sceneVideoUrl).trim();
-    } else if (effKind === 'web' && item && (item.webUrl || item.sceneLiveUrl) && (!rawMediaUrl || /\/preview\//i.test(rawMediaUrl))) {
-      rawMediaUrl = String(item.webUrl || item.sceneLiveUrl).trim();
+    var rawMediaUrl = '';
+    if (effKind === 'video') {
+      rawMediaUrl = String((item && (item.sceneVideoUrl || item.mediaUrl)) || cfg.sourceUrl || '').trim();
+      if (item && item.mediaUrl && !/\/preview\//i.test(item.mediaUrl)) {
+        rawMediaUrl = String(item.mediaUrl).trim();
+      }
+    } else if (effKind === 'web') {
+      rawMediaUrl = String((item && (item.webUrl || item.sceneLiveUrl || item.mediaUrl)) || cfg.sourceUrl || '').trim();
+      if (item && item.mediaUrl && !/\/preview\//i.test(item.mediaUrl)) {
+        rawMediaUrl = String(item.mediaUrl).trim();
+      }
+    } else {
+      rawMediaUrl = String((item && (item.mediaUrl || item.thumbUrl)) || cfg.sourceUrl || '').trim();
     }
     var mediaUrl = rawMediaUrl;
     var audioUrl = String((item && item.audioUrl) || '').trim();
     var mediaKey = effKind + '|' + mediaUrl + '|' + audioUrl + '|' + (state.slides ? state.slides.length : 0);
 
-    var hasActive = Boolean(state.activeWrap && state.activeWrap.isConnected);
+    var hasActive = Boolean(state.activeWrap && state.activeWrap.isConnected && state.wallpaperReady);
     var hasLivePending = Boolean(state.pendingWrap && state.pendingWrap.isConnected && state.pendingMediaTimer);
     if (!forceReplace && mediaKey === state.activeMediaKey && (hasActive || hasLivePending)) {
       if (hasActive && !state.transitionTimer && state.activeWrap.style.opacity === '0') {
@@ -1950,6 +2329,10 @@
     }
 
     var prevWrap = state.activeWrap;
+    var validPrevWrap = Boolean(prevWrap && prevWrap.isConnected && state.wallpaperReady);
+    if (!validPrevWrap) {
+      setWallpaperReady(false);
+    }
     state.activeVideo = null;
     state.activeAudio = null;
     state.activeIframe = null;
@@ -1976,15 +2359,35 @@
         cfg.switchTransitionDir,
         transitionDurationMs(cfg.switchTransitionSpeed)
       );
+      setWallpaperReady(true);
       syncMediaPlaybackState();
     };
 
+    var failMount = function () {
+      if (destroyed || mountSeq !== state.mediaMountSeq) {
+        disposeWrap(nextWrap);
+        return;
+      }
+      clearTimeout(state.pendingMediaTimer);
+      state.pendingMediaTimer = 0;
+      state.pendingWrap = null;
+      if (state.activeVideo && nextWrap.contains(state.activeVideo)) state.activeVideo = null;
+      if (state.activeAudio && nextWrap.contains(state.activeAudio)) state.activeAudio = null;
+      if (state.activeIframe && nextWrap.contains(state.activeIframe)) state.activeIframe = null;
+      disposeWrap(nextWrap);
+      flushOutgoingWraps();
+      if (prevWrap) disposeWrap(prevWrap);
+      state.activeWrap = null;
+      state.activeMediaKey = '';
+      setWallpaperReady(false);
+    };
+
     if (effKind === 'none') {
-      commitMount();
+      failMount();
       return;
     }
 
-    if (effKind === 'aurora' || (!mediaUrl && effKind !== 'slideshow')) {
+    if (effKind === 'aurora') {
       var aurora = doc.createElement('div');
       aurora.className = 'agy-prism-media-el';
       var baseCol = (item && item.schemeColor) || '#1e293b';
@@ -1997,16 +2400,31 @@
       return;
     }
 
+    if (!mediaUrl && effKind !== 'slideshow') {
+      failMount();
+      return;
+    }
+
     if (effKind === 'image') {
       var img = doc.createElement('img');
       img.className = 'agy-prism-media-el';
       img.crossOrigin = 'anonymous';
       img.decoding = 'async';
       img.alt = '';
-      var committedImg = false;
-      var finishImg = function () {
-        if (committedImg) return;
-        committedImg = true;
+      var settledImg = false;
+      var onImgDecoded = function () {
+        if (settledImg) return;
+        settledImg = true;
+        clearTimeout(state.pendingMediaTimer);
+        state.pendingMediaTimer = 0;
+        if (destroyed || mountSeq !== state.mediaMountSeq) {
+          disposeWrap(nextWrap);
+          return;
+        }
+        if (!(img.naturalWidth > 0)) {
+          failMount();
+          return;
+        }
         commitMount();
         if (shouldExtractAccent(item, state.cfg)) {
           extractAccent(img, item && item.id).then(function (acc) {
@@ -2017,18 +2435,22 @@
           });
         }
       };
+      var onImgFailed = function () {
+        if (settledImg) return;
+        settledImg = true;
+        failMount();
+      };
       state.pendingWrap = nextWrap;
-      state.pendingMediaTimer = setTimeout(finishImg, 240);
+      state.pendingMediaTimer = setTimeout(onImgFailed, 6000);
       img.onload = function () {
-        clearTimeout(state.pendingMediaTimer);
-        state.pendingMediaTimer = 0;
-        finishImg();
+        var dec = typeof img.decode === 'function' ? img.decode() : null;
+        if (dec && typeof dec.then === 'function') {
+          dec.then(onImgDecoded, onImgDecoded);
+        } else {
+          onImgDecoded();
+        }
       };
-      img.onerror = function () {
-        clearTimeout(state.pendingMediaTimer);
-        state.pendingMediaTimer = 0;
-        finishImg();
-      };
+      img.onerror = onImgFailed;
       img.src = mediaUrl;
       nextWrap.appendChild(img);
       return;
@@ -2036,6 +2458,11 @@
 
     if (effKind === 'slideshow') {
       var list = state.slides && state.slides.length ? state.slides : [mediaUrl];
+      var firstSlide = String((list && list[0]) || '').trim();
+      if (!firstSlide) {
+        failMount();
+        return;
+      }
       state.slideIdx = 0;
       var imgA = doc.createElement('img');
       var imgB = doc.createElement('img');
@@ -2045,28 +2472,72 @@
       imgB.crossOrigin = 'anonymous';
       imgA.style.transition = 'opacity 680ms ease';
       imgB.style.transition = 'opacity 680ms ease';
-      imgA.src = list[0] || '';
       imgB.style.opacity = '0';
       nextWrap.appendChild(imgA);
       nextWrap.appendChild(imgB);
-      commitMount();
 
-      var frontIsA = true;
-      var intervalSec = cfg.pictureSlideSeconds > 0 ? cfg.pictureSlideSeconds : 30;
-      if (list.length > 1) {
-        state.slideTimer = setInterval(function () {
-          if (state.cfg.paused || state.autoPaused) return;
-          state.slideIdx = (state.slideIdx + 1) % list.length;
-          var incoming = frontIsA ? imgB : imgA;
-          var outgoing = frontIsA ? imgA : imgB;
-          incoming.onload = function () {
-            incoming.style.opacity = String(state.cfg.mediaOpacity);
-            outgoing.style.opacity = '0';
-            frontIsA = !frontIsA;
-          };
-          incoming.src = list[state.slideIdx];
-        }, Math.max(5, intervalSec) * 1000);
-      }
+      var settledSlide = false;
+      var startSlideLoop = function () {
+        var frontIsA = true;
+        var intervalSec = cfg.pictureSlideSeconds > 0 ? cfg.pictureSlideSeconds : 30;
+        if (list.length > 1) {
+          state.slideTimer = setInterval(function () {
+            if (state.cfg.paused || state.autoPaused) return;
+            state.slideIdx = (state.slideIdx + 1) % list.length;
+            var incoming = frontIsA ? imgB : imgA;
+            var outgoing = frontIsA ? imgA : imgB;
+            incoming.onload = function () {
+              if (!(incoming.naturalWidth > 0)) return;
+              incoming.style.opacity = String(state.cfg.mediaOpacity);
+              outgoing.style.opacity = '0';
+              frontIsA = !frontIsA;
+            };
+            incoming.onerror = function () {};
+            incoming.src = list[state.slideIdx];
+          }, Math.max(5, intervalSec) * 1000);
+        }
+      };
+      var onSlideDecoded = function () {
+        if (settledSlide) return;
+        settledSlide = true;
+        clearTimeout(state.pendingMediaTimer);
+        state.pendingMediaTimer = 0;
+        if (destroyed || mountSeq !== state.mediaMountSeq) {
+          disposeWrap(nextWrap);
+          return;
+        }
+        if (!(imgA.naturalWidth > 0)) {
+          failMount();
+          return;
+        }
+        commitMount();
+        startSlideLoop();
+        if (shouldExtractAccent(item, state.cfg)) {
+          extractAccent(imgA, item && item.id).then(function (acc) {
+            if (acc && !destroyed) {
+              state.cfg.extractedAccent = acc;
+              refreshSkinStyles();
+            }
+          });
+        }
+      };
+      var onSlideFailed = function () {
+        if (settledSlide) return;
+        settledSlide = true;
+        failMount();
+      };
+      state.pendingWrap = nextWrap;
+      state.pendingMediaTimer = setTimeout(onSlideFailed, 6000);
+      imgA.onload = function () {
+        var dec = typeof imgA.decode === 'function' ? imgA.decode() : null;
+        if (dec && typeof dec.then === 'function') {
+          dec.then(onSlideDecoded, onSlideDecoded);
+        } else {
+          onSlideDecoded();
+        }
+      };
+      imgA.onerror = onSlideFailed;
+      imgA.src = firstSlide;
       return;
     }
 
@@ -2116,12 +2587,9 @@
       // Freeze outgoing 4K60 decoder immediately so incoming video decodes frame 1 without GPU contention.
       if (prevWrap) pauseWrapMedia(prevWrap);
 
-      var validPrevWrap = prevWrap && prevWrap.isConnected && prevWrap !== nextWrap ? prevWrap : null;
       var needsCrossfade = Boolean(validPrevWrap && cfg.switchTransition !== 'cut' && !doc.hidden);
-      if (needsCrossfade) {
-        nextWrap.style.opacity = '0';
-        state.pendingWrap = nextWrap;
-      }
+      nextWrap.style.opacity = needsCrossfade ? '0' : '0.001';
+      state.pendingWrap = nextWrap;
       stage.insertBefore(nextWrap, scrimNode || null);
 
       var finishPriming = function () {
@@ -2136,51 +2604,64 @@
           syncMediaPlaybackState();
         }
       };
-      video.addEventListener('loadedmetadata', ensureVidPlaying, { once: true });
-      video.addEventListener('loadeddata', finishPriming, { once: true });
-      video.addEventListener('canplay', function () {
-        finishPriming();
-        ensureVidPlaying();
-      }, { once: true });
-      video.addEventListener('error', finishPriming, { once: true });
 
-      video.src = mediaUrl;
-
-      if (!needsCrossfade) {
-        commitMount();
-      } else {
-        syncMediaPlaybackState();
-        var revealedVid = false;
-        var revealVid = function () {
-          if (revealedVid) return;
-          revealedVid = true;
-          clearTimeout(state.pendingMediaTimer);
-          state.pendingMediaTimer = 0;
-          if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideo !== video) {
-            disposeWrap(nextWrap);
-            return;
-          }
-          finishPriming();
-          commitMount();
-        };
-        if (video.readyState >= 2) {
-          revealVid();
-        } else {
-          state.pendingMediaTimer = setTimeout(revealVid, 450);
-          video.addEventListener('loadeddata', revealVid, { once: true });
-          video.addEventListener('canplay', revealVid, { once: true });
-          video.addEventListener('playing', revealVid, { once: true });
-          video.addEventListener('error', revealVid, { once: true });
+      var settledVid = false;
+      var onVideoDecoded = function () {
+        if (settledVid) return;
+        if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideo !== video) {
+          settledVid = true;
+          disposeWrap(nextWrap);
+          return;
         }
+        if (video.readyState < 2 || !(video.videoWidth > 0)) return;
+        settledVid = true;
+        clearTimeout(state.pendingMediaTimer);
+        state.pendingMediaTimer = 0;
+        if (!needsCrossfade) nextWrap.style.opacity = '';
+        finishPriming();
+        commitMount();
+        if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
+          extractAccent(item.thumbUrl, item.id).then(function (acc) {
+            if (acc && !destroyed) {
+              state.cfg.extractedAccent = acc;
+              refreshSkinStyles();
+            }
+          });
+        }
+      };
+      var onVideoFailed = function () {
+        if (settledVid) return;
+        settledVid = true;
+        video.__prismPriming = false;
+        failMount();
+      };
+
+      video.addEventListener('loadedmetadata', ensureVidPlaying, { once: true });
+      video.addEventListener('loadeddata', onVideoDecoded);
+      video.addEventListener('canplay', function () {
+        ensureVidPlaying();
+        onVideoDecoded();
+      });
+      video.addEventListener('playing', onVideoDecoded);
+      video.addEventListener('timeupdate', onVideoDecoded);
+      video.addEventListener('error', onVideoFailed, { once: true });
+      if (typeof video.requestVideoFrameCallback === 'function') {
+        try {
+          video.requestVideoFrameCallback(function () {
+            onVideoDecoded();
+          });
+        } catch (_) {}
       }
 
-      if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
-        extractAccent(item.thumbUrl, item.id).then(function (acc) {
-          if (acc && !destroyed) {
-            state.cfg.extractedAccent = acc;
-            refreshSkinStyles();
-          }
-        });
+      state.pendingMediaTimer = setTimeout(function () {
+        if (video.readyState >= 2 && video.videoWidth > 0) onVideoDecoded();
+        else onVideoFailed();
+      }, 6000);
+
+      video.src = mediaUrl;
+      syncMediaPlaybackState();
+      if (video.readyState >= 2 && video.videoWidth > 0) {
+        onVideoDecoded();
       }
       return;
     }
@@ -2193,18 +2674,44 @@
       iframe.setAttribute('frameborder', '0');
       iframe.setAttribute('scrolling', 'no');
       iframe.setAttribute('tabindex', '-1');
-      iframe.src = mediaUrl;
+      var needsWebCrossfade = Boolean(validPrevWrap && cfg.switchTransition !== 'cut' && !doc.hidden);
+      nextWrap.style.opacity = needsWebCrossfade ? '0' : '0.001';
       nextWrap.appendChild(iframe);
       state.activeIframe = iframe;
-      commitMount();
-      if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
-        extractAccent(item.thumbUrl, item.id).then(function (acc) {
-          if (acc && !destroyed) {
-            state.cfg.extractedAccent = acc;
-            refreshSkinStyles();
-          }
-        });
-      }
+      state.pendingWrap = nextWrap;
+
+      var settledWeb = false;
+      var onWebLoaded = function () {
+        if (settledWeb) return;
+        settledWeb = true;
+        clearTimeout(state.pendingMediaTimer);
+        state.pendingMediaTimer = 0;
+        if (destroyed || mountSeq !== state.mediaMountSeq || state.activeIframe !== iframe) {
+          disposeWrap(nextWrap);
+          return;
+        }
+        if (!needsWebCrossfade) nextWrap.style.opacity = '';
+        commitMount();
+        if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
+          extractAccent(item.thumbUrl, item.id).then(function (acc) {
+            if (acc && !destroyed) {
+              state.cfg.extractedAccent = acc;
+              refreshSkinStyles();
+            }
+          });
+        }
+      };
+      var onWebFailed = function () {
+        if (settledWeb) return;
+        settledWeb = true;
+        failMount();
+      };
+
+      iframe.addEventListener('load', onWebLoaded, { once: true });
+      iframe.addEventListener('error', onWebFailed, { once: true });
+      state.pendingMediaTimer = setTimeout(onWebFailed, 6000);
+      stage.insertBefore(nextWrap, scrimNode || null);
+      iframe.src = mediaUrl;
     }
   }
 
@@ -2224,7 +2731,7 @@
       true
     );
     listen(W, 'blur', function () {
-      if (!state.activeIframe || state.cfg.interactiveWeb) return;
+      if (!state.activeIframe) return;
       setTimeout(function () {
         if (doc.activeElement === state.activeIframe) {
           try {
@@ -2365,8 +2872,12 @@
     if (!c && doc.body) {
       c = doc.createElement('canvas');
       c.id = FX_CANVAS_ID;
+      c.setAttribute('aria-hidden', 'true');
       c.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:43;';
       doc.body.appendChild(c);
+    }
+    if (c && state.lastHoleClip && c.style.clipPath !== state.lastHoleClip) {
+      c.style.clipPath = state.lastHoleClip;
     }
     if (c && (c.width !== W.innerWidth || c.height !== W.innerHeight)) {
       c.width = W.innerWidth;
@@ -2419,7 +2930,7 @@
         var vw = Math.max(1, W.innerWidth);
         var vh = Math.max(1, W.innerHeight);
 
-        if (state.activeIframe && state.activeIframe.contentWindow && !state.cfg.interactiveWeb) {
+        if (state.activeIframe && state.activeIframe.contentWindow) {
           try {
             state.activeIframe.contentWindow.postMessage(
               { type: 'we-pointer', event: 'move', x: e.clientX / vw, y: e.clientY / vh, clientX: e.clientX, clientY: e.clientY },
@@ -2464,7 +2975,18 @@
       W,
       'pointerdown',
       function (e) {
-        if (!state.skinEnabled || !state.cfg.fxEnabled) return;
+        if (!state.skinEnabled) return;
+        if (!state.autoPaused && state.cfg.interactiveWeb && state.activeIframe && state.activeIframe.contentWindow) {
+          var vw = Math.max(1, W.innerWidth);
+          var vh = Math.max(1, W.innerHeight);
+          try {
+            state.activeIframe.contentWindow.postMessage(
+              { type: 'we-pointer', event: 'down', x: e.clientX / vw, y: e.clientY / vh, clientX: e.clientX, clientY: e.clientY, button: e.button },
+              '*'
+            );
+          } catch (_) {}
+        }
+        if (!state.cfg.fxEnabled) return;
         var rgb = getComputedStyle(doc.documentElement).getPropertyValue('--prism-accent-rgb').trim() || '102, 157, 246';
         state.fxParticles.push({
           x: e.clientX,
@@ -2497,6 +3019,45 @@
       },
       { passive: true }
     );
+
+    listen(
+      W,
+      'pointerup',
+      function (e) {
+        if (!state.skinEnabled || state.autoPaused || !state.cfg.interactiveWeb) return;
+        if (state.activeIframe && state.activeIframe.contentWindow) {
+          var vw = Math.max(1, W.innerWidth);
+          var vh = Math.max(1, W.innerHeight);
+          try {
+            state.activeIframe.contentWindow.postMessage(
+              { type: 'we-pointer', event: 'up', x: e.clientX / vw, y: e.clientY / vh, clientX: e.clientX, clientY: e.clientY, button: e.button },
+              '*'
+            );
+          } catch (_) {}
+        }
+      },
+      { passive: true }
+    );
+
+    listen(
+      W,
+      'resize',
+      function () {
+        if (destroyed || !state.skinEnabled) return;
+        syncBrowserHoleCutout();
+      },
+      { passive: true }
+    );
+
+    listen(
+      doc,
+      'transitionrun',
+      function () {
+        if (destroyed || !state.skinEnabled) return;
+        if (state.lastHoleClip) armHoleTransitionRaf(560);
+      },
+      true
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -2522,12 +3083,18 @@
       return;
     }
 
+    var staticStyleEl = doc.getElementById(STATIC_STYLE_ID);
+    if (staticStyleEl && staticStyleEl.parentNode) {
+      staticStyleEl.parentNode.removeChild(staticStyleEl);
+    }
+
     state.hostTheme = detectHostTheme();
     state.effectiveTheme = resolveEffectiveTheme(state.cfg);
 
     var effKind = resolveEffectiveKind(state.item, state.cfg);
     var rootAttrs = [
       [ROOT_ATTR, VERSION],
+      [GLASS_ATTR, 'ready'],
       ['data-prism-theme', state.effectiveTheme],
       ['data-prism-scheme', state.cfg.colorScheme],
       ['data-prism-accent-mode', state.cfg.accentMode],
@@ -2544,6 +3111,11 @@
         root.setAttribute(rootAttrs[i][0], rootAttrs[i][1]);
       }
     }
+    if (state.wallpaperReady) {
+      if (root.getAttribute(WALLPAPER_ATTR) !== 'ready') root.setAttribute(WALLPAPER_ATTR, 'ready');
+    } else {
+      root.removeAttribute(WALLPAPER_ATTR);
+    }
 
     var tok = computeSkinTokens(state.cfg);
     applyFastCssVars(tok.vars);
@@ -2557,10 +3129,14 @@
 
     applyCaretStyle(state.cfg);
     ensureFxCanvas();
+    syncBrowserHoleCutout();
     syncSidecarIframes(state.cfg);
   }
 
   function teardownSkinDomOnly() {
+    clearRootWatchdogTimers();
+    state._watchdogReported = false;
+    disconnectHoleActiveObservers();
     clearInterval(state.slideTimer);
     state.slideTimer = 0;
     clearTimeout(state.pendingMediaTimer);
@@ -2580,6 +3156,7 @@
     state.activeAudio = null;
     state.activeIframe = null;
     state.activeMediaKey = '';
+    state.wallpaperReady = false;
     state.slides = [];
     state.lastStructuralSig = '';
     state.lastCaretSig = '';
@@ -2590,6 +3167,8 @@
     if (stage && stage.parentNode) stage.parentNode.removeChild(stage);
     var styleEl = doc.getElementById(STYLE_ID);
     if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+    var staticEl = doc.getElementById(STATIC_STYLE_ID);
+    if (staticEl && staticEl.parentNode) staticEl.parentNode.removeChild(staticEl);
     var caretEl = doc.getElementById(CARET_STYLE_ID);
     if (caretEl && caretEl.parentNode) caretEl.parentNode.removeChild(caretEl);
     var fxEl = doc.getElementById(FX_CANVAS_ID);
@@ -2599,6 +3178,8 @@
     if (root) {
       var attrs = [
         ROOT_ATTR,
+        GLASS_ATTR,
+        WALLPAPER_ATTR,
         'data-prism-theme',
         'data-prism-scheme',
         'data-prism-accent-mode',
@@ -2623,6 +3204,25 @@
       });
       try {
         domObs.observe(doc.body, { childList: true });
+      } catch (_) {}
+    }
+
+    if (W.MutationObserver && !holeAttrObs && doc.documentElement) {
+      holeAttrObs = new MutationObserver(function () {
+        if (destroyed || !state.skinEnabled) return;
+        syncBrowserHoleCutout();
+      });
+      try {
+        holeAttrObs.observe(doc.documentElement, {
+          attributes: true,
+          attributeFilter: ['data-has-browser-hole', 'data-has-three-layer-browser-hole', 'data-has-drawer-browser-hole'],
+        });
+        if (doc.body) {
+          holeAttrObs.observe(doc.body, {
+            attributes: true,
+            attributeFilter: ['data-has-browser-hole', 'data-has-three-layer-browser-hole', 'data-has-drawer-browser-hole'],
+          });
+        }
       } catch (_) {}
     }
 
@@ -2651,6 +3251,8 @@
         } catch (_) {}
       }
     }
+
+    syncBrowserHoleCutout();
   }
 
   function applyPayload(payload) {
@@ -2727,6 +3329,7 @@
       mountStageMedia(false);
       attachWatchers();
       evaluateAutoPause();
+      armPostMountWatchdog();
     };
 
     if (doc.body) {
@@ -2816,6 +3419,9 @@
       videoMuted: state.activeVideo ? Boolean(state.activeVideo.muted) : null,
       videoReadyState: state.activeVideo ? Number(state.activeVideo.readyState || 0) : 0,
       videoSrc: state.activeVideo ? String(state.activeVideo.currentSrc || state.activeVideo.src || '') : '',
+      glassReady: Boolean(doc.documentElement && doc.documentElement.getAttribute(GLASS_ATTR) === 'ready'),
+      wallpaperReady: Boolean(state.wallpaperReady),
+      holeClip: state.lastHoleClip,
       stagePresent: Boolean(doc.getElementById(STAGE_ID)),
       stylePresent: Boolean(doc.getElementById(STYLE_ID)),
       checks: checks,
@@ -2826,6 +3432,8 @@
     if (destroyed) return { installed: false };
     destroyed = true;
     state.skinEnabled = false;
+    clearRootWatchdogTimers();
+    disconnectHoleActiveObservers();
     clearTimeout(state.hiddenTimer);
     clearInterval(state.blurPollTimer);
     clearTimeout(themeDebounce);
@@ -2834,9 +3442,11 @@
     if (state.unmuteGestureCleanup) state.unmuteGestureCleanup();
     try {
       if (domObs) domObs.disconnect();
+      if (holeAttrObs) holeAttrObs.disconnect();
       if (themeObs) themeObs.disconnect();
     } catch (_) {}
     domObs = null;
+    holeAttrObs = null;
     themeObs = null;
     for (var i = 0; i < cleanups.length; i += 1) {
       try {
@@ -2868,6 +3478,7 @@
     extractAccent: extractAccent,
     stepSlideshow: stepSlideshow,
     setPaused: setPaused,
+    syncBrowserHoles: syncBrowserHoleCutout,
     heal: heal,
     status: status,
     receive: receive,

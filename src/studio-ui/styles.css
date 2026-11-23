@@ -467,6 +467,18 @@ button, input, select, textarea {
 .prism-status-pill[data-status="off"] .prism-status-dot {
   background: var(--prism-fg-faint);
 }
+.prism-status-pill[data-status="tripped"] {
+  border-color: rgba(var(--prism-danger-rgb), 0.55);
+  background: rgba(var(--prism-danger-rgb), 0.14);
+  color: var(--prism-danger);
+}
+.prism-status-pill[data-status="tripped"] .prism-status-dot {
+  background: var(--prism-danger);
+  box-shadow: 0 0 8px rgba(var(--prism-danger-rgb), 0.75);
+}
+.prism-status-pill[data-status="manual"] .prism-status-dot {
+  background: var(--prism-accent);
+}
 
 .prism-lang-btn {
   height: 24px;
@@ -2189,4 +2201,176 @@ button, input, select, textarea {
   gap: 5px;
   padding-top: 7px;
   border-top: 1px solid var(--prism-border-hairline);
+}
+
+/* ==========================================================================
+   v2.0.0 Startup Strategy Cards, Canary Circuit-Breaker & Panic Callout
+   ========================================================================== */
+.prism-safety-banner[data-tone="tripped"] {
+  background: linear-gradient(90deg, rgba(var(--prism-danger-rgb), 0.18) 0%, rgba(var(--prism-danger-rgb), 0.09) 100%);
+  border-bottom-color: rgba(var(--prism-danger-rgb), 0.46);
+  box-shadow: inset 0 1px 0 rgba(var(--prism-danger-rgb), 0.25);
+}
+
+.prism-safety-banner[data-tone="manual-wake"] {
+  background: linear-gradient(90deg, rgba(var(--prism-accent-rgb), 0.16) 0%, rgba(var(--prism-accent-rgb), 0.07) 100%);
+  border-bottom-color: rgba(var(--prism-accent-rgb), 0.38);
+}
+
+.prism-btn-danger-solid {
+  background: var(--prism-danger) !important;
+  border-color: var(--prism-danger) !important;
+  color: #FFFFFF !important;
+  font-weight: 600;
+  box-shadow: 0 4px 14px -4px rgba(var(--prism-danger-rgb), 0.55);
+}
+.prism-btn-danger-solid:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.prism-canary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--prism-r-pill);
+  font-family: var(--prism-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-ctl-bg);
+  color: var(--prism-fg-2);
+  white-space: nowrap;
+}
+.prism-canary-badge[data-canary-state="healthy"] {
+  color: var(--prism-ok);
+  border-color: rgba(var(--prism-ok-rgb), 0.45);
+  background: rgba(var(--prism-ok-rgb), 0.14);
+}
+.prism-canary-badge[data-canary-state="arming"] {
+  color: var(--prism-warn);
+  border-color: rgba(var(--prism-warn-rgb), 0.48);
+  background: rgba(var(--prism-warn-rgb), 0.14);
+}
+.prism-canary-badge[data-canary-state="tripped"] {
+  color: var(--prism-danger);
+  border-color: rgba(var(--prism-danger-rgb), 0.55);
+  background: rgba(var(--prism-danger-rgb), 0.16);
+}
+
+.prism-startup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+  gap: 8px;
+}
+
+.prism-startup-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 10px 11px;
+  border-radius: var(--prism-r-card);
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-ctl-bg);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--prism-dur-fast) ease, background var(--prism-dur-fast) ease, transform var(--prism-dur-fast) ease;
+}
+.prism-startup-card:hover {
+  background: var(--prism-ctl-hover);
+  border-color: rgba(var(--prism-pt-rgb), 0.22);
+  transform: translateY(-1px);
+}
+.prism-startup-card.is-active {
+  border-color: var(--prism-accent);
+  background: var(--prism-accent-soft);
+  background-image: var(--prism-sheen);
+  box-shadow: 0 0 0 1px rgba(var(--prism-accent-rgb), 0.28), inset 0 1px 0 var(--prism-specular-top);
+}
+
+.prism-startup-card-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.prism-startup-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--prism-fg);
+}
+.prism-startup-radio {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--prism-fg-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.prism-startup-card.is-active .prism-startup-radio {
+  border-color: var(--prism-accent);
+  background: var(--prism-accent);
+  box-shadow: inset 0 0 0 2.5px rgb(var(--prism-tint-1-rgb));
+}
+.prism-startup-badge {
+  font-family: var(--prism-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid var(--prism-accent-border);
+  background: rgba(var(--prism-accent-rgb), 0.14);
+  color: var(--prism-accent);
+}
+.prism-startup-card-desc {
+  font-size: 11px;
+  line-height: 1.42;
+  color: var(--prism-fg-muted);
+}
+.prism-startup-card.is-active .prism-startup-card-desc {
+  color: var(--prism-fg-2);
+}
+
+.prism-panic-callout {
+  padding: 8px 11px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid rgba(var(--prism-accent-rgb), 0.30);
+  background: rgba(var(--prism-accent-rgb), 0.07);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+}
+.prism-kbd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.prism-kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 21px;
+  padding: 0 7px;
+  border-radius: 5px;
+  border: 1px solid var(--prism-border-popover);
+  background: var(--prism-card-bg);
+  box-shadow: inset 0 1px 0 var(--prism-specular-top), 0 1px 2px rgba(0, 0, 0, 0.22);
+  font-family: var(--prism-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--prism-fg);
+  white-space: nowrap;
 }

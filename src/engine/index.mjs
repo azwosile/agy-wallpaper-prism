@@ -19,7 +19,7 @@ import {
   scanWallpaperLibrary,
   syncDesktopWallpaper,
 } from './scanner.mjs';
-import { createPrismStore } from './store.mjs';
+import { createPrismStore, resolveDefaultPrismDataDir, writeFsyncJsonSync } from './store.mjs';
 
 // Re-export low-level engine primitives for direct module consumers & verification tests
 export { createMediaServer, hasRawTraversalAttempt, parseByteRange } from './media-server.mjs';
@@ -67,13 +67,22 @@ export {
   scanWallpaperLibrary,
   syncDesktopWallpaper,
 } from './scanner.mjs';
-export { createPrismStore, MAX_UPLOAD_BYTES, writeAtomicJsonAsync, writeAtomicJsonSync } from './store.mjs';
+export {
+  createPrismStore,
+  MAX_UPLOAD_BYTES,
+  migrateLegacyPrismDataIfNeeded,
+  resolveDefaultPrismDataDir,
+  writeAtomicJsonAsync,
+  writeAtomicJsonSync,
+  writeFsyncJsonSync,
+} from './store.mjs';
 
 export async function createWallpaperPrismEngine(opts = {}) {
   const events = new EventEmitter();
   events.setMaxListeners(50);
 
-  const store = await createPrismStore({ dataDir: opts.dataDir });
+  const effectiveDataDir = opts.dataDir || opts.sidecarDataDir || '';
+  const store = await createPrismStore({ dataDir: effectiveDataDir, pluginRoot: opts.pluginRoot });
 
   let rawLibraryItems = [];
   let publicLibraryItems = [];

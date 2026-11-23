@@ -1,7 +1,7 @@
 {
   "command": "node",
   "args": ["main.mjs"],
-  "restart_policy": "always",
+  "restart_policy": "on-failure",
   "display_name": "Wallpaper Prism",
   "description": "Zero-token Obsidian Prism glass skin controller and Wallpaper Engine studio supporting Steam Workshop 431960, local images/videos/web/scene wallpapers, playlists, and dynamic wallpaper accent extraction.",
   "has_web_ui": true,
