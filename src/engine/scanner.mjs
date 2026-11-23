@@ -43,10 +43,31 @@ export const WE_APP_ID = '431960';
 const DISCOVERY_TTL_MS = 60_000;
 const SCAN_CHUNK_SIZE = 12;
 const MAX_SLIDESHOW_FRAMES = 2000;
-const INVENTORY_CACHE_VERSION = 2;
+const INVENTORY_CACHE_VERSION = 3;
+const MAX_LOCAL_SCAN_DEPTH = 4;
+const MAX_LOCAL_ITEMS = 5000;
+const MAX_LOCAL_STAT_OPS = 25_000;
+
+const SKIP_LOCAL_DIRS = new Set([
+  'node_modules',
+  '$recycle.bin',
+  'system volume information',
+  '__macosx',
+  'thumbs',
+  'cache',
+  'dist',
+  'build',
+  '__pycache',
+  '__pycache__',
+  'appdata',
+  'windows',
+  'program files',
+  'program files (x86)',
+]);
+const GENERIC_LOCAL_STEM_RE = /^(?:bg|background|video|wallpaper|main|preview|index|loop|clip|0*\d{1,3})$/i;
 
 export const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.bmp', '.svg']);
-export const VIDEO_EXTS = new Set(['.mp4', '.webm', '.m4v', '.mov', '.ogv']);
+export const VIDEO_EXTS = new Set(['.mp4', '.webm', '.m4v', '.mov', '.ogv', '.mkv']);
 export const WEB_EXTS = new Set(['.html', '.htm']);
 export const AUDIO_EXTS = new Set(['.mp3', '.ogg', '.oga', '.wav', '.m4a', '.flac', '.aac']);
 
@@ -1085,6 +1106,7 @@ function inspectStandaloneMediaFile({
   source,
   absPath,
   addedAt,
+  extraTags = [],
   cacheMap,
   nextCacheMap,
   forceRefresh,
@@ -1127,6 +1149,13 @@ function inspectStandaloneMediaFile({
 
   const cleanTitle = String(title || basename(absPath, ext) || id).trim().slice(0, 200);
   const resolution = probe.width && probe.height ? `${probe.width}x${probe.height}` : '';
+  const mergedTags = [kind === 'video' ? 'Video' : 'Image'];
+  if (Array.isArray(extraTags)) {
+    for (const rawTag of extraTags) {
+      const tag = String(rawTag || '').trim().slice(0, 64);
+      if (tag && !mergedTags.includes(tag)) mergedTags.push(tag);
+    }
+  }
 
   return {
     id,
@@ -1136,7 +1165,7 @@ function inspectStandaloneMediaFile({
     source,
     workshopId: '',
     contentRating: 'everyone',
-    tags: [kind === 'video' ? 'Video' : 'Image'],
+    tags: mergedTags,
     schemeColor: '#669DF6',
     sceneMode: null,
     properties: [],
@@ -1396,55 +1425,121 @@ export async function scanWallpaperLibrary({
     for (const f of config.customFolders) addLocalFolder(f);
   }
 
-  for (const folder of localFolders) {
-    if (isFileSafe(join(folder, 'project.json'))) {
-      const id = `loc-${sha1Short(folder, 12)}`;
+  const visitedLocalDirs = new Set();
+  const canonicalLocalDirKey = (p) => {
+    try {
+      return realpathSync(p).toLowerCase();
+    } catch {
+      return resolve(p).toLowerCase();
+    }
+  };
+  const seedExcludedLocalDir = (rawDir) => {
+    if (!rawDir) return;
+    const resolved = resolve(rawDir);
+    visitedLocalDirs.add(resolved.toLowerCase());
+    try {
+      visitedLocalDirs.add(realpathSync(resolved).toLowerCase());
+    } catch {
+      try {
+        const parentReal = realpathSync(dirname(resolved));
+        visitedLocalDirs.add(join(parentReal, basename(resolved)).toLowerCase());
+      } catch { /* ignore */ }
+    }
+  };
+  if (cacheDir) {
+    seedExcludedLocalDir(cacheDir);
+    seedExcludedLocalDir(join(cacheDir, 'thumbs'));
+  }
+  if (uploadDir) {
+    seedExcludedLocalDir(uploadDir);
+  }
+
+  let localItemsCount = 0;
+  let localStatOps = 0;
+  const seenLocalTitles = new Set();
+
+  const scanLocalDir = (dirPath, depth, rootDir) => {
+    if (depth > MAX_LOCAL_SCAN_DEPTH) return;
+    if (localItemsCount >= MAX_LOCAL_ITEMS || localStatOps >= MAX_LOCAL_STAT_OPS) return;
+
+    const dirKey = canonicalLocalDirKey(dirPath);
+    if (visitedLocalDirs.has(dirKey)) return;
+    visitedLocalDirs.add(dirKey);
+
+    // Preserve Wallpaper Engine project directories (`project.json`) as atomic items
+    localStatOps++;
+    if (isFileSafe(join(dirPath, 'project.json'))) {
+      const id = `loc-${sha1Short(dirPath, 12)}`;
       if (!seenIds.has(id)) {
         seenIds.add(id);
+        localItemsCount++;
         tasks.push(() => inspectWeProjectDir({
           id,
           source: 'local',
-          projectDir: folder,
+          projectDir: dirPath,
           config,
           cacheMap,
           nextCacheMap,
           forceRefresh: refresh,
         }));
       }
-      continue;
+      return;
     }
 
     let names = [];
-    try { names = readdirSync(folder); } catch { continue; }
+    try {
+      names = readdirSync(dirPath).slice().sort(naturalCollator.compare);
+    } catch {
+      return;
+    }
+
+    const relFromRoot = depth > 0 ? relative(rootDir, dirPath) : '';
+    const subFolderTags = relFromRoot && !relFromRoot.startsWith('..')
+      ? relFromRoot.split(/[\\/]+/).filter(Boolean)
+      : [];
+    const parentFolderName = depth > 0 ? basename(dirPath) : '';
+    const childDirs = [];
+
     for (const name of names) {
-      if (name.startsWith('.')) continue;
-      const full = join(folder, name);
+      if (localItemsCount >= MAX_LOCAL_ITEMS || localStatOps >= MAX_LOCAL_STAT_OPS) break;
+      if (!name || name.startsWith('.')) continue;
+
+      const full = join(dirPath, name);
+      localStatOps++;
       const lst = safeLstat(full);
       if (!lst || lst.isSymbolicLink()) continue;
-      if (lst.isDirectory() && isFileSafe(join(full, 'project.json'))) {
-        const id = `loc-${sha1Short(full, 12)}`;
-        if (seenIds.has(id)) continue;
-        seenIds.add(id);
-        tasks.push(() => inspectWeProjectDir({
-          id,
-          source: 'local',
-          projectDir: full,
-          config,
-          cacheMap,
-          nextCacheMap,
-          forceRefresh: refresh,
-        }));
+
+      if (lst.isDirectory()) {
+        if (depth < MAX_LOCAL_SCAN_DEPTH && !SKIP_LOCAL_DIRS.has(name.toLowerCase())) {
+          childDirs.push(full);
+        }
       } else if (lst.isFile()) {
         const ext = extname(name).toLowerCase();
         if (IMAGE_EXTS.has(ext) || VIDEO_EXTS.has(ext)) {
           const id = `loc-${sha1Short(full, 12)}`;
           if (seenIds.has(id)) continue;
           seenIds.add(id);
+          localItemsCount++;
+
+          const rawStem = basename(name, ext);
+          const stemKey = rawStem.trim().toLowerCase();
+          let itemTitle = rawStem;
+          if (
+            depth > 0 &&
+            parentFolderName &&
+            (GENERIC_LOCAL_STEM_RE.test(rawStem.trim()) || seenLocalTitles.has(stemKey))
+          ) {
+            itemTitle = `${parentFolderName} · ${rawStem}`;
+          }
+          seenLocalTitles.add(itemTitle.trim().toLowerCase());
+          seenLocalTitles.add(stemKey);
+
           tasks.push(() => inspectStandaloneMediaFile({
             id,
-            title: basename(name, ext),
+            title: itemTitle,
             source: 'local',
             absPath: full,
+            extraTags: subFolderTags,
             cacheMap,
             nextCacheMap,
             forceRefresh: refresh,
@@ -1452,6 +1547,15 @@ export async function scanWallpaperLibrary({
         }
       }
     }
+
+    for (const childDir of childDirs) {
+      if (localItemsCount >= MAX_LOCAL_ITEMS || localStatOps >= MAX_LOCAL_STAT_OPS) break;
+      scanLocalDir(childDir, depth + 1, rootDir);
+    }
+  };
+
+  for (const folder of localFolders) {
+    scanLocalDir(folder, 0, folder);
   }
 
   const scannedItems = await processTasksInChunks(tasks);

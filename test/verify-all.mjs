@@ -193,7 +193,7 @@ async function main() {
   // =========================================================================
   console.log('\n--- Suite 1: Manifest (v2.0.0), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
 
-  await check('plugin.json & package.json strict v2.0.0 schema & GitHub repository metadata', '@resilience-designer', () => {
+  await check('plugin.json & package.json strict v2.0.4 schema & GitHub repository metadata', '@gentle-skin-architect', () => {
     const pPath = path.join(REPO_ROOT, 'plugin.json');
     const pkgPath = path.join(REPO_ROOT, 'package.json');
     assert.ok(fs.existsSync(pPath), 'plugin.json missing');
@@ -203,8 +203,8 @@ async function main() {
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.0.3', `Expected plugin.json version 2.0.3, got ${raw.version}`);
-    assert.equal(pkg.version, '2.0.3', `Expected package.json version 2.0.3, got ${pkg.version}`);
+    assert.equal(raw.version, '2.0.4', `Expected plugin.json version 2.0.4, got ${raw.version}`);
+    assert.equal(pkg.version, '2.0.4', `Expected package.json version 2.0.4, got ${pkg.version}`);
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -621,6 +621,53 @@ async function main() {
     const warmItems = Array.isArray(warmRes) ? warmRes : warmRes.items || [];
     assert.equal(warmItems.length, libraryItems.length, 'Warm cache item count mismatch');
     return `${libraryItems.length} playable items, SHA-1 cache verified`;
+  });
+
+  await check('PR #3 Recursive `customFolders` subfolder scan, `.mkv` discovery (`video/x-matroska`) & `<cacheDir>/thumbs` non-ingestion', '@resilience-designer', async () => {
+    const nestedRoot = path.join(SCRATCH_ROOT, 'nested-local-folders');
+    const subCyber = path.join(nestedRoot, 'Cyberpunk');
+    const subAnime = path.join(nestedRoot, 'Anime');
+    const thumbsTrapDir = path.join(engineDataDir, 'cache', 'thumbs');
+    fs.mkdirSync(subCyber, { recursive: true });
+    fs.mkdirSync(subAnime, { recursive: true });
+    fs.mkdirSync(thumbsTrapDir, { recursive: true });
+
+    fs.copyFileSync(fx.playableMp4Path, path.join(subCyber, 'bg.mp4'));
+    fs.copyFileSync(fx.playableMp4Path, path.join(subAnime, 'bg.mkv'));
+    fs.writeFileSync(path.join(thumbsTrapDir, 'self-thumb-trap.jpg'), createPrismArtworkPng(64, 64, 'sunset-amber'));
+
+    try {
+      await engine.updateConfig({ customFolders: [nestedRoot, path.join(engineDataDir, 'cache')] });
+      const recRes = await engine.listLibrary({ refresh: true });
+      const recItems = Array.isArray(recRes) ? recRes : recRes.items || [];
+
+      const cyberMp4 = recItems.find((x) => x.source === 'local' && String(x.title || '').includes('Cyberpunk'));
+      const animeMkv = recItems.find((x) => x.source === 'local' && String(x.title || '').includes('Anime') && x.kind === 'video');
+      const leakedThumb = recItems.find((x) => String(x.title || '').includes('self-thumb-trap'));
+
+      assert.ok(cyberMp4, `Nested Cyberpunk/bg.mp4 not discovered with parent title disambiguation (titles: ${recItems.map((i) => i.title).join(', ')})`);
+      assert.ok(animeMkv, `Nested Anime/bg.mkv not discovered as video item (titles: ${recItems.map((i) => i.title).join(', ')})`);
+      assert.equal(Boolean(leakedThumb), false, '<cacheDir>/thumbs/self-thumb-trap.jpg was self-ingested as a wallpaper!');
+
+      const srv =
+        engine?.mediaServer?.server ||
+        engine?._mediaServer?.server ||
+        (typeof engine?.getMediaServer === 'function' ? engine.getMediaServer()?.server : null);
+      if (srv && animeMkv.mediaUrl) {
+        const mkvRes = await invokeServerInMemory(srv, {
+          method: 'GET',
+          url: new URL(animeMkv.mediaUrl).pathname,
+          headers: { Range: 'bytes=0-31' },
+        });
+        assert.ok(mkvRes.status === 200 || mkvRes.status === 206, `Expected 200/206 for .mkv stream, got ${mkvRes.status}`);
+        assert.equal(mkvRes.headers['content-type'], 'video/x-matroska', `Expected video/x-matroska MIME, got ${mkvRes.headers['content-type']}`);
+      }
+      return `nested bg.mp4 (${cyberMp4.title}) + bg.mkv (${animeMkv.title}, video/x-matroska) + 0 thumb self-ingestion`;
+    } finally {
+      await engine.updateConfig({ customFolders: [] });
+      const restoreLib = await engine.listLibrary({ refresh: true });
+      libraryItems = Array.isArray(restoreLib) ? restoreLib : restoreLib.items || [];
+    }
   });
 
   mediaHttpServer =
@@ -1116,6 +1163,51 @@ async function main() {
         });
         assert.ok(sHostV2.bytes > 20000, 'Studio Host & System v2.0 screenshot suspiciously small');
 
+        // PR #3 Studio Drawer & <summary> Click Delegation E2E (`close-drawer` child span + `reset-module` inside <summary>)
+        await engine.updateConfig({ islandGap: 14 });
+        await studioPage.evaluate(`document.querySelector('[data-action="switch-tab"][data-tab="skin"]').click()`);
+        await sleep(220);
+        const summaryResetCheck = await studioPage.evaluate(`(() => {
+          const resetBtn = document.querySelector('summary [data-action="reset-module"]');
+          const details = resetBtn ? resetBtn.closest('details') : null;
+          const wasOpen = details ? details.open : false;
+          if (resetBtn) resetBtn.click();
+          return { found: Boolean(resetBtn), wasOpen, stillOpen: details ? details.open : false };
+        })()`);
+        assert.equal(summaryResetCheck.found, true, 'Missing <summary> [data-action="reset-module"] button in Skin tab');
+        assert.equal(summaryResetCheck.wasOpen, true);
+        assert.equal(summaryResetCheck.stillOpen, true, 'Clicking <summary> reset-module collapsed <details> or failed delegation!');
+        await sleep(200);
+        const cfgAfterResetMod = await engine.getConfig();
+        assert.equal(cfgAfterResetMod.islandGap, 8, `Clicking <summary> reset-module did not reset islandGap to 8 (got ${cfgAfterResetMod.islandGap})`);
+
+        // Open Inspector Drawer -> verify interior click keeps drawer open & child <span> inside close-drawer closes it!
+        await studioPage.evaluate(`document.querySelector('[data-action="switch-tab"][data-tab="library"]').click()`);
+        await sleep(150);
+        const drawerOpenCheck = await studioPage.evaluate(`(() => {
+          const openBtn = document.querySelector('[data-action="open-inspector"], [data-action="open-drawer"]');
+          if (openBtn) openBtn.click();
+          const drawer = document.querySelector('.prism-drawer');
+          const body = document.querySelector('.prism-drawer-body');
+          if (body) body.click(); // interior click MUST NOT trigger backdrop-close!
+          const stillOpenAfterInterior = Boolean(document.querySelector('.prism-drawer'));
+          const closeBtn = document.querySelector('.prism-drawer [data-action="close-drawer"]');
+          let closedViaChildSpan = false;
+          if (closeBtn) {
+            const childSpan = document.createElement('span');
+            childSpan.id = 'prism-close-child-span';
+            childSpan.textContent = '✕';
+            closeBtn.innerHTML = '';
+            closeBtn.appendChild(childSpan);
+            childSpan.click();
+            closedViaChildSpan = !document.querySelector('.prism-drawer');
+          }
+          return { opened: Boolean(drawer), stillOpenAfterInterior, closedViaChildSpan };
+        })()`);
+        assert.equal(drawerOpenCheck.opened, true, 'Studio drawer did not open');
+        assert.equal(drawerOpenCheck.stillOpenAfterInterior, true, 'Interior click inside .prism-drawer prematurely closed drawer!');
+        assert.equal(drawerOpenCheck.closedViaChildSpan, true, 'Clicking child <span> inside [data-action="close-drawer"] failed to close drawer!');
+
         const modalCalls = await studioPage.evaluate(`({ confirm: window.__confirmCalled, alert: window.__alertCalled })`);
         assert.equal(modalCalls.confirm, 0, 'Forbidden window.confirm() called');
         assert.equal(modalCalls.alert, 0, 'Forbidden window.alert() called');
@@ -1562,6 +1654,100 @@ async function main() {
         await sleep(350);
 
         // -------------------------------------------------------------------
+        // CHECK 3B — Antigravity 2.34.0 Light-Mode Regression Suite (Issue #4 + PR #3 Part 5)
+        //   1) `[data-testid="voice-live-pill"]` & `.ag-cs-home-heat-hint` keep crisp light glyph (`rgb(--prism-base-rgb)`), NOT transparent black dot!
+        //   2) Sidebar `[data-index][style*="sticky"]` `Projects` header gets `::before` frosted carrier (`alpha >= 0.90` + `blur(`) & nested `.bg-sidebar` transparent!
+        //   3) Image preview lightbox `[data-testid="media-modal"]` stays `rgba(0,0,0,0)` over dimmed blurred `[data-testid="modal-backdrop"]` (NOT solid white!)
+        // -------------------------------------------------------------------
+        const lightModeAudit = await hubPage.evaluate(`(async () => {
+          document.documentElement.className = 'light';
+          document.body.className = 'light';
+          const wrap = document.getElementById('v234-root-theme-wrap');
+          if (wrap) wrap.className = 'h-full w-full light';
+          await new Promise((r) => setTimeout(r, 90));
+
+          const voiceEl = document.getElementById('hub-voice-live-pill');
+          const voiceCs = getComputedStyle(voiceEl);
+          const heatEl = document.getElementById('hub-heat-hint-probe');
+          const heatCs = getComputedStyle(heatEl);
+
+          const stickyOuter = document.getElementById('hub-sidebar-sticky-projects');
+          const stickyBeforeCs = getComputedStyle(stickyOuter, '::before');
+          const stickyInnerCs = getComputedStyle(document.getElementById('hub-sidebar-sticky-inner'));
+
+          const lbPortal = document.getElementById('v234-lightbox-portal');
+          lbPortal.style.display = 'block';
+          const lbBackdropCs = getComputedStyle(document.getElementById('v234-modal-backdrop-probe'));
+          const lbModalCs = getComputedStyle(document.getElementById('v234-media-modal-probe'));
+
+          const res = {
+            prismTheme: document.documentElement.getAttribute('data-prism-theme'),
+            voiceBg: voiceCs.backgroundColor,
+            voiceColor: voiceCs.color,
+            heatColor: heatCs.color,
+            stickyBeforeBg: stickyBeforeCs.backgroundColor,
+            stickyBeforeBlur: stickyBeforeCs.backdropFilter || stickyBeforeCs.webkitBackdropFilter || 'none',
+            stickyInnerBg: stickyInnerCs.backgroundColor,
+            lbBackdropBg: lbBackdropCs.backgroundColor,
+            lbBackdropBlur: lbBackdropCs.backdropFilter || lbBackdropCs.webkitBackdropFilter || 'none',
+            lbModalBg: lbModalCs.backgroundColor,
+            lbModalBlur: lbModalCs.backdropFilter || lbModalCs.webkitBackdropFilter || 'none',
+          };
+
+          lbPortal.style.display = 'none';
+          document.documentElement.className = 'dark';
+          document.body.className = 'dark';
+          if (wrap) wrap.className = 'h-full w-full dark';
+          await new Promise((r) => setTimeout(r, 70));
+          return res;
+        })()`);
+
+        assert.equal(lightModeAudit.prismTheme, 'light', 'Hub did not switch data-prism-theme to light');
+        const voiceRgbMatch = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(lightModeAudit.voiceColor);
+        assert.ok(
+          voiceRgbMatch &&
+            parseAlphaFromCssColor(lightModeAudit.voiceColor) >= 0.99 &&
+            Number(voiceRgbMatch[1]) > 200 &&
+            Number(voiceRgbMatch[2]) > 200 &&
+            Number(voiceRgbMatch[3]) > 200,
+          `Issue #4 Bug 1 regression: Light-mode [data-testid="voice-live-pill"] glyph turned transparent/dark (${lightModeAudit.voiceColor} on ${lightModeAudit.voiceBg})!`,
+        );
+        assert.equal(lightModeAudit.heatColor, lightModeAudit.voiceColor, `.ag-cs-home-heat-hint ink mismatch: ${lightModeAudit.heatColor}`);
+        assert.ok(
+          parseAlphaFromCssColor(lightModeAudit.stickyBeforeBg) >= 0.90,
+          `Issue #4 Bug 2 regression: Sidebar sticky Projects ::before alpha < 0.90 (${lightModeAudit.stickyBeforeBg})!`,
+        );
+        assert.ok(
+          String(lightModeAudit.stickyBeforeBlur).includes('blur('),
+          `Issue #4 Bug 2 regression: Sidebar sticky Projects ::before missing blur (${lightModeAudit.stickyBeforeBlur})!`,
+        );
+        assert.equal(
+          lightModeAudit.stickyInnerBg,
+          'rgba(0, 0, 0, 0)',
+          `Nested .bg-sidebar inside sticky Projects header was not zeroed (${lightModeAudit.stickyInnerBg})`,
+        );
+        assert.equal(
+          lightModeAudit.lbModalBg,
+          'rgba(0, 0, 0, 0)',
+          `Issue #4 Bug 3 regression: Light-mode [data-testid="media-modal"] painted opaque (${lightModeAudit.lbModalBg}) instead of transparent!`,
+        );
+        assert.equal(lightModeAudit.lbModalBlur, 'none', '[data-testid="media-modal"] must have backdrop-filter: none');
+        const lbBackdropAlpha = parseAlphaFromCssColor(lightModeAudit.lbBackdropBg);
+        assert.ok(
+          lbBackdropAlpha >= 0.40 && lbBackdropAlpha <= 0.75,
+          `[data-testid="modal-backdrop"] lost dimmed cinema backdrop (${lightModeAudit.lbBackdropBg})!`,
+        );
+        assert.ok(String(lightModeAudit.lbBackdropBlur).includes('blur('), '[data-testid="modal-backdrop"] missing blur');
+
+        // Verify lazy boot `#agy-prism-pill` stub has `data-ag-no-i18n="1"` BEFORE summoning `panel.js`
+        const stubNoI18n = await hubPage.evaluate(`(() => {
+          const p = document.getElementById('agy-prism-pill');
+          return p ? { noI18n: p.getAttribute('data-ag-no-i18n'), translate: p.getAttribute('translate') } : null;
+        })()`);
+        assert.equal(stubNoI18n?.noI18n, '1', 'Lazy boot #agy-prism-pill stub missing data-ag-no-i18n="1"');
+        assert.equal(stubNoI18n?.translate, 'no', 'Lazy boot #agy-prism-pill stub missing translate="no"');
+
+        // -------------------------------------------------------------------
         // CHECK 1B — Press `Ctrl+Alt+W` -> Dynamically Loads `/host/<token>/panel.js` & Opens `#agy-prism-popover`
         // -------------------------------------------------------------------
         await hubPage.pressKey({
@@ -1586,6 +1772,53 @@ async function main() {
           true,
           `Expected dynamic GET /host/<token>/panel.js after Ctrl+Alt+W (seen: ${hubRequestedPaths.join(', ')})`,
         );
+
+        // PR #3 Popover `本地`/`Local` Chip + `90`-Step `Load More` Pagination + `data-ag-no-i18n="1"` E2E
+        const popPaginationCheck = await hubPage.evaluate(`(() => {
+          const pop = document.getElementById('agy-prism-popover');
+          const pill = document.getElementById('agy-prism-pill');
+          const noI18nOk = Boolean(
+            pop && pop.getAttribute('data-ag-no-i18n') === '1' && pill && pill.getAttribute('data-ag-no-i18n') === '1',
+          );
+
+          const tabs = pop.querySelectorAll('[role="tab"]');
+          if (tabs[0]) tabs[0].click(); // switch to library tab so renderLibraryGrid() mounts cards!
+
+          const synthetic = [];
+          for (let i = 0; i < 95; i++) {
+            synthetic.push({ id: 'ws-syn-' + i, title: 'Workshop Synth ' + i, kind: 'image', source: 'workshop', thumbUrl: '' });
+          }
+          for (let j = 0; j < 30; j++) {
+            synthetic.push({ id: 'loc-syn-' + j, title: 'Local Synth ' + j, kind: 'video', source: 'local', thumbUrl: '' });
+          }
+          window.__agyPrismPanel.syncState({ items: synthetic });
+
+          const grid = pop.querySelector('.pp-grid');
+          const initialShown = grid ? grid.querySelectorAll('.pp-card').length : 0;
+          const loadMoreBtn = pop.querySelector('[data-testid="prism-load-more"]');
+          const hadLoadMore = Boolean(loadMoreBtn);
+          if (loadMoreBtn) loadMoreBtn.click();
+          const afterLoadMore = grid ? grid.querySelectorAll('.pp-card').length : 0;
+          const loadMoreGone = !pop.querySelector('[data-testid="prism-load-more"]');
+
+          const localChip = pop.querySelector('[data-testid="prism-local-chip"]');
+          if (localChip) localChip.click();
+          const localShown = grid ? grid.querySelectorAll('.pp-card').length : 0;
+          if (localChip) localChip.click(); // toggle off local filter
+          if (tabs[1]) tabs[1].click(); // restore optics tab for Screenshot (a)
+
+          return { noI18nOk, initialShown, hadLoadMore, afterLoadMore, loadMoreGone, hasLocalChip: Boolean(localChip), localShown };
+        })()`);
+        assert.equal(popPaginationCheck.noI18nOk, true, '#agy-prism-popover or #agy-prism-pill missing data-ag-no-i18n="1"');
+        assert.equal(popPaginationCheck.initialShown, 90, `Expected initial page size 90, got ${popPaginationCheck.initialShown}`);
+        assert.equal(popPaginationCheck.hadLoadMore, true, 'Missing [data-testid="prism-load-more"] button for >90 items');
+        assert.equal(popPaginationCheck.afterLoadMore, 125, `Expected all 125 items after Load More, got ${popPaginationCheck.afterLoadMore}`);
+        assert.equal(popPaginationCheck.loadMoreGone, true, 'Load More button remained visible when all items shown');
+        assert.equal(popPaginationCheck.hasLocalChip, true, 'Missing [data-testid="prism-local-chip"] filter chip');
+        assert.equal(popPaginationCheck.localShown, 30, `Expected 30 local items when Local chip active, got ${popPaginationCheck.localShown}`);
+
+        // Restore real library items into panel before Screenshot (a)
+        await hubPage.evaluate(`window.__agyPrismPanel.syncState({ items: ${JSON.stringify(libraryItems)} })`);
 
         // Verify Two-Stage Escape (2 Escapes only — unwinds drilldown then closes popover without triggering 4x-Esc panic!)
         await hubPage.evaluate(`window.__agyPrismPanel.openDrilldown()`);

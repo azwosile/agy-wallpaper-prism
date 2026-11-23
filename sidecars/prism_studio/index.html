@@ -2405,11 +2405,11 @@ button, input, select, textarea {
 
   <script id="prism-studio-bundle">
 (() => {
-  // src/shared/schema.mjs
-  var PLUGIN_VERSION = "2.0.3";
+  // agy-wallpaper-prism/src/shared/schema.mjs
+  var PLUGIN_VERSION = "2.0.4";
   var DEFAULT_DEBUG_PORT = 9339;
   var PRISM_DOM = Object.freeze({
-    skinVersion: "2.0.3",
+    skinVersion: "2.0.4",
     skinAttr: "data-agy-prism-skin",
     glassAttr: "data-agy-prism-glass",
     wallpaperAttr: "data-agy-prism-wallpaper",
@@ -3552,7 +3552,7 @@ button, input, select, textarea {
     return sanitizeConfig(filtered, clean);
   }
 
-  // src/shared/i18n.mjs
+  // agy-wallpaper-prism/src/shared/i18n.mjs
   var DICT = Object.freeze({
     zh: Object.freeze({
       // App & Header
@@ -4029,7 +4029,7 @@ button, input, select, textarea {
     return str;
   }
 
-  // src/studio-ui/app.mjs
+  // agy-wallpaper-prism/src/studio-ui/app.mjs
   function bootPrismStudioApp() {
     const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
     const rawSidecarFetch = (url, init2) => window.sidecar?.fetch ? window.sidecar.fetch(url, init2) : window.fetch(url, init2);
@@ -4483,6 +4483,7 @@ button, input, select, textarea {
           posterImg = document.createElement("img");
           posterImg.className = "mini-poster-overlay";
           posterImg.alt = "";
+          posterImg.onerror = () => posterImg.remove();
           posterImg.src = item.thumbUrl;
           wrap.appendChild(posterImg);
         }
@@ -4580,6 +4581,7 @@ button, input, select, textarea {
           const img = document.createElement("img");
           img.className = "mini-media-el";
           img.alt = item.title || "Wallpaper";
+          img.onerror = () => img.remove();
           img.src = src;
           wrap.appendChild(img);
         }
@@ -5248,7 +5250,7 @@ button, input, select, textarea {
       <article class="prism-wall-card ${isActive ? "is-active" : ""} ${isPicked ? "is-batch-selected" : ""}"
                tabindex="0" data-action="card-click" data-id="${esc(item.id)}">
         <div class="prism-wall-thumb" style="background:linear-gradient(135deg, ${esc(bgFallback)}66, rgba(12,14,22,0.95))">
-          ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="${esc(item.title || "Wallpaper")}" />` : ""}
+          ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="${esc(item.title || "Wallpaper")}" onerror="this.remove()" />` : ""}
           <div class="prism-card-top-left">
             ${isActive ? `<span class="prism-active-pill">\u2713 ${esc(curLocale() === "zh" ? "\u5F53\u524D" : "Active")}</span>` : ""}
             ${store.batchMode ? `<span class="prism-fmt-tag">${isPicked ? "\u2611" : "\u2610"}</span>` : ""}
@@ -5433,7 +5435,7 @@ button, input, select, textarea {
             <span class="prism-section-chevron">\u25B6</span>
             <span>${esc(tr("preset.profileTitle"))}</span>
           </div>
-          <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
+          <div style="display:flex;gap:5px">
             <button type="button" class="prism-btn prism-btn-sm" data-action="trigger-preset-import">\u{1F4E5} ${esc(tr("preset.import"))}</button>
           </div>
         </summary>
@@ -5482,7 +5484,7 @@ button, input, select, textarea {
               <span class="prism-section-chevron">\u25B6</span>
               <span>${esc(tr("layout.title"))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="layoutMode,islandGap,workspacePad,cornerStyle,leftSidebarRadius,rightSidebarRadius,borders,shadows,transparentWindowControls">\u21BA</button>
           </summary>
           <div class="prism-section-body">
@@ -5560,7 +5562,7 @@ button, input, select, textarea {
               <span class="prism-section-chevron">\u25B6</span>
               <span>${esc(tr("scheme.title"))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="themeMode,themeFollow,colorScheme,accentMode,customAccent,wallTintMix">\u21BA</button>
           </summary>
           <div class="prism-section-body">
@@ -5650,7 +5652,7 @@ button, input, select, textarea {
               <span class="prism-section-chevron">\u25B6</span>
               <span>${esc(tr("glass.title"))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="glassSurfaces,glassOpacity,glassBlur,glassFidelity,chatGlassFidelity,codeReadabilityMode,contrastFloor,caretColor">\u21BA</button>
           </summary>
           <div class="prism-section-body">
@@ -5733,7 +5735,7 @@ button, input, select, textarea {
               <span class="prism-section-chevron">\u25B6</span>
               <span>${esc(tr("optics.title"))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="scrimOpacity,scrimColor,vignette,mediaOpacity,mediaBlur,mediaBrightness,mediaContrast,mediaSaturate,grainAlpha,filterPreset">\u21BA</button>
           </summary>
           <div class="prism-section-body">
@@ -5834,7 +5836,7 @@ button, input, select, textarea {
               <span class="prism-section-chevron">\u25B6</span>
               <span>${esc(tr("ext.title"))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="fxEnabled,parallaxEnabled,parallaxStrength">\u21BA</button>
           </summary>
           <div class="prism-section-body">
@@ -5874,7 +5876,7 @@ button, input, select, textarea {
               <span class="prism-section-chevron">\u25B6</span>
               <span>${esc(tr("play.transitions"))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="switchTransition,switchTransitionDir,switchTransitionSpeed,pictureSlideSeconds">\u21BA</button>
           </summary>
           <div class="prism-section-body">
@@ -5916,7 +5918,7 @@ button, input, select, textarea {
               <span class="prism-section-chevron">\u25B6</span>
               <span>${esc(tr("tab.playback"))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="playbackRate,fpsCap,sceneLive,sceneLiveFps,sceneAutoQuality,interactiveWeb">\u21BA</button>
           </summary>
           <div class="prism-section-body">
@@ -5985,7 +5987,7 @@ button, input, select, textarea {
               <span class="prism-section-chevron">\u25B6</span>
               <span>${esc(tr("optics.fit"))} &amp; Free Framing</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="fit,flip,layerPosX,layerPosY,layerScale">\u21BA</button>
           </summary>
           <div class="prism-section-body">
@@ -6044,7 +6046,7 @@ button, input, select, textarea {
               <span class="prism-section-chevron">\u25B6</span>
               <span>${esc(tr("play.autoPause"))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="muted,volume,pauseOnHidden,pauseOnBlur,pauseOnBattery,pauseOnFullscreen,desktopSync">\u21BA</button>
           </summary>
           <div class="prism-section-body">
@@ -6446,7 +6448,7 @@ button, input, select, textarea {
         const model = computeLibraryModel();
         return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">\u{1F648} ${esc(tr("lib.hidden"))} (${model.hiddenItems.length})</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">\u2715</button>
@@ -6456,7 +6458,7 @@ button, input, select, textarea {
           (it) => `
                     <div class="prism-confirm-row">
                       <div style="display:flex;align-items:center;gap:8px;min-width:0">
-                        ${it.thumbUrl ? `<img src="${esc(it.thumbUrl)}" alt="" style="width:42px;height:28px;object-fit:cover;border-radius:4px" />` : ""}
+                        ${it.thumbUrl ? `<img src="${esc(it.thumbUrl)}" alt="" onerror="this.remove()" style="width:42px;height:28px;object-fit:cover;border-radius:4px" />` : ""}
                         <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.title || it.id)}</span>
                       </div>
                       <button type="button" class="prism-btn prism-btn-sm" data-action="unhide-item" data-id="${esc(it.id)}">${esc(tr("lib.restoreOne"))}</button>
@@ -6479,7 +6481,7 @@ button, input, select, textarea {
         const intervals = [1, 5, 15, 30, 60, 120, 360, 1440];
         return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">\u21BB ${esc(tr("lib.playlists"))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">\u2715</button>
@@ -6575,7 +6577,7 @@ button, input, select, textarea {
           return `
                         <div class="prism-mini-pick-item ${picked ? "is-picked" : ""}"
                              data-action="toggle-pl-pick" data-id="${esc(it.id)}">
-                          ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="" />` : `<div style="aspect-ratio:16/10;background:rgba(var(--prism-accent-rgb),0.18)"></div>`}
+                          ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="" onerror="this.remove()" />` : `<div style="aspect-ratio:16/10;background:rgba(var(--prism-accent-rgb),0.18)"></div>`}
                           <div class="prism-mini-pick-name">${picked ? "\u2713 " : ""}${esc(it.title || it.id)}</div>
                         </div>
                       `;
@@ -6608,7 +6610,7 @@ button, input, select, textarea {
         const rmUploadKey = `rm-upload:${item.id}`;
         return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">\u2699 ${esc(tr("lib.inspector"))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">\u2715</button>
@@ -6723,7 +6725,7 @@ button, input, select, textarea {
         const fb = store.fsBrowser;
         return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">\u{1F4C2} ${esc(tr("host.browse"))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">\u2715</button>
@@ -7035,7 +7037,7 @@ button, input, select, textarea {
                     <button type="button" class="prism-rail-qslot ${qAct ? "is-active" : ""}"
                             data-action="card-click" data-id="${esc(qIt.id)}" title="${esc(qIt.title || qIt.id)}">
                       <div class="prism-rail-qslot-thumb">
-                        ${qThumb ? `<img loading="lazy" src="${esc(qThumb)}" alt="" />` : ""}
+                        ${qThumb ? `<img loading="lazy" src="${esc(qThumb)}" alt="" onerror="this.remove()" />` : ""}
                       </div>
                       <span class="prism-rail-qslot-title">${esc(qIt.title || qIt.id)}</span>
                     </button>
@@ -7682,6 +7684,7 @@ button, input, select, textarea {
             break;
           }
           case "reset-module": {
+            e.preventDefault();
             const keys = (actEl.dataset.keys || "").split(",").filter(Boolean);
             const patch = {};
             for (const k of keys) {
@@ -7976,8 +7979,10 @@ button, input, select, textarea {
             renderActiveSurface();
             break;
           }
-          case "close-drawer":
-          case "backdrop-close": {
+          case "backdrop-close":
+            if (e.target !== actEl) return;
+          // fall through
+          case "close-drawer": {
             store.drawer = null;
             renderActiveSurface();
             break;
@@ -8165,6 +8170,7 @@ button, input, select, textarea {
             break;
           }
           case "trigger-preset-import": {
+            e.preventDefault();
             document.getElementById("prism-preset-import-input")?.click();
             break;
           }

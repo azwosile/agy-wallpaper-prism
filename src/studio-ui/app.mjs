@@ -564,6 +564,7 @@ function bootPrismStudioApp() {
         posterImg = document.createElement('img');
         posterImg.className = 'mini-poster-overlay';
         posterImg.alt = '';
+        posterImg.onerror = () => posterImg.remove();
         posterImg.src = item.thumbUrl;
         wrap.appendChild(posterImg);
       }
@@ -672,6 +673,7 @@ function bootPrismStudioApp() {
         const img = document.createElement('img');
         img.className = 'mini-media-el';
         img.alt = item.title || 'Wallpaper';
+        img.onerror = () => img.remove();
         img.src = src;
         wrap.appendChild(img);
       }
@@ -1451,7 +1453,7 @@ function bootPrismStudioApp() {
       <article class="prism-wall-card ${isActive ? 'is-active' : ''} ${isPicked ? 'is-batch-selected' : ''}"
                tabindex="0" data-action="card-click" data-id="${esc(item.id)}">
         <div class="prism-wall-thumb" style="background:linear-gradient(135deg, ${esc(bgFallback)}66, rgba(12,14,22,0.95))">
-          ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="${esc(item.title || 'Wallpaper')}" />` : ''}
+          ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="${esc(item.title || 'Wallpaper')}" onerror="this.remove()" />` : ''}
           <div class="prism-card-top-left">
             ${isActive ? `<span class="prism-active-pill">✓ ${esc(curLocale() === 'zh' ? '当前' : 'Active')}</span>` : ''}
             ${store.batchMode ? `<span class="prism-fmt-tag">${isPicked ? '☑' : '☐'}</span>` : ''}
@@ -1657,7 +1659,7 @@ function bootPrismStudioApp() {
             <span class="prism-section-chevron">▶</span>
             <span>${esc(tr('preset.profileTitle'))}</span>
           </div>
-          <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
+          <div style="display:flex;gap:5px">
             <button type="button" class="prism-btn prism-btn-sm" data-action="trigger-preset-import">📥 ${esc(tr('preset.import'))}</button>
           </div>
         </summary>
@@ -1712,7 +1714,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('layout.title'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="layoutMode,islandGap,workspacePad,cornerStyle,leftSidebarRadius,rightSidebarRadius,borders,shadows,transparentWindowControls">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -1790,7 +1792,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('scheme.title'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="themeMode,themeFollow,colorScheme,accentMode,customAccent,wallTintMix">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -1884,7 +1886,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('glass.title'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="glassSurfaces,glassOpacity,glassBlur,glassFidelity,chatGlassFidelity,codeReadabilityMode,contrastFloor,caretColor">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -1967,7 +1969,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('optics.title'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="scrimOpacity,scrimColor,vignette,mediaOpacity,mediaBlur,mediaBrightness,mediaContrast,mediaSaturate,grainAlpha,filterPreset">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2068,7 +2070,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('ext.title'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="fxEnabled,parallaxEnabled,parallaxStrength">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2117,7 +2119,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('play.transitions'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="switchTransition,switchTransitionDir,switchTransitionSpeed,pictureSlideSeconds">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2159,7 +2161,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('tab.playback'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="playbackRate,fpsCap,sceneLive,sceneLiveFps,sceneAutoQuality,interactiveWeb">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2228,7 +2230,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('optics.fit'))} &amp; Free Framing</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="fit,flip,layerPosX,layerPosY,layerScale">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2287,7 +2289,7 @@ function bootPrismStudioApp() {
               <span class="prism-section-chevron">▶</span>
               <span>${esc(tr('play.autoPause'))}</span>
             </div>
-            <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
+            <button type="button" class="prism-btn prism-btn-sm"
                     data-action="reset-module" data-keys="muted,volume,pauseOnHidden,pauseOnBlur,pauseOnBattery,pauseOnFullscreen,desktopSync">↺</button>
           </summary>
           <div class="prism-section-body">
@@ -2748,7 +2750,7 @@ function bootPrismStudioApp() {
       const model = computeLibraryModel();
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">🙈 ${esc(tr('lib.hidden'))} (${model.hiddenItems.length})</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -2762,7 +2764,7 @@ function bootPrismStudioApp() {
                         (it) => `
                     <div class="prism-confirm-row">
                       <div style="display:flex;align-items:center;gap:8px;min-width:0">
-                        ${it.thumbUrl ? `<img src="${esc(it.thumbUrl)}" alt="" style="width:42px;height:28px;object-fit:cover;border-radius:4px" />` : ''}
+                        ${it.thumbUrl ? `<img src="${esc(it.thumbUrl)}" alt="" onerror="this.remove()" style="width:42px;height:28px;object-fit:cover;border-radius:4px" />` : ''}
                         <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.title || it.id)}</span>
                       </div>
                       <button type="button" class="prism-btn prism-btn-sm" data-action="unhide-item" data-id="${esc(it.id)}">${esc(tr('lib.restoreOne'))}</button>
@@ -2793,7 +2795,7 @@ function bootPrismStudioApp() {
 
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">↻ ${esc(tr('lib.playlists'))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -2903,7 +2905,7 @@ function bootPrismStudioApp() {
                       return `
                         <div class="prism-mini-pick-item ${picked ? 'is-picked' : ''}"
                              data-action="toggle-pl-pick" data-id="${esc(it.id)}">
-                          ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="" />` : `<div style="aspect-ratio:16/10;background:rgba(var(--prism-accent-rgb),0.18)"></div>`}
+                          ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="" onerror="this.remove()" />` : `<div style="aspect-ratio:16/10;background:rgba(var(--prism-accent-rgb),0.18)"></div>`}
                           <div class="prism-mini-pick-name">${picked ? '✓ ' : ''}${esc(it.title || it.id)}</div>
                         </div>
                       `;
@@ -2939,7 +2941,7 @@ function bootPrismStudioApp() {
 
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">⚙ ${esc(tr('lib.inspector'))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -3072,7 +3074,7 @@ function bootPrismStudioApp() {
       const fb = store.fsBrowser;
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer" onclick="event.stopPropagation()">
+          <aside class="prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">📂 ${esc(tr('host.browse'))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -3451,7 +3453,7 @@ function bootPrismStudioApp() {
                     <button type="button" class="prism-rail-qslot ${qAct ? 'is-active' : ''}"
                             data-action="card-click" data-id="${esc(qIt.id)}" title="${esc(qIt.title || qIt.id)}">
                       <div class="prism-rail-qslot-thumb">
-                        ${qThumb ? `<img loading="lazy" src="${esc(qThumb)}" alt="" />` : ''}
+                        ${qThumb ? `<img loading="lazy" src="${esc(qThumb)}" alt="" onerror="this.remove()" />` : ''}
                       </div>
                       <span class="prism-rail-qslot-title">${esc(qIt.title || qIt.id)}</span>
                     </button>
@@ -4189,6 +4191,7 @@ function bootPrismStudioApp() {
           break;
         }
         case 'reset-module': {
+          e.preventDefault();
           const keys = (actEl.dataset.keys || '').split(',').filter(Boolean);
           const patch = {};
           for (const k of keys) {
@@ -4487,8 +4490,10 @@ function bootPrismStudioApp() {
           renderActiveSurface();
           break;
         }
-        case 'close-drawer':
-        case 'backdrop-close': {
+        case 'backdrop-close':
+          if (e.target !== actEl) return;
+          // fall through
+        case 'close-drawer': {
           store.drawer = null;
           renderActiveSurface();
           break;
@@ -4679,6 +4684,7 @@ function bootPrismStudioApp() {
           break;
         }
         case 'trigger-preset-import': {
+          e.preventDefault();
           document.getElementById('prism-preset-import-input')?.click();
           break;
         }

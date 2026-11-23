@@ -85,16 +85,24 @@ export function buildMockAntigravityHubHtml({
       background-color: var(--background);
     }
 
-    /* Antigravity 2.34.0 layout & inner .dark variable reset + .browser-hole-opaque + --shell-canvas */
+    /* Antigravity 2.34.0 layout & inner .dark/.light variable reset + .browser-hole-opaque + --shell-canvas */
     #root .dark {
       --background: #070708;
+      --color-background: #070708;
+      --foreground: #ffffff;
+      --color-foreground: #ffffff;
       --content: #070708;
       --sidebar: #111114;
+      --color-sidebar: #111114;
     }
     #root .light {
       --background: #f7f7f8;
+      --color-background: #f7f7f8;
+      --foreground: #0f172a;
+      --color-foreground: #0f172a;
       --content: #f7f7f8;
       --sidebar: #eeeef1;
+      --color-sidebar: #eeeef1;
     }
     .dark .agy-inset-shell {
       --shell-canvas: color-mix(in srgb, #000 38%, var(--background));
@@ -133,11 +141,14 @@ export function buildMockAntigravityHubHtml({
       background-image: none !important;
     }
 
-    .bg-background { background-color: var(--background); }
+    .bg-background { background-color: var(--color-background, var(--background)); }
+    .bg-foreground { background-color: var(--color-foreground, var(--foreground)); }
+    .text-background { color: var(--color-background, var(--background)); }
+    .ag-cs-home-heat-hint { background-color: var(--color-foreground, var(--foreground)); color: var(--color-background, var(--background)); }
     .hover\\:bg-background { background-color: transparent; }
-    .hover\\:bg-background:hover { background-color: var(--background); }
-    .bg-sidebar { background-color: var(--sidebar); }
-    .bg-card { background-color: var(--card); border: 1px solid var(--card-border); }
+    .hover\\:bg-background:hover { background-color: var(--color-background, var(--background)); }
+    .bg-sidebar { background-color: var(--color-sidebar, var(--sidebar)); }
+    .bg-card { background-color: var(--color-card, var(--card)); border: 1px solid var(--card-border); }
     .bg-popover { background-color: var(--popover); }
 
     .agy-shell {
@@ -413,7 +424,11 @@ export function buildMockAntigravityHubHtml({
           <div data-testid="sidebar-split"${holeAncAttr}>
             <aside class="agy-sidebar bg-sidebar">
               <div>
-                <div class="nav-section-label">Workspaces</div>
+                <div id="hub-sidebar-sticky-projects" data-index="0" class="bg-sidebar" style="position: sticky; top: 0px; z-index: 10; width: 100%">
+                  <div data-testid="section-header" data-title="Projects">
+                    <div id="hub-sidebar-sticky-inner" class="group/section-header bg-sidebar nav-section-label">Projects</div>
+                  </div>
+                </div>
                 <div class="nav-item active">
                   <span>agy-wallpaper-prism</span>
                   <span class="dot-online"></span>
@@ -484,6 +499,9 @@ export function buildMockAntigravityHubHtml({
                           <span class="footer-chip">Claude Opus 4.6</span>
                           <span class="footer-chip">2.34.0 WCV</span>
                           <button id="hub-interactive-btn" type="button" class="hub-send-btn" onclick="window.__hubInteractiveClicks=(window.__hubInteractiveClicks||0)+1">Send</button>
+                          <span id="hub-voice-live-pill" data-testid="voice-live-pill" class="bg-foreground text-background" title="Start Voice mode" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px">
+                            <svg width="12" height="12" viewBox="0 0 12 12"><path fill="currentColor" d="M5 1h2v10H5zM2 4h2v4H2zM8 3h2v6H8z"/></svg>
+                          </span>
                           <span style="margin-left:auto;opacity:0.65;font-size:11px">Ctrl+Alt+W · Quick Prism</span>
                         </div>
                       </div>
@@ -530,6 +548,15 @@ export function buildMockAntigravityHubHtml({
         </div>
       </div>
       <div id="hub-inner-menu-probe" role="menu" class="agy-menu bg-popover" style="width:180px;padding:8px">Inner Dark Menu</div>
+      <div id="hub-heat-hint-probe" class="ag-cs-home-heat-hint" style="padding:4px 8px">Heatmap Hint</div>
+    </div>
+
+    <!-- Antigravity 2.34.0 Image Preview Lightbox Portal inside #root > div (Issue #4 Bug 3) -->
+    <div id="v234-lightbox-portal" style="display:none;position:fixed;inset:0;z-index:5000">
+      <div id="v234-modal-backdrop-probe" data-testid="modal-backdrop" class="bg-black/45" style="position:absolute;inset:0;background-color:rgba(0, 0, 0, 0.45)"></div>
+      <div id="v234-media-modal-probe" role="dialog" data-testid="media-modal" style="position:absolute;inset:0;display:flex;flex-direction:column;color:#ffffff">
+        <div id="v234-media-zoom-probe" data-testid="media-modal-zoom-controls" class="bg-card" style="padding:4px 10px">- 100% +</div>
+      </div>
     </div>
 
     <div id="v234-settings-backdrop-probe" class="fixed inset-0 settings-modal-backdrop" style="display:none;position:fixed;inset:0;z-index:5000">

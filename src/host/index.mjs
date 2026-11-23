@@ -143,6 +143,9 @@ function buildPolarityTokenVarsCss(cfg, tok, isLight) {
 
   return [
     `  --prism-native-floor: ${isLight ? '#f8fafc' : '#070708'};`,
+    `  --prism-shade-rgb: ${tok.shadeRgb};`,
+    `  --prism-base-rgb: ${tok.baseRgb};`,
+    `  --prism-sticky-sidebar-bg: rgba(${tok.shadeRgb}, ${isLight ? '0.940' : '0.900'});`,
     `  --prism-fg: ${tok.fg};`,
     `  --prism-fg-2: ${tok.fg2};`,
     `  --prism-fg-muted: ${tok.fgMuted};`,
@@ -178,7 +181,7 @@ function buildPolarityTokenVarsCss(cfg, tok, isLight) {
  */
 export function buildStaticCssSheet(payload = {}) {
   if (payload && payload.skinEnabled === false) {
-    return '/* agy-wallpaper-prism v2.0.0 static-css: skin disabled */\n';
+    return '/* agy-wallpaper-prism v2.0.4 static-css: skin disabled */\n';
   }
   const rawCfg = payload?.config && typeof payload.config === 'object' ? payload.config : payload || DEFAULT_CONFIG;
   const activeItem = payload?.activeItem && typeof payload.activeItem === 'object' ? payload.activeItem : null;
@@ -209,12 +212,12 @@ export function buildStaticCssSheet(payload = {}) {
     : `radial-gradient(ellipse 80% 70% at 22% 24%, rgba(${lightTok.accentRgb}, 0.18) 0%, transparent 65%), radial-gradient(ellipse 75% 75% at 80% 78%, rgba(${lightTok.accentRgb}, 0.12) 0%, #f4f7fb 100%)`;
 
   const sibEx =
-    ':not(#gemini-neko-pet-root):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(.settings-modal-backdrop):not(.settings-modal-container):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
+    ':not(#gemini-neko-pet-root):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
   const dlgDescEx =
     ':not(.settings-modal-backdrop *):not(.settings-modal-container *):not(.agy-dialog *):not([role="dialog"] *):not([role="alertdialog"] *):not([role="menu"] *):not([role="listbox"] *):not([data-radix-popper-content-wrapper] *):not(.agy-popover *):not(.quick-input-widget *)';
   const notHole = ':not([data-has-browser-hole="true"]):not([data-browser-hole])';
 
-  return `/* agy-wallpaper-prism v2.0.0 zero-JS static-css sheet */
+  return `/* agy-wallpaper-prism v2.0.4 zero-JS static-css sheet */
 :root, body.dark, html.dark body {
 ${buildPolarityTokenVarsCss(cfg, darkTok, false)}
   --prism-static-wall: ${wallBgDark};
@@ -315,6 +318,31 @@ body,
   color: var(--prism-fg) !important;
   background-color: var(--prism-surface-popover) !important;
 }
+:is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])),
+.sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none) {
+  isolation: isolate;
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+:is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"]))::before,
+.sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--prism-sticky-sidebar-bg) !important;
+  backdrop-filter: blur(14px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+  box-shadow: 0 1px 0 var(--prism-border-hairline);
+}
+:is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]) .bg-sidebar {
+  background-color: transparent !important;
+}
+.surface-opaque.bg-background {
+  background-color: var(--prism-surface-card) !important;
+}
 
 :is([data-testid="agent-input-box"], #antigravity\\.agentSidePanelInputBox > .surface-composer-card, .surface-composer-card, .agy-composer) {
   position: relative !important;
@@ -360,7 +388,21 @@ ${
   backdrop-filter: blur(12px) saturate(120%) !important;
   -webkit-backdrop-filter: blur(12px) saturate(120%) !important;
 }
-:is([role="menu"], [role="listbox"], [role="dialog"]:not(#gemini-neko-observer-modal), [role="alertdialog"], .settings-modal-container, .agy-dialog, .agy-popover, .agy-menu, [data-radix-popper-content-wrapper] > *) {
+[data-testid="modal-backdrop"] {
+  background-color: rgba(0, 0, 0, 0.52) !important;
+  backdrop-filter: blur(8px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+}
+[data-testid="media-modal"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+:is([role="menu"], [role="listbox"], [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]), [role="alertdialog"], .settings-modal-container, .agy-dialog, .agy-popover, .agy-menu, [data-radix-popper-content-wrapper] > *) {
   --background: var(--prism-surface-popover) !important;
   --color-background: var(--prism-surface-popover) !important;
   --content: var(--prism-surface-popover) !important;
@@ -368,10 +410,13 @@ ${
   border: 1px solid var(--prism-border-popover) !important;
   box-shadow: var(--prism-shadow-popover) !important;
 }
-:is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {
+:is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {
   --background: var(--prism-surface-popover) !important;
   --color-background: var(--prism-surface-popover) !important;
   --content: var(--prism-surface-popover) !important;
+}
+:is(.text-background, .ag-cs-home-heat-hint) {
+  color: rgb(var(--prism-base-rgb)) !important;
 }
 `;
 }

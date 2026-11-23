@@ -1,4 +1,4 @@
-// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.0.0).
+// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.0.4).
 //
 // Gentle Fail-Open ES2020 browser IIFE loaded post-hydration (`stage.js`) or in headless verification harnesses.
 // Zero `Page.enable`/`Runtime.enable`, zero `app.asar` modifications, `z-index: -1` inert stage,
@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.0.3';
+  var VERSION = '2.0.4';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -312,7 +312,7 @@
   var SIBLING_EXCLUDE =
     ':not(#gemini-neko-pet-root):not(#gemini-neko-observer-modal):not(#gemini-neko-stats-bar):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(#' +
     STAGE_ID +
-    '):not(.settings-modal-backdrop):not(.settings-modal-container):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
+    '):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
 
   var DIALOG_DESCENDANT_EXCLUDE =
     ':not(.settings-modal-backdrop *):not(.settings-modal-container *):not(.agy-dialog *):not([role="dialog"] *):not([role="alertdialog"] *):not([role="menu"] *):not([role="listbox"] *):not([data-radix-popper-content-wrapper] *):not(.agy-popover *):not(.quick-input-widget *)';
@@ -364,7 +364,7 @@
     '.agy-popover',
     '.agy-menu',
     '.agy-toast',
-    '[role="dialog"]:not(#gemini-neko-observer-modal)',
+    '[role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"])',
     '[role="menu"]',
     '[role="listbox"]',
     '[role="tooltip"]',
@@ -1457,6 +1457,31 @@
       '  background-color: rgba(var(--prism-tint-2-rgb), 0.94) !important;\n' +
       '  border-color: var(--prism-border-card) !important;\n' +
       '  box-shadow: 0 2px 8px rgba(0, 0, 0, ' + (isLight ? '0.14' : '0.38') + ') !important;\n' +
+      '}\n' +
+      GW + ' :is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])),\n' +
+      GW + ' .sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none) {\n' +
+      '  isolation: isolate;\n' +
+      '  background-color: transparent !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' :is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"]))::before,\n' +
+      GW + ' .sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none)::before {\n' +
+      '  content: "";\n' +
+      '  position: absolute;\n' +
+      '  inset: 0;\n' +
+      '  z-index: -1;\n' +
+      '  pointer-events: none;\n' +
+      '  background-color: rgba(var(--prism-shade-rgb), ' + (isLight ? '0.94' : '0.90') + ') !important;\n' +
+      '  backdrop-filter: blur(14px) saturate(140%) !important;\n' +
+      '  -webkit-backdrop-filter: blur(14px) saturate(140%) !important;\n' +
+      '  box-shadow: 0 1px 0 var(--prism-border-hairline);\n' +
+      '}\n' +
+      GW + ' :is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]) .bg-sidebar {\n' +
+      '  background-color: transparent !important;\n' +
+      '}\n' +
+      GW + ' .surface-opaque.bg-background {\n' +
+      '  background-color: var(--prism-surface-card) !important;\n' +
       '}'
     );
 
@@ -1600,6 +1625,20 @@
       GG + '[data-has-browser-hole="true"] .settings-modal-backdrop,\n' +
       GG + ' body[data-has-browser-hole="true"] .settings-modal-backdrop {\n' +
       '  background-color: ' + (isLight ? 'rgba(15, 23, 42, 0.42)' : 'rgba(0, 0, 0, 0.58)') + ' !important;\n' +
+      '}\n' +
+      GG + ' [data-testid="modal-backdrop"] {\n' +
+      '  background-color: rgba(0, 0, 0, 0.52) !important;\n' +
+      '  backdrop-filter: blur(8px) saturate(120%) !important;\n' +
+      '  -webkit-backdrop-filter: blur(8px) saturate(120%) !important;\n' +
+      '}\n' +
+      GG + ' [data-testid="media-modal"] {\n' +
+      '  background: transparent !important;\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  border: none !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
       '}\n\n' +
       SOLID_POPOVERS.map(function (s) {
         return GG + ' ' + s;
@@ -1615,7 +1654,7 @@
       '  border: 1px solid var(--prism-border-popover) !important;\n' +
       '  box-shadow: inset 0 1px 0 var(--prism-specular-top), var(--prism-shadow-popover) !important;\n' +
       '}\n\n' +
-      GG + ' :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {\n' +
+      GG + ' :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {\n' +
       '  --background: var(--prism-surface-popover) !important;\n' +
       '  --color-background: var(--prism-surface-popover) !important;\n' +
       '  --content: var(--prism-surface-popover) !important;\n' +
@@ -1623,6 +1662,9 @@
     );
 
     out.push(
+      GW + ' :is(.text-background, .ag-cs-home-heat-hint) {\n' +
+      '  color: rgb(var(--prism-base-rgb)) !important;\n' +
+      '}\n' +
       GG + ' ::selection { background-color: var(--prism-selection-bg) !important; color: inherit; }\n' +
       GW + ' ::-webkit-scrollbar-track { background: transparent !important; }\n' +
       GG + ' ::-webkit-scrollbar-thumb { background: var(--prism-scroll-thumb) !important; border-radius: 999px; }'
