@@ -298,12 +298,15 @@
   var GRAIN_SVG =
     "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
 
-  // Verified Antigravity 2.0 Hub + VS Code Workbench Selectors
-  // Explicit exclusions protect sibling plugins (#gemini-neko-*, #ag-context-meter, #agy-prism-popover).
+  // Verified Antigravity 2.0 / 2.34.0 Hub + VS Code Workbench Selectors
+  // Explicit exclusions protect sibling plugins and modal dialogs.
   var SIBLING_EXCLUDE =
-    ':not(#gemini-neko-pet-root):not(#gemini-neko-observer-modal):not(#gemini-neko-stats-bar):not(#ag-context-meter):not(#agy-prism-popover):not(#' +
+    ':not(#gemini-neko-pet-root):not(#gemini-neko-observer-modal):not(#gemini-neko-stats-bar):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(#' +
     STAGE_ID +
-    ')';
+    '):not(.settings-modal-backdrop):not(.settings-modal-container):not(.agy-dialog):not([role="dialog"])';
+
+  var DIALOG_DESCENDANT_EXCLUDE =
+    ':not(.settings-modal-backdrop *):not(.settings-modal-container *):not(.agy-dialog *):not([role="dialog"] *)';
 
   var HOLLOW_SURFACES = [
     '#root',
@@ -314,8 +317,17 @@
     '.agy-inset-shell',
     '.agy-sheet',
     '.browser-hole-ancestor',
+    '.browser-hole-opaque' + SIBLING_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
+    '.agy-sheet[data-sheet-inset] [data-main-content-body]',
+    '.agy-inset-shell [data-side-panel-body]',
+    '.agy-inset-shell .agy-sheet[data-sheet-inset] [data-side-panel-strip]',
+    '.agy-inset-shell .agy-sheet[data-sheet-inset] [data-main-content-header]',
+    '[data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane]',
+    '[data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane] > [data-pane-id]',
+    '[data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane] > [data-pane-id] > :first-child',
+    '.agy-inset-shell > [data-split-root] > [data-split-sash]',
     'body[data-has-browser-hole="true"]',
-    '[class*="bg-background"]:not([role="dialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])' + SIBLING_EXCLUDE,
+    '[class*="bg-background"]:not([role="dialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])' + SIBLING_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
     '.monaco-workbench',
     '.monaco-workbench .monaco-grid-view',
     '.monaco-workbench .monaco-split-view2 > .monaco-scrollable-element > .split-view-container > .split-view-view',
@@ -340,6 +352,7 @@
 
   var SOLID_POPOVERS = [
     '.agy-dialog',
+    '.settings-modal-container',
     '.agy-overlay',
     '.agy-popover',
     '.agy-menu',
@@ -520,6 +533,7 @@
     activeWrap: null,
     pendingWrap: null,
     pendingMediaTimer: 0,
+    mediaMountSeq: 0,
     outgoingWraps: [],
     activeVideo: null,
     activeAudio: null,
@@ -1176,11 +1190,14 @@
     );
 
     out.push(
-      G + ' body {\n' +
+      G + ' body,\n' +
+      G + ' :where(#root, #root > div, #root .dark, #root .light, #root .theme-dark, #root .theme-light, .agy-shell, .agy-inset-shell, .agy-sheet, [data-split-panes] [data-testid="pane-titlebar-toolbar"])' +
+      ':where(' + SIBLING_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE + ') {\n' +
       '  --background: transparent !important;\n' +
       '  --color-background: transparent !important;\n' +
       '  --body-background: transparent !important;\n' +
       '  --shell: transparent !important;\n' +
+      '  --shell-canvas: transparent !important;\n' +
       '  --content: var(--prism-surface-chat) !important;\n' +
       '  --sidebar: var(--prism-surface-sidebar) !important;\n' +
       '  --color-sidebar: var(--prism-surface-sidebar) !important;\n' +
@@ -1281,7 +1298,7 @@
     out.push(
       G + ' #root, ' + G + ' .monaco-workbench { position: relative; z-index: 1; }\n' +
       HOLLOW_SURFACES.map(function (sel) {
-        return G + ' ' + sel;
+        return G + ' :where(' + sel + ')';
       }).join(',\n') +
       ' {\n' +
       '  background-color: transparent !important;\n' +
@@ -1459,16 +1476,27 @@
     }
 
     out.push(
+      G + ' .settings-modal-backdrop {\n' +
+      '  background-color: ' + (isLight ? 'rgba(15, 23, 42, 0.28)' : 'rgba(0, 0, 0, 0.45)') + ' !important;\n' +
+      '  backdrop-filter: blur(12px) saturate(120%) !important;\n' +
+      '  -webkit-backdrop-filter: blur(12px) saturate(120%) !important;\n' +
+      '}\n\n' +
       SOLID_POPOVERS.map(function (s) {
         return G + ' ' + s;
       }).join(',\n') +
       ' {\n' +
+      '  --background: var(--prism-surface-popover) !important;\n' +
+      '  --color-background: var(--prism-surface-popover) !important;\n' +
+      '  --content: var(--prism-surface-popover) !important;\n' +
       '  background-color: var(--prism-surface-popover) !important;\n' +
       '  background-image: var(--prism-sheen) !important;\n' +
       '  backdrop-filter: blur(var(--prism-blur-xl)) saturate(150%) !important;\n' +
       '  -webkit-backdrop-filter: blur(var(--prism-blur-xl)) saturate(150%) !important;\n' +
       '  border: 1px solid var(--prism-border-popover) !important;\n' +
       '  box-shadow: inset 0 1px 0 var(--prism-specular-top), var(--prism-shadow-popover) !important;\n' +
+      '}\n\n' +
+      G + ' :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal)) [class*="bg-background"] {\n' +
+      '  background-color: var(--prism-surface-popover) !important;\n' +
       '}'
     );
 
@@ -1659,6 +1687,11 @@
   function flushOutgoingWraps() {
     clearTimeout(state.transitionTimer);
     state.transitionTimer = 0;
+    if (state.activeWrap && state.activeWrap.isConnected) {
+      state.activeWrap.style.transition = '';
+      state.activeWrap.style.clipPath = '';
+      state.activeWrap.style.opacity = '';
+    }
     while (state.outgoingWraps.length > 0) {
       disposeWrap(state.outgoingWraps.pop());
     }
@@ -1671,9 +1704,9 @@
   }
 
   function applyTransitionAnimation(inWrap, outWrap, type, dir, durMs) {
-    if (!outWrap || type === 'cut' || durMs <= 0) {
+    if (!outWrap || !outWrap.isConnected || outWrap === inWrap || doc.hidden || type === 'cut' || durMs <= 0) {
       flushOutgoingWraps();
-      disposeWrap(outWrap);
+      if (outWrap && outWrap !== inWrap) disposeWrap(outWrap);
       inWrap.style.opacity = '';
       inWrap.style.transition = '';
       inWrap.style.clipPath = '';
@@ -1788,7 +1821,13 @@
         vid.volume = clamp(cfg.volume, 0, 1);
 
         if (shouldPause) {
-          if (!vid.paused) vid.pause();
+          if (vid.__prismPriming && vid.readyState < 2) {
+            // Allow newly mounted video to decode frame 1 muted before honoring auto-pause (e.g. pauseOnBlur when clicking in sidecar UI)
+            vid.muted = true;
+            if (vid.paused) vid.play().catch(function () {});
+          } else if (!vid.paused) {
+            vid.pause();
+          }
         } else {
           if (cfg.muted || cfg.volume <= 0.005) {
             vid.muted = true;
@@ -1889,11 +1928,18 @@
     var audioUrl = String((item && item.audioUrl) || '').trim();
     var mediaKey = effKind + '|' + mediaUrl + '|' + audioUrl + '|' + (state.slides ? state.slides.length : 0);
 
-    if (!forceReplace && mediaKey === state.activeMediaKey && ((state.activeWrap && state.activeWrap.isConnected) || (state.pendingWrap && state.pendingWrap.isConnected))) {
+    var hasActive = Boolean(state.activeWrap && state.activeWrap.isConnected);
+    var hasLivePending = Boolean(state.pendingWrap && state.pendingWrap.isConnected && state.pendingMediaTimer);
+    if (!forceReplace && mediaKey === state.activeMediaKey && (hasActive || hasLivePending)) {
+      if (hasActive && !state.transitionTimer && state.activeWrap.style.opacity === '0') {
+        state.activeWrap.style.opacity = '';
+        state.activeWrap.style.transition = '';
+      }
       syncMediaPlaybackState();
       return;
     }
     state.activeMediaKey = mediaKey;
+    var mountSeq = ++state.mediaMountSeq;
     clearInterval(state.slideTimer);
     state.slideTimer = 0;
     clearTimeout(state.pendingMediaTimer);
@@ -1913,7 +1959,7 @@
     var scrimNode = stage.querySelector('.agy-prism-scrim');
 
     var commitMount = function () {
-      if (destroyed) {
+      if (destroyed || mountSeq !== state.mediaMountSeq) {
         disposeWrap(nextWrap);
         return;
       }
@@ -1922,10 +1968,11 @@
       }
       state.pendingWrap = null;
       state.activeWrap = nextWrap;
+      var validPrev = prevWrap && prevWrap.isConnected && prevWrap !== nextWrap ? prevWrap : null;
       applyTransitionAnimation(
         nextWrap,
-        prevWrap,
-        prevWrap ? cfg.switchTransition : 'cut',
+        validPrev,
+        validPrev ? cfg.switchTransition : 'cut',
         cfg.switchTransitionDir,
         transitionDurationMs(cfg.switchTransitionSpeed)
       );
@@ -2038,6 +2085,10 @@
       video.setAttribute('playsinline', '');
       video.setAttribute('autoplay', '');
       video.setAttribute('disablepictureinpicture', '');
+      if (item && item.thumbUrl) {
+        video.poster = String(item.thumbUrl);
+      }
+      video.__prismPriming = true;
 
       video.addEventListener('ended', function () {
         if (state.cfg.rotationEnabled && state.cfg.rotationTrigger === 'videoEnd') {
@@ -2065,20 +2116,33 @@
       // Freeze outgoing 4K60 decoder immediately so incoming video decodes frame 1 without GPU contention.
       if (prevWrap) pauseWrapMedia(prevWrap);
 
-      var needsCrossfade = Boolean(prevWrap && cfg.switchTransition !== 'cut');
+      var validPrevWrap = prevWrap && prevWrap.isConnected && prevWrap !== nextWrap ? prevWrap : null;
+      var needsCrossfade = Boolean(validPrevWrap && cfg.switchTransition !== 'cut' && !doc.hidden);
       if (needsCrossfade) {
         nextWrap.style.opacity = '0';
         state.pendingWrap = nextWrap;
       }
       stage.insertBefore(nextWrap, scrimNode || null);
 
+      var finishPriming = function () {
+        if (!video.__prismPriming) return;
+        video.__prismPriming = false;
+        if (!destroyed && state.activeVideo === video) {
+          syncMediaPlaybackState();
+        }
+      };
       var ensureVidPlaying = function () {
         if (!destroyed && state.activeVideo === video && video.paused) {
           syncMediaPlaybackState();
         }
       };
       video.addEventListener('loadedmetadata', ensureVidPlaying, { once: true });
-      video.addEventListener('canplay', ensureVidPlaying, { once: true });
+      video.addEventListener('loadeddata', finishPriming, { once: true });
+      video.addEventListener('canplay', function () {
+        finishPriming();
+        ensureVidPlaying();
+      }, { once: true });
+      video.addEventListener('error', finishPriming, { once: true });
 
       video.src = mediaUrl;
 
@@ -2092,15 +2156,22 @@
           revealedVid = true;
           clearTimeout(state.pendingMediaTimer);
           state.pendingMediaTimer = 0;
-          if (destroyed || state.activeVideo !== video) {
+          if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideo !== video) {
             disposeWrap(nextWrap);
             return;
           }
+          finishPriming();
           commitMount();
         };
-        state.pendingMediaTimer = setTimeout(revealVid, 180);
-        video.addEventListener('loadeddata', revealVid, { once: true });
-        video.addEventListener('playing', revealVid, { once: true });
+        if (video.readyState >= 2) {
+          revealVid();
+        } else {
+          state.pendingMediaTimer = setTimeout(revealVid, 450);
+          video.addEventListener('loadeddata', revealVid, { once: true });
+          video.addEventListener('canplay', revealVid, { once: true });
+          video.addEventListener('playing', revealVid, { once: true });
+          video.addEventListener('error', revealVid, { once: true });
+        }
       }
 
       if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
@@ -2699,7 +2770,14 @@
     if (destroyed || !state.skinEnabled) return status();
     if (doc.body) {
       if (!doc.getElementById(STYLE_ID)) refreshSkinStyles();
-      if (!doc.getElementById(STAGE_ID)) mountStageMedia(true);
+      if (!doc.getElementById(STAGE_ID)) {
+        mountStageMedia(true);
+      } else if (state.activeWrap && state.activeWrap.isConnected && !state.transitionTimer && state.activeWrap.style.opacity === '0') {
+        state.activeWrap.style.opacity = '';
+        state.activeWrap.style.transition = '';
+      } else if (state.pendingWrap && state.pendingWrap.isConnected && !state.pendingMediaTimer) {
+        mountStageMedia(true);
+      }
       attachWatchers();
     }
     return status();
