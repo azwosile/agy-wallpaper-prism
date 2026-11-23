@@ -1478,18 +1478,18 @@ export function buildHostMicroBootstrap({
   const isSkinOn = skinEnabled !== false ? 1 : 0;
   return [
     ';(function(){var W=window,D=document;if(W.top&&W!==W.top)return{ok:false};',
-    `var B=${safeJsonLiteral(base)},T=${safeJsonLiteral(capToken)};`,
+    `var B=${safeJsonLiteral(base)},T=${safeJsonLiteral(capToken)},prevB=W.__agyPrismHostBase||"";`,
     'W.__agyPrismHostBase=B;W.__agyPrismCapToken=T;W.__agyPrismRpcUrl=B+"/rpc";W.__agyPrismBootstrapped=true;',
     'function strip(){try{W.__agyPrism&&W.__agyPrism.destroy&&W.__agyPrism.destroy()}catch(_){}try{W.__agyPrismPanel&&W.__agyPrismPanel.destroy&&W.__agyPrismPanel.destroy()}catch(_){}D.querySelectorAll(\'[id^="agy-prism-"],.prism-corner-orb\').forEach(function(e){e.remove()});var r=D.documentElement;if(r)Array.from(r.attributes).forEach(function(a){if(/^data-(?:agy-)?prism/.test(a.name))r.removeAttribute(a.name)})}',
     'function rpc(m,p){var o=typeof m==="string"&&m[0]==="{"?JSON.parse(m):{id:"r"+Date.now(),method:m,params:p||{}};return W.fetch(B+"/rpc",{method:"POST",headers:{"Content-Type":"application/json","X-Prism-Token":T},body:JSON.stringify(o)}).then(function(r){return r.json()}).then(function(e){if(e&&e.ok===false)throw Error(e.error||"rpc");return e?e.result:null})}',
     'W.__agyPrismCall=rpc;W.__agyPrismPanicStrip=function(w){strip();W.__agyPrismBootstrapped=false;rpc("skin.panicRestore",{reason:w||"panic"}).catch(function(){})};',
-    'function sum(){if(W.__agyPrismPanel&&W.__agyPrismPanel.toggle)return W.__agyPrismPanel.toggle();if(D.getElementById("agy-prism-panel-loader"))return;var p=D.getElementById("agy-prism-pill");if(p&&p.dataset.prismLazyStub==="1")p.remove();ld("agy-prism-panel-loader","/panel.js?open=1")}',
-    'W.__agyPrismSummonPanel=sum;function ld(id,u){if(D.getElementById(id))return;var s=D.createElement("script");s.id=id;s.async=true;s.src=B+u+(u.indexOf("?")>0?"&":"?")+"t="+Date.now();(D.head||D.documentElement).appendChild(s)}',
+    'function sum(){if(W.__agyPrismPanel&&W.__agyPrismPanel.toggle)return W.__agyPrismPanel.toggle();if(D.getElementById("agy-prism-panel-loader"))return;var p=D.getElementById("agy-prism-pill");if(p&&p.dataset.prismLazyStub==="1")p.remove();ld("agy-prism-panel-loader","/panel.js?open=1",1)}',
+    'W.__agyPrismSummonPanel=sum;function ld(id,u,f){var ex=D.getElementById(id);if(ex){if(!f)return;ex.remove()}var s=D.createElement("script");s.id=id;s.async=true;s.src=B+u+(u.indexOf("?")>0?"&":"?")+"t="+Date.now();(D.head||D.documentElement).appendChild(s)}',
     'function css(){var l=D.getElementById("agy-prism-static-css");if(!l){l=D.createElement("link");l.id="agy-prism-static-css";l.rel="stylesheet";(D.head||D.documentElement).appendChild(l)}l.href=B+"/static.css?t="+Date.now()}',
     'if(!W.__agyPrismKeysBound){W.__agyPrismKeysBound=true;var esc=[];W.addEventListener("keydown",function(e){var k=String(e.key||""),c=(e.ctrlKey||e.metaKey)&&e.altKey;if(c&&e.shiftKey&&k.toLowerCase()==="r"){e.preventDefault();e.stopPropagation();W.__agyPrismPanicStrip("Ctrl+Alt+Shift+R");return}if(k==="Escape"&&!e.repeat){var n=Date.now();esc=esc.filter(function(t){return n-t<=900});esc.push(n);if(esc.length>=4){esc=[];e.preventDefault();e.stopPropagation();W.__agyPrismPanicStrip("4x-Escape");return}}else if(k!=="Escape")esc=[];if(c&&!e.shiftKey&&k.toLowerCase()==="w"){if(W.__agyPrismPanel&&W.__agyPrismPanel.toggle)return;e.preventDefault();e.stopPropagation();sum()}},true)}',
     `if(${showStubPill}&&!W.__agyPrismPanel&&!D.getElementById("agy-prism-pill")&&D.body){var b=D.createElement("button");b.id="agy-prism-pill";b.type="button";b.dataset.prismLazyStub="1";b.textContent="\\u25C6 Prism";b.style.cssText="all:initial;cursor:pointer;font:500 11px/18px system-ui,sans-serif;padding:2px 8px;border-radius:999px;color:#cbd5e1;background:rgba(20,20,26,.72);border:1px solid rgba(255,255,255,.14);z-index:44;";var f=D.querySelector(".agy-composer-footer,[data-testid=\\"agent-input-box\\"] footer");if(f)f.appendChild(b);else{b.style.position="fixed";b.style.right="14px";b.style.bottom="10px";D.body.appendChild(b)}b.onclick=function(e){e.preventDefault();e.stopPropagation();sum()}}`,
-    'if(W.EventSource&&(!W.__agyPrismSse||W.__agyPrismSse.readyState===2)){try{var es=new W.EventSource(B+"/events");W.__agyPrismSse=es;es.onmessage=function(v){try{var m=JSON.parse(v.data);if(m.skinEnabled===false)return strip();if(m.startupMode==="static-css"){W.__agyPrism&&W.__agyPrism.destroy&&W.__agyPrism.destroy();css()}else{var sl=D.getElementById("agy-prism-static-css");if(sl)sl.remove();if(W.__agyPrism&&W.__agyPrism.applyPayload&&m.skinPayload)W.__agyPrism.applyPayload(m.skinPayload);else ld("agy-prism-stage-loader","/stage.js")}W.__agyPrismPanel&&W.__agyPrismPanel.syncState&&m.data&&W.__agyPrismPanel.syncState(m.data)}catch(_){}}}catch(_){}}',
-    `if(${isSkinOn}){var go=function(){${isStatic}?(css()):(W.__agyPrism||ld("agy-prism-stage-loader","/stage.js"))};W.requestIdleCallback?W.requestIdleCallback(go,{timeout:250}):setTimeout(go,16)}`,
+    'if(W.EventSource&&(!W.__agyPrismSse||W.__agyPrismSse.readyState===2||prevB!==B)){try{if(W.__agyPrismSse)W.__agyPrismSse.close()}catch(_){}try{var es=new W.EventSource(B+"/events");W.__agyPrismSse=es;es.onmessage=function(v){try{var m=JSON.parse(v.data);if(m.skinEnabled===false)return strip();if(m.startupMode==="static-css"){W.__agyPrism&&W.__agyPrism.destroy&&W.__agyPrism.destroy();css()}else{var sl=D.getElementById("agy-prism-static-css");if(sl)sl.remove();var okVer=W.__agyPrism&&(!m.skinVersion||W.__agyPrism.version===m.skinVersion);if(okVer&&W.__agyPrism.applyPayload&&m.skinPayload)W.__agyPrism.applyPayload(m.skinPayload);else{if(m.skinPayload)W.__AGY_PRISM_BOOT_PAYLOAD__=m.skinPayload;ld("agy-prism-stage-loader","/stage.js",1)}}if(W.__agyPrismPanel){if(m.skinVersion&&W.__agyPrismPanel.version!==m.skinVersion)ld("agy-prism-panel-loader","/panel.js",1);else if(W.__agyPrismPanel.syncState&&m.data)W.__agyPrismPanel.syncState(m.data)}}catch(_){}}}catch(_){}}',
+    `if(${isSkinOn}){var go=function(){${isStatic}?(css()):((W.__agyPrism&&W.__agyPrism.version===${safeJsonLiteral(PRISM_DOM.skinVersion)})||ld("agy-prism-stage-loader","/stage.js",1))};W.requestIdleCallback?W.requestIdleCallback(go,{timeout:250}):setTimeout(go,16)}`,
     'return{ok:true}})()',
   ].join('');
 }
@@ -1501,7 +1501,7 @@ if(document.readyState!=='complete')return{ready:false,booted:Boolean(window.__a
 var r=document.getElementById('root')||document.querySelector('.monaco-workbench');
 if(!r||!r.childElementCount)return{ready:false,booted:Boolean(window.__agyPrismBootstrapped)};
 var b=r.getBoundingClientRect();
-return{ready:b.width>=200&&b.height>=150,w:Math.round(b.width),h:Math.round(b.height),booted:Boolean(window.__agyPrismBootstrapped),skin:Boolean(window.__agyPrism||document.getElementById('agy-prism-static-css'))};
+return{ready:b.width>=200&&b.height>=150,w:Math.round(b.width),h:Math.round(b.height),booted:Boolean(window.__agyPrismBootstrapped),hostBase:String(window.__agyPrismHostBase||''),sseState:window.__agyPrismSse?Number(window.__agyPrismSse.readyState):-1,skinVer:window.__agyPrism?String(window.__agyPrism.version||''):'',skin:Boolean(window.__agyPrism||document.getElementById('agy-prism-static-css'))};
 })()`;
 
 // --------------------------------------------------------- Ephemeral Gentle CDP Bridge
@@ -1571,6 +1571,7 @@ export function createPassiveCdpBridge({
       : { config: st.config, activeItem: st.activeItem, mediaOrigin: st.mediaOrigin, skinEnabled };
     return {
       event: 'state',
+      skinVersion: PRISM_DOM.skinVersion,
       startupMode,
       skinEnabled,
       skinPayload,
@@ -1659,8 +1660,15 @@ export function createPassiveCdpBridge({
     const skinEnabled = st?.skinEnabled !== false;
     const settleMs = immediateWake ? 0 : Math.round(Math.max(0.5, Number(st?.config?.liveBootDelay ?? 1.5)) * 1000);
 
-    if (!probe.booted) {
-      if (settleMs > 0) {
+    const expectedBase = `${hostOrigin.replace(/\/+$/, '')}/host/${capToken}`;
+    const needsBridgeRebind =
+      probe.booted &&
+      (probe.hostBase !== expectedBase ||
+        probe.sseState === 2 ||
+        (skinEnabled && startupMode !== 'static-css' && probe.skinVer !== PRISM_DOM.skinVersion));
+
+    if (!probe.booted || needsBridgeRebind) {
+      if (!needsBridgeRebind && settleMs > 0) {
         const firstSeen = firstReadyAt.get(target.id) || 0;
         const now = Date.now();
         if (!firstSeen) {
@@ -1687,7 +1695,7 @@ export function createPassiveCdpBridge({
         return false;
       }
 
-      if (skinEnabled) {
+      if (skinEnabled && !needsBridgeRebind) {
         canary.arm(browserSessionId, target.id);
       }
 
@@ -1906,7 +1914,7 @@ export function createPassiveCdpBridge({
       }
 
       for (const h of hubs) {
-        if (!activeTargets.has(h.id) || immediateWake) {
+        if (!activeTargets.has(h.id) || immediateWake || sseClients.size === 0) {
           await injectTargetOnce(h, browserSessionId, st, immediateWake).catch((err) => log(`gentle mount warn: ${err.message}`));
         }
       }
@@ -1991,6 +1999,14 @@ export function createPassiveCdpBridge({
       return next;
     },
     wake: async () => {
+      sessionAwake = true;
+      sessionForcedWake = true;
+      await runTick({ immediateWake: true });
+      await broadcastState();
+      return getStatus();
+    },
+    reloadHostScripts: async () => {
+      activeTargets.clear();
       sessionAwake = true;
       sessionForcedWake = true;
       await runTick({ immediateWake: true });

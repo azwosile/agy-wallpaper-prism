@@ -2405,11 +2405,11 @@ button, input, select, textarea {
 
   <script id="prism-studio-bundle">
 (() => {
-  // agy-wallpaper-prism/src/shared/schema.mjs
-  var PLUGIN_VERSION = "2.0.0";
+  // src/shared/schema.mjs
+  var PLUGIN_VERSION = "2.0.1";
   var DEFAULT_DEBUG_PORT = 9339;
   var PRISM_DOM = Object.freeze({
-    skinVersion: "2.0.0",
+    skinVersion: "2.0.1",
     skinAttr: "data-agy-prism-skin",
     glassAttr: "data-agy-prism-glass",
     wallpaperAttr: "data-agy-prism-wallpaper",
@@ -3548,7 +3548,7 @@ button, input, select, textarea {
     return sanitizeConfig(filtered, clean);
   }
 
-  // agy-wallpaper-prism/src/shared/i18n.mjs
+  // src/shared/i18n.mjs
   var DICT = Object.freeze({
     zh: Object.freeze({
       // App & Header
@@ -4021,7 +4021,7 @@ button, input, select, textarea {
     return str;
   }
 
-  // agy-wallpaper-prism/src/studio-ui/app.mjs
+  // src/studio-ui/app.mjs
   function bootPrismStudioApp() {
     const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
     const rawSidecarFetch = (url, init2) => window.sidecar?.fetch ? window.sidecar.fetch(url, init2) : window.fetch(url, init2);
@@ -4506,6 +4506,12 @@ button, input, select, textarea {
         vid.addEventListener("canplay", ensurePlaying);
         vid.addEventListener("loadeddata", hidePoster);
         vid.addEventListener("playing", hidePoster);
+        vid.addEventListener("timeupdate", () => {
+          if (vid.__effectiveEnd > 0 && !vid.seeking && vid.currentTime >= vid.__effectiveEnd) {
+            vid.currentTime = 0;
+            ensurePlaying();
+          }
+        });
         wrap.appendChild(vid);
         vid.src = videoUrl;
         ensurePlaying();
@@ -8470,6 +8476,46 @@ button, input, select, textarea {
         };
         if (typeof mq.addEventListener === "function") mq.addEventListener("change", onMq);
       }
+      let lastPreviewVidT = -1;
+      let previewStallTicks = 0;
+      setInterval(() => {
+        if (document.hidden || getEffectiveConfig().paused) {
+          lastPreviewVidT = -1;
+          previewStallTicks = 0;
+          return;
+        }
+        const vid = document.getElementById("prism-preview-video");
+        if (!(vid instanceof HTMLVideoElement) || vid.seeking || vid.readyState < 1) return;
+        if (vid.paused) {
+          vid.play().catch(() => {
+          });
+          lastPreviewVidT = vid.currentTime;
+          return;
+        }
+        const curT = Number(vid.currentTime || 0);
+        const dur = Number(vid.duration);
+        if (lastPreviewVidT >= 0 && Math.abs(curT - lastPreviewVidT) < 2e-3) {
+          previewStallTicks += 1;
+          if (Number.isFinite(dur) && dur > 1.2 && curT >= dur - 1.5) {
+            if (curT > 0.8) vid.__effectiveEnd = Math.max(0.5, curT - 0.06);
+            vid.currentTime = 0;
+            vid.play().catch(() => {
+            });
+            previewStallTicks = 0;
+            lastPreviewVidT = 0;
+            return;
+          }
+          if (previewStallTicks >= 2) {
+            vid.currentTime = Number.isFinite(dur) && dur > 1.5 && curT < dur - 1.2 ? Math.max(0, curT - 0.035) : 0;
+            vid.play().catch(() => {
+            });
+            previewStallTicks = 0;
+          }
+        } else {
+          previewStallTicks = 0;
+        }
+        lastPreviewVidT = curT;
+      }, 1250);
       document.addEventListener("visibilitychange", () => {
         const vid = document.getElementById("prism-preview-video");
         if (vid instanceof HTMLVideoElement) {

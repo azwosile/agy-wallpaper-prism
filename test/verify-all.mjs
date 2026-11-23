@@ -203,8 +203,8 @@ async function main() {
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.0.0', `Expected plugin.json version 2.0.0, got ${raw.version}`);
-    assert.equal(pkg.version, '2.0.0', `Expected package.json version 2.0.0, got ${pkg.version}`);
+    assert.equal(raw.version, '2.0.1', `Expected plugin.json version 2.0.1, got ${raw.version}`);
+    assert.equal(pkg.version, '2.0.1', `Expected package.json version 2.0.1, got ${pkg.version}`);
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -1348,6 +1348,29 @@ async function main() {
           assert.ok(validVidGate.readyState >= 2, `Expected readyState >= 2 at wallpaper="ready", got ${validVidGate.readyState}`);
           assert.ok(validVidGate.videoWidth > 0, `Expected decoded videoWidth > 0 at wallpaper="ready", got ${validVidGate.videoWidth}`);
         }
+
+        // Verify v2.0.1 anti-occlusion containment (`contain: style`, never `paint`), rVFC keep-alive, and fullscreen/focus wake
+        const vidLivenessAudit = await hubPage.evaluate(`(() => {
+          const stage = document.getElementById('agy-prism-stage');
+          const vids = Array.from(stage.querySelectorAll('video'));
+          const v = vids[vids.length - 1] || null;
+          document.dispatchEvent(new Event('fullscreenchange'));
+          window.dispatchEvent(new Event('focus'));
+          return {
+            stageContain: getComputedStyle(stage).contain,
+            rvfcSupported: Boolean(v && typeof v.requestVideoFrameCallback === 'function'),
+            rvfcActive: Boolean(v && v.__prismRvfcActive),
+            statusPaused: window.__agyPrism.status().paused,
+          };
+        })()`);
+        assert.ok(
+          !String(vidLivenessAudit.stageContain).includes('paint'),
+          `#agy-prism-stage must NOT include paint containment (got: ${vidLivenessAudit.stageContain})`,
+        );
+        if (vidLivenessAudit.rvfcSupported) {
+          assert.equal(vidLivenessAudit.rvfcActive, true, 'Active video missing rVFC frame-consumer keep-alive');
+        }
+        assert.equal(vidLivenessAudit.statusPaused, false, 'Fullscreen/focus wake should keep video unpaused');
 
         // Clear any expected 404 network error log emitted by Chromium during the intentional broken-video probe
         hubPage.consoleErrors = hubPage.consoleErrors.filter((e) => !e.includes('__broken_404_video__') && !e.includes('404'));

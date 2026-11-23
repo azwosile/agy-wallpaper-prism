@@ -9,7 +9,7 @@
 (function agyPrismPanelMain() {
   'use strict';
 
-  var VERSION = '2.0.0';
+  var VERSION = '2.0.1';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   try {

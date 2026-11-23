@@ -964,7 +964,11 @@ export async function createPrismStudioServer(options = {}) {
       if (pathname === '/api/host/reload') {
         hostModule.getHostSkinScript?.({ reload: true });
         hostModule.getHostPanelScript?.({ reload: true });
-        await pushToHost();
+        if (cdpBridge?.reloadHostScripts) {
+          await cdpBridge.reloadHostScripts().catch(() => {});
+        } else {
+          await pushToHost();
+        }
         sendJson(res, 200, { ok: true, reloaded: true, state: await buildCanonicalState() });
         return;
       }

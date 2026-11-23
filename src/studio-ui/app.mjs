@@ -598,6 +598,12 @@ function bootPrismStudioApp() {
       vid.addEventListener('canplay', ensurePlaying);
       vid.addEventListener('loadeddata', hidePoster);
       vid.addEventListener('playing', hidePoster);
+      vid.addEventListener('timeupdate', () => {
+        if (vid.__effectiveEnd > 0 && !vid.seeking && vid.currentTime >= vid.__effectiveEnd) {
+          vid.currentTime = 0;
+          ensurePlaying();
+        }
+      });
 
       wrap.appendChild(vid);
       vid.src = videoUrl;
@@ -5018,6 +5024,44 @@ function bootPrismStudioApp() {
       };
       if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onMq);
     }
+
+    let lastPreviewVidT = -1;
+    let previewStallTicks = 0;
+    setInterval(() => {
+      if (document.hidden || getEffectiveConfig().paused) {
+        lastPreviewVidT = -1;
+        previewStallTicks = 0;
+        return;
+      }
+      const vid = document.getElementById('prism-preview-video');
+      if (!(vid instanceof HTMLVideoElement) || vid.seeking || vid.readyState < 1) return;
+      if (vid.paused) {
+        vid.play().catch(() => {});
+        lastPreviewVidT = vid.currentTime;
+        return;
+      }
+      const curT = Number(vid.currentTime || 0);
+      const dur = Number(vid.duration);
+      if (lastPreviewVidT >= 0 && Math.abs(curT - lastPreviewVidT) < 0.002) {
+        previewStallTicks += 1;
+        if (Number.isFinite(dur) && dur > 1.2 && curT >= dur - 1.5) {
+          if (curT > 0.8) vid.__effectiveEnd = Math.max(0.5, curT - 0.06);
+          vid.currentTime = 0;
+          vid.play().catch(() => {});
+          previewStallTicks = 0;
+          lastPreviewVidT = 0;
+          return;
+        }
+        if (previewStallTicks >= 2) {
+          vid.currentTime = Number.isFinite(dur) && dur > 1.5 && curT < dur - 1.2 ? Math.max(0, curT - 0.035) : 0;
+          vid.play().catch(() => {});
+          previewStallTicks = 0;
+        }
+      } else {
+        previewStallTicks = 0;
+      }
+      lastPreviewVidT = curT;
+    }, 1250);
 
     document.addEventListener('visibilitychange', () => {
       const vid = document.getElementById('prism-preview-video');

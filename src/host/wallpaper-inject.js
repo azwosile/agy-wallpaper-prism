@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.0.0';
+  var VERSION = '2.0.1';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -33,6 +33,9 @@
   if (prev && typeof prev === 'object') {
     if (prev.version === VERSION && typeof prev.alive === 'function' && prev.alive()) {
       try {
+        if (W.__AGY_PRISM_BOOT_PAYLOAD__ && typeof prev.applyPayload === 'function') {
+          prev.applyPayload(W.__AGY_PRISM_BOOT_PAYLOAD__);
+        }
         prev.heal();
       } catch (_) {}
       return prev.status();
@@ -533,6 +536,12 @@
     hiddenDebounced: false,
     hiddenTimer: 0,
     blurPollTimer: 0,
+    videoWatchTimer: 0,
+    wakeNudgeTimer: 0,
+    lastVidCheckTime: -1,
+    lastVidCheckFrames: -1,
+    vidStallCount: 0,
+    rvfcCount: 0,
     unmuteGestureCleanup: null,
     activeWrap: null,
     pendingWrap: null,
@@ -1301,7 +1310,7 @@
       '  background-color: transparent !important;\n' +
       '  background-image: none !important;\n' +
       '  clip-path: var(--prism-hole-clip, none);\n' +
-      '  contain: layout paint style;\n' +
+      '  contain: style;\n' +
       '}\n' +
       '#' + STAGE_ID + ' *, #' + FX_CANVAS_ID + ' {\n' +
       '  pointer-events: none !important;\n' +
@@ -2560,17 +2569,63 @@
         video.poster = String(item.thumbUrl);
       }
       video.__prismPriming = true;
+      video.__prismEffectiveEnd = 0;
+      state.lastVidCheckTime = -1;
+      state.lastVidCheckFrames = -1;
+      state.vidStallCount = 0;
 
-      video.addEventListener('ended', function () {
+      var wrapLoopOrAdvance = function () {
         if (state.cfg.rotationEnabled && state.cfg.rotationTrigger === 'videoEnd') {
           callHostRpc('playlist.step', { direction: 1, reason: 'videoEnd' });
         } else {
           try {
             video.currentTime = 0;
-            video.play().catch(function () {});
+            if (!state.cfg.paused && !state.autoPaused && !state.cfg.agentBusyPaused) {
+              video.play().catch(function () {});
+            }
           } catch (_) {}
         }
+      };
+
+      video.addEventListener('ended', wrapLoopOrAdvance);
+      video.addEventListener('timeupdate', function () {
+        if (
+          video === state.activeVideo &&
+          video.__prismEffectiveEnd > 0 &&
+          !video.seeking &&
+          video.currentTime >= video.__prismEffectiveEnd
+        ) {
+          wrapLoopOrAdvance();
+        }
       });
+
+      // Keep an active requestVideoFrameCallback consumer registered while visible so Chromium's
+      // VideoFrameSubmitter never suspends a muted background <video> as "occluded" in fullscreen.
+      var armRvfcKeepAlive = function () {
+        if (typeof video.requestVideoFrameCallback !== 'function') return;
+        if (video.__prismRvfcActive) return;
+        video.__prismRvfcActive = true;
+        var onFrame = function () {
+          if (destroyed || state.activeVideo !== video) {
+            video.__prismRvfcActive = false;
+            return;
+          }
+          state.rvfcCount += 1;
+          if (!doc.hidden && !state.cfg.paused && !state.autoPaused) {
+            try {
+              video.requestVideoFrameCallback(onFrame);
+              return;
+            } catch (_) {}
+          }
+          video.__prismRvfcActive = false;
+        };
+        try {
+          video.requestVideoFrameCallback(onFrame);
+        } catch (_) {
+          video.__prismRvfcActive = false;
+        }
+      };
+      video.__prismArmRvfc = armRvfcKeepAlive;
 
       if (audioUrl) {
         var aud = doc.createElement('audio');
@@ -2620,6 +2675,7 @@
         if (!needsCrossfade) nextWrap.style.opacity = '';
         finishPriming();
         commitMount();
+        armRvfcKeepAlive();
         if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
           extractAccent(item.thumbUrl, item.id).then(function (acc) {
             if (acc && !destroyed) {
@@ -2642,7 +2698,16 @@
         ensureVidPlaying();
         onVideoDecoded();
       });
-      video.addEventListener('playing', onVideoDecoded);
+      video.addEventListener('playing', function () {
+        onVideoDecoded();
+        armRvfcKeepAlive();
+      });
+      video.addEventListener('stalled', function () {
+        scheduleWakeVideoCheck(350);
+      });
+      video.addEventListener('waiting', function () {
+        scheduleWakeVideoCheck(450);
+      });
       video.addEventListener('timeupdate', onVideoDecoded);
       video.addEventListener('error', onVideoFailed, { once: true });
       if (typeof video.requestVideoFrameCallback === 'function') {
@@ -2760,6 +2825,118 @@
     return true;
   }
 
+  function isHostWindowFocused() {
+    if (doc.hidden) return false;
+    if (typeof doc.hasFocus === 'function' && doc.hasFocus()) return true;
+    // Focus inside an embedded Sidecar OOPIF <iframe>/<webview> or Built-in Browser WCV hole
+    // still means the Antigravity host window itself is focused!
+    var ae = doc.activeElement;
+    if (ae && ae.tagName && /^(IFRAME|WEBVIEW)$/i.test(ae.tagName)) return true;
+    if (doc.documentElement && doc.documentElement.getAttribute('data-has-browser-hole') === 'true') return true;
+    return false;
+  }
+
+  function scheduleWakeVideoCheck(delayMs) {
+    clearTimeout(state.wakeNudgeTimer);
+    state.wakeNudgeTimer = setTimeout(function () {
+      state.wakeNudgeTimer = 0;
+      checkVideoLiveness(true);
+    }, Math.max(40, Number(delayMs) || 180));
+  }
+
+  // Self-heals Chromium muted-video track-reenable deadlocks (`paused: false, readyState: 2, dt: 0`
+  // when video trak ends slightly before container mvhd duration, e.g. 11.596s / 12.033s) and
+  // fullscreen D3D11 swapchain decoder freezes.
+  function checkVideoLiveness(isWake) {
+    if (destroyed || !state.skinEnabled || doc.hidden) {
+      state.vidStallCount = 0;
+      state.lastVidCheckTime = -1;
+      return;
+    }
+    var vid = state.activeVideo;
+    if (!vid || !vid.isConnected || vid.__prismPriming) {
+      state.vidStallCount = 0;
+      return;
+    }
+    var cfg = state.cfg;
+    var shouldPause = Boolean(cfg.paused || state.autoPaused || cfg.agentBusyPaused);
+    if (shouldPause) {
+      state.vidStallCount = 0;
+      state.lastVidCheckTime = -1;
+      return;
+    }
+    if (typeof vid.__prismArmRvfc === 'function') vid.__prismArmRvfc();
+    if (vid.paused && !vid.ended) {
+      syncMediaPlaybackState();
+      state.lastVidCheckTime = Number(vid.currentTime || 0);
+      return;
+    }
+
+    var curT = Number(vid.currentTime || 0);
+    var dur = Number(vid.duration);
+    var q = typeof vid.getVideoPlaybackQuality === 'function' ? vid.getVideoPlaybackQuality() : null;
+    var curF = q && typeof q.totalVideoFrames === 'number' ? q.totalVideoFrames : state.rvfcCount;
+    var moved =
+      state.lastVidCheckTime < 0 ||
+      Math.abs(curT - state.lastVidCheckTime) > 0.002 ||
+      (state.lastVidCheckFrames >= 0 && curF > state.lastVidCheckFrames);
+
+    if (moved) {
+      state.vidStallCount = 0;
+      state.lastVidCheckTime = curT;
+      state.lastVidCheckFrames = curF;
+      return;
+    }
+
+    if (vid.readyState >= 1 && !vid.seeking) {
+      state.vidStallCount += 1;
+
+      // Case 1: Frozen near EOF where video track ended earlier than container/audio mvhd duration!
+      if (Number.isFinite(dur) && dur > 1.2 && curT >= dur - 1.5) {
+        if (curT > 0.8 && (!vid.__prismEffectiveEnd || curT < vid.__prismEffectiveEnd)) {
+          vid.__prismEffectiveEnd = Math.max(0.5, curT - 0.06);
+        }
+        if (cfg.rotationEnabled && cfg.rotationTrigger === 'videoEnd') {
+          callHostRpc('playlist.step', { direction: 1, reason: 'videoEnd' });
+        } else {
+          try {
+            vid.currentTime = 0;
+            vid.play().catch(function () {});
+          } catch (_) {}
+        }
+        state.vidStallCount = 0;
+        state.lastVidCheckTime = 0;
+        state.lastVidCheckFrames = curF;
+        return;
+      }
+
+      // Case 2: Mid-stream freeze after fullscreen/focus/occlusion track re-enable -> soft keyframe nudge
+      if (state.vidStallCount === 2 || (isWake && vid.readyState <= 2)) {
+        try {
+          var kickT = Number.isFinite(dur) && dur > 1.5 && curT < dur - 1.2 ? Math.max(0, curT - 0.035) : 0;
+          vid.currentTime = kickT;
+          vid.play().catch(function () {});
+        } catch (_) {}
+      } else if (state.vidStallCount >= 4) {
+        // Case 3: Persistent D3D11 hardware decoder stall -> seamless reload preserving poster floor
+        try {
+          var resumeT = Number.isFinite(dur) && dur > 2 && curT < dur - 1.5 ? curT : 0;
+          vid.load();
+          vid.muted = Boolean(cfg.muted || cfg.volume <= 0.005);
+          if (resumeT > 0.05) vid.currentTime = resumeT;
+          vid.play().catch(function () {
+            vid.muted = true;
+            vid.play().catch(function () {});
+          });
+        } catch (_) {}
+        state.vidStallCount = 0;
+      }
+    }
+
+    state.lastVidCheckTime = curT;
+    state.lastVidCheckFrames = curF;
+  }
+
   function evaluateAutoPause() {
     if (destroyed || !state.skinEnabled) return;
     var cfg = state.cfg;
@@ -2771,7 +2948,7 @@
       reason = 'battery';
     } else if (cfg.pauseOnHidden && doc.hidden && state.hiddenDebounced) {
       reason = 'hidden';
-    } else if (cfg.pauseOnBlur && typeof doc.hasFocus === 'function' && !doc.hasFocus()) {
+    } else if (cfg.pauseOnBlur && !isHostWindowFocused()) {
       reason = 'blur';
     }
     var nextPaused = Boolean(reason);
@@ -2791,6 +2968,13 @@
           });
         });
       }
+    } else if (!nextPaused && !doc.hidden) {
+      if (state.activeVideo && state.activeVideo.paused && !state.cfg.paused && !state.cfg.agentBusyPaused) {
+        syncMediaPlaybackState();
+      }
+    }
+    if (!nextPaused && !doc.hidden) {
+      scheduleWakeVideoCheck(180);
     }
   }
 
@@ -2806,15 +2990,26 @@
       } else {
         state.hiddenDebounced = false;
         evaluateAutoPause();
+        scheduleWakeVideoCheck(150);
       }
     });
-    listen(W, 'focus', evaluateAutoPause);
+    listen(W, 'focus', function () {
+      evaluateAutoPause();
+      scheduleWakeVideoCheck(150);
+    });
     listen(W, 'blur', evaluateAutoPause);
-    listen(doc, 'fullscreenchange', evaluateAutoPause);
+    listen(doc, 'fullscreenchange', function () {
+      evaluateAutoPause();
+      scheduleWakeVideoCheck(220);
+    });
 
     state.blurPollTimer = setInterval(function () {
       if (state.cfg.pauseOnBlur || state.autoPaused) evaluateAutoPause();
     }, 3000);
+
+    state.videoWatchTimer = setInterval(function () {
+      checkVideoLiveness(false);
+    }, 1100);
 
     if (W.navigator && typeof W.navigator.getBattery === 'function') {
       W.navigator
@@ -3435,7 +3630,9 @@
     clearRootWatchdogTimers();
     disconnectHoleActiveObservers();
     clearTimeout(state.hiddenTimer);
+    clearTimeout(state.wakeNudgeTimer);
     clearInterval(state.blurPollTimer);
+    clearInterval(state.videoWatchTimer);
     clearTimeout(themeDebounce);
     if (state.parallaxRaf) W.cancelAnimationFrame(state.parallaxRaf);
     if (state.fxRaf) W.cancelAnimationFrame(state.fxRaf);

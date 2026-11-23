@@ -9,6 +9,9 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveDefaultPrismDataDir } from '../src/engine/store.mjs';
+import { PRISM_DOM, DEFAULT_DEBUG_PORT } from '../src/shared/schema.mjs';
+import { buildClientSkinPayload } from '../src/host/index.mjs';
+import { evaluateTargetEphemeral, listCdpTargets, probeCdpPort, readDevToolsActivePort, selectHubTargets } from '../sidecars/prism_studio/cdp-bridge.mjs';
 import { buildStudioBundle } from './build.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -90,19 +93,94 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
   if (!destRoot) {
     try {
       const serverInfoPath = join(resolveDefaultPrismDataDir(), 'server_info.json');
+      let liveBootPayload = null;
+      let livePort = 0;
+      let liveHeaders = { 'Content-Type': 'application/json' };
       if (existsSync(serverInfoPath)) {
         const info = JSON.parse(readFileSync(serverInfoPath, 'utf8'));
         const port = Number(info?.port);
         if (info?.plugin === 'agy-wallpaper-prism' && Number.isInteger(port) && port > 0) {
-          const headers = { 'Content-Type': 'application/json' };
-          if (info.token) headers['X-Sidecar-Token'] = info.token;
-          await fetch(`http://127.0.0.1:${port}/api/host/reload`, {
+          livePort = port;
+          if (info.token) liveHeaders['X-Sidecar-Token'] = info.token;
+          const reloadRes = await fetch(`http://127.0.0.1:${port}/api/host/reload`, {
             method: 'POST',
-            headers,
+            headers: liveHeaders,
             body: '{}',
             signal: AbortSignal.timeout(1500),
-          }).catch(() => {});
+          }).catch(() => null);
+          const reloadJson = reloadRes?.ok ? await reloadRes.json().catch(() => null) : null;
+          let st = reloadJson?.state || null;
+          if (!st?.config) {
+            const bootRes = await fetch(`http://127.0.0.1:${port}/api/bootstrap`, {
+              signal: AbortSignal.timeout(1500),
+            }).catch(() => null);
+            if (bootRes?.ok) st = await bootRes.json().catch(() => null);
+          }
+          if (st?.config) {
+            liveBootPayload = buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
+              skinEnabled: st.skinEnabled,
+              slides: st.activeItem?.slides,
+            });
+          }
         }
+      }
+
+      // Hot-upgrade any older in-memory `window.__agyPrism` or stale Sidecar/mediaOrigin inside already-open Hub windows
+      const pf = readDevToolsActivePort();
+      const cdpPorts = [...new Set([pf?.port, DEFAULT_DEBUG_PORT].filter((n) => Number.isInteger(n) && n > 0))];
+      for (const cp of cdpPorts) {
+        const pr = await probeCdpPort(cp).catch(() => ({ ok: false }));
+        if (!pr.ok) continue;
+        const targets = await listCdpTargets(pr.port, pr.host || '127.0.0.1').catch(() => []);
+        for (const h of selectHubTargets(targets)) {
+          const expr = `(function(){
+            if (window.top && window !== window.top) return false;
+            var payload = ${JSON.stringify(liveBootPayload)};
+            var expectedPrefix = ${JSON.stringify(livePort ? `http://127.0.0.1:${livePort}/host/` : '')};
+            if (payload) window.__AGY_PRISM_BOOT_PAYLOAD__ = payload;
+            var hostBase = String(window.__agyPrismHostBase || '');
+            var staleOrigin = Boolean(expectedPrefix) && (!hostBase || hostBase.indexOf(expectedPrefix) !== 0);
+            var cur = window.__agyPrism;
+            if (cur && cur.version === ${JSON.stringify(PRISM_DOM.skinVersion)}) {
+              if (payload && typeof cur.applyPayload === 'function') cur.applyPayload(payload);
+            }
+            if (staleOrigin) {
+              if (window.__agyPrismSse) {
+                try { window.__agyPrismSse.close(); } catch (e) {}
+                window.__agyPrismSse = null;
+              }
+              var sl = document.getElementById('agy-prism-stage-loader');
+              if (sl) sl.remove();
+              var pl = document.getElementById('agy-prism-panel-loader');
+              if (pl) pl.remove();
+              window.__agyPrismBootstrapped = false;
+              return 'rebind';
+            }
+            if (cur && cur.version === ${JSON.stringify(PRISM_DOM.skinVersion)}) {
+              return 'updated';
+            }
+            if (!hostBase) return false;
+            var ex = document.getElementById('agy-prism-stage-loader');
+            if (ex) ex.remove();
+            var s = document.createElement('script');
+            s.id = 'agy-prism-stage-loader';
+            s.async = true;
+            s.src = hostBase + '/stage.js?t=' + Date.now();
+            (document.head || document.documentElement).appendChild(s);
+            return 'reloaded';
+          })()`;
+          await evaluateTargetEphemeral(h.webSocketDebuggerUrl, expr).catch(() => {});
+        }
+        break;
+      }
+
+      if (livePort) {
+        await fetch(`http://127.0.0.1:${livePort}/api/skin/wake`, {
+          method: 'POST',
+          headers: liveHeaders,
+          body: '{}',
+          signal: AbortSignal.timeout(2500),
+        }).catch(() => {});
       }
     } catch {
       /* best-effort live reload; never fail installation */
