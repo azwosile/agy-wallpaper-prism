@@ -193,7 +193,7 @@ async function main() {
   // =========================================================================
   console.log('\n--- Suite 1: Manifest (v2.0.0), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
 
-  await check('plugin.json & package.json strict v2.0.4 schema & GitHub repository metadata', '@gentle-skin-architect', () => {
+  await check('plugin.json & package.json strict v2.0.5 schema & GitHub repository metadata', '@gentle-skin-architect', () => {
     const pPath = path.join(REPO_ROOT, 'plugin.json');
     const pkgPath = path.join(REPO_ROOT, 'package.json');
     assert.ok(fs.existsSync(pPath), 'plugin.json missing');
@@ -203,8 +203,8 @@ async function main() {
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.0.4', `Expected plugin.json version 2.0.4, got ${raw.version}`);
-    assert.equal(pkg.version, '2.0.4', `Expected package.json version 2.0.4, got ${pkg.version}`);
+    assert.equal(raw.version, '2.0.5', `Expected plugin.json version 2.0.5, got ${raw.version}`);
+    assert.equal(pkg.version, '2.0.5', `Expected package.json version 2.0.5, got ${pkg.version}`);
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -668,6 +668,36 @@ async function main() {
       const restoreLib = await engine.listLibrary({ refresh: true });
       libraryItems = Array.isArray(restoreLib) ? restoreLib : restoreLib.items || [];
     }
+  });
+
+  await check('PR #5 Legacy v1 migration wiring, ephemeral DevToolsActivePort (`!= 9222`) & v2->v3 warm-cache non-blocking boot', '@resilience-designer', async () => {
+    const mainSrc = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'main.mjs'), 'utf8');
+    const storeSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'engine', 'store.mjs'), 'utf8');
+    const cdpSrc = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs'), 'utf8');
+    assert.ok(mainSrc.includes('allowLegacyMigration: !hasExplicitDataDir'), 'main.mjs missing allowLegacyMigration wiring');
+    assert.ok(storeSrc.includes('shouldMigrateLegacy'), 'store.mjs missing shouldMigrateLegacy check');
+    assert.ok(cdpSrc.includes('pf.port !== 9222'), 'cdp-bridge.mjs missing ephemeral DevToolsActivePort (!== 9222) support');
+
+    // Verify downgrading inventory-index.json version from 3 -> 2 still loads instantaneously from warm cache with staleVersion=true
+    const { loadWarmInventorySnapshot } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'scanner.mjs')).href);
+    const cacheIndex = path.join(engineDataDir, 'cache', 'inventory-index.json');
+    const origRaw = fs.readFileSync(cacheIndex, 'utf8');
+    try {
+      const parsed = JSON.parse(origRaw);
+      parsed.version = 2;
+      fs.writeFileSync(cacheIndex, JSON.stringify(parsed), 'utf8');
+      const warmV2 = loadWarmInventorySnapshot({
+        cacheDir: path.join(engineDataDir, 'cache'),
+        config: await engine.getConfig(),
+        uploadDir: path.join(engineDataDir, 'uploads'),
+        steamRoot: fx.steamRoot,
+      });
+      assert.ok(warmV2 && warmV2.fromWarmCache === true, 'v2 inventory-index.json should load warm instead of blocking cold boot');
+      assert.equal(warmV2.staleVersion, true, 'Expected staleVersion=true on v2 warm cache');
+    } finally {
+      fs.writeFileSync(cacheIndex, origRaw, 'utf8');
+    }
+    return 'allowLegacyMigration + ephemeral DevToolsActivePort + v2->v3 warm boot verified';
   });
 
   mediaHttpServer =

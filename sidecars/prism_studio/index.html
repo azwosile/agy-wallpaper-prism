@@ -2405,11 +2405,11 @@ button, input, select, textarea {
 
   <script id="prism-studio-bundle">
 (() => {
-  // agy-wallpaper-prism/src/shared/schema.mjs
-  var PLUGIN_VERSION = "2.0.4";
+  // src/shared/schema.mjs
+  var PLUGIN_VERSION = "2.0.5";
   var DEFAULT_DEBUG_PORT = 9339;
   var PRISM_DOM = Object.freeze({
-    skinVersion: "2.0.4",
+    skinVersion: "2.0.5",
     skinAttr: "data-agy-prism-skin",
     glassAttr: "data-agy-prism-glass",
     wallpaperAttr: "data-agy-prism-wallpaper",
@@ -3552,7 +3552,7 @@ button, input, select, textarea {
     return sanitizeConfig(filtered, clean);
   }
 
-  // agy-wallpaper-prism/src/shared/i18n.mjs
+  // src/shared/i18n.mjs
   var DICT = Object.freeze({
     zh: Object.freeze({
       // App & Header
@@ -4029,7 +4029,7 @@ button, input, select, textarea {
     return str;
   }
 
-  // agy-wallpaper-prism/src/studio-ui/app.mjs
+  // src/studio-ui/app.mjs
   function bootPrismStudioApp() {
     const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
     const rawSidecarFetch = (url, init2) => window.sidecar?.fetch ? window.sidecar.fetch(url, init2) : window.fetch(url, init2);

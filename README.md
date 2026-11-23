@@ -1,7 +1,7 @@
 # Wallpaper Prism (`agy-wallpaper-prism`)
 
 > **Repository**: [https://github.com/azwosile/agy-wallpaper-prism](https://github.com/azwosile/agy-wallpaper-prism)  
-> **Version**: `2.0.4` · **Zero Agent Tokens** · **Zero `app.asar` Modification**
+> **Version**: `2.0.5` · **Zero Agent Tokens** · **Zero `app.asar` Modification**
 
 **Obsidian Prism Glass Skin & Wallpaper Engine Studio for Google Antigravity**  
 **适用于 Google Antigravity 的棱镜液态玻璃皮肤与动态壁纸工作台**
@@ -51,7 +51,7 @@ node scripts/install-local.mjs
 
 ```text
 agy-wallpaper-prism/
-├── plugin.json                     # Official 10-key Antigravity plugin manifest (v2.0.4)
+├── plugin.json                     # Official 10-key Antigravity plugin manifest (v2.0.5)
 ├── assets/logo.svg                 # Faceted Prism diamond vector icon
 ├── skills/wallpaper-prism/SKILL.md # On-demand agent navigation & CLI skill
 ├── src/

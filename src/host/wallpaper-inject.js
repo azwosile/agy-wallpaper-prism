@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.0.4';
+  var VERSION = '2.0.5';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -553,6 +553,8 @@
     activeAudio: null,
     activeIframe: null,
     activeMediaKey: '',
+    failedMediaKey: '',
+    failedMediaRetries: 0,
     transitionTimer: 0,
     lastHostFocus: null,
     lastSidecarSig: '',
@@ -2413,6 +2415,10 @@
       syncMediaPlaybackState();
       return;
     }
+    if (mediaKey !== state.failedMediaKey) {
+      state.failedMediaKey = mediaKey;
+      state.failedMediaRetries = 0;
+    }
     state.activeMediaKey = mediaKey;
     var mountSeq = ++state.mediaMountSeq;
     clearInterval(state.slideTimer);
@@ -2536,8 +2542,22 @@
         settledImg = true;
         failMount();
       };
+      var armImgGuard = function (delayMs) {
+        clearTimeout(state.pendingMediaTimer);
+        state.pendingMediaTimer = setTimeout(function () {
+          state.pendingMediaTimer = 0;
+          if (settledImg) return;
+          if (img.complete && img.naturalWidth > 0) {
+            onImgDecoded();
+          } else if (doc.hidden && !img.complete) {
+            armImgGuard(3000);
+          } else {
+            onImgFailed();
+          }
+        }, delayMs);
+      };
       state.pendingWrap = nextWrap;
-      state.pendingMediaTimer = setTimeout(onImgFailed, 6000);
+      armImgGuard(6000);
       img.onload = function () {
         var dec = typeof img.decode === 'function' ? img.decode() : null;
         if (dec && typeof dec.then === 'function') {
@@ -2805,10 +2825,39 @@
         } catch (_) {}
       }
 
-      state.pendingMediaTimer = setTimeout(function () {
-        if (video.readyState >= 2 && video.videoWidth > 0) onVideoDecoded();
-        else onVideoFailed();
-      }, 6000);
+      var pendingVidChecks = 0;
+      var armPendingVideoGuard = function (delayMs) {
+        clearTimeout(state.pendingMediaTimer);
+        state.pendingMediaTimer = setTimeout(function () {
+          state.pendingMediaTimer = 0;
+          if (settledVid || destroyed || mountSeq !== state.mediaMountSeq || state.activeVideo !== video) return;
+          if (video.readyState >= 2 && video.videoWidth > 0) {
+            onVideoDecoded();
+            return;
+          }
+          // Broken URL / 404 / unsupported codec -> fail-open immediately!
+          if (video.error || video.networkState === 3) {
+            onVideoFailed();
+            return;
+          }
+          // Window minimized (`doc.hidden`) or DWM-occluded behind another window (`readyState >= 1`,
+          // `videoWidth > 0`, `error === null`): Chromium defers decoding Frame 1 until un-occluded.
+          // Keep `<video>` alive instead of destroying it, nudge `play()`, and re-check on wake!
+          pendingVidChecks += 1;
+          if (doc.hidden || (video.readyState >= 1 && video.videoWidth > 0) || pendingVidChecks <= 3) {
+            if (!doc.hidden) {
+              try {
+                video.muted = true;
+                video.play().catch(function () {});
+              } catch (_) {}
+            }
+            armPendingVideoGuard(2500);
+            return;
+          }
+          onVideoFailed();
+        }, delayMs);
+      };
+      armPendingVideoGuard(6000);
 
       video.src = mediaUrl;
       syncMediaPlaybackState();
@@ -2943,6 +2992,27 @@
     var vid = state.activeVideo;
     if (!vid || !vid.isConnected || vid.__prismPriming) {
       state.vidStallCount = 0;
+      if (isWake && !doc.hidden) {
+        if (vid && vid.isConnected && vid.__prismPriming && !vid.error) {
+          if (vid.readyState >= 2 && vid.videoWidth > 0) {
+            try { vid.dispatchEvent(new Event('loadeddata')); } catch (_) {}
+          } else {
+            try {
+              vid.muted = true;
+              vid.play().catch(function () {});
+            } catch (_) {}
+          }
+        } else if (
+          !state.activeWrap &&
+          !state.pendingWrap &&
+          state.item &&
+          resolveEffectiveKind(state.item, state.cfg) !== 'none' &&
+          state.failedMediaRetries < 3
+        ) {
+          state.failedMediaRetries += 1;
+          mountStageMedia(true);
+        }
+      }
       return;
     }
     var cfg = state.cfg;
@@ -3693,6 +3763,15 @@
         state.activeWrap.style.opacity = '';
         state.activeWrap.style.transition = '';
       } else if (state.pendingWrap && state.pendingWrap.isConnected && !state.pendingMediaTimer) {
+        mountStageMedia(true);
+      } else if (
+        !state.activeWrap &&
+        !state.pendingWrap &&
+        state.item &&
+        resolveEffectiveKind(state.item, state.cfg) !== 'none' &&
+        state.failedMediaRetries < 3
+      ) {
+        state.failedMediaRetries += 1;
         mountStageMedia(true);
       }
       attachWatchers();

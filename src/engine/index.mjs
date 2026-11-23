@@ -269,6 +269,7 @@ export async function createWallpaperPrismEngine(opts = {}) {
       });
       if (closed) return { items: publicLibraryItems, stats: getStats() };
 
+      const prevActiveMedia = getActiveItem()?.mediaUrl || '';
       rawLibraryItems = scanRes.items;
       lastScanStats = scanRes.stats;
       lastDiscovery = scanRes.discovery;
@@ -304,6 +305,9 @@ export async function createWallpaperPrismEngine(opts = {}) {
         stats: getStats(),
       };
       events.emit('library', result);
+      if ((getActiveItem()?.mediaUrl || '') !== prevActiveMedia) {
+        events.emit('state', getActivePayload());
+      }
       return result;
     };
 
@@ -346,7 +350,7 @@ export async function createWallpaperPrismEngine(opts = {}) {
         lastDiscovery = warm.discovery;
         steamPrimaryRoot = warm.discovery?.weInstallDir || '';
         syncPublicLibrary();
-        scheduleDeferredRefresh(Number(opts.deferredScanDelayMs) || 4000);
+        scheduleDeferredRefresh(warm.staleVersion ? 350 : (Number(opts.deferredScanDelayMs) || 4000));
       } else {
         await performScan(false);
       }

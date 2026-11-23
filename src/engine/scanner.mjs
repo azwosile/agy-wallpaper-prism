@@ -840,7 +840,8 @@ export function loadWarmInventorySnapshot({
   if (!isFileSafe(cachePath)) return null;
   try {
     const parsed = JSON.parse(readFileSync(cachePath, 'utf8'));
-    if (parsed?.version !== INVENTORY_CACHE_VERSION) return null;
+    const cacheVer = Number(parsed?.version);
+    if (!Number.isInteger(cacheVer) || cacheVer < 2 || cacheVer > INVENTORY_CACHE_VERSION) return null;
     const expectedScope = computeInventoryScopeKey({
       steamRoot,
       uploadDir,
@@ -868,6 +869,7 @@ export function loadWarmInventorySnapshot({
       discovery: snap.discovery || {},
       wePlaylists: Array.isArray(snap.wePlaylists) ? snap.wePlaylists : [],
       fromWarmCache: true,
+      staleVersion: cacheVer !== INVENTORY_CACHE_VERSION,
     };
   } catch {
     return null;
