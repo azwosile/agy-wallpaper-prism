@@ -1503,7 +1503,10 @@
     out.push(
       G + ' ::selection { background-color: var(--prism-selection-bg) !important; color: inherit; }\n' +
       G + ' ::-webkit-scrollbar-track { background: transparent !important; }\n' +
-      G + ' ::-webkit-scrollbar-thumb { background: var(--prism-scroll-thumb) !important; border-radius: 999px; }'
+      G + ' ::-webkit-scrollbar-thumb { background: var(--prism-scroll-thumb) !important; border-radius: 999px; }\n' +
+      // Coexistence fix: inverted-color tooltips (e.g. Obsidian Prism heatmap hint) use `color: var(--background)`,
+      // which becomes invisible when Prism sets `--background: transparent`. Restore readable contrasting ink.
+      G + ' .ag-cs-home-heat-hint { color: var(--prism-stage-bg, ' + (isLight ? '#f4f7fb' : '#09090b') + ') !important; }'
     );
 
     return out.join('\n\n');
