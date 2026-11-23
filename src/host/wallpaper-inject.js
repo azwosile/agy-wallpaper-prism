@@ -555,6 +555,7 @@
     activeMediaKey: '',
     failedMediaKey: '',
     failedMediaRetries: 0,
+    preferBlobMedia: false,
     transitionTimer: 0,
     lastHostFocus: null,
     lastSidecarSig: '',
@@ -2131,17 +2132,165 @@
     }
   }
 
+  var MAX_BLOB_MEDIA_BYTES = 512 * 1024 * 1024;
+  var CROSS_SCHEME_MEDIA_PROBE_MS = 900;
+
+  function isCrossSchemeLoopbackMediaUrl(url) {
+    return Boolean(
+      W.location &&
+      W.location.protocol === 'https:' &&
+      /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\//i.test(String(url || '').trim()) &&
+      typeof W.fetch === 'function' &&
+      typeof W.URL !== 'undefined' &&
+      typeof W.URL.createObjectURL === 'function'
+    );
+  }
+
+  // Antigravity 2.34.0 (Chrome 152) serves the main hub on `https://127.0.0.1:<port>`, where direct
+  // `<video>`/`<audio>` `type:"Media"` requests to `http://127.0.0.1:<mediaPort>` can stall at
+  // `readyState === 0` before reaching the Network Service while `fetch()` + `blob:` succeeds cleanly.
+  function attachLoopbackMediaSrc(el, url, opts) {
+    if (!el || !url) return;
+    opts = opts || {};
+    var wrap = opts.wrap || null;
+    var isStale = typeof opts.isStale === 'function' ? opts.isStale : function () { return destroyed; };
+    var token = (el.__prismMediaToken = (el.__prismMediaToken || 0) + 1);
+    clearTimeout(el.__prismProbeTimer);
+    el.__prismProbeTimer = 0;
+
+    var isCurrent = function () {
+      return !destroyed && el.__prismMediaToken === token && !isStale();
+    };
+
+    var startBlobFetch = function () {
+      if (!isCurrent() || el.__prismFetchingBlob) return;
+      el.__prismFetchingBlob = true;
+      try {
+        if (el.getAttribute('src')) {
+          el.removeAttribute('src');
+          el.load();
+        }
+      } catch (_) {}
+
+      var ac = typeof W.AbortController === 'function' ? new W.AbortController() : null;
+      if (ac && wrap) {
+        if (!wrap.__prismAbortControllers) wrap.__prismAbortControllers = [];
+        wrap.__prismAbortControllers.push(ac);
+      }
+
+      W.fetch(url, ac ? { signal: ac.signal } : undefined)
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : 0));
+          var lenHeader = res.headers && typeof res.headers.get === 'function' ? Number(res.headers.get('content-length')) : 0;
+          if (Number.isFinite(lenHeader) && lenHeader > MAX_BLOB_MEDIA_BYTES) {
+            throw new Error('Media exceeds blob cap');
+          }
+          return res.blob();
+        })
+        .then(function (blob) {
+          if (!isCurrent()) return;
+          if (!blob || blob.size <= 0 || blob.size > MAX_BLOB_MEDIA_BYTES) {
+            throw new Error('Invalid media blob');
+          }
+          var blobUrl = W.URL.createObjectURL(blob);
+          if (!isCurrent()) {
+            try { W.URL.revokeObjectURL(blobUrl); } catch (_) {}
+            return;
+          }
+          state.preferBlobMedia = true;
+          el.__prismFetchingBlob = false;
+          if (el.__prismBlobUrl) {
+            try { W.URL.revokeObjectURL(el.__prismBlobUrl); } catch (_) {}
+          }
+          el.__prismBlobUrl = blobUrl;
+          el.src = blobUrl;
+          if (typeof opts.onReady === 'function') opts.onReady();
+        })
+        .catch(function (err) {
+          el.__prismFetchingBlob = false;
+          if (!isCurrent()) return;
+          if (err && err.name === 'AbortError') return;
+          if (typeof opts.onError === 'function') opts.onError(err);
+        });
+    };
+
+    if (!isCrossSchemeLoopbackMediaUrl(url)) {
+      el.src = url;
+      return;
+    }
+
+    if (state.preferBlobMedia) {
+      startBlobFetch();
+      return;
+    }
+
+    var settledDirect = false;
+    var cancelProbe = function () {
+      if (settledDirect) return;
+      settledDirect = true;
+      clearTimeout(el.__prismProbeTimer);
+      el.__prismProbeTimer = 0;
+      el.removeEventListener('loadedmetadata', cancelProbe);
+      el.removeEventListener('loadeddata', cancelProbe);
+      el.removeEventListener('canplay', cancelProbe);
+      el.removeEventListener('progress', onProgress);
+      el.removeEventListener('error', cancelProbe);
+    };
+    var onProgress = function () {
+      if (el.readyState > 0 || (el.buffered && el.buffered.length > 0)) {
+        cancelProbe();
+      }
+    };
+
+    el.addEventListener('loadedmetadata', cancelProbe, { once: true });
+    el.addEventListener('loadeddata', cancelProbe, { once: true });
+    el.addEventListener('canplay', cancelProbe, { once: true });
+    el.addEventListener('progress', onProgress);
+    el.addEventListener('error', cancelProbe, { once: true });
+
+    el.__prismProbeTimer = setTimeout(function () {
+      el.__prismProbeTimer = 0;
+      if (settledDirect || !isCurrent()) return;
+      if (el.readyState > 0 || (el.buffered && el.buffered.length > 0) || el.error) {
+        cancelProbe();
+        return;
+      }
+      cancelProbe();
+      startBlobFetch();
+    }, CROSS_SCHEME_MEDIA_PROBE_MS);
+
+    el.src = url;
+  }
+
   function disposeWrap(wrap) {
     if (!wrap) return;
     var idx = state.outgoingWraps.indexOf(wrap);
     if (idx >= 0) state.outgoingWraps.splice(idx, 1);
+    if (wrap.__prismAbortControllers) {
+      for (var k = 0; k < wrap.__prismAbortControllers.length; k += 1) {
+        try {
+          wrap.__prismAbortControllers[k].abort();
+        } catch (_) {}
+      }
+      wrap.__prismAbortControllers = null;
+    }
     var vids = wrap.querySelectorAll ? wrap.querySelectorAll('video, audio') : [];
     for (var i = 0; i < vids.length; i += 1) {
       try {
+        vids[i].__prismMediaToken = (vids[i].__prismMediaToken || 0) + 1;
+        clearTimeout(vids[i].__prismProbeTimer);
+        vids[i].__prismProbeTimer = 0;
+        vids[i].__prismFetchingBlob = false;
         vids[i].pause();
         vids[i].removeAttribute('src');
         vids[i].srcObject = null;
         vids[i].load();
+        if (vids[i].__prismBlobUrl) {
+          if (typeof W.URL !== 'undefined' && typeof W.URL.revokeObjectURL === 'function') {
+            W.URL.revokeObjectURL(vids[i].__prismBlobUrl);
+          }
+          vids[i].__prismBlobUrl = '';
+        }
       } catch (_) {}
     }
     var ifs = wrap.querySelectorAll ? wrap.querySelectorAll('iframe') : [];
@@ -2738,9 +2887,15 @@
         var aud = doc.createElement('audio');
         aud.loop = true;
         aud.preload = 'auto';
-        aud.src = audioUrl;
         nextWrap.appendChild(aud);
         state.activeAudio = aud;
+        attachLoopbackMediaSrc(aud, audioUrl, {
+          wrap: nextWrap,
+          isStale: function () {
+            return mountSeq !== state.mediaMountSeq || state.activeAudio !== aud;
+          },
+          onReady: syncMediaPlaybackState,
+        });
       }
 
       nextWrap.appendChild(video);
@@ -2840,6 +2995,10 @@
             onVideoFailed();
             return;
           }
+          if (video.__prismFetchingBlob) {
+            armPendingVideoGuard(1500);
+            return;
+          }
           // Window minimized (`doc.hidden`) or DWM-occluded behind another window (`readyState >= 1`,
           // `videoWidth > 0`, `error === null`): Chromium defers decoding Frame 1 until un-occluded.
           // Keep `<video>` alive instead of destroying it, nudge `play()`, and re-check on wake!
@@ -2859,7 +3018,14 @@
       };
       armPendingVideoGuard(6000);
 
-      video.src = mediaUrl;
+      attachLoopbackMediaSrc(video, mediaUrl, {
+        wrap: nextWrap,
+        isStale: function () {
+          return mountSeq !== state.mediaMountSeq || state.activeVideo !== video;
+        },
+        onReady: syncMediaPlaybackState,
+        onError: onVideoFailed,
+      });
       syncMediaPlaybackState();
       if (video.readyState >= 2 && video.videoWidth > 0) {
         onVideoDecoded();
@@ -2996,7 +3162,7 @@
         if (vid && vid.isConnected && vid.__prismPriming && !vid.error) {
           if (vid.readyState >= 2 && vid.videoWidth > 0) {
             try { vid.dispatchEvent(new Event('loadeddata')); } catch (_) {}
-          } else {
+          } else if (!vid.__prismFetchingBlob) {
             try {
               vid.muted = true;
               vid.play().catch(function () {});

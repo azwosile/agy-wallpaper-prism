@@ -28,6 +28,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import zlib from 'node:zlib';
 
 import { launchHeadlessBrowser, readPngDimensions } from './cdp-browser.mjs';
@@ -974,6 +975,230 @@ async function main() {
     assert.equal(disRes.status, 200);
     assert.equal(disRes.json().autostart.normalShortcutEnabled, false);
     return `playlist + presets + cold-init=${initMs}ms + 2 .lnk losslessly restored`;
+  });
+
+  await check('Cross-scheme HTTPS->HTTP loopback video fetch+blob fallback & URL revocation (Antigravity 2.34.0)', '@resilience-designer', async () => {
+    const injectCode = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+    const createdBlobs = [];
+    const revokedBlobs = [];
+    const fetchCalls = [];
+    let blobSeq = 0;
+
+    const makeEl = (tag) => {
+      const attrs = new Map();
+      const listeners = new Map();
+      const children = [];
+      let _src = '';
+      const el = {
+        tagName: String(tag).toUpperCase(),
+        style: { setProperty() {}, removeProperty() {} },
+        className: '',
+        id: '',
+        parentNode: null,
+        isConnected: true,
+        readyState: 0,
+        networkState: 0,
+        videoWidth: 0,
+        videoHeight: 0,
+        paused: true,
+        muted: false,
+        error: null,
+        children,
+        get childNodes() { return children; },
+        get classList() {
+          return { add() {}, remove() {}, contains() { return false; } };
+        },
+        setAttribute(k, v) {
+          attrs.set(String(k), String(v));
+          if (k === 'id') el.id = String(v);
+        },
+        getAttribute(k) { return attrs.has(String(k)) ? attrs.get(String(k)) : null; },
+        removeAttribute(k) {
+          attrs.delete(String(k));
+          if (k === 'src') _src = '';
+        },
+        hasAttribute(k) { return attrs.has(String(k)); },
+        appendChild(c) { c.parentNode = el; children.push(c); return c; },
+        insertBefore(c) { c.parentNode = el; children.push(c); return c; },
+        removeChild(c) { const idx = children.indexOf(c); if (idx >= 0) children.splice(idx, 1); c.parentNode = null; return c; },
+        contains(c) { return children.includes(c) || children.some((x) => x.contains && x.contains(c)); },
+        querySelector(sel) {
+          if (sel === '.agy-prism-scrim') return children.find((x) => x.className === 'agy-prism-scrim') || null;
+          return null;
+        },
+        querySelectorAll(sel) {
+          if (sel === 'video, audio') return children.flatMap((c) => (c.tagName === 'VIDEO' || c.tagName === 'AUDIO' ? [c] : c.querySelectorAll(sel)));
+          return [];
+        },
+        addEventListener(type, fn) {
+          if (!listeners.has(type)) listeners.set(type, new Set());
+          listeners.get(type).add(fn);
+        },
+        removeEventListener(type, fn) {
+          listeners.get(type)?.delete(fn);
+        },
+        dispatchEvent(ev) {
+          for (const fn of [...(listeners.get(ev.type) || [])]) fn(ev);
+          return true;
+        },
+        getBoundingClientRect() { return { left: 0, top: 0, width: 1440, height: 900 }; },
+        play() { el.paused = false; return Promise.resolve(); },
+        pause() { el.paused = true; },
+        load() {
+          if (!_src) {
+            el.networkState = 0;
+            el.readyState = 0;
+          }
+        },
+        get src() { return _src; },
+        set src(v) {
+          _src = String(v || '');
+          attrs.set('src', _src);
+          if (_src.startsWith('blob:')) {
+            el.networkState = 1;
+            el.readyState = 4;
+            el.videoWidth = 1920;
+            el.videoHeight = 1080;
+            queueMicrotask(() => el.dispatchEvent({ type: 'loadeddata' }));
+          } else if (_src.startsWith('http://')) {
+            // Simulate Chromium 152 HTTPS->HTTP loopback Media stall (`readyState === 0`, `networkState === 2`)
+            el.networkState = 2;
+            el.readyState = 0;
+            el.videoWidth = 0;
+          }
+        },
+      };
+      return el;
+    };
+
+    const htmlEl = makeEl('html');
+    const headEl = makeEl('head');
+    const bodyEl = makeEl('body');
+    const rootEl = makeEl('div');
+    rootEl.id = 'root';
+    bodyEl.appendChild(rootEl);
+
+    const mockDoc = {
+      documentElement: htmlEl,
+      head: headEl,
+      body: bodyEl,
+      hidden: false,
+      visibilityState: 'visible',
+      createElement: (t) => makeEl(t),
+      getElementById: (id) => {
+        if (id === 'root') return rootEl;
+        const all = [htmlEl, headEl, bodyEl, ...headEl.children, ...bodyEl.children];
+        return all.find((n) => n.id === id) || null;
+      },
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      addEventListener() {},
+      removeEventListener() {},
+      hasFocus: () => true,
+    };
+
+    const mockWin = {
+      document: mockDoc,
+      location: { protocol: 'https:', origin: 'https://127.0.0.1:50734' },
+      innerWidth: 1440,
+      innerHeight: 900,
+      top: null,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: (fn) => setTimeout(() => fn(Date.now()), 16),
+      cancelAnimationFrame: clearTimeout,
+      getComputedStyle: () => ({ backgroundColor: 'rgb(7, 7, 8)', getPropertyValue: () => '' }),
+      addEventListener() {},
+      removeEventListener() {},
+      AbortController,
+      Event: class Event { constructor(t) { this.type = t; } },
+      URL: {
+        createObjectURL(b) {
+          const u = `blob:https://127.0.0.1:50734/mock-${++blobSeq}-${b.size}`;
+          createdBlobs.push(u);
+          return u;
+        },
+        revokeObjectURL(u) {
+          revokedBlobs.push(u);
+        },
+      },
+      async fetch(u) {
+        fetchCalls.push(u);
+        if (String(u).includes('404')) return { ok: false, status: 404 };
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => '1024' },
+          blob: async () => new Blob([new Uint8Array(1024)], { type: 'video/mp4' }),
+        };
+      },
+    };
+    mockWin.window = mockWin;
+    mockWin.top = mockWin;
+    mockWin.self = mockWin;
+
+    vm.runInNewContext(injectCode, {
+      window: mockWin,
+      document: mockDoc,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      Blob,
+      AbortController,
+      Event: mockWin.Event,
+      Promise,
+      Math,
+      JSON,
+      Object,
+      Array,
+      String,
+      Number,
+      Boolean,
+      RegExp,
+      Error,
+    });
+
+    assert.ok(mockWin.__agyPrism, 'wallpaper-inject.js did not mount __agyPrism in HTTPS mock');
+    mockWin.__agyPrism.applyPayload({
+      skinEnabled: true,
+      config: { skinEnabled: true, layoutMode: 'islands', paused: false, muted: true },
+      activeItem: { id: 'vid-1', title: 'Vid 1', kind: 'video', mediaUrl: 'http://127.0.0.1:52075/media/vid-1.mp4' },
+    });
+
+    const deadline = Date.now() + 2600;
+    while (Date.now() < deadline && htmlEl.getAttribute('data-agy-prism-wallpaper') !== 'ready') {
+      await sleep(30);
+    }
+    assert.equal(htmlEl.getAttribute('data-agy-prism-wallpaper'), 'ready', 'HTTPS->HTTP stalled video did not recover via fetch+blob fallback');
+    assert.equal(fetchCalls.length, 1);
+    assert.equal(createdBlobs.length, 1);
+
+    // Switch to a second video -> should use preferBlobMedia fast path and revoke first blob URL
+    mockWin.__agyPrism.applyPayload({
+      skinEnabled: true,
+      config: { skinEnabled: true, layoutMode: 'islands', paused: false, muted: true, switchTransition: 'cut' },
+      activeItem: { id: 'vid-2', title: 'Vid 2', kind: 'video', mediaUrl: 'http://127.0.0.1:52075/media/vid-2.mp4' },
+    });
+    await sleep(60);
+    assert.equal(fetchCalls.length, 2);
+    assert.equal(createdBlobs.length, 2);
+    assert.ok(revokedBlobs.includes(createdBlobs[0]), 'Previous blob URL was not revoked on wallpaper switch');
+
+    // Broken 404 video over fetch fallback must still fail open cleanly
+    mockWin.__agyPrism.applyPayload({
+      skinEnabled: true,
+      config: { skinEnabled: true, layoutMode: 'islands', paused: false, muted: true, switchTransition: 'cut' },
+      activeItem: { id: 'vid-404', title: 'Vid 404', kind: 'video', mediaUrl: 'http://127.0.0.1:52075/media/404.mp4' },
+    });
+    await sleep(60);
+    assert.notEqual(htmlEl.getAttribute('data-agy-prism-wallpaper'), 'ready', '404 video must fail-open');
+    assert.ok(revokedBlobs.includes(createdBlobs[1]), 'Blob URL not revoked when switching to 404 video');
+
+    mockWin.__agyPrism.destroy();
+    return `probe fallback + fast preferBlobMedia + 404 fail-open + ${revokedBlobs.length} blob URLs revoked`;
   });
 
   // =========================================================================
