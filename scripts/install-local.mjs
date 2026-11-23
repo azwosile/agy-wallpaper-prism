@@ -89,9 +89,10 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
     throw new Error('Destination directory must be a real directory, not a symlink/junction');
   }
 
-  // Trigger clean in-process Sidecar host script reload (never SIGTERM under `restart_policy: "on-failure"`)
+  // Trigger clean in-process Sidecar host script reload (allow ~650ms for host plugin watcher to respawn Sidecar if version bumped)
   if (!destRoot) {
     try {
+      await new Promise((r) => setTimeout(r, 650));
       const serverInfoPath = join(resolveDefaultPrismDataDir(), 'server_info.json');
       let liveBootPayload = null;
       let livePort = 0;
@@ -125,7 +126,7 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
         }
       }
 
-      // Hot-upgrade any older in-memory `window.__agyPrism` or stale Sidecar/mediaOrigin inside already-open Hub windows
+      // Hot-upgrade any older in-memory `window.__agyPrism` / `window.__agyPrismPanel` or stale Sidecar/mediaOrigin inside open Hub windows
       const pf = readDevToolsActivePort();
       const cdpPorts = [...new Set([pf?.port, DEFAULT_DEBUG_PORT].filter((n) => Number.isInteger(n) && n > 0))];
       for (const cp of cdpPorts) {
@@ -137,11 +138,12 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
             if (window.top && window !== window.top) return false;
             var payload = ${JSON.stringify(liveBootPayload)};
             var expectedPrefix = ${JSON.stringify(livePort ? `http://127.0.0.1:${livePort}/host/` : '')};
+            var targetVer = ${JSON.stringify(PRISM_DOM.skinVersion)};
             if (payload) window.__AGY_PRISM_BOOT_PAYLOAD__ = payload;
             var hostBase = String(window.__agyPrismHostBase || '');
             var staleOrigin = Boolean(expectedPrefix) && (!hostBase || hostBase.indexOf(expectedPrefix) !== 0);
             var cur = window.__agyPrism;
-            if (cur && cur.version === ${JSON.stringify(PRISM_DOM.skinVersion)}) {
+            if (cur && cur.version === targetVer) {
               if (payload && typeof cur.applyPayload === 'function') cur.applyPayload(payload);
             }
             if (staleOrigin) {
@@ -156,10 +158,19 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
               window.__agyPrismBootstrapped = false;
               return 'rebind';
             }
-            if (cur && cur.version === ${JSON.stringify(PRISM_DOM.skinVersion)}) {
+            if (!hostBase) return false;
+            if (window.__agyPrismPanel && window.__agyPrismPanel.version !== targetVer) {
+              var ep = document.getElementById('agy-prism-panel-loader');
+              if (ep) ep.remove();
+              var sp = document.createElement('script');
+              sp.id = 'agy-prism-panel-loader';
+              sp.async = true;
+              sp.src = hostBase + '/panel.js?t=' + Date.now();
+              (document.head || document.documentElement).appendChild(sp);
+            }
+            if (cur && cur.version === targetVer) {
               return 'updated';
             }
-            if (!hostBase) return false;
             var ex = document.getElementById('agy-prism-stage-loader');
             if (ex) ex.remove();
             var s = document.createElement('script');
@@ -170,6 +181,11 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
             return 'reloaded';
           })()`;
           await evaluateTargetEphemeral(h.webSocketDebuggerUrl, expr).catch(() => {});
+        }
+        for (const t of targets) {
+          if (t.type === 'iframe' && String(t.url || '').startsWith('plugin://agy-wallpaper-prism--prism_studio')) {
+            await evaluateTargetEphemeral(t.webSocketDebuggerUrl, 'window.location.reload()').catch(() => {});
+          }
         }
         break;
       }

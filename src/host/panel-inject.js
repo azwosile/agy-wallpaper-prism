@@ -9,7 +9,7 @@
 (function agyPrismPanelMain() {
   'use strict';
 
-  var VERSION = '2.0.1';
+  var VERSION = '2.0.2';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   try {
@@ -56,6 +56,7 @@
     cornerStyle: 'balanced',
     borders: 'on',
     shadows: true,
+    transparentWindowControls: true,
     themeMode: 'auto',
     colorScheme: 'prism-default',
     accentMode: 'dynamic',
@@ -193,6 +194,7 @@
       s_volume: '壁纸音量',
       resetTip: '重置为默认值',
       sw_glass: '毛玻璃磨砂界面',
+      sw_wco: '右上角窗口按钮透明',
       sw_vignette: '中央阅读暗角保护',
       sw_pauseBlur: '窗口失焦时自动暂停',
       codeLabel: '代码/终端底板',
@@ -258,6 +260,7 @@
       s_volume: 'Audio Volume',
       resetTip: 'Reset to default',
       sw_glass: 'Frosted Glass Surfaces',
+      sw_wco: 'Transparent Window Buttons',
       sw_vignette: 'Central Reading Vignette',
       sw_pauseBlur: 'Auto-Pause When Unfocused',
       codeLabel: 'Code & Terminal Backing',
@@ -1204,6 +1207,13 @@
       role: 'switch',
       onclick: function () { pushConfigPatch({ glassSurfaces: !cfgVal('glassSurfaces'), preset: 'custom' }, true); },
     });
+    els.swWcoLbl = h('span');
+    els.swWco = h('button', {
+      type: 'button',
+      class: 'pp-sw',
+      role: 'switch',
+      onclick: function () { pushConfigPatch({ transparentWindowControls: !cfgVal('transparentWindowControls') }, true); },
+    });
     els.swVigLbl = h('span');
     els.swVig = h('button', {
       type: 'button',
@@ -1235,6 +1245,7 @@
 
     var togglesSec = h('div', { class: 'pp-sec' }, [
       h('div', { class: 'pp-trow', style: 'border-top:none;' }, [els.swGlassLbl, els.swGlass]),
+      h('div', { class: 'pp-trow' }, [els.swWcoLbl, els.swWco]),
       h('div', { class: 'pp-trow' }, [els.swVigLbl, els.swVig]),
       h('div', { class: 'pp-trow' }, [els.swBlurLbl, els.swBlur]),
       els.codeLbl,
@@ -1558,6 +1569,8 @@
 
     els.swGlassLbl.textContent = tr('sw_glass');
     els.swGlass.setAttribute('aria-checked', cfgVal('glassSurfaces') ? 'true' : 'false');
+    els.swWcoLbl.textContent = tr('sw_wco');
+    els.swWco.setAttribute('aria-checked', cfgVal('transparentWindowControls') !== false ? 'true' : 'false');
     els.swVigLbl.textContent = tr('sw_vignette');
     els.swVig.setAttribute('aria-checked', cfgVal('vignette') ? 'true' : 'false');
     els.swBlurLbl.textContent = tr('sw_pauseBlur');

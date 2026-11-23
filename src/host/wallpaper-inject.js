@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.0.1';
+  var VERSION = '2.0.2';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -25,6 +25,7 @@
   var ROOT_ATTR = 'data-agy-prism-skin';
   var GLASS_ATTR = 'data-agy-prism-glass';
   var WALLPAPER_ATTR = 'data-agy-prism-wallpaper';
+  var WCO_ATTR = 'data-agy-prism-wco';
   var ACTIVE_HOLE_SEL = '[data-browser-hole]:not([data-browser-hole="false"])';
 
   // Preserve state or tear down an older kernel cleanly before mounting.
@@ -557,6 +558,8 @@
     lastSidecarSig: '',
     lastStructuralSig: '',
     lastCaretSig: '',
+    lastWcoSig: '',
+    wcoThemeTimer: 0,
     lastHoleClip: '',
     watchdog15Timer: 0,
     watchdog80Timer: 0,
@@ -877,6 +880,7 @@
       rightCornerRadius: String(c.rightSidebarRadius || c.rightSidebarCornerRadius || 'auto'),
       borders: borders,
       shadows: bool(c.shadows, true),
+      transparentWindowControls: bool(c.transparentWindowControls, true),
       themeMode: String(c.themeMode || 'auto').toLowerCase(),
       themeFollow: bool(c.themeFollow, false),
       colorScheme: schemeKey,
@@ -1231,6 +1235,10 @@
       GW + ' ' + ACTIVE_HOLE_SEL + ' {\n' +
       '  background-color: transparent !important;\n' +
       '  background-image: none !important;\n' +
+      '}\n' +
+      'html[' + WCO_ATTR + '="transparent"] :is(.window-controls-container, .monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right .window-controls-container) {\n' +
+      '  background: transparent !important;\n' +
+      '  background-color: transparent !important;\n' +
       '}\n' +
       GW + '[data-prism-kind="image"] body:not(:has(> #' + STAGE_ID + ' .agy-prism-media-wrap))::before {\n' +
       '  content: "";\n' +
@@ -3325,7 +3333,32 @@
     applyCaretStyle(state.cfg);
     ensureFxCanvas();
     syncBrowserHoleCutout();
+    syncWindowControlsOverlay(false, false);
     syncSidecarIframes(state.cfg);
+  }
+
+  function syncWindowControlsOverlay(forceRestore, forceSend) {
+    var isLight = (state.skinEnabled && !forceRestore ? state.effectiveTheme : detectHostTheme()) === 'light';
+    var wantTransparent = Boolean(!forceRestore && state.skinEnabled && state.cfg.transparentWindowControls !== false);
+    var root = doc.documentElement;
+    if (root) {
+      if (wantTransparent) root.setAttribute(WCO_ATTR, 'transparent');
+      else root.removeAttribute(WCO_ATTR);
+    }
+    var nav = W.electronNative;
+    if (!nav || typeof nav.setTitleBarOverlay !== 'function') return false;
+    var color = wantTransparent ? '#00000000' : isLight ? '#FFFFFF' : '#131313';
+    var symbolColor = wantTransparent ? (isLight ? '#18181B' : '#F2F2F5') : isLight ? '#000000' : '#FAFAFA';
+    var sig = color + '|' + symbolColor;
+    if (!forceSend && state.lastWcoSig === sig) return true;
+    state.lastWcoSig = sig;
+    try {
+      var res = nav.setTitleBarOverlay({ color: color, symbolColor: symbolColor });
+      if (res && typeof res.catch === 'function') res.catch(function () {});
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   function teardownSkinDomOnly() {
@@ -3357,6 +3390,7 @@
     state.lastCaretSig = '';
     state.lastSidecarSig = '';
     clearFastCssVars();
+    syncWindowControlsOverlay(true, true);
 
     var stage = doc.getElementById(STAGE_ID);
     if (stage && stage.parentNode) stage.parentNode.removeChild(stage);
@@ -3375,6 +3409,7 @@
         ROOT_ATTR,
         GLASS_ATTR,
         WALLPAPER_ATTR,
+        WCO_ATTR,
         'data-prism-theme',
         'data-prism-scheme',
         'data-prism-accent-mode',
@@ -3431,6 +3466,11 @@
             state.hostTheme = nextHost;
             refreshSkinStyles();
           }
+          clearTimeout(state.wcoThemeTimer);
+          state.wcoThemeTimer = setTimeout(function () {
+            state.wcoThemeTimer = 0;
+            if (!destroyed && state.skinEnabled) syncWindowControlsOverlay(false, true);
+          }, 75);
         }, 32);
       };
       themeObs = new MutationObserver(onThemeMut);
@@ -3577,6 +3617,7 @@
         mountStageMedia(true);
       }
       attachWatchers();
+      syncWindowControlsOverlay(false, true);
     }
     return status();
   }
@@ -3616,6 +3657,8 @@
       videoSrc: state.activeVideo ? String(state.activeVideo.currentSrc || state.activeVideo.src || '') : '',
       glassReady: Boolean(doc.documentElement && doc.documentElement.getAttribute(GLASS_ATTR) === 'ready'),
       wallpaperReady: Boolean(state.wallpaperReady),
+      transparentWindowControls: Boolean(state.cfg.transparentWindowControls !== false),
+      wcoSig: state.lastWcoSig,
       holeClip: state.lastHoleClip,
       stagePresent: Boolean(doc.getElementById(STAGE_ID)),
       stylePresent: Boolean(doc.getElementById(STYLE_ID)),
@@ -3631,6 +3674,7 @@
     disconnectHoleActiveObservers();
     clearTimeout(state.hiddenTimer);
     clearTimeout(state.wakeNudgeTimer);
+    clearTimeout(state.wcoThemeTimer);
     clearInterval(state.blurPollTimer);
     clearInterval(state.videoWatchTimer);
     clearTimeout(themeDebounce);

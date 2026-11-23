@@ -1713,7 +1713,7 @@ function bootPrismStudioApp() {
               <span>${esc(tr('layout.title'))}</span>
             </div>
             <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
-                    data-action="reset-module" data-keys="layoutMode,islandGap,workspacePad,cornerStyle,leftSidebarRadius,rightSidebarRadius,borders,shadows">↺</button>
+                    data-action="reset-module" data-keys="layoutMode,islandGap,workspacePad,cornerStyle,leftSidebarRadius,rightSidebarRadius,borders,shadows,transparentWindowControls">↺</button>
           </summary>
           <div class="prism-section-body">
             ${renderSegRow({
@@ -1773,6 +1773,12 @@ function bootPrismStudioApp() {
               key: 'shadows',
               label: tr('layout.shadows'),
               checked: eff.shadows,
+            })}
+            ${renderSwitchRow({
+              key: 'transparentWindowControls',
+              label: tr('layout.transparentWindowControls'),
+              hint: tr('layout.transparentWindowControlsHint'),
+              checked: eff.transparentWindowControls !== false,
             })}
           </div>
         </details>
@@ -2605,6 +2611,13 @@ function bootPrismStudioApp() {
             { value: 'corner', label: tr('host.trigger.corner') },
             { value: 'shortcut-only', label: tr('host.trigger.shortcut') },
           ],
+        })}
+
+        ${renderSwitchRow({
+          key: 'transparentWindowControls',
+          label: tr('layout.transparentWindowControls'),
+          hint: tr('layout.transparentWindowControlsHint'),
+          checked: store.config.transparentWindowControls !== false,
         })}
       </div>
 
@@ -4191,7 +4204,11 @@ function bootPrismStudioApp() {
           const key = actEl.dataset.key;
           if (!key) return;
           const eff = getEffectiveConfig();
-          queueConfigPatch({ [key]: !eff[key] }, true, key !== 'rotationEnabled' && key !== 'themeFollow');
+          queueConfigPatch(
+            { [key]: !eff[key] },
+            true,
+            key !== 'rotationEnabled' && key !== 'themeFollow' && key !== 'transparentWindowControls',
+          );
           renderActiveSurface();
           break;
         }

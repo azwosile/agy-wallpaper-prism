@@ -3,17 +3,18 @@
 
 export const PLUGIN_ID = 'agy-wallpaper-prism';
 export const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-export const PLUGIN_VERSION = '2.0.1';
+export const PLUGIN_VERSION = '2.0.2';
 export const SIDECAR_ID = 'prism_studio';
 export const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 export const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 export const DEFAULT_DEBUG_PORT = 9339;
 
 export const PRISM_DOM = Object.freeze({
-  skinVersion: '2.0.1',
+  skinVersion: '2.0.2',
   skinAttr: 'data-agy-prism-skin',
   glassAttr: 'data-agy-prism-glass',
   wallpaperAttr: 'data-agy-prism-wallpaper',
+  wcoAttr: 'data-agy-prism-wco',
   staticStyleId: 'agy-prism-static-css',
   themeAttr: 'data-prism-theme',
   schemeAttr: 'data-prism-scheme',
@@ -705,6 +706,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   rightSidebarRadius: 'auto',
   borders: 'on',
   shadows: true,
+  transparentWindowControls: true,
 
   // Adaptive Theme, Color Scheme & Dynamic Accent
   themeMode: 'auto',
@@ -811,6 +813,7 @@ export const RESET_SCOPES = Object.freeze({
     'rightSidebarRadius',
     'borders',
     'shadows',
+    'transparentWindowControls',
     'themeMode',
     'themeFollow',
     'colorScheme',
@@ -1122,6 +1125,7 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     rightSidebarRadius: oneOf(String(merged.rightSidebarRadius ?? 'auto'), SIDEBAR_RADII, 'auto'),
     borders: oneOf(merged.borders, BORDER_MODES, DEFAULT_CONFIG.borders),
     shadows: bool(merged.shadows, DEFAULT_CONFIG.shadows),
+    transparentWindowControls: bool(merged.transparentWindowControls, DEFAULT_CONFIG.transparentWindowControls),
 
     themeMode: oneOf(merged.themeMode, THEME_MODES, DEFAULT_CONFIG.themeMode),
     themeFollow: bool(merged.themeFollow, DEFAULT_CONFIG.themeFollow),

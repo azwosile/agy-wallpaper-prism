@@ -2406,13 +2406,14 @@ button, input, select, textarea {
   <script id="prism-studio-bundle">
 (() => {
   // src/shared/schema.mjs
-  var PLUGIN_VERSION = "2.0.1";
+  var PLUGIN_VERSION = "2.0.2";
   var DEFAULT_DEBUG_PORT = 9339;
   var PRISM_DOM = Object.freeze({
-    skinVersion: "2.0.1",
+    skinVersion: "2.0.2",
     skinAttr: "data-agy-prism-skin",
     glassAttr: "data-agy-prism-glass",
     wallpaperAttr: "data-agy-prism-wallpaper",
+    wcoAttr: "data-agy-prism-wco",
     staticStyleId: "agy-prism-static-css",
     themeAttr: "data-prism-theme",
     schemeAttr: "data-prism-scheme",
@@ -3090,6 +3091,7 @@ button, input, select, textarea {
     rightSidebarRadius: "auto",
     borders: "on",
     shadows: true,
+    transparentWindowControls: true,
     // Adaptive Theme, Color Scheme & Dynamic Accent
     themeMode: "auto",
     themeFollow: false,
@@ -3188,6 +3190,7 @@ button, input, select, textarea {
       "rightSidebarRadius",
       "borders",
       "shadows",
+      "transparentWindowControls",
       "themeMode",
       "themeFollow",
       "colorScheme",
@@ -3455,6 +3458,7 @@ button, input, select, textarea {
       rightSidebarRadius: oneOf(String(merged.rightSidebarRadius ?? "auto"), SIDEBAR_RADII, "auto"),
       borders: oneOf(merged.borders, BORDER_MODES, DEFAULT_CONFIG.borders),
       shadows: bool(merged.shadows, DEFAULT_CONFIG.shadows),
+      transparentWindowControls: bool(merged.transparentWindowControls, DEFAULT_CONFIG.transparentWindowControls),
       themeMode: oneOf(merged.themeMode, THEME_MODES, DEFAULT_CONFIG.themeMode),
       themeFollow: bool(merged.themeFollow, DEFAULT_CONFIG.themeFollow),
       colorScheme: oneOf(merged.colorScheme, COLOR_SCHEME_IDS, DEFAULT_CONFIG.colorScheme),
@@ -3608,6 +3612,8 @@ button, input, select, textarea {
       "layout.borders.subtle": "\u5FAE\u5F31",
       "layout.borders.off": "\u5173\u95ED",
       "layout.shadows": "\u6D6E\u5C9B\u73AF\u5883\u6295\u5F71",
+      "layout.transparentWindowControls": "\u53F3\u4E0A\u89D2\u7A97\u53E3\u63A7\u5236\u6309\u94AE\u900F\u660E\uFF08\u6700\u5C0F\u5316 / \u6700\u5927\u5316 / \u5173\u95ED\uFF09",
+      "layout.transparentWindowControlsHint": "\u5C06\u539F\u751F\u6807\u9898\u680F\u6700\u5C0F\u5316\u3001\u6700\u5927\u5316\u4E0E\u5173\u95ED\u6309\u94AE\u5E95\u8272\u8BBE\u4E3A\u5168\u900F\u660E\uFF0C\u878D\u5165\u73BB\u7483\u9876\u680F\u4E0E\u58C1\u7EB8",
       // Schemes & Accent
       "scheme.title": "\u81EA\u9002\u5E94\u660E\u6697\u914D\u8272\u4E0E\u58C1\u7EB8\u53D6\u8272",
       "scheme.themeMode": "\u660E\u6697\u6781\u6027",
@@ -3834,6 +3840,8 @@ button, input, select, textarea {
       "layout.borders.subtle": "Subtle",
       "layout.borders.off": "Off",
       "layout.shadows": "Island Drop Shadows",
+      "layout.transparentWindowControls": "Transparent Window Control Buttons (Min / Max / Close)",
+      "layout.transparentWindowControlsHint": "Make native titlebar minimize, maximize, and close button backgrounds transparent",
       // Schemes & Accent
       "scheme.title": "Adaptive Color Schemes & Dynamic Accent",
       "scheme.themeMode": "Theme Polarity",
@@ -5475,7 +5483,7 @@ button, input, select, textarea {
               <span>${esc(tr("layout.title"))}</span>
             </div>
             <button type="button" class="prism-btn prism-btn-sm" onclick="event.stopPropagation()"
-                    data-action="reset-module" data-keys="layoutMode,islandGap,workspacePad,cornerStyle,leftSidebarRadius,rightSidebarRadius,borders,shadows">\u21BA</button>
+                    data-action="reset-module" data-keys="layoutMode,islandGap,workspacePad,cornerStyle,leftSidebarRadius,rightSidebarRadius,borders,shadows,transparentWindowControls">\u21BA</button>
           </summary>
           <div class="prism-section-body">
             ${renderSegRow({
@@ -5535,6 +5543,12 @@ button, input, select, textarea {
         key: "shadows",
         label: tr("layout.shadows"),
         checked: eff.shadows
+      })}
+            ${renderSwitchRow({
+        key: "transparentWindowControls",
+        label: tr("layout.transparentWindowControls"),
+        hint: tr("layout.transparentWindowControlsHint"),
+        checked: eff.transparentWindowControls !== false
       })}
           </div>
         </details>
@@ -6306,6 +6320,13 @@ button, input, select, textarea {
           { value: "corner", label: tr("host.trigger.corner") },
           { value: "shortcut-only", label: tr("host.trigger.shortcut") }
         ]
+      })}
+
+        ${renderSwitchRow({
+        key: "transparentWindowControls",
+        label: tr("layout.transparentWindowControls"),
+        hint: tr("layout.transparentWindowControlsHint"),
+        checked: store.config.transparentWindowControls !== false
       })}
       </div>
 
@@ -7676,7 +7697,11 @@ button, input, select, textarea {
             const key = actEl.dataset.key;
             if (!key) return;
             const eff = getEffectiveConfig();
-            queueConfigPatch({ [key]: !eff[key] }, true, key !== "rotationEnabled" && key !== "themeFollow");
+            queueConfigPatch(
+              { [key]: !eff[key] },
+              true,
+              key !== "rotationEnabled" && key !== "themeFollow" && key !== "transparentWindowControls"
+            );
             renderActiveSurface();
             break;
           }

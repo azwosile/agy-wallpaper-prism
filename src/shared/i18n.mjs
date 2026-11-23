@@ -64,6 +64,8 @@ export const DICT = Object.freeze({
     'layout.borders.subtle': '微弱',
     'layout.borders.off': '关闭',
     'layout.shadows': '浮岛环境投影',
+    'layout.transparentWindowControls': '右上角窗口控制按钮透明（最小化 / 最大化 / 关闭）',
+    'layout.transparentWindowControlsHint': '将原生标题栏最小化、最大化与关闭按钮底色设为全透明，融入玻璃顶栏与壁纸',
 
     // Schemes & Accent
     'scheme.title': '自适应明暗配色与壁纸取色',
@@ -303,6 +305,8 @@ export const DICT = Object.freeze({
     'layout.borders.subtle': 'Subtle',
     'layout.borders.off': 'Off',
     'layout.shadows': 'Island Drop Shadows',
+    'layout.transparentWindowControls': 'Transparent Window Control Buttons (Min / Max / Close)',
+    'layout.transparentWindowControlsHint': 'Make native titlebar minimize, maximize, and close button backgrounds transparent',
 
     // Schemes & Accent
     'scheme.title': 'Adaptive Color Schemes & Dynamic Accent',

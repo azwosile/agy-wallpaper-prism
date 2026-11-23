@@ -203,8 +203,8 @@ async function main() {
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.0.1', `Expected plugin.json version 2.0.1, got ${raw.version}`);
-    assert.equal(pkg.version, '2.0.1', `Expected package.json version 2.0.1, got ${pkg.version}`);
+    assert.equal(raw.version, '2.0.2', `Expected plugin.json version 2.0.2, got ${raw.version}`);
+    assert.equal(pkg.version, '2.0.2', `Expected package.json version 2.0.2, got ${pkg.version}`);
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -1190,8 +1190,17 @@ async function main() {
       });
 
       try {
-        // Baseline pre-injection dark Hub check
+        // Baseline pre-injection dark Hub check + mock `window.electronNative.setTitleBarOverlay`
         const baseline = await hubPage.evaluate(`(() => {
+          window.__wcoCalls = [];
+          window.__lastWco = null;
+          window.electronNative = {
+            setTitleBarOverlay(opts) {
+              window.__wcoCalls.push(opts);
+              window.__lastWco = opts;
+              return Promise.resolve();
+            },
+          };
           const snap = (id) => {
             const el = document.getElementById(id);
             const cs = getComputedStyle(el);
@@ -1371,6 +1380,25 @@ async function main() {
           assert.equal(vidLivenessAudit.rvfcActive, true, 'Active video missing rVFC frame-consumer keep-alive');
         }
         assert.equal(vidLivenessAudit.statusPaused, false, 'Fullscreen/focus wake should keep video unpaused');
+
+        // Verify v2.0.2 `transparentWindowControls` default ON (`#00000000`) & live toggle OFF/ON (`#131313` <-> `#00000000`)
+        const wcoToggleAudit = await hubPage.evaluate(`(() => {
+          const initialWco = window.__lastWco ? { ...window.__lastWco } : null;
+          const initialAttr = document.documentElement.getAttribute('data-agy-prism-wco');
+          window.__agyPrism.updateConfig({ transparentWindowControls: false });
+          const offWco = window.__lastWco ? { ...window.__lastWco } : null;
+          const offAttr = document.documentElement.getAttribute('data-agy-prism-wco');
+          window.__agyPrism.updateConfig({ transparentWindowControls: true });
+          const onWco = window.__lastWco ? { ...window.__lastWco } : null;
+          const onAttr = document.documentElement.getAttribute('data-agy-prism-wco');
+          return { initialWco, initialAttr, offWco, offAttr, onWco, onAttr };
+        })()`);
+        assert.equal(wcoToggleAudit.initialWco?.color, '#00000000', `Expected default transparent WCO #00000000, got ${JSON.stringify(wcoToggleAudit.initialWco)}`);
+        assert.equal(wcoToggleAudit.initialAttr, 'transparent');
+        assert.equal(wcoToggleAudit.offWco?.color, '#131313', `Expected opaque WCO #131313 when toggled off, got ${JSON.stringify(wcoToggleAudit.offWco)}`);
+        assert.equal(wcoToggleAudit.offAttr, null);
+        assert.equal(wcoToggleAudit.onWco?.color, '#00000000', `Expected transparent WCO #00000000 when toggled back on`);
+        assert.equal(wcoToggleAudit.onAttr, 'transparent');
 
         // Clear any expected 404 network error log emitted by Chromium during the intentional broken-video probe
         hubPage.consoleErrors = hubPage.consoleErrors.filter((e) => !e.includes('__broken_404_video__') && !e.includes('404'));
@@ -1746,10 +1774,12 @@ async function main() {
             .map(a => a.name)
             .filter(n => /^data-(?:agy-)?prism/.test(n)),
           bodyBg: getComputedStyle(document.body).backgroundColor,
+          lastWcoColor: window.__lastWco ? window.__lastWco.color : null,
         })`);
         assert.deepEqual(afterPanicDom.prismNodes, [], `Ctrl+Alt+Shift+R left #agy-prism-* nodes: ${afterPanicDom.prismNodes.join(', ')}`);
         assert.deepEqual(afterPanicDom.prismAttrs, [], `Ctrl+Alt+Shift+R left data-prism-* attrs: ${afterPanicDom.prismAttrs.join(', ')}`);
         assert.equal(afterPanicDom.bodyBg, 'rgb(7, 7, 8)', 'Ctrl+Alt+Shift+R did not restore native #070708 dark background');
+        assert.equal(afterPanicDom.lastWcoColor, '#131313', 'Ctrl+Alt+Shift+R did not restore native #131313 window controls overlay');
 
         const cfgAfterPanic = await engine.getConfig();
         assert.equal(cfgAfterPanic.skinEnabled, false, 'Ctrl+Alt+Shift+R did not persist skinEnabled === false on backend!');
