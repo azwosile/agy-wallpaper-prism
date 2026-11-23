@@ -1353,6 +1353,53 @@ async function main() {
         assert.equal(hubAudit.ctxZ, '7500', '#ag-context-meter z-index altered');
         assert.equal(hubAudit.pillInFooter, true, '#agy-prism-pill not mounted inside .agy-composer-footer');
 
+        // 1B. Antigravity 2.34.0 regressions (Issue #1): inner .dark token reset, .browser-hole-opaque & settings modal inside #root
+        const v234Audit = await hubPage.evaluate(`(() => {
+          const prevHole = document.body.getAttribute('data-has-browser-hole');
+          const bd = document.getElementById('v234-settings-backdrop-probe');
+          const dlg = document.getElementById('v234-settings-dialog-probe');
+          const detail = document.getElementById('v234-settings-detail-probe');
+          const innerDark = document.getElementById('v234-inner-dark-probe');
+          const hole = document.getElementById('v234-browser-hole-probe');
+          const mainBody = document.getElementById('v234-main-body-probe');
+          document.body.setAttribute('data-has-browser-hole', 'true');
+          bd.style.display = 'flex';
+          try {
+            const innerCs = getComputedStyle(innerDark);
+            const holeCs = getComputedStyle(hole);
+            const mainBodyCs = getComputedStyle(mainBody);
+            const bdCs = getComputedStyle(bd);
+            const dlgCs = getComputedStyle(dlg);
+            const detailCs = getComputedStyle(detail);
+            return {
+              innerDarkBgVar: innerCs.getPropertyValue('--background').trim(),
+              innerDarkSidebarVar: innerCs.getPropertyValue('--sidebar').trim(),
+              holeBg: holeCs.backgroundColor,
+              holeShellCanvas: holeCs.getPropertyValue('--shell-canvas').trim(),
+              mainBodyBg: mainBodyCs.backgroundColor,
+              backdropBg: bdCs.backgroundColor,
+              backdropBlur: bdCs.backdropFilter || bdCs.webkitBackdropFilter || 'none',
+              dialogBg: dlgCs.backgroundColor,
+              dialogBgVar: dlgCs.getPropertyValue('--background').trim(),
+              detailBg: detailCs.backgroundColor,
+            };
+          } finally {
+            bd.style.display = 'none';
+            if (prevHole == null) document.body.removeAttribute('data-has-browser-hole');
+            else document.body.setAttribute('data-has-browser-hole', prevHole);
+          }
+        })()`);
+        assert.equal(v234Audit.innerDarkBgVar, 'transparent', `Inner #root .dark reset --background: ${v234Audit.innerDarkBgVar}`);
+        assert.notEqual(v234Audit.innerDarkSidebarVar, '#111114', 'Inner #root .dark reset --sidebar back to solid #111114');
+        assert.equal(v234Audit.holeShellCanvas, 'transparent', `Inner .agy-inset-shell --shell-canvas not hollowed: ${v234Audit.holeShellCanvas}`);
+        assert.equal(v234Audit.holeBg, 'rgba(0, 0, 0, 0)', `.browser-hole-opaque stayed opaque: ${v234Audit.holeBg}`);
+        assert.equal(v234Audit.mainBodyBg, 'rgba(0, 0, 0, 0)', `[data-main-content-body] stayed opaque: ${v234Audit.mainBodyBg}`);
+        assert.ok(parseAlphaFromCssColor(v234Audit.backdropBg) >= 0.25, `Settings modal backdrop lost dim tint: ${v234Audit.backdropBg}`);
+        assert.ok(String(v234Audit.backdropBlur).includes('blur('), `Settings modal backdrop lost blur: ${v234Audit.backdropBlur}`);
+        assert.ok(parseAlphaFromCssColor(v234Audit.dialogBg) >= 0.90, `Settings dialog inside #root became transparent: ${v234Audit.dialogBg}`);
+        assert.notEqual(v234Audit.dialogBgVar, 'transparent', 'Settings dialog --background remained transparent');
+        assert.ok(parseAlphaFromCssColor(v234Audit.detailBg) >= 0.90, `Settings detail pane inside #root became transparent: ${v234Audit.detailBg}`);
+
         // 2. Test `flush` layout switch & code contrastFloor at extreme glassOpacity=0.30
         await hubPage.evaluate(`window.__agyPrism.updateConfig({ layoutMode: 'flush', glassOpacity: 0.30, contrastFloor: true })`);
         const flushCheck = await hubPage.evaluate(`(() => {
@@ -1507,6 +1554,7 @@ async function main() {
         const sceneVidCheck = await hubPage.evaluate(`(() => {
           const vids = Array.from(document.querySelectorAll('#agy-prism-stage video'));
           const v = vids[vids.length - 1] || null;
+          const wrap = v ? v.closest('.agy-prism-media-wrap') : null;
           const st = window.__agyPrism.status();
           return v ? {
             found: true,
@@ -1514,11 +1562,15 @@ async function main() {
             statusVideoPaused: st.videoPaused,
             readyState: v.readyState,
             currentTime: v.currentTime,
+            wrapOpacity: wrap ? parseFloat(getComputedStyle(wrap).opacity) : 0,
+            hasPoster: Boolean(v.getAttribute('poster')),
           } : { found: false };
         })()`);
         assert.equal(sceneVidCheck.found, true, 'Scene TEXB0004 video did not mount <video> in #agy-prism-stage');
         assert.equal(sceneVidCheck.paused, false, 'Scene TEXB0004 <video> paused on mount');
         assert.equal(sceneVidCheck.statusVideoPaused, false, 'window.__agyPrism.status().videoPaused should be false');
+        assert.ok(sceneVidCheck.wrapOpacity >= 0.99, `Video crossfade stuck at opacity=${sceneVidCheck.wrapOpacity} (<0.99)!`);
+        assert.equal(sceneVidCheck.hasPoster, true, 'Video wallpaper missing poster fallback from thumbUrl');
 
         await hubPage.setViewport(1440, 900, 1);
 

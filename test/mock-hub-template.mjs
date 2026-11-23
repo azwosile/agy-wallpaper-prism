@@ -72,6 +72,25 @@ export function buildMockAntigravityHubHtml({ initialTheme = 'dark', title = 'An
       background-color: var(--background);
     }
 
+    /* Antigravity 2.34.0 regressions: inner .dark variable reset + .browser-hole-opaque + --shell-canvas */
+    #root .dark {
+      --background: #070708;
+      --content: #070708;
+      --sidebar: #111114;
+    }
+    .dark .agy-inset-shell {
+      --shell-canvas: color-mix(in srgb, #000 38%, var(--background));
+    }
+    body[data-has-browser-hole="true"] .agy-inset-shell .agy-sheet[data-sheet-inset] .browser-hole-opaque {
+      background-color: var(--shell-canvas);
+    }
+    body[data-has-browser-hole="true"] .browser-hole-opaque:not([data-has-browser-hole="true"]) {
+      background-color: var(--background);
+    }
+    .agy-sheet[data-sheet-inset] [data-main-content-body] {
+      background-color: var(--background);
+    }
+
     .bg-background { background-color: var(--background); }
     .bg-sidebar { background-color: var(--sidebar); }
     .bg-card { background-color: var(--card); border: 1px solid var(--card-border); }
@@ -412,6 +431,23 @@ export function buildMockAntigravityHubHtml({ initialTheme = 'dark', title = 'An
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Antigravity 2.34.0 off-screen probes inside #root: inner .dark + .browser-hole-opaque + settings modal portal -->
+    <div id="v234-inner-dark-probe" class="h-full w-full dark" style="position:fixed;left:-9999px;top:0;width:400px;height:300px;pointer-events:none">
+      <div class="agy-inset-shell">
+        <div class="agy-sheet" data-sheet-inset="true">
+          <div id="v234-browser-hole-probe" class="browser-hole-opaque">
+            <div id="v234-main-body-probe" data-main-content-body="true"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="v234-settings-backdrop-probe" class="fixed inset-0 settings-modal-backdrop" style="display:none;position:fixed;inset:0;z-index:5000">
+      <div id="v234-settings-dialog-probe" class="agy-dialog bg-background settings-modal-container" style="width:640px;height:420px">
+        <div id="v234-settings-detail-probe" class="bg-background">Settings Detail Pane</div>
       </div>
     </div>
   </div>
