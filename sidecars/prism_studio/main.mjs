@@ -182,6 +182,10 @@ function readRawBuffer(req, maxBytes = MAX_UPLOAD_BYTES) {
  * Create and start the unified Prism Studio HTTP server + Engine + optional Passive CDP Bridge.
  */
 export async function createPrismStudioServer(options = {}) {
+  const hasExplicitDataDir = Boolean(
+    (options.dataDir && String(options.dataDir).trim())
+    || (process.env.AGY_PRISM_DATA_DIR && process.env.AGY_PRISM_DATA_DIR.trim()),
+  );
   const dataDir = resolveDefaultDataDir(options.dataDir || '');
   const sidecarExecDataDir = process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR
     ? resolve(process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR)
@@ -216,6 +220,7 @@ export async function createPrismStudioServer(options = {}) {
     options.engine ||
     (await createWallpaperPrismEngine({
       dataDir,
+      allowLegacyMigration: !hasExplicitDataDir,
       pluginRoot: PLUGIN_ROOT,
       sidecarDataDir: sidecarExecDataDir,
     }));

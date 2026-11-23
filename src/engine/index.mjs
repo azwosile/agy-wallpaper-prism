@@ -82,7 +82,11 @@ export async function createWallpaperPrismEngine(opts = {}) {
   events.setMaxListeners(50);
 
   const effectiveDataDir = opts.dataDir || opts.sidecarDataDir || '';
-  const store = await createPrismStore({ dataDir: effectiveDataDir, pluginRoot: opts.pluginRoot });
+  const store = await createPrismStore({
+    dataDir: effectiveDataDir,
+    pluginRoot: opts.pluginRoot,
+    allowLegacyMigration: opts.allowLegacyMigration,
+  });
 
   let rawLibraryItems = [];
   let publicLibraryItems = [];

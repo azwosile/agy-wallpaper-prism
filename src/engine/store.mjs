@@ -365,9 +365,16 @@ function moveFileCrossDeviceSafe(srcFile, dstFile) {
 }
 
 export async function createPrismStore(opts = {}) {
-  const hasExplicitDir = Boolean(opts.dataDir || process.env.AGY_PRISM_DATA_DIR);
+  const hasExplicitDir = Boolean(
+    (opts.dataDir && String(opts.dataDir).trim())
+    || (process.env.AGY_PRISM_DATA_DIR && process.env.AGY_PRISM_DATA_DIR.trim()),
+  );
+  const shouldMigrateLegacy =
+    opts.allowLegacyMigration !== undefined
+      ? Boolean(opts.allowLegacyMigration)
+      : !hasExplicitDir;
   const dataDir = resolveDefaultPrismDataDir(opts.dataDir || '');
-  if (!hasExplicitDir) {
+  if (shouldMigrateLegacy) {
     migrateLegacyPrismDataIfNeeded(dataDir);
   }
   const configPath = join(dataDir, 'config.json');

@@ -1643,8 +1643,9 @@ export function createPassiveCdpBridge({
     const configured = Number(st?.config?.debugPort || DEFAULT_DEBUG_PORT);
     const set = new Set([configured, DEFAULT_DEBUG_PORT]);
     const pf = readDevToolsActivePort(profileDir);
-    // Never hijack shared port 9222 uninvited on cold boot unless configured or manually awakened!
-    if (pf?.port && (pf.port === configured || sessionForcedWake)) {
+    // Never hijack shared port 9222 uninvited on cold boot unless configured or manually awakened,
+    // while still honoring ephemeral ports written by Antigravity (--remote-debugging-port=0).
+    if (pf?.port && (pf.port !== 9222 || pf.port === configured || sessionForcedWake)) {
       set.add(pf.port);
     }
     return [...set].filter((n) => Number.isInteger(n) && n > 0 && n <= 65535);
