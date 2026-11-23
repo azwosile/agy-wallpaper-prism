@@ -203,8 +203,8 @@ async function main() {
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.0.2', `Expected plugin.json version 2.0.2, got ${raw.version}`);
-    assert.equal(pkg.version, '2.0.2', `Expected package.json version 2.0.2, got ${pkg.version}`);
+    assert.equal(raw.version, '2.0.3', `Expected plugin.json version 2.0.3, got ${raw.version}`);
+    assert.equal(pkg.version, '2.0.3', `Expected package.json version 2.0.3, got ${pkg.version}`);
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -1399,6 +1399,50 @@ async function main() {
         assert.equal(wcoToggleAudit.offAttr, null);
         assert.equal(wcoToggleAudit.onWco?.color, '#00000000', `Expected transparent WCO #00000000 when toggled back on`);
         assert.equal(wcoToggleAudit.onAttr, 'transparent');
+
+        // Verify v2.0.3 `.agy-sidebar-row` hover title alpha-mask + `.agy-row-actions > button` frosted contrast pill
+        const rowActAudit = await hubPage.evaluate(`(() => {
+          const sb = document.querySelector('.agy-sidebar');
+          const row = document.createElement('div');
+          row.setAttribute('data-testid', 'conversation-row-sidebar');
+          row.setAttribute('data-prism-force-hover', '1');
+          row.className = 'relative w-full flex flex-row justify-between agy-sidebar-row group pl-[30px] pr-2 py-1.5 items-center';
+          row.style.cssText = '--row-bg: var(--sidebar-muted); width: 240px;';
+          row.innerHTML =
+            '<div id="mock-row-title-wrap" class="relative flex gap-2 grow min-w-0 items-center pointer-events-none">' +
+              '<span class="truncate w-full">Antigravity 插件市场自动收录与重名评估</span>' +
+            '</div>' +
+            '<div class="relative flex items-center shrink-0 ml-2 pointer-events-none">' +
+              '<div class="relative flex items-center">' +
+                '<div id="mock-row-actions" class="agy-row-actions absolute top-0 bottom-0 -right-1 pl-6 flex items-center justify-end gap-0.5 z-10" style="background: linear-gradient(to right, transparent 0%, var(--row-bg) 25%);">' +
+                  '<button id="mock-archive-btn" type="button">A</button>' +
+                  '<button type="button">P</button>' +
+                  '<button type="button">M</button>' +
+                '</div>' +
+                '<div class="agy-row-status"></div>' +
+              '</div>' +
+            '</div>';
+          sb.appendChild(row);
+          const titleCs = getComputedStyle(document.getElementById('mock-row-title-wrap'));
+          const actCs = getComputedStyle(document.getElementById('mock-row-actions'));
+          const btnCs = getComputedStyle(document.getElementById('mock-archive-btn'));
+          const out = {
+            maskImage: titleCs.maskImage || titleCs.webkitMaskImage || '',
+            actBgImg: actCs.backgroundImage,
+            btnBg: btnCs.backgroundColor,
+          };
+          row.remove();
+          return out;
+        })()`);
+        assert.ok(
+          String(rowActAudit.maskImage).includes('linear-gradient'),
+          `Hovered .agy-sidebar-row title wrapper missing mask-image fade (got: ${rowActAudit.maskImage})`,
+        );
+        assert.equal(rowActAudit.actBgImg, 'none', `.agy-row-actions did not clear broken inline gradient (${rowActAudit.actBgImg})`);
+        assert.ok(
+          parseAlphaFromCssColor(rowActAudit.btnBg) >= 0.6,
+          `Expected .agy-row-actions > button frosted contrast alpha >= 0.6, got ${rowActAudit.btnBg}`,
+        );
 
         // Clear any expected 404 network error log emitted by Chromium during the intentional broken-video probe
         hubPage.consoleErrors = hubPage.consoleErrors.filter((e) => !e.includes('__broken_404_video__') && !e.includes('404'));

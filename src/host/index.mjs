@@ -301,6 +301,20 @@ body,
   backdrop-filter: var(--prism-sidebar-backdrop);
   -webkit-backdrop-filter: var(--prism-sidebar-backdrop);
 }
+:is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]):has(.agy-row-actions):is(:hover, :focus-visible, :has(:focus-visible)) > .min-w-0 {
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 98px), transparent calc(100% - 76px)) !important;
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 98px), transparent calc(100% - 76px)) !important;
+}
+.agy-row-actions { background: none !important; background-image: none !important; padding-left: 4px !important; }
+.agy-row-actions > button {
+  color: var(--prism-fg-2) !important;
+  background-color: var(--prism-surface-card) !important;
+  border: 1px solid var(--prism-border-hairline) !important;
+}
+.agy-row-actions > button:is(:hover, :focus-visible) {
+  color: var(--prism-fg) !important;
+  background-color: var(--prism-surface-popover) !important;
+}
 
 :is([data-testid="agent-input-box"], #antigravity\\.agentSidePanelInputBox > .surface-composer-card, .surface-composer-card, .agy-composer) {
   position: relative !important;

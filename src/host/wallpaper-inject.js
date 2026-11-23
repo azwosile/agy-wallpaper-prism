@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.0.2';
+  var VERSION = '2.0.3';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -1117,8 +1117,8 @@
       '--prism-surface-code-block': cfg.codeReadabilityMode === 'solid' ? rgbaStr(tint1Rgb, 1) : surfEditor,
       '--prism-secondary-bg': rgbaStr(tint2Rgb, isLight ? 0.78 : 0.72),
       '--prism-muted-bg': rgbaStr(tint1Rgb, isLight ? 0.65 : 0.55),
-      '--prism-sidebar-muted': 'rgba(' + S.pt + ', 0.048)',
-      '--prism-sidebar-secondary': 'rgba(' + S.pt + ', 0.082)',
+      '--prism-sidebar-muted': 'rgba(' + S.pt + ', ' + (isLight ? '0.075' : '0.078') + ')',
+      '--prism-sidebar-secondary': 'rgba(' + S.pt + ', ' + (isLight ? '0.115' : '0.125') + ')',
       '--prism-blur-md': blurMd + 'px',
       '--prism-blur-lg': blurLg + 'px',
       '--prism-blur-xl': blurXl + 'px',
@@ -1420,6 +1420,43 @@
       '  backdrop-filter: var(--prism-sidebar-backdrop);\n' +
       '  -webkit-backdrop-filter: var(--prism-sidebar-backdrop);\n' +
       '  box-shadow: inset 0 1px 0 var(--prism-specular-top);\n' +
+      '}\n' +
+      GW + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]):has(.agy-row-actions) {\n' +
+      '  --prism-act-stop: 76px;\n' +
+      '  --prism-act-fade: 98px;\n' +
+      '}\n' +
+      GW + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]):has(.agy-row-status:not(:empty)),\n' +
+      GW + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]):has(.agy-row-actions > button:nth-child(2):last-child) {\n' +
+      '  --prism-act-stop: 50px;\n' +
+      '  --prism-act-fade: 72px;\n' +
+      '}\n' +
+      GW + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]):has(.agy-row-status:not(:empty)):has(.agy-row-actions > button:nth-child(2):last-child),\n' +
+      GW + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]):has(.agy-row-actions > button:only-child) {\n' +
+      '  --prism-act-stop: 26px;\n' +
+      '  --prism-act-fade: 46px;\n' +
+      '}\n' +
+      GW + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]):has(.agy-row-actions):is(:hover, :focus-visible, :has(:focus-visible), [data-prism-force-hover="1"]) > .min-w-0 {\n' +
+      '  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - var(--prism-act-fade, 98px)), transparent calc(100% - var(--prism-act-stop, 76px))) !important;\n' +
+      '  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - var(--prism-act-fade, 98px)), transparent calc(100% - var(--prism-act-stop, 76px))) !important;\n' +
+      '}\n' +
+      GW + ' .agy-row-actions {\n' +
+      '  background: none !important;\n' +
+      '  background-image: none !important;\n' +
+      '  padding-left: 4px !important;\n' +
+      '}\n' +
+      GW + ' .agy-row-actions > button {\n' +
+      '  color: var(--prism-fg-2) !important;\n' +
+      '  background-color: rgba(var(--prism-shade-rgb), ' + (isLight ? '0.78' : '0.68') + ') !important;\n' +
+      '  border: 1px solid var(--prism-border-hairline) !important;\n' +
+      '  backdrop-filter: blur(8px) !important;\n' +
+      '  -webkit-backdrop-filter: blur(8px) !important;\n' +
+      '  box-shadow: 0 1px 4px rgba(0, 0, 0, ' + (isLight ? '0.08' : '0.26') + ') !important;\n' +
+      '}\n' +
+      GW + ' .agy-row-actions > button:is(:hover, :focus-visible) {\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '  background-color: rgba(var(--prism-tint-2-rgb), 0.94) !important;\n' +
+      '  border-color: var(--prism-border-card) !important;\n' +
+      '  box-shadow: 0 2px 8px rgba(0, 0, 0, ' + (isLight ? '0.14' : '0.38') + ') !important;\n' +
       '}'
     );
 
