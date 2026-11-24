@@ -4,7 +4,7 @@
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,11 +13,16 @@ import {
   DEFAULT_DEBUG_PORT,
   PLUGIN_ID,
   PLUGIN_VERSION,
+  PRISM_DOM,
   SCENE_PRESETS,
   SCENE_PRESET_IDS,
   SIDECAR_URI,
 } from '../../src/shared/schema.mjs';
-import { createWallpaperPrismEngine, resolveDefaultPrismDataDir } from '../../src/engine/index.mjs';
+import {
+  createWallpaperPrismEngine,
+  hasRawTraversalAttempt,
+  resolveDefaultPrismDataDir,
+} from '../../src/engine/index.mjs';
 import * as hostModule from '../../src/host/index.mjs';
 import {
   createCanaryController,
@@ -197,6 +202,12 @@ export async function createPrismStudioServer(options = {}) {
     : randomBytes(32).toString('hex');
   let localSessionAwake = false;
   let boundOrigin = '';
+  let server = null;
+  const getPluginOrigin = () => {
+    const addr = server?.address?.();
+    const p = typeof addr === 'object' && addr ? addr.port : 0;
+    return p > 0 ? `plugin://agy-wallpaper-prism--prism_studio-${p}` : '';
+  };
 
   const envPort = parseInt(
     process.env.ANTIGRAVITY_SIDECAR_WEB_PORT ||
@@ -394,6 +405,7 @@ export async function createPrismStudioServer(options = {}) {
       autoRestoreLastSettings: hostStatus.autoRestoreLastSettings,
       stats,
       mediaOrigin,
+      pluginOrigin: getPluginOrigin(),
       pid: process.pid,
       version: PLUGIN_VERSION,
       studioUri: SIDECAR_URI,
@@ -544,6 +556,29 @@ export async function createPrismStudioServer(options = {}) {
       const state = await buildCanonicalState();
       return { ok: true, sessionAwake: true, state };
     },
+    'skin.toggle': async (params = {}) => {
+      const curSt = await buildCanonicalState();
+      const nextEnabled = typeof params?.enabled === 'boolean' ? params.enabled : !curSt.skinEnabled;
+      if (nextEnabled) {
+        localSessionAwake = true;
+        if (canaryController.getStatus().state === 'tripped') {
+          if (cdpBridge) await cdpBridge.resetCanary();
+          else canaryController.reset();
+        }
+        await engine.updateConfig({ skinEnabled: true });
+        if (cdpBridge) {
+          await cdpBridge.wake();
+          void broadcastStudioState();
+        } else {
+          await pushToHost();
+        }
+      } else {
+        await engine.updateConfig({ skinEnabled: false });
+        await pushToHost();
+      }
+      const state = await buildCanonicalState();
+      return { ok: true, skinEnabled: nextEnabled, state };
+    },
     'canary.get': async () => ({ ok: true, canary: cdpBridge ? cdpBridge.getCanary() : canaryController.getStatus() }),
     'canary.healthy': async (params = {}) => {
       const next = cdpBridge
@@ -593,6 +628,7 @@ export async function createPrismStudioServer(options = {}) {
       hostScripts: hostModule,
       rpcHandlers,
       getHostOrigin: () => boundOrigin,
+      getPluginOrigin,
       capToken: hostCapToken,
       dataDir,
       pluginRoot: PLUGIN_ROOT,
@@ -635,8 +671,9 @@ export async function createPrismStudioServer(options = {}) {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': reqOrigin,
         Vary: 'Origin',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Sidecar-Token, X-Prism-Token, Cache-Control',
+        'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Sidecar-Token, X-Prism-Token, Cache-Control, Range, If-Range, If-None-Match',
+        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, ETag, X-Prism-Mse-Mime',
         'Access-Control-Allow-Private-Network': 'true',
         'Cross-Origin-Resource-Policy': 'cross-origin',
       });
@@ -666,6 +703,7 @@ export async function createPrismStudioServer(options = {}) {
         const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
           skinEnabled: st.skinEnabled,
           slides: st.activeItem?.slides,
+          pluginOrigin: getPluginOrigin(),
         });
         const body = `window.__AGY_PRISM_BOOT_PAYLOAD__ = ${JSON.stringify(skinPayload)};\n${hostModule.getHostSkinScript()}\n`;
         res.writeHead(200, { ...hostHeaders, 'Content-Type': 'text/javascript; charset=utf-8' });
@@ -692,6 +730,7 @@ export async function createPrismStudioServer(options = {}) {
         const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
           skinEnabled: st.skinEnabled,
           slides: st.activeItem?.slides,
+          pluginOrigin: getPluginOrigin(),
         });
         const css =
           typeof hostModule.buildStaticCssSheet === 'function'
@@ -734,12 +773,141 @@ export async function createPrismStudioServer(options = {}) {
           const st = await buildCanonicalState();
           const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
             skinEnabled: st.skinEnabled,
+            slides: st.activeItem?.slides,
+            pluginOrigin: getPluginOrigin(),
           });
-          res.write(`retry: 2500\ndata: ${JSON.stringify({ event: 'state', startupMode: st.config.startupMode, skinEnabled: st.skinEnabled, skinPayload, data: st })}\n\n`);
+          res.write(`retry: 2500\ndata: ${JSON.stringify({ event: 'state', skinVersion: PRISM_DOM.skinVersion, startupMode: st.config.startupMode, skinEnabled: st.skinEnabled, skinPayload, data: st })}\n\n`);
           res.end();
         }
         return;
       }
+    }
+
+    // ---- Secure `plugin://` Same-Origin Streaming Media Proxy (`/media-proxy/<subRoute>/*`) ----
+    if (pathname.startsWith('/media-proxy/')) {
+      const proxyCors = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+        'Access-Control-Allow-Headers': 'Range, If-Range, If-None-Match, Content-Type',
+        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, ETag, X-Prism-Mse-Mime',
+        'Access-Control-Allow-Private-Network': 'true',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+      };
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        sendJson(res, 405, { ok: false, error: 'Method Not Allowed' }, proxyCors);
+        return;
+      }
+      if (hasRawTraversalAttempt(req.url || '')) {
+        sendJson(res, 403, { ok: false, error: 'Forbidden: path traversal blocked' }, proxyCors);
+        return;
+      }
+      const proxyMatch = /^\/media-proxy\/(media|preview|slide|slides|audio|scene-video|scene-audio|video-stage|scene-live|web|scene-files|mse-fmp4)(\/.*)?$/.exec(pathname);
+      if (!proxyMatch) {
+        sendJson(res, 404, { ok: false, error: 'Unsupported media-proxy sub-route' }, proxyCors);
+        return;
+      }
+      const [, subRoute, rest = ''] = proxyMatch;
+      const upstreamPath = `/${subRoute}${rest}${urlObj.search}`;
+      const fwdHeaders = {};
+      if (req.headers.range) fwdHeaders.range = String(req.headers.range);
+      if (req.headers['if-range']) fwdHeaders['if-range'] = String(req.headers['if-range']);
+      if (req.headers['if-none-match']) fwdHeaders['if-none-match'] = String(req.headers['if-none-match']);
+
+      const passthroughKeys = [
+        'content-type',
+        'content-length',
+        'content-range',
+        'accept-ranges',
+        'cache-control',
+        'etag',
+        'x-prism-mse-mime',
+      ];
+
+      const isInMemory = typeof req.socket?.setNoDelay !== 'function';
+      if (isInMemory && typeof engine.mediaServer?.inject === 'function') {
+        const up = await engine.mediaServer.inject({
+          method: req.method,
+          url: upstreamPath,
+          headers: fwdHeaders,
+        });
+        const outHeaders = { ...proxyCors };
+        for (const hk of passthroughKeys) {
+          if (up.headers && up.headers[hk] !== undefined) {
+            outHeaders[hk] = up.headers[hk];
+          }
+        }
+        res.writeHead(up.status || up.statusCode || 200, outHeaders);
+        if (req.method === 'HEAD') res.end();
+        else res.end(up.body);
+        return;
+      }
+
+      const mediaOrigin = typeof engine.getMediaOrigin === 'function'
+        ? String(engine.getMediaOrigin() || '').replace(/\/+$/, '')
+        : '';
+      if (!mediaOrigin) {
+        sendJson(res, 503, { ok: false, error: 'Media server unavailable' }, proxyCors);
+        return;
+      }
+      const targetUrl = new URL(`${mediaOrigin}${upstreamPath}`);
+      await new Promise((resolveProxy) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolveProxy();
+        };
+        const upReq = httpRequest(
+          {
+            protocol: targetUrl.protocol,
+            hostname: targetUrl.hostname,
+            port: targetUrl.port,
+            path: `${targetUrl.pathname}${targetUrl.search}`,
+            method: req.method,
+            headers: fwdHeaders,
+          },
+          (upRes) => {
+            const outHeaders = { ...proxyCors };
+            for (const hk of passthroughKeys) {
+              if (upRes.headers[hk] !== undefined) {
+                outHeaders[hk] = upRes.headers[hk];
+              }
+            }
+            res.writeHead(upRes.statusCode || 200, outHeaders);
+            if (req.method === 'HEAD') {
+              upRes.resume();
+              res.end();
+              finish();
+              return;
+            }
+            upRes.on('error', () => {
+              try { res.end(); } catch { /* ignore */ }
+              finish();
+            });
+            res.on('finish', finish);
+            upRes.pipe(res);
+          },
+        );
+        const abortUpstream = () => {
+          if (!res.writableEnded) {
+            try { upReq.destroy(); } catch { /* ignore */ }
+          }
+          finish();
+        };
+        req.on('close', abortUpstream);
+        req.on('aborted', abortUpstream);
+        res.on('close', abortUpstream);
+        upReq.on('error', (err) => {
+          if (!res.headersSent) {
+            sendJson(res, 502, { ok: false, error: `Media proxy upstream error: ${err?.message || String(err)}` }, proxyCors);
+          } else {
+            try { res.end(); } catch { /* ignore */ }
+          }
+          finish();
+        });
+        upReq.end();
+      });
+      return;
     }
 
     // Static UI & Preload
@@ -835,6 +1003,7 @@ export async function createPrismStudioServer(options = {}) {
         skinEnabled: st.skinEnabled,
         activeItem: st.activeItem,
         mediaOrigin: st.mediaOrigin,
+        pluginOrigin: st.pluginOrigin,
         pid: process.pid,
         version: PLUGIN_VERSION,
       });
@@ -1024,6 +1193,12 @@ export async function createPrismStudioServer(options = {}) {
         return;
       }
 
+      if (pathname === '/api/skin/toggle') {
+        const out = await rpcHandlers['skin.toggle'](body || {});
+        sendJson(res, 200, out);
+        return;
+      }
+
       if (pathname === '/api/canary/reset') {
         const out = await rpcHandlers['canary.reset']();
         sendJson(res, 200, out);
@@ -1086,7 +1261,7 @@ export async function createPrismStudioServer(options = {}) {
     sendJson(res, 404, { ok: false, error: `Route not found: ${req.method} ${pathname}` });
   };
 
-  const server = createServer((req, res) => {
+  server = createServer((req, res) => {
     handleRequest(req, res).catch((err) => {
       if (!res.headersSent) {
         sendJson(res, 400, { ok: false, error: err?.message || String(err) });
@@ -1216,6 +1391,7 @@ export async function createPrismStudioServer(options = {}) {
     server,
     port: actualPort,
     origin,
+    pluginOrigin: getPluginOrigin(),
     token: authToken,
     hostCapToken,
     hostBaseUrl: `${origin}/host/${hostCapToken}`,

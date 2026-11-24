@@ -1,4 +1,4 @@
-// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.0.6).
+// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.0.7).
 //
 // Gentle Fail-Open ES2020 browser IIFE loaded post-hydration (`stage.js`) or in headless verification harnesses.
 // Zero `Page.enable`/`Runtime.enable`, zero `app.asar` modifications, `z-index: -1` inert stage,
@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.0.6';
+  var VERSION = '2.0.7';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -820,29 +820,81 @@
     if (!srcUrl) return Promise.resolve(null);
 
     return new Promise(function (resolve) {
-      var img = new Image();
+      var ImageCtor = typeof W.Image === 'function' ? W.Image : typeof Image === 'function' ? Image : null;
+      var img = ImageCtor ? new ImageCtor() : doc.createElement('img');
       img.crossOrigin = 'anonymous';
       var done = false;
+      var blobUrl = '';
+      var ac = null;
+      var timer = 0;
       var finish = function (val) {
         if (done) return;
         done = true;
+        clearTimeout(timer);
+        timer = 0;
+        if (ac) {
+          try {
+            ac.abort();
+          } catch (_) {}
+          ac = null;
+        }
+        if (blobUrl) {
+          try {
+            if (typeof W.URL !== 'undefined' && typeof W.URL.revokeObjectURL === 'function') {
+              W.URL.revokeObjectURL(blobUrl);
+            }
+          } catch (_) {}
+          blobUrl = '';
+        }
         if (val) {
           if (wid) accentCache[wid] = val;
           callHostRpc('accent.save', val);
         }
         resolve(val);
       };
-      var timer = setTimeout(function () {
+      timer = setTimeout(function () {
         finish(null);
       }, 4000);
-      img.onload = function () {
-        clearTimeout(timer);
+      var handleLoad = function () {
         finish(extractAccentFromImageSource(img, wid));
       };
-      img.onerror = function () {
-        clearTimeout(timer);
+      var handleErr = function () {
         finish(null);
       };
+      img.onload = handleLoad;
+      img.onerror = handleErr;
+      if (typeof img.addEventListener === 'function') {
+        img.addEventListener('load', handleLoad);
+        img.addEventListener('error', handleErr);
+      }
+      if (isCrossSchemeLoopbackMediaUrl(srcUrl)) {
+        ac = typeof W.AbortController === 'function' ? new W.AbortController() : null;
+        W.fetch(srcUrl, ac ? { signal: ac.signal } : undefined)
+          .then(function (res) {
+            if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : 0));
+            return res.blob();
+          })
+          .then(function (blob) {
+            if (done) return;
+            if (!blob || blob.size <= 0) {
+              finish(null);
+              return;
+            }
+            blobUrl = W.URL.createObjectURL(blob);
+            if (done) {
+              try {
+                W.URL.revokeObjectURL(blobUrl);
+              } catch (_) {}
+              blobUrl = '';
+              return;
+            }
+            img.src = blobUrl;
+          })
+          .catch(function () {
+            finish(null);
+          });
+        return;
+      }
       img.src = srcUrl;
     });
   }
@@ -1215,10 +1267,18 @@
       '--prism-r-xs': R.xs + 'px',
       '--prism-native-floor': isLight ? '#f7f7f8' : '#070708',
       '--prism-stage-bg': 'transparent',
-      '--prism-wall-image':
-        state.item && resolveEffectiveKind(state.item, cfg) === 'image' && (state.item.mediaUrl || state.item.thumbUrl)
-          ? 'url(' + JSON.stringify(String(state.item.mediaUrl || state.item.thumbUrl)) + ')'
-          : 'none',
+      '--prism-wall-image': (function () {
+        var rawWallUrl =
+          state.item && resolveEffectiveKind(state.item, cfg) === 'image'
+            ? String(state.item.mediaUrl || state.item.thumbUrl || '').trim()
+            : '';
+        if (!rawWallUrl) return 'none';
+        if (isCrossSchemeLoopbackUrl(rawWallUrl)) {
+          var pluginWallUrl = String((state.item && state.item.pluginMediaUrl) || '').trim();
+          return /^plugin:\/\//i.test(pluginWallUrl) ? 'url(' + JSON.stringify(pluginWallUrl) + ')' : 'none';
+        }
+        return 'url(' + JSON.stringify(rawWallUrl) + ')';
+      })(),
       '--prism-media-fit': fitCss,
       '--prism-media-pos': cfg.posX + '% ' + cfg.posY + '%',
       '--prism-media-opacity': cfg.mediaOpacity.toFixed(3),
@@ -2591,6 +2651,9 @@
     startBlobFetch();
   }
 
+  // Antigravity 2.34.0 (Chrome 152) serves the main hub on `https://127.0.0.1:<port>`, where direct
+  // `<img>` requests to `http://127.0.0.1:<mediaPort>` can silently hang without firing `onerror`.
+  // Zero-delay `fetch()` -> `blob:` bypasses Chrome 152 passive Mixed Content hangs at 0ms.
   function attachLoopbackImageSrc(img, url, wrap, onFail) {
     if (!img || !url) {
       if (typeof onFail === 'function') onFail();
@@ -2602,6 +2665,12 @@
     img.__prismTimedOut = false;
     clearTimeout(img.__prismFetchTimer);
     img.__prismFetchTimer = 0;
+    if (typeof img.__prismErrCleanup === 'function') {
+      try {
+        img.__prismErrCleanup();
+      } catch (_) {}
+      img.__prismErrCleanup = null;
+    }
     if (img.__prismBlobUrl) {
       try {
         if (typeof W.URL !== 'undefined' && typeof W.URL.revokeObjectURL === 'function') {
@@ -2622,72 +2691,77 @@
       if (typeof onFail === 'function') onFail();
     };
 
+    var startBlobFetch = function () {
+      if (!isCurrent() || img.__prismFetchingBlob) return;
+      img.__prismTriedBlob = true;
+      img.__prismFetchingBlob = true;
+      img.__prismTimedOut = false;
+      var ac = typeof W.AbortController === 'function' ? new W.AbortController() : null;
+      if (ac && wrap) {
+        if (!wrap.__prismAbortControllers) wrap.__prismAbortControllers = [];
+        wrap.__prismAbortControllers.push(ac);
+      }
+      var fetchTimer = setTimeout(function () {
+        img.__prismTimedOut = true;
+        try {
+          if (ac) ac.abort();
+        } catch (_) {}
+      }, BLOB_FETCH_TIMEOUT_MS);
+      img.__prismFetchTimer = fetchTimer;
+
+      W.fetch(url, ac ? { signal: ac.signal } : undefined)
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : 0));
+          var lenHeader = res.headers && typeof res.headers.get === 'function' ? Number(res.headers.get('content-length')) : 0;
+          if (Number.isFinite(lenHeader) && lenHeader > MAX_BLOB_MEDIA_BYTES) {
+            try {
+              if (ac) ac.abort();
+            } catch (_) {}
+            throw new Error('Image exceeds blob cap');
+          }
+          return res.blob();
+        })
+        .then(function (blob) {
+          clearTimeout(fetchTimer);
+          img.__prismFetchTimer = 0;
+          if (!isCurrent()) {
+            img.__prismFetchingBlob = false;
+            return;
+          }
+          if (!blob || blob.size <= 0 || blob.size > MAX_BLOB_MEDIA_BYTES) {
+            throw new Error('Invalid image blob');
+          }
+          var blobUrl = W.URL.createObjectURL(blob);
+          if (!isCurrent()) {
+            img.__prismFetchingBlob = false;
+            try {
+              W.URL.revokeObjectURL(blobUrl);
+            } catch (_) {}
+            return;
+          }
+          img.__prismFetchingBlob = false;
+          if (img.__prismBlobUrl) {
+            try {
+              W.URL.revokeObjectURL(img.__prismBlobUrl);
+            } catch (_) {}
+          }
+          img.__prismBlobUrl = blobUrl;
+          img.src = blobUrl;
+        })
+        .catch(function (err) {
+          clearTimeout(fetchTimer);
+          img.__prismFetchTimer = 0;
+          img.__prismFetchingBlob = false;
+          if (!isCurrent()) return;
+          if (err && err.name === 'AbortError' && !img.__prismTimedOut) return;
+          triggerFail();
+        });
+    };
+
     var handleError = function () {
       if (!isCurrent() || img.__prismFetchingBlob) return;
       if (!img.__prismTriedBlob && isCrossSchemeLoopbackMediaUrl(url)) {
-        img.__prismTriedBlob = true;
-        img.__prismFetchingBlob = true;
-        img.__prismTimedOut = false;
-        var ac = typeof W.AbortController === 'function' ? new W.AbortController() : null;
-        if (ac && wrap) {
-          if (!wrap.__prismAbortControllers) wrap.__prismAbortControllers = [];
-          wrap.__prismAbortControllers.push(ac);
-        }
-        var fetchTimer = setTimeout(function () {
-          img.__prismTimedOut = true;
-          try {
-            if (ac) ac.abort();
-          } catch (_) {}
-        }, BLOB_FETCH_TIMEOUT_MS);
-        img.__prismFetchTimer = fetchTimer;
-
-        W.fetch(url, ac ? { signal: ac.signal } : undefined)
-          .then(function (res) {
-            if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : 0));
-            var lenHeader = res.headers && typeof res.headers.get === 'function' ? Number(res.headers.get('content-length')) : 0;
-            if (Number.isFinite(lenHeader) && lenHeader > MAX_BLOB_MEDIA_BYTES) {
-              try {
-                if (ac) ac.abort();
-              } catch (_) {}
-              throw new Error('Image exceeds blob cap');
-            }
-            return res.blob();
-          })
-          .then(function (blob) {
-            clearTimeout(fetchTimer);
-            img.__prismFetchTimer = 0;
-            if (!isCurrent()) {
-              img.__prismFetchingBlob = false;
-              return;
-            }
-            if (!blob || blob.size <= 0 || blob.size > MAX_BLOB_MEDIA_BYTES) {
-              throw new Error('Invalid image blob');
-            }
-            var blobUrl = W.URL.createObjectURL(blob);
-            if (!isCurrent()) {
-              img.__prismFetchingBlob = false;
-              try {
-                W.URL.revokeObjectURL(blobUrl);
-              } catch (_) {}
-              return;
-            }
-            img.__prismFetchingBlob = false;
-            if (img.__prismBlobUrl) {
-              try {
-                W.URL.revokeObjectURL(img.__prismBlobUrl);
-              } catch (_) {}
-            }
-            img.__prismBlobUrl = blobUrl;
-            img.src = blobUrl;
-          })
-          .catch(function (err) {
-            clearTimeout(fetchTimer);
-            img.__prismFetchTimer = 0;
-            img.__prismFetchingBlob = false;
-            if (!isCurrent()) return;
-            if (err && err.name === 'AbortError' && !img.__prismTimedOut) return;
-            triggerFail();
-          });
+        startBlobFetch();
         return;
       }
       triggerFail();
@@ -2696,8 +2770,321 @@
     img.onerror = handleError;
     if (typeof img.addEventListener === 'function') {
       img.addEventListener('error', handleError);
+      img.__prismErrCleanup = function () {
+        if (typeof img.removeEventListener === 'function') {
+          img.removeEventListener('error', handleError);
+        }
+      };
     }
+
+    if (isCrossSchemeLoopbackMediaUrl(url)) {
+      startBlobFetch();
+      return;
+    }
+
     img.src = url;
+  }
+
+  // Streaming MediaSource (MSE) fMP4 player for >256 MiB videos (e.g. 971 MB / 4 GB) under `https:` hosts.
+  // Pumps chunks from `/mse-fmp4/<token>` into SourceBuffer with rolling frame eviction so RAM stays <32 MiB.
+  function mountMseStreamVideo(video, mseUrl, wrap, isStaleFn, onVideoDecoded, fallbackToPoster) {
+    var isStale = typeof isStaleFn === 'function' ? isStaleFn : function () { return destroyed; };
+    var failedOnce = false;
+    var mseDone = false;
+    var activeReader = null;
+    var ac = typeof W.AbortController === 'function' ? new W.AbortController() : null;
+
+    var failMse = function () {
+      if (failedOnce) return;
+      failedOnce = true;
+      mseDone = true;
+      if (video) {
+        video.__prismMseLoading = false;
+      }
+      if (ac) {
+        try {
+          ac.abort();
+        } catch (_) {}
+      }
+      if (activeReader && typeof activeReader.cancel === 'function') {
+        try {
+          activeReader.cancel().catch(function () {});
+        } catch (_) {}
+        activeReader = null;
+      }
+      if (!destroyed && !isStale() && typeof fallbackToPoster === 'function') {
+        fallbackToPoster();
+      }
+    };
+
+    if (
+      !video ||
+      !mseUrl ||
+      typeof W.MediaSource !== 'function' ||
+      typeof W.fetch !== 'function' ||
+      typeof W.URL === 'undefined' ||
+      typeof W.URL.createObjectURL !== 'function'
+    ) {
+      failMse();
+      return;
+    }
+
+    if (ac && wrap) {
+      if (!wrap.__prismAbortControllers) wrap.__prismAbortControllers = [];
+      wrap.__prismAbortControllers.push(ac);
+    }
+    if (ac && ac.signal && typeof ac.signal.addEventListener === 'function') {
+      ac.signal.addEventListener(
+        'abort',
+        function () {
+          mseDone = true;
+          if (activeReader && typeof activeReader.cancel === 'function') {
+            try {
+              activeReader.cancel().catch(function () {});
+            } catch (_) {}
+            activeReader = null;
+          }
+        },
+        { once: true }
+      );
+    }
+
+    if (video.__prismBlobUrl) {
+      try {
+        if (typeof W.URL.revokeObjectURL === 'function') {
+          W.URL.revokeObjectURL(video.__prismBlobUrl);
+        }
+      } catch (_) {}
+      video.__prismBlobUrl = '';
+    }
+
+    video.__prismMseActive = true;
+    video.__prismMseLoading = true;
+    video.__prismMseEvicted = false;
+
+    var ms;
+    try {
+      ms = new W.MediaSource();
+    } catch (_) {
+      failMse();
+      return;
+    }
+
+    var opened = false;
+    var onSourceOpen = function () {
+      if (opened || mseDone || destroyed || isStale()) return;
+      opened = true;
+
+      W.fetch(mseUrl, ac ? { signal: ac.signal } : undefined)
+        .then(function (res) {
+          if (mseDone || destroyed || isStale()) return;
+          if (!res || !res.ok) {
+            throw new Error('MSE HTTP ' + (res ? res.status : 0));
+          }
+
+          var hdrMime =
+            res.headers && typeof res.headers.get === 'function' ? String(res.headers.get('x-prism-mse-mime') || '').trim() : '';
+          var mimeCandidates = [];
+          if (hdrMime) mimeCandidates.push(hdrMime);
+          mimeCandidates.push(
+            'video/mp4; codecs="avc1.640028"',
+            'video/mp4; codecs="avc1.42E01E"',
+            'video/mp4; codecs="hvc1.1.6.L120.90"',
+            'video/mp4; codecs="hev1.1.6.L120.90"'
+          );
+
+          var chosenMime = '';
+          for (var mi = 0; mi < mimeCandidates.length; mi += 1) {
+            try {
+              if (typeof W.MediaSource.isTypeSupported !== 'function' || W.MediaSource.isTypeSupported(mimeCandidates[mi])) {
+                chosenMime = mimeCandidates[mi];
+                break;
+              }
+            } catch (_) {}
+          }
+          if (!chosenMime) {
+            throw new Error('Unsupported MSE codecs');
+          }
+
+          var sb = ms.addSourceBuffer(chosenMime);
+          var waitForUpdateEnd = function () {
+            if (!sb || !sb.updating) return Promise.resolve();
+            return new Promise(function (resolveEnd, rejectEnd) {
+              var settledWait = false;
+              var cleanupWait = function () {
+                if (typeof sb.removeEventListener === 'function') {
+                  sb.removeEventListener('updateend', onEnd);
+                  sb.removeEventListener('error', onErr);
+                  sb.removeEventListener('abort', onErr);
+                }
+              };
+              var onEnd = function () {
+                if (settledWait) return;
+                settledWait = true;
+                cleanupWait();
+                resolveEnd();
+              };
+              var onErr = function () {
+                if (settledWait) return;
+                settledWait = true;
+                cleanupWait();
+                rejectEnd(new Error('SourceBuffer update error'));
+              };
+              if (typeof sb.addEventListener === 'function') {
+                sb.addEventListener('updateend', onEnd);
+                sb.addEventListener('error', onErr);
+                sb.addEventListener('abort', onErr);
+              } else {
+                resolveEnd();
+              }
+            });
+          };
+
+          var evictOldFramesIfNeeded = function () {
+            try {
+              var curT = Number(video.currentTime || 0);
+              if (curT > 25 && sb.buffered && sb.buffered.length > 0) {
+                var bStart = Number(sb.buffered.start(0));
+                var bEnd = Number(sb.buffered.end(sb.buffered.length - 1));
+                if (bEnd - bStart > 20 && curT - 15 > bStart) {
+                  video.__prismMseEvicted = true;
+                  sb.remove(0, curT - 15);
+                  return waitForUpdateEnd();
+                }
+              }
+            } catch (_) {}
+            return Promise.resolve();
+          };
+
+          var waitForBackpressure = function () {
+            try {
+              if (video.readyState >= 2 && sb.buffered && sb.buffered.length > 0) {
+                var curT = Number(video.currentTime || 0);
+                var bEnd = Number(sb.buffered.end(sb.buffered.length - 1));
+                if (bEnd - curT > 25) {
+                  return new Promise(function (resolveDelay) {
+                    setTimeout(resolveDelay, 250);
+                  });
+                }
+              }
+            } catch (_) {}
+            return Promise.resolve();
+          };
+
+          var appendChunkWithRetry = function (u8) {
+            return waitForUpdateEnd()
+              .then(evictOldFramesIfNeeded)
+              .then(function () {
+                if (mseDone || destroyed || isStale()) return;
+                try {
+                  sb.appendBuffer(u8);
+                  return waitForUpdateEnd();
+                } catch (appendErr) {
+                  if (appendErr && appendErr.name === 'QuotaExceededError') {
+                    var curT = Number(video.currentTime || 0);
+                    if (curT > 5 && sb.buffered && sb.buffered.length > 0) {
+                      try {
+                        video.__prismMseEvicted = true;
+                        sb.remove(0, Math.max(0, curT - 5));
+                      } catch (_) {}
+                      return waitForUpdateEnd().then(function () {
+                        if (mseDone || destroyed || isStale()) return;
+                        sb.appendBuffer(u8);
+                        return waitForUpdateEnd();
+                      });
+                    }
+                  }
+                  throw appendErr;
+                }
+              });
+          };
+
+          var finishStream = function () {
+            return waitForUpdateEnd().then(function () {
+              if (mseDone || destroyed || isStale()) return;
+              video.__prismMseLoading = false;
+              try {
+                if (ms.readyState === 'open' && typeof ms.endOfStream === 'function') {
+                  ms.endOfStream();
+                }
+              } catch (_) {}
+              syncMediaPlaybackState();
+              if (video.readyState >= 2 && video.videoWidth > 0 && typeof onVideoDecoded === 'function') {
+                onVideoDecoded();
+              }
+            });
+          };
+
+          if (res.body && typeof res.body.getReader === 'function') {
+            var reader = res.body.getReader();
+            activeReader = reader;
+            var chunksAppended = 0;
+
+            var pump = function () {
+              if (mseDone || destroyed || isStale()) {
+                try {
+                  reader.cancel().catch(function () {});
+                } catch (_) {}
+                return Promise.resolve();
+              }
+              return waitForBackpressure().then(function () {
+                if (mseDone || destroyed || isStale()) return;
+                return reader.read().then(function (step) {
+                  if (mseDone || destroyed || isStale()) return;
+                  if (!step || step.done) {
+                    activeReader = null;
+                    return finishStream();
+                  }
+                  var chunk = step.value;
+                  if (chunk && chunk.byteLength > 0) {
+                    var u8 = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+                    return appendChunkWithRetry(u8).then(function () {
+                      if (mseDone || destroyed || isStale()) return;
+                      chunksAppended += 1;
+                      if (chunksAppended === 1) {
+                        syncMediaPlaybackState();
+                      }
+                      if (video.readyState >= 2 && video.videoWidth > 0 && typeof onVideoDecoded === 'function') {
+                        onVideoDecoded();
+                      }
+                      return pump();
+                    });
+                  }
+                  return pump();
+                });
+              });
+            };
+
+            return pump();
+          }
+
+          if (typeof res.arrayBuffer === 'function') {
+            return res.arrayBuffer().then(function (buf) {
+              if (mseDone || destroyed || isStale()) return;
+              return appendChunkWithRetry(new Uint8Array(buf)).then(finishStream);
+            });
+          }
+
+          throw new Error('MSE response body unreadable');
+        })
+        .catch(function (err) {
+          if (mseDone || destroyed || isStale()) return;
+          if (err && err.name === 'AbortError') return;
+          failMse();
+        });
+    };
+
+    if (typeof ms.addEventListener === 'function') {
+      ms.addEventListener('sourceopen', onSourceOpen);
+    }
+
+    var msBlobUrl = W.URL.createObjectURL(ms);
+    video.__prismBlobUrl = msBlobUrl;
+    video.src = msBlobUrl;
+
+    if (ms.readyState === 'open') {
+      onSourceOpen();
+    }
   }
 
   function disposeWrap(wrap) {
@@ -2726,6 +3113,14 @@
         clearTimeout(el.__prismFetchTimer);
         el.__prismFetchTimer = 0;
         el.__prismFetchingBlob = false;
+        el.__prismMseLoading = false;
+        el.__prismMseActive = false;
+        if (typeof el.__prismErrCleanup === 'function') {
+          try {
+            el.__prismErrCleanup();
+          } catch (_) {}
+          el.__prismErrCleanup = null;
+        }
         if (typeof el.pause === 'function') el.pause();
         if (typeof el.removeAttribute === 'function') el.removeAttribute('src');
         if ('srcObject' in el) el.srcObject = null;
@@ -3044,8 +3439,25 @@
     }
     var mediaUrl = rawMediaUrl;
     var videoStageBase = effKind === 'video' ? String((item && item.videoStageUrl) || '').trim() : '';
+    var pluginMediaUrl = effKind === 'video' ? String((item && item.pluginMediaUrl) || '').trim() : '';
+    var pluginAudioUrl = effKind === 'video' ? String((item && item.pluginAudioUrl) || '').trim() : '';
+    var pluginVideoStageUrl = effKind === 'video' ? String((item && item.pluginVideoStageUrl) || '').trim() : '';
+    var mseFmp4Url = effKind === 'video' ? String((item && item.mseFmp4Url) || '').trim() : '';
     var audioUrl = String((item && item.audioUrl) || '').trim();
-    var mediaKey = effKind + '|' + mediaUrl + '|' + videoStageBase + '|' + audioUrl + '|' + (state.slides ? state.slides.length : 0);
+    var mediaKey =
+      effKind +
+      '|' +
+      mediaUrl +
+      '|' +
+      videoStageBase +
+      '|' +
+      audioUrl +
+      '|' +
+      pluginMediaUrl +
+      '|' +
+      mseFmp4Url +
+      '|' +
+      (state.slides ? state.slides.length : 0);
 
     var hasActive = Boolean(state.activeWrap && state.activeWrap.isConnected && state.wallpaperReady);
     var hasLivePending = Boolean(state.pendingWrap && state.pendingWrap.isConnected && state.pendingMediaTimer);
@@ -3333,11 +3745,17 @@
     }
 
     if (effKind === 'video') {
-      var mountDirectVideo = function () {
+      var pluginFallbackUsed = false;
+      var mountDirectVideo = function (directOpts) {
         if (destroyed || mountSeq !== state.mediaMountSeq) {
           disposeWrap(nextWrap);
           return;
         }
+        var dOpts = directOpts && typeof directOpts === 'object' ? directOpts : null;
+        var effectiveMediaUrl = (dOpts && dOpts.directMediaUrl) || mediaUrl;
+        var effectiveAudioUrl = dOpts && dOpts.directAudioUrl !== undefined ? dOpts.directAudioUrl : audioUrl;
+        var allowPluginErrorFallback = Boolean(dOpts && dOpts.allowPluginErrorFallback);
+
         var video = doc.createElement('video');
         video.className = 'agy-prism-media-el';
         // Always start muted & connected in DOM BEFORE setting video.src so Chromium autoplay never blocks (#31/#32).
@@ -3352,11 +3770,18 @@
         video.setAttribute('playsinline', '');
         video.setAttribute('autoplay', '');
         video.setAttribute('disablepictureinpicture', '');
-        if (item && item.thumbUrl) {
-          video.poster = String(item.thumbUrl);
+        if (item) {
+          if (item.thumbUrl && !isCrossSchemeLoopbackUrl(item.thumbUrl)) {
+            video.poster = String(item.thumbUrl);
+          } else if (item.pluginThumbUrl && /^plugin:\/\//i.test(String(item.pluginThumbUrl))) {
+            video.poster = String(item.pluginThumbUrl);
+          }
         }
         video.__prismPriming = true;
         video.__prismEffectiveEnd = 0;
+        video.__prismMseActive = false;
+        video.__prismMseLoading = false;
+        video.__prismMseEvicted = false;
         state.lastVidCheckTime = -1;
         state.lastVidCheckFrames = -1;
         state.lastVidCheckAt = 0;
@@ -3365,6 +3790,8 @@
         var wrapLoopOrAdvance = function () {
           if (state.cfg.rotationEnabled && state.cfg.rotationTrigger === 'videoEnd') {
             callHostRpc('playlist.step', { direction: 1, reason: 'videoEnd' });
+          } else if (video.__prismMseActive && video.__prismMseEvicted) {
+            mountStageMedia(true);
           } else {
             try {
               video.currentTime = 0;
@@ -3415,13 +3842,13 @@
         };
         video.__prismArmRvfc = armRvfcKeepAlive;
 
-        if (audioUrl) {
+        if (effectiveAudioUrl) {
           var aud = doc.createElement('audio');
           aud.loop = true;
           aud.preload = 'auto';
           nextWrap.appendChild(aud);
           state.activeAudio = aud;
-          attachLoopbackMediaSrc(aud, audioUrl, {
+          attachLoopbackMediaSrc(aud, effectiveAudioUrl, {
             wrap: nextWrap,
             isStale: function () {
               return mountSeq !== state.mediaMountSeq || state.activeAudio !== aud;
@@ -3457,6 +3884,7 @@
         };
 
         var settledVid = false;
+        var posterFallbackStarted = false;
         var onVideoDecoded = function () {
           if (settledVid) return;
           if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideo !== video) {
@@ -3485,7 +3913,138 @@
           if (settledVid) return;
           settledVid = true;
           video.__prismPriming = false;
+          video.__prismMseLoading = false;
           failMount();
+        };
+
+        var fallbackToPoster = function () {
+          if (posterFallbackStarted || settledVid || destroyed || mountSeq !== state.mediaMountSeq) return;
+          if (!(item && item.thumbUrl)) {
+            onVideoFailed();
+            return;
+          }
+          posterFallbackStarted = true;
+          settledVid = true;
+          video.__prismPriming = false;
+          video.__prismMseLoading = false;
+          video.__prismMseActive = false;
+          clearTimeout(state.pendingMediaTimer);
+          state.pendingMediaTimer = 0;
+          if (state.activeVideo === video) state.activeVideo = null;
+          try {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+          } catch (_) {}
+          if (video.__prismBlobUrl) {
+            try {
+              if (typeof W.URL !== 'undefined' && typeof W.URL.revokeObjectURL === 'function') {
+                W.URL.revokeObjectURL(video.__prismBlobUrl);
+              }
+            } catch (_) {}
+            video.__prismBlobUrl = '';
+          }
+          if (video.parentNode) video.parentNode.removeChild(video);
+
+          var posterImg = doc.createElement('img');
+          posterImg.className = 'agy-prism-media-el';
+          posterImg.crossOrigin = 'anonymous';
+          posterImg.alt = '';
+          posterImg.decoding = 'async';
+          nextWrap.appendChild(posterImg);
+
+          var settledPoster = false;
+          var onPosterDecoded = function () {
+            if (settledPoster) return;
+            settledPoster = true;
+            clearTimeout(state.pendingMediaTimer);
+            state.pendingMediaTimer = 0;
+            if (destroyed || mountSeq !== state.mediaMountSeq) {
+              disposeWrap(nextWrap);
+              return;
+            }
+            if (typeof posterImg.naturalWidth === 'number' && !(posterImg.naturalWidth > 0)) {
+              failMount();
+              return;
+            }
+            if (!needsCrossfade) nextWrap.style.opacity = '';
+            commitMount();
+            if (shouldExtractAccent(item, state.cfg)) {
+              extractAccent(posterImg, item.id).then(function (acc) {
+                if (acc && !destroyed) {
+                  state.cfg.extractedAccent = acc;
+                  refreshSkinStyles();
+                }
+              });
+            }
+          };
+          var onPosterFailed = function () {
+            if (settledPoster) return;
+            settledPoster = true;
+            failMount();
+          };
+          var handlePosterLoad = function () {
+            var dec = typeof posterImg.decode === 'function' ? posterImg.decode() : null;
+            if (dec && typeof dec.then === 'function') {
+              dec.then(onPosterDecoded, onPosterDecoded);
+            } else {
+              onPosterDecoded();
+            }
+          };
+          posterImg.onload = handlePosterLoad;
+          if (typeof posterImg.addEventListener === 'function') {
+            posterImg.addEventListener('load', handlePosterLoad);
+          }
+          var posterWaitTicks = 0;
+          var armPosterGuard = function (delayMs) {
+            clearTimeout(state.pendingMediaTimer);
+            state.pendingMediaTimer = setTimeout(function () {
+              state.pendingMediaTimer = 0;
+              if (settledPoster) return;
+              if (posterImg.__prismFetchingBlob && posterWaitTicks < 8) {
+                posterWaitTicks += 1;
+                armPosterGuard(3000);
+              } else {
+                onPosterFailed();
+              }
+            }, delayMs);
+          };
+          armPosterGuard(6000);
+          attachLoopbackImageSrc(posterImg, String(item.thumbUrl), nextWrap, onPosterFailed);
+        };
+
+        var onVideoError = function () {
+          if (settledVid || destroyed || mountSeq !== state.mediaMountSeq) return;
+          if (allowPluginErrorFallback && !pluginFallbackUsed) {
+            pluginFallbackUsed = true;
+            settledVid = true;
+            video.__prismPriming = false;
+            clearTimeout(state.pendingMediaTimer);
+            state.pendingMediaTimer = 0;
+            if (state.activeVideo === video) state.activeVideo = null;
+            try {
+              video.pause();
+              video.removeAttribute('src');
+              video.load();
+            } catch (_) {}
+            if (video.parentNode) video.parentNode.removeChild(video);
+            if (state.activeAudio && nextWrap.contains(state.activeAudio)) {
+              try {
+                state.activeAudio.pause();
+                state.activeAudio.removeAttribute('src');
+                state.activeAudio.load();
+              } catch (_) {}
+              if (state.activeAudio.parentNode) state.activeAudio.parentNode.removeChild(state.activeAudio);
+              state.activeAudio = null;
+            }
+            mountDirectVideo();
+            return;
+          }
+          if (video.__prismMseActive && item && item.thumbUrl) {
+            fallbackToPoster();
+            return;
+          }
+          onVideoFailed();
         };
 
         video.addEventListener('loadedmetadata', ensureVidPlaying, { once: true });
@@ -3505,7 +4064,7 @@
           scheduleWakeVideoCheck(450);
         });
         video.addEventListener('timeupdate', onVideoDecoded);
-        video.addEventListener('error', onVideoFailed, { once: true });
+        video.addEventListener('error', onVideoError, { once: true });
         if (typeof video.requestVideoFrameCallback === 'function') {
           try {
             video.requestVideoFrameCallback(function () {
@@ -3525,18 +4084,22 @@
               onVideoDecoded();
               return;
             }
-            if (video.__prismFetchingBlob) {
+            if (video.__prismFetchingBlob || video.__prismMseLoading) {
               if (blobWaitTicks < 16) {
                 blobWaitTicks += 1;
                 armPendingVideoGuard(1500);
                 return;
               }
-              onVideoFailed();
+              if (video.__prismMseActive) {
+                fallbackToPoster();
+              } else {
+                onVideoFailed();
+              }
               return;
             }
             // Broken URL / 404 / unsupported codec -> fail-open immediately!
             if (video.error || video.networkState === 3) {
-              onVideoFailed();
+              onVideoError();
               return;
             }
             // Window minimized (`doc.hidden`) or DWM-occluded behind another window (`readyState >= 1`,
@@ -3558,93 +4121,24 @@
         };
         armPendingVideoGuard(6000);
 
-        attachLoopbackMediaSrc(video, mediaUrl, {
+        var isStaleVid = function () {
+          return mountSeq !== state.mediaMountSeq || state.activeVideo !== video;
+        };
+
+        attachLoopbackMediaSrc(video, effectiveMediaUrl, {
           wrap: nextWrap,
-          isStale: function () {
-            return mountSeq !== state.mediaMountSeq || state.activeVideo !== video;
-          },
+          isStale: isStaleVid,
           onReady: syncMediaPlaybackState,
           onError: function (err) {
-            if (err && err.code === 'BLOB_CAP_EXCEEDED' && item && item.thumbUrl) {
-              if (settledVid || destroyed || mountSeq !== state.mediaMountSeq) return;
-              settledVid = true;
-              video.__prismPriming = false;
-              clearTimeout(state.pendingMediaTimer);
-              state.pendingMediaTimer = 0;
-              if (state.activeVideo === video) state.activeVideo = null;
-              try {
-                video.pause();
-                video.removeAttribute('src');
-                video.load();
-              } catch (_) {}
-              if (video.parentNode) video.parentNode.removeChild(video);
-
-              var posterImg = doc.createElement('img');
-              posterImg.className = 'agy-prism-media-el';
-              posterImg.crossOrigin = 'anonymous';
-              posterImg.alt = '';
-              posterImg.decoding = 'async';
-              nextWrap.appendChild(posterImg);
-
-              var settledPoster = false;
-              var onPosterDecoded = function () {
-                if (settledPoster) return;
-                settledPoster = true;
-                clearTimeout(state.pendingMediaTimer);
-                state.pendingMediaTimer = 0;
-                if (destroyed || mountSeq !== state.mediaMountSeq) {
-                  disposeWrap(nextWrap);
-                  return;
-                }
-                if (typeof posterImg.naturalWidth === 'number' && !(posterImg.naturalWidth > 0)) {
-                  failMount();
-                  return;
-                }
-                if (!needsCrossfade) nextWrap.style.opacity = '';
-                commitMount();
-                if (shouldExtractAccent(item, state.cfg)) {
-                  extractAccent(posterImg, item.id).then(function (acc) {
-                    if (acc && !destroyed) {
-                      state.cfg.extractedAccent = acc;
-                      refreshSkinStyles();
-                    }
-                  });
-                }
-              };
-              var onPosterFailed = function () {
-                if (settledPoster) return;
-                settledPoster = true;
-                failMount();
-              };
-              var handlePosterLoad = function () {
-                var dec = typeof posterImg.decode === 'function' ? posterImg.decode() : null;
-                if (dec && typeof dec.then === 'function') {
-                  dec.then(onPosterDecoded, onPosterDecoded);
-                } else {
-                  onPosterDecoded();
-                }
-              };
-              posterImg.onload = handlePosterLoad;
-              if (typeof posterImg.addEventListener === 'function') {
-                posterImg.addEventListener('load', handlePosterLoad);
+            if (err && err.code === 'BLOB_CAP_EXCEEDED') {
+              if (mseFmp4Url && typeof W.MediaSource === 'function') {
+                mountMseStreamVideo(video, mseFmp4Url, nextWrap, isStaleVid, onVideoDecoded, fallbackToPoster);
+                return;
               }
-              var posterWaitTicks = 0;
-              var armPosterGuard = function (delayMs) {
-                clearTimeout(state.pendingMediaTimer);
-                state.pendingMediaTimer = setTimeout(function () {
-                  state.pendingMediaTimer = 0;
-                  if (settledPoster) return;
-                  if (posterImg.__prismFetchingBlob && posterWaitTicks < 8) {
-                    posterWaitTicks += 1;
-                    armPosterGuard(3000);
-                  } else {
-                    onPosterFailed();
-                  }
-                }, delayMs);
-              };
-              armPosterGuard(6000);
-              attachLoopbackImageSrc(posterImg, String(item.thumbUrl), nextWrap, onPosterFailed);
-              return;
+              if (item && item.thumbUrl) {
+                fallbackToPoster();
+                return;
+              }
             }
             onVideoFailed();
           },
@@ -3655,149 +4149,222 @@
         }
       };
 
-      var useVideoStageIframe = Boolean(
-        videoStageBase &&
-        isCrossSchemeLoopbackUrl(mediaUrl) &&
-        isCrossSchemeLoopbackUrl(videoStageBase) &&
-        typeof W.addEventListener === 'function'
-      );
-
-      if (useVideoStageIframe) {
-        var stageSid = 'vs-' + mountSeq + '-' + Date.now();
-        var stageUrl = videoStageBase + (videoStageBase.indexOf('?') >= 0 ? '&' : '?') + 'sid=' + encodeURIComponent(stageSid);
-        var vframe = doc.createElement('iframe');
-        vframe.className = 'agy-prism-media-el';
-        vframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
-        vframe.setAttribute('allow', 'autoplay');
-        vframe.setAttribute('frameborder', '0');
-        vframe.setAttribute('scrolling', 'no');
-        vframe.setAttribute('tabindex', '-1');
-        vframe.setAttribute('data-prism-video-stage', '1');
-        vframe.style.pointerEvents = 'none';
-        vframe.style.background = 'transparent';
-
-        if (prevWrap) pauseWrapMedia(prevWrap);
-
-        var needsStageCrossfade = Boolean(validPrevWrap && cfg.switchTransition !== 'cut' && !doc.hidden);
-        nextWrap.style.opacity = needsStageCrossfade ? '0' : '0.001';
-        nextWrap.appendChild(vframe);
-        state.activeVideoStageFrame = vframe;
-        state.activeVideoStageSid = stageSid;
-        state.activeVideoStageReady = false;
-        state.activeVideoStageUrl = stageUrl;
-        state.pendingWrap = nextWrap;
-
-        var settledStage = false;
-        var fellBackToDirectVideo = false;
-        var onStageReady = function () {
-          if (settledStage || fellBackToDirectVideo) return;
-          if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) {
-            settledStage = true;
-            disposeWrap(nextWrap);
-            return;
-          }
-          settledStage = true;
-          state.activeVideoStageReady = true;
-          clearTimeout(state.pendingMediaTimer);
-          state.pendingMediaTimer = 0;
-          if (!needsStageCrossfade) nextWrap.style.opacity = '';
-          commitMount();
-          sendVideoStageControl();
-          if (!state.cfg.muted && state.cfg.volume > 0.005) armGestureUnmute();
-          if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
-            extractAccent(item.thumbUrl, item.id).then(function (acc) {
-              if (acc && !destroyed) {
-                state.cfg.extractedAccent = acc;
-                refreshSkinStyles();
-              }
-            });
-          }
-        };
-        var fallbackToDirectVideo = function () {
-          if (fellBackToDirectVideo) return;
-          fellBackToDirectVideo = true;
-          settledStage = true;
-          clearTimeout(state.pendingMediaTimer);
-          state.pendingMediaTimer = 0;
-          clearVideoStageListener();
-          if (state.activeVideoStageFrame === vframe) {
-            state.activeVideoStageFrame = null;
-            state.activeVideoStageSid = '';
-            state.activeVideoStageReady = false;
-            state.activeVideoStageUrl = '';
-          }
-          try {
-            vframe.src = 'about:blank';
-          } catch (_) {}
-          if (vframe.parentNode) {
-            try {
-              vframe.parentNode.removeChild(vframe);
-            } catch (_) {}
-          }
-          if (destroyed || mountSeq !== state.mediaMountSeq) {
-            disposeWrap(nextWrap);
-            return;
-          }
-          if (state.activeWrap === nextWrap) {
-            prevWrap = null;
-            validPrevWrap = false;
-          }
-          mountDirectVideo();
-        };
-
-        var onStageMessage = function (ev) {
-          var m = ev && ev.data;
-          if (!m || typeof m !== 'object' || m.type !== 'prism-video-stage') return;
-          if (m.sid !== stageSid) return;
-          if (ev.source && vframe.contentWindow && ev.source !== vframe.contentWindow) return;
-          if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) return;
-          if (m.event === 'ready') {
-            onStageReady();
-          } else if (m.event === 'ended') {
-            if (state.cfg.rotationEnabled && state.cfg.rotationTrigger === 'videoEnd') {
-              callHostRpc('playlist.step', { direction: 1, reason: 'videoEnd' });
-            }
-          } else if (m.event === 'error') {
-            fallbackToDirectVideo();
-          }
-        };
-        W.addEventListener('message', onStageMessage);
-        state.videoStageMessageCleanup = function () {
-          W.removeEventListener('message', onStageMessage);
-        };
-
-        vframe.addEventListener('load', function () {
-          if (!destroyed && state.activeVideoStageFrame === vframe) {
-            sendVideoStageControl();
-          }
-        });
-        vframe.addEventListener('error', fallbackToDirectVideo, { once: true });
-
-        var pendingStageChecks = 0;
-        var armPendingStageGuard = function (delayMs) {
-          clearTimeout(state.pendingMediaTimer);
-          state.pendingMediaTimer = setTimeout(function () {
-            state.pendingMediaTimer = 0;
-            if (settledStage || fellBackToDirectVideo || destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) return;
-            pendingStageChecks += 1;
-            if (doc.hidden || pendingStageChecks <= 3) {
-              sendVideoStageControl();
-              armPendingStageGuard(2500);
-              return;
-            }
-            fallbackToDirectVideo();
-          }, delayMs);
-        };
-        armPendingStageGuard(8000);
-
-        if (nextWrap.parentNode !== stage) {
-          stage.insertBefore(nextWrap, scrimNode || null);
-        }
-        vframe.src = stageUrl;
+      if (!isCrossSchemeLoopbackUrl(mediaUrl)) {
+        mountDirectVideo();
         return;
       }
 
-      mountDirectVideo();
+      var continueAfterPluginProbe = function (pluginProbeFailed) {
+        if (destroyed || mountSeq !== state.mediaMountSeq) {
+          disposeWrap(nextWrap);
+          return;
+        }
+        var stageCandidate =
+          !pluginProbeFailed && pluginVideoStageUrl && /^plugin:\/\//i.test(pluginVideoStageUrl)
+            ? pluginVideoStageUrl
+            : videoStageBase;
+        var stageIsSecurePlugin = Boolean(stageCandidate && /^plugin:\/\//i.test(stageCandidate));
+        var stageIsSandboxHttp = Boolean(
+          stageCandidate && isCrossSchemeLoopbackUrl(stageCandidate) && typeof W.MediaSource === 'undefined'
+        );
+        var useVideoStageIframe = Boolean(
+          stageCandidate && (stageIsSecurePlugin || stageIsSandboxHttp) && typeof W.addEventListener === 'function'
+        );
+
+        if (useVideoStageIframe) {
+          var stageSid = 'vs-' + mountSeq + '-' + Date.now();
+          var stageUrl = stageCandidate + (stageCandidate.indexOf('?') >= 0 ? '&' : '?') + 'sid=' + encodeURIComponent(stageSid);
+          var vframe = doc.createElement('iframe');
+          vframe.className = 'agy-prism-media-el';
+          vframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+          vframe.setAttribute('allow', 'autoplay');
+          vframe.setAttribute('frameborder', '0');
+          vframe.setAttribute('scrolling', 'no');
+          vframe.setAttribute('tabindex', '-1');
+          vframe.setAttribute('data-prism-video-stage', '1');
+          vframe.style.pointerEvents = 'none';
+          vframe.style.background = 'transparent';
+
+          if (prevWrap) pauseWrapMedia(prevWrap);
+
+          var needsStageCrossfade = Boolean(validPrevWrap && cfg.switchTransition !== 'cut' && !doc.hidden);
+          nextWrap.style.opacity = needsStageCrossfade ? '0' : '0.001';
+          nextWrap.appendChild(vframe);
+          state.activeVideoStageFrame = vframe;
+          state.activeVideoStageSid = stageSid;
+          state.activeVideoStageReady = false;
+          state.activeVideoStageUrl = stageUrl;
+          state.pendingWrap = nextWrap;
+
+          var settledStage = false;
+          var fellBackToDirectVideo = false;
+          var onStageReady = function () {
+            if (settledStage || fellBackToDirectVideo) return;
+            if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) {
+              settledStage = true;
+              disposeWrap(nextWrap);
+              return;
+            }
+            settledStage = true;
+            state.activeVideoStageReady = true;
+            clearTimeout(state.pendingMediaTimer);
+            state.pendingMediaTimer = 0;
+            if (!needsStageCrossfade) nextWrap.style.opacity = '';
+            commitMount();
+            sendVideoStageControl();
+            if (!state.cfg.muted && state.cfg.volume > 0.005) armGestureUnmute();
+            if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
+              extractAccent(item.thumbUrl, item.id).then(function (acc) {
+                if (acc && !destroyed) {
+                  state.cfg.extractedAccent = acc;
+                  refreshSkinStyles();
+                }
+              });
+            }
+          };
+          var fallbackToDirectVideo = function () {
+            if (fellBackToDirectVideo) return;
+            fellBackToDirectVideo = true;
+            settledStage = true;
+            clearTimeout(state.pendingMediaTimer);
+            state.pendingMediaTimer = 0;
+            clearVideoStageListener();
+            if (state.activeVideoStageFrame === vframe) {
+              state.activeVideoStageFrame = null;
+              state.activeVideoStageSid = '';
+              state.activeVideoStageReady = false;
+              state.activeVideoStageUrl = '';
+            }
+            try {
+              vframe.src = 'about:blank';
+            } catch (_) {}
+            if (vframe.parentNode) {
+              try {
+                vframe.parentNode.removeChild(vframe);
+              } catch (_) {}
+            }
+            if (destroyed || mountSeq !== state.mediaMountSeq) {
+              disposeWrap(nextWrap);
+              return;
+            }
+            if (state.activeWrap === nextWrap) {
+              prevWrap = null;
+              validPrevWrap = false;
+            }
+            mountDirectVideo();
+          };
+
+          var onStageMessage = function (ev) {
+            var m = ev && ev.data;
+            if (!m || typeof m !== 'object' || m.type !== 'prism-video-stage') return;
+            if (m.sid !== stageSid) return;
+            if (ev.source && vframe.contentWindow && ev.source !== vframe.contentWindow) return;
+            if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) return;
+            if (m.event === 'ready') {
+              onStageReady();
+            } else if (m.event === 'ended') {
+              if (state.cfg.rotationEnabled && state.cfg.rotationTrigger === 'videoEnd') {
+                callHostRpc('playlist.step', { direction: 1, reason: 'videoEnd' });
+              }
+            } else if (m.event === 'error') {
+              fallbackToDirectVideo();
+            }
+          };
+          W.addEventListener('message', onStageMessage);
+          state.videoStageMessageCleanup = function () {
+            W.removeEventListener('message', onStageMessage);
+          };
+
+          vframe.addEventListener('load', function () {
+            if (!destroyed && state.activeVideoStageFrame === vframe) {
+              sendVideoStageControl();
+            }
+          });
+          vframe.addEventListener('error', fallbackToDirectVideo, { once: true });
+
+          var pendingStageChecks = 0;
+          var armPendingStageGuard = function (delayMs) {
+            clearTimeout(state.pendingMediaTimer);
+            state.pendingMediaTimer = setTimeout(function () {
+              state.pendingMediaTimer = 0;
+              if (settledStage || fellBackToDirectVideo || destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) return;
+              pendingStageChecks += 1;
+              if (doc.hidden || pendingStageChecks <= 1) {
+                sendVideoStageControl();
+                armPendingStageGuard(2500);
+                return;
+              }
+              fallbackToDirectVideo();
+            }, delayMs);
+          };
+          armPendingStageGuard(2500);
+
+          if (nextWrap.parentNode !== stage) {
+            stage.insertBefore(nextWrap, scrimNode || null);
+          }
+          vframe.src = stageUrl;
+          return;
+        }
+
+        mountDirectVideo();
+      };
+
+      // Priority 1: Electron `plugin://` secure 206 streaming proxy (zero-copy for 971 MB / 4 GB videos!)
+      if (pluginMediaUrl && /^plugin:\/\//i.test(pluginMediaUrl) && typeof W.fetch === 'function') {
+        var headAc = typeof W.AbortController === 'function' ? new W.AbortController() : null;
+        if (headAc) {
+          if (!nextWrap.__prismAbortControllers) nextWrap.__prismAbortControllers = [];
+          nextWrap.__prismAbortControllers.push(headAc);
+        }
+        var probeSettled = false;
+        state.pendingWrap = nextWrap;
+        var headTimer = setTimeout(function () {
+          try {
+            if (headAc) headAc.abort();
+          } catch (_) {}
+          if (!probeSettled) {
+            probeSettled = true;
+            state.pendingMediaTimer = 0;
+            continueAfterPluginProbe(true);
+          }
+        }, 800);
+        state.pendingMediaTimer = headTimer;
+
+        W.fetch(pluginMediaUrl, headAc ? { method: 'HEAD', signal: headAc.signal } : { method: 'HEAD' })
+          .then(function (res) {
+            if (probeSettled) return;
+            probeSettled = true;
+            clearTimeout(headTimer);
+            if (state.pendingMediaTimer === headTimer) state.pendingMediaTimer = 0;
+            if (destroyed || mountSeq !== state.mediaMountSeq) {
+              disposeWrap(nextWrap);
+              return;
+            }
+            if (res && res.ok) {
+              mountDirectVideo({
+                directMediaUrl: pluginMediaUrl,
+                directAudioUrl: pluginAudioUrl && /^plugin:\/\//i.test(pluginAudioUrl) ? pluginAudioUrl : audioUrl,
+                allowPluginErrorFallback: true,
+              });
+              return;
+            }
+            continueAfterPluginProbe(true);
+          })
+          .catch(function () {
+            if (probeSettled) return;
+            probeSettled = true;
+            clearTimeout(headTimer);
+            if (state.pendingMediaTimer === headTimer) state.pendingMediaTimer = 0;
+            if (destroyed || mountSeq !== state.mediaMountSeq) {
+              disposeWrap(nextWrap);
+              return;
+            }
+            continueAfterPluginProbe(true);
+          });
+        return;
+      }
+
+      continueAfterPluginProbe(false);
       return;
     }
 
@@ -4892,6 +5459,11 @@
         sceneVideoUrl: p.source.sceneVideoUrl || '',
         sceneLiveUrl: p.source.sceneLiveUrl || '',
         videoStageUrl: p.source.videoStageUrl || '',
+        mseFmp4Url: p.source.mseFmp4Url || '',
+        pluginMediaUrl: p.source.pluginMediaUrl || '',
+        pluginThumbUrl: p.source.pluginThumbUrl || '',
+        pluginAudioUrl: p.source.pluginAudioUrl || '',
+        pluginVideoStageUrl: p.source.pluginVideoStageUrl || '',
         webUrl: p.source.webUrl || '',
         schemeColor: p.source.schemeColor || '',
       };
@@ -5066,6 +5638,17 @@
       autoPaused: Boolean(state.autoPaused),
       pauseReason: state.pauseReason,
       videoStageMode: state.activeVideoStageFrame ? 'iframe' : state.activeVideo ? 'video' : 'none',
+      videoTransport: state.activeVideoStageFrame
+        ? 'iframe'
+        : state.activeVideo
+          ? state.activeVideo.__prismMseActive
+            ? 'mse'
+            : /^plugin:\/\//i.test(String(state.activeVideo.currentSrc || state.activeVideo.src || ''))
+              ? 'plugin'
+              : /^blob:/i.test(String(state.activeVideo.currentSrc || state.activeVideo.src || ''))
+                ? 'blob'
+                : 'direct'
+          : 'none',
       videoPaused: state.activeVideo
         ? Boolean(state.activeVideo.paused)
         : state.activeVideoStageFrame

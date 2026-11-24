@@ -3,15 +3,18 @@
  * `scene.pkg` Video/Audio Extraction, Directory-Fenced Web Serving & Shim Injection (`media-server.mjs`)
  */
 
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import {
+  closeSync,
   createReadStream,
   existsSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   realpathSync,
   renameSync,
   statSync,
@@ -112,6 +115,27 @@ function resolveFfmpegCapability() {
   }
   cachedFfmpegResolution = { available: false, bin: '' };
   return cachedFfmpegResolution;
+}
+
+function probeMseVideoMime(absPath) {
+  let fd = -1;
+  try {
+    fd = openSync(absPath, 'r');
+    const buf = Buffer.allocUnsafe(65536);
+    const bytesRead = readSync(fd, buf, 0, buf.length, 0);
+    const head = buf.subarray(0, bytesRead);
+    if (head.includes('hvc1')) return 'video/mp4; codecs="hvc1.1.6.L120.90"';
+    if (head.includes('hev1') || head.includes('hvcC')) return 'video/mp4; codecs="hev1.1.6.L120.90"';
+    if (head.includes('av01')) return 'video/mp4; codecs="av01.0.08M.08"';
+    if (head.includes('vp09')) return 'video/mp4; codecs="vp09.00.41.08"';
+  } catch {
+    /* fall back to H.264 High profile */
+  } finally {
+    if (fd >= 0) {
+      try { closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+  return 'video/mp4; codecs="avc1.640028"';
 }
 
 export function mimeForPath(filePath, fallback = 'application/octet-stream') {
@@ -509,6 +533,7 @@ export async function createMediaServer(opts = {}) {
   const registry = new Map(); // token -> entry
   const sockets = new Set();
   const activeStreams = new Set();
+  const activeProcs = new Set();
 
   // Bounded LRU for extracted `scene.pkg` MP4 / audio buffers
   const scenePayloadCache = new Map();
@@ -724,7 +749,7 @@ export async function createMediaServer(opts = {}) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, If-None-Match');
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, ETag');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, ETag, X-Prism-Mse-Mime');
     res.setHeader('Access-Control-Allow-Private-Network', 'true');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Timing-Allow-Origin', '*');
@@ -946,6 +971,91 @@ export async function createMediaServer(opts = {}) {
       return;
     }
 
+    if (route === 'mse-fmp4') {
+      if (!fsMeta.primaryAbs) {
+        sendJson(req, res, 404, { error: 'No primary video file for MSE fMP4 stream' });
+        return;
+      }
+      try {
+        const lst = lstatSync(fsMeta.primaryAbs);
+        if (lst.isSymbolicLink() || !lst.isFile()) {
+          sendJson(req, res, 403, { error: 'Symbolic links and non-files are forbidden' });
+          return;
+        }
+      } catch {
+        sendJson(req, res, 404, { error: 'Media file not found' });
+        return;
+      }
+      const cap = resolveFfmpegCapability();
+      if (!cap.available || !cap.bin) {
+        sendJson(req, res, 501, { error: 'ffmpeg is not available for MSE fMP4 remuxing' });
+        return;
+      }
+      const mseMime = probeMseVideoMime(fsMeta.primaryAbs);
+      const mseHeaders = {
+        'Content-Type': 'video/mp4',
+        'X-Prism-Mse-Mime': mseMime,
+        'Cache-Control': 'no-store',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers': 'X-Prism-Mse-Mime',
+      };
+      if (req.method === 'HEAD') {
+        res.writeHead(200, mseHeaders);
+        res.end();
+        return;
+      }
+      const ff = spawn(
+        cap.bin,
+        [
+          '-nostdin',
+          '-hide_banner',
+          '-loglevel', 'error',
+          '-i', fsMeta.primaryAbs,
+          '-map', '0:v:0',
+          '-c:v', 'copy',
+          '-an',
+          '-f', 'mp4',
+          '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+          'pipe:1',
+        ],
+        {
+          windowsHide: true,
+          env: cleanHostEnv(),
+          stdio: ['ignore', 'pipe', 'ignore'],
+        },
+      );
+      activeProcs.add(ff);
+      let killed = false;
+      const killFf = () => {
+        if (killed) return;
+        killed = true;
+        activeProcs.delete(ff);
+        try {
+          if (!ff.killed && ff.exitCode === null) {
+            ff.kill('SIGKILL');
+          }
+        } catch { /* ignore */ }
+        try { ff.stdout?.destroy(); } catch { /* ignore */ }
+      };
+      req.on('close', killFf);
+      req.on('aborted', killFf);
+      res.on('close', killFf);
+      ff.on('exit', () => {
+        activeProcs.delete(ff);
+      });
+      ff.on('error', () => {
+        activeProcs.delete(ff);
+        if (!res.headersSent) {
+          sendJson(req, res, 501, { error: 'Failed to spawn ffmpeg for MSE fMP4 remuxing' });
+        } else {
+          try { res.end(); } catch { /* ignore */ }
+        }
+      });
+      res.writeHead(200, mseHeaders);
+      ff.stdout.pipe(res);
+      return;
+    }
+
     if (route === 'preview') {
       if (fsMeta.isBuiltinAurora) {
         const svg = Buffer.from(buildBuiltinAuroraSvg(), 'utf8');
@@ -1072,13 +1182,13 @@ export async function createMediaServer(opts = {}) {
       const ctx = runtimeContextGetter(entry) || {};
       const cfg = ctx.config || {};
       const encToken = encodeURIComponent(token);
-      const mediaSrc = useSceneVideo ? `/scene-video/${encToken}` : `/media/${encToken}`;
+      const mediaSrc = useSceneVideo ? `../scene-video/${encToken}` : `../media/${encToken}`;
       const audioSrc = fsMeta.hasSceneAudio
-        ? `/scene-audio/${encToken}`
+        ? `../scene-audio/${encToken}`
         : fsMeta.looseAudioAbs
-          ? `/audio/${encToken}`
+          ? `../audio/${encToken}`
           : '';
-      const posterSrc = entry.thumbUrl ? `/preview/${encToken}` : '';
+      const posterSrc = entry.thumbUrl ? `../preview/${encToken}` : '';
       const sid = parsedUrl.searchParams.get('sid') || '';
       const html = buildVideoStageHtml({ mediaSrc, audioSrc, posterSrc, sid, cfg });
       const body = Buffer.from(html, 'utf8');
@@ -1212,6 +1322,7 @@ export async function createMediaServer(opts = {}) {
   function syncLibrary(rawItems = []) {
     const nextRegistry = new Map();
     const publicItems = [];
+    const ffmpegAvailable = resolveFfmpegCapability().available;
 
     for (const raw of rawItems) {
       if (!raw || !raw.id) continue;
@@ -1233,6 +1344,9 @@ export async function createMediaServer(opts = {}) {
         : fsMeta.hasSceneVideo
           ? `${origin}/video-stage/${encToken}?src=scene-video`
           : '';
+      const mseFmp4Url = (raw.kind === 'video' && fsMeta.primaryAbs && ffmpegAvailable)
+        ? `${origin}/mse-fmp4/${encToken}`
+        : '';
       const slidesUrl = raw.kind === 'slideshow' ? `${origin}/slides/${encToken}` : '';
       const webUrl = raw.kind === 'web'
         ? `${origin}/web/${encToken}/${encodeUrlSubpath(fsMeta.webEntryRel || 'index.html')}`
@@ -1271,6 +1385,7 @@ export async function createMediaServer(opts = {}) {
         sceneVideoUrl,
         sceneLiveUrl,
         videoStageUrl,
+        mseFmp4Url,
         webUrl,
       };
       nextRegistry.set(token, enrichedInternal);
@@ -1402,6 +1517,10 @@ export async function createMediaServer(opts = {}) {
     serverClosed = true;
     thumbQueue.length = 0;
     thumbInflight.clear();
+    for (const proc of activeProcs) {
+      try { proc.kill('SIGKILL'); } catch { /* ignore */ }
+    }
+    activeProcs.clear();
     for (const stream of activeStreams) {
       try { stream.destroy(); } catch { /* ignore */ }
     }

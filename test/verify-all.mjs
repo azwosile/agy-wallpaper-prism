@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.0.6
+ * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.0.7
  *
- * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.0.6 specifications across:
- *   Suite 1 — Manifest (v2.0.6), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
+ * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.0.7 specifications across:
+ *   Suite 1 — Manifest (v2.0.7), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
  *             Zero-PII Audit & SHA-256 Workspace <-> Global Plugin Sync
  *   Suite 2 — Backend Engine, DSH Parity, Co-Keyed Storage, Two-Phase `fsync` Boot Canary Circuit-Breaker
  *             (`canary.json` arming -> tripped, `/api/canary/reset`, `/api/skin/wake`), PR #6 Hardened `fetch+blob`,
- *             PR #7 `/video-stage/` Streaming Iframe + Studio `/api/events` SSE & Static CSS Mode
+ *             PR #7 `/video-stage/` Streaming Iframe + Studio `/api/events` SSE, Static CSS Mode &
+ *             v2.0.7 HTTPS Zero-Stall Images/Accent/Thumbnails + `plugin://` 206 Proxy + 971 MB `MediaSource` `/mse-fmp4/`
  *   Suite 3 — Studio v2.0 UI (`Host & System` 3-way Startup Strategy + Canary + Panic Badge + 21:9 `.mini-aux` Parity) &
  *             Antigravity 2.34.0 Hub Headless Chrome E2E:
  *               1) Zero-Enable Ephemeral Micro-Bootstrap & Lazy `/host/<token>/panel.js` Load (0 KB boot)
@@ -21,7 +22,9 @@
  *               5) `Ctrl+Alt+Shift+R` Emergency Panic Strip + `skinEnabled === false` Persistence
  *               6) Four v2.0.6 Glass UI Fixes (WCO `#agy-prism-wco-pill` + `syncOverlay` guard, rounded glass titlebar,
  *                  deep rounded `Projects` & `[data-testid="project-header"]` capsules, right aux-pane = center chat alignment)
- *               7) Full-Window Verification Screenshots
+ *               7) v2.0.7 3-Point 1-Click Master Toggle E2E (Studio `#prism-master-toggle-btn` + `Ctrl+Alt+W`
+ *                  `[data-testid="prism-power-toggle"]` + persistent `#agy-prism-pill` + `/api/skin/toggle` Canary auto-reset)
+ *               8) Full-Window Verification Screenshots
  */
 
 import assert from 'node:assert/strict';
@@ -186,7 +189,7 @@ function decodePngRgba(pngBuf) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  console.log('=== agy-wallpaper-prism v2.0.6 Full Verification Harness ===');
+  console.log('=== agy-wallpaper-prism v2.0.7 Full Verification Harness ===');
   fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
   fs.mkdirSync(DEFAULT_ARTIFACT_DIR, { recursive: true });
   const fixturesDir = path.join(SCRATCH_ROOT, 'fixtures');
@@ -195,9 +198,9 @@ async function main() {
   // =========================================================================
   // SUITE 1: Manifest, Bundle, Zero-Enable CDP Audit, Zero-PII & Byte Sync
   // =========================================================================
-  console.log('\n--- Suite 1: Manifest (v2.0.6), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
+  console.log('\n--- Suite 1: Manifest (v2.0.7), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
 
-  await check('plugin.json, package.json & 7-point v2.0.6 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
+  await check('plugin.json, package.json & 7-point v2.0.7 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
     const pPath = path.join(REPO_ROOT, 'plugin.json');
     const pkgPath = path.join(REPO_ROOT, 'package.json');
     const readmePath = path.join(REPO_ROOT, 'README.md');
@@ -215,13 +218,13 @@ async function main() {
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.0.6', `Expected plugin.json version 2.0.6, got ${raw.version}`);
-    assert.equal(pkg.version, '2.0.6', `Expected package.json version 2.0.6, got ${pkg.version}`);
-    assert.match(readme, /\*\*Version\*\*:\s*`2\.0\.6`/, 'Expected README.md **Version**: `2.0.6`');
-    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.0\.6'/, 'Expected schema.mjs PLUGIN_VERSION = 2.0.6');
-    assert.match(schemaSrc, /skinVersion:\s*'2\.0\.6'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.0.6');
-    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.0\.6'/, 'Expected wallpaper-inject.js VERSION = 2.0.6');
-    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.0\.6'/, 'Expected panel-inject.js VERSION = 2.0.6');
+    assert.equal(raw.version, '2.0.7', `Expected plugin.json version 2.0.7, got ${raw.version}`);
+    assert.equal(pkg.version, '2.0.7', `Expected package.json version 2.0.7, got ${pkg.version}`);
+    assert.match(readme, /\*\*Version\*\*:\s*`2\.0\.7`/, 'Expected README.md **Version**: `2.0.7`');
+    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.0\.7'/, 'Expected schema.mjs PLUGIN_VERSION = 2.0.7');
+    assert.match(schemaSrc, /skinVersion:\s*'2\.0\.7'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.0.7');
+    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.0\.7'/, 'Expected wallpaper-inject.js VERSION = 2.0.7');
+    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.0\.7'/, 'Expected panel-inject.js VERSION = 2.0.7');
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -311,7 +314,10 @@ async function main() {
     assert.ok(!/<script[^>]+type=["']module["'][^>]+src=/i.test(html), 'External ES module <script src> forbidden in sidecar');
     assert.ok(/#app[\s\S]{0,220}height:\s*100(%|dvh|vh)/i.test(html), 'Missing #app 100% height lock in Studio CSS');
     assert.ok(html.includes('prism-startup-safety-card'), 'Bundled index.html missing v2.0 #prism-startup-safety-card');
-    return `${Math.round(html.length / 1024)} KB inlined v2.0 bundle`;
+    assert.ok(html.includes('prism-master-toggle-btn'), 'Bundled index.html missing v2.0.7 #prism-master-toggle-btn');
+    assert.ok(html.includes('2.0.7'), 'Bundled index.html missing inlined v2.0.7 version marker');
+    assert.equal(html.includes('\r'), false, 'Bundled index.html must be pure LF (0 CR/CRLF)');
+    return `${Math.round(html.length / 1024)} KB inlined v2.0.7 pure-LF bundle`;
   });
 
   await check('Syntax check (`node --check`) across all JS/MJS entrypoints & test modules', '@resilience-designer', () => {
@@ -999,6 +1005,7 @@ async function main() {
     const createdBlobUrls = [];
     const revokedBlobUrls = [];
     const directHttpVideoSrcs = [];
+    const directHttpImgSrcs = [];
     let blobSeq = 0;
     let stepStartMs = Date.now();
 
@@ -1105,6 +1112,9 @@ async function main() {
             set(val) {
               const s = String(val || '');
               self._src = s;
+              if (/^http:\/\//i.test(s)) {
+                directHttpImgSrcs.push(s);
+              }
               if (s) {
                 self.complete = true;
                 self.naturalWidth = 1920;
@@ -1481,7 +1491,12 @@ async function main() {
       assert.equal(stageEl.querySelectorAll('video').length, 0, 'Oversized <video> element must be removed during poster fallback');
       const posterImgs = stageEl.querySelectorAll('img');
       assert.equal(posterImgs.length, 1, 'Expected fallback <img class="agy-prism-media-el"> in stage');
-      assert.ok(posterImgs[0].src.includes('poster-ok.png'), `Unexpected poster fallback src: ${posterImgs[0].src}`);
+      assert.deepEqual(directHttpImgSrcs, [], 'https: host MUST NOT assign http://127.0.0.1 directly to poster <img>.src');
+      assert.ok(posterImgs[0].src.startsWith('blob:'), `Expected 0ms fetch+blob poster fallback src, got: ${posterImgs[0].src}`);
+      assert.ok(
+        fetchCalls.some((c) => c.url.includes('poster-ok.png')),
+        `Expected 0ms fetch() for poster-ok.png (seen: ${fetchCalls.map((c) => c.url).join(', ')})`,
+      );
 
       // 4) 404 broken video fails open (data-agy-prism-wallpaper removed) AND hides #agy-prism-fx-canvas
       stepStartMs = Date.now();
@@ -1911,6 +1926,777 @@ async function main() {
       return `/video-stage/ 200+HEAD (900ms gate, 0 fetch) + ready/ended + error->0ms blob fallback (${fetchCalls[0].elapsedMs}ms) + Studio SSE & /api/status config verified`;
     } finally {
       mockWin.__agyPrism.destroy();
+    }
+  });
+
+  await check('v2.0.7 HTTPS Zero-Stall Images/Accent/Thumbnails (0ms fetch+blob, 0 direct http://) + plugin:// 206 Proxy + 971 MB MediaSource /mse-fmp4/ Streaming Regression', '@exec-v207-backend / @exec-v207-host / @exec-v207-tests', async () => {
+    // 1. Verify Sidecar `/media-proxy/media/<token>` (HEAD 200, Range bytes=0-63 -> 206, 403 traversal, 404 non-whitelist, optional /mse-fmp4/)
+    //    and `buildClientSkinPayload` `pluginMediaUrl` / `pluginThumbUrl` / `mseFmp4Url`
+    const libRes = await engine.listLibrary({ refresh: false });
+    const libArr = Array.isArray(libRes) ? libRes : libRes.items || [];
+    const vidItem = libArr.find((x) => x.kind === 'video' && x.mediaUrl);
+    assert.ok(vidItem, 'Expected scanned video item in library');
+    const vidPathname = new URL(vidItem.mediaUrl).pathname;
+
+    const proxyHead = await invokeServerInMemory(studio.server, {
+      method: 'HEAD',
+      url: `/media-proxy${vidPathname}`,
+    });
+    assert.equal(proxyHead.status, 200, `Expected 200 for HEAD /media-proxy${vidPathname}, got ${proxyHead.status}`);
+    assert.equal(proxyHead.headers['access-control-allow-origin'], '*');
+
+    const proxyRange = await invokeServerInMemory(studio.server, {
+      method: 'GET',
+      url: `/media-proxy${vidPathname}`,
+      headers: { Range: 'bytes=0-63' },
+    });
+    assert.equal(proxyRange.status, 206, `Expected 206 for Range /media-proxy${vidPathname}, got ${proxyRange.status}`);
+    assert.equal(proxyRange.body.length, 64, `Expected 64 bytes for bytes=0-63, got ${proxyRange.body.length}`);
+    assert.equal(proxyRange.body.toString('ascii', 4, 8), 'ftyp', 'Expected ftyp header in /media-proxy 206 slice');
+    assert.match(String(proxyRange.headers['content-range'] || ''), /^bytes 0-63\/\d+$/);
+
+    const proxyTrav = await invokeServerInMemory(studio.server, {
+      method: 'GET',
+      url: '/media-proxy/media/..%2foutside-secret.png',
+    });
+    assert.equal(proxyTrav.status, 403, `Expected 403 on /media-proxy traversal, got ${proxyTrav.status}`);
+
+    const proxyBadRoute = await invokeServerInMemory(studio.server, {
+      method: 'GET',
+      url: '/media-proxy/health',
+    });
+    assert.equal(proxyBadRoute.status, 404, `Expected 404 on non-whitelisted /media-proxy/health, got ${proxyBadRoute.status}`);
+
+    let mseHeadMime = '';
+    if (vidItem.mseFmp4Url) {
+      const msePath = new URL(vidItem.mseFmp4Url).pathname;
+      const mseHead = await invokeServerInMemory(studio.server, {
+        method: 'HEAD',
+        url: `/media-proxy${msePath}`,
+      });
+      assert.equal(mseHead.status, 200, `Expected 200 for HEAD /media-proxy${msePath}, got ${mseHead.status}`);
+      assert.equal(mseHead.headers['content-type'], 'video/mp4');
+      mseHeadMime = String(mseHead.headers['x-prism-mse-mime'] || '');
+      assert.ok(mseHeadMime.startsWith('video/mp4; codecs='), `Unexpected X-Prism-Mse-Mime: ${mseHeadMime}`);
+    }
+
+    const { buildClientSkinPayload: buildPayloadV207 } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'src', 'host', 'index.mjs')).href
+    );
+    const mOrigin = engine.getMediaOrigin();
+    const pOrigin = studio.pluginOrigin || 'plugin://agy-wallpaper-prism--prism_studio-53040';
+    const syntheticMseUrl = vidItem.mseFmp4Url || `${mOrigin}/mse-fmp4/tok-mse-test`;
+    const builtV207 = buildPayloadV207(
+      await engine.getConfig(),
+      { ...vidItem, mseFmp4Url: syntheticMseUrl },
+      mOrigin,
+      { skinEnabled: true, pluginOrigin: pOrigin },
+    );
+    assert.ok(
+      String(builtV207.activeItem?.pluginMediaUrl || '').startsWith(`${pOrigin}/media-proxy/media/`),
+      `Expected pluginMediaUrl under ${pOrigin}/media-proxy/media/, got ${builtV207.activeItem?.pluginMediaUrl}`,
+    );
+    if (vidItem.thumbUrl) {
+      assert.ok(
+        String(builtV207.activeItem?.pluginThumbUrl || '').startsWith(`${pOrigin}/media-proxy/preview/`),
+        `Expected pluginThumbUrl under ${pOrigin}/media-proxy/preview/, got ${builtV207.activeItem?.pluginThumbUrl}`,
+      );
+    }
+    assert.equal(builtV207.activeItem?.mseFmp4Url, syntheticMseUrl, 'buildClientSkinPayload dropped mseFmp4Url');
+
+    // 2. HTTPS VM environment: verify 0ms fetch+blob for image, slideshow, extractAccent(thumbUrl),
+    //    --prism-wall-image zero plaintext http://, 971 MB Tier 1 plugin:// HEAD 200 direct playback,
+    //    and 971 MB Tier 1 404 -> MediaSource /mse-fmp4/ chunked SourceBuffer streaming (0 plaintext http:// iframe!)
+    const wallInjectSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+    const panelInjectSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'panel-inject.js'), 'utf8');
+
+    const fetchCalls = [];
+    const directHttpImgSrcs = [];
+    const directHttpVideoSrcs = [];
+    const createdIframeSrcs = [];
+    const createdBlobUrls = [];
+    const revokedBlobUrls = [];
+    const mseAppendedChunks = [];
+    let mseEndOfStreamCount = 0;
+    let blobSeq = 0;
+    let stepStartMs = Date.now();
+    const mediaSourceByUrl = new Map();
+
+    class MockStyle {
+      constructor() {
+        this._props = new Map();
+        this.display = '';
+        this.opacity = '';
+        this.transition = '';
+        this.clipPath = '';
+        this.transform = '';
+        this.background = '';
+        this.cssText = '';
+      }
+      setProperty(k, v) { this._props.set(String(k), String(v)); }
+      removeProperty(k) { this._props.delete(String(k)); }
+      getPropertyValue(k) { return this._props.get(String(k)) || ''; }
+    }
+
+    class MockMediaSource {
+      static isTypeSupported(mime) {
+        return String(mime || '').includes('video/mp4');
+      }
+      constructor() {
+        this.readyState = 'closed';
+        this._listeners = new Map();
+        this._video = null;
+      }
+      addEventListener(type, fn) {
+        const list = this._listeners.get(type) || [];
+        list.push(fn);
+        this._listeners.set(type, list);
+      }
+      removeEventListener(type, fn) {
+        const list = this._listeners.get(type);
+        if (!list) return;
+        const idx = list.indexOf(fn);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+      _openFor(video) {
+        this._video = video;
+        this.readyState = 'open';
+        queueMicrotask(() => {
+          for (const fn of (this._listeners.get('sourceopen') || []).slice()) fn({ type: 'sourceopen' });
+        });
+      }
+      addSourceBuffer(mime) {
+        assert.ok(String(mime || '').includes('video/mp4'), `Unexpected SourceBuffer MIME: ${mime}`);
+        const ms = this;
+        const sbListeners = new Map();
+        const sb = {
+          updating: false,
+          buffered: { length: 1, start: () => 0, end: () => 12 },
+          addEventListener(type, fn) {
+            const list = sbListeners.get(type) || [];
+            list.push(fn);
+            sbListeners.set(type, list);
+          },
+          removeEventListener(type, fn) {
+            const list = sbListeners.get(type);
+            if (!list) return;
+            const idx = list.indexOf(fn);
+            if (idx >= 0) list.splice(idx, 1);
+          },
+          appendBuffer(chunk) {
+            const u8 = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+            mseAppendedChunks.push(u8.byteLength);
+            sb.updating = true;
+            queueMicrotask(() => {
+              sb.updating = false;
+              if (ms._video && ms._video.readyState < 4) {
+                ms._video.readyState = 4;
+                ms._video.videoWidth = 1920;
+                ms._video.videoHeight = 1080;
+                ms._video.dispatchEvent({ type: 'loadeddata' });
+                ms._video.dispatchEvent({ type: 'canplay' });
+              }
+              for (const fn of (sbListeners.get('updateend') || []).slice()) fn({ type: 'updateend' });
+            });
+          },
+          remove() {
+            sb.updating = true;
+            queueMicrotask(() => {
+              sb.updating = false;
+              for (const fn of (sbListeners.get('updateend') || []).slice()) fn({ type: 'updateend' });
+            });
+          },
+        };
+        return sb;
+      }
+      endOfStream() {
+        this.readyState = 'ended';
+        mseEndOfStreamCount += 1;
+      }
+    }
+
+    class MockNode {
+      constructor(tagName) {
+        this.tagName = String(tagName || 'DIV').toUpperCase();
+        this.id = '';
+        this.className = '';
+        this.style = new MockStyle();
+        this._attrs = new Map();
+        this.dataset = {};
+        this.children = [];
+        this.parentNode = null;
+        this._listeners = new Map();
+        this.inert = false;
+        this.textContent = '';
+        this._src = '';
+        const self = this;
+        this.classList = {
+          add() {},
+          remove() {},
+          contains(cls) { return String(self.className || '').split(/\s+/).filter(Boolean).includes(cls); },
+        };
+
+        if (this.tagName === 'VIDEO' || this.tagName === 'AUDIO') {
+          this.readyState = 0;
+          this.videoWidth = 0;
+          this.videoHeight = 0;
+          this.currentTime = 0;
+          this.duration = 30;
+          this.paused = true;
+          this.muted = true;
+          this.defaultMuted = true;
+          this.volume = 1;
+          this.playbackRate = 1;
+          this.loop = true;
+          this.ended = false;
+          this.error = null;
+          this.networkState = 0;
+          this.poster = '';
+          this.play = () => { this.paused = false; return Promise.resolve(); };
+          this.pause = () => { this.paused = true; };
+          this.load = () => {};
+          Object.defineProperty(this, 'currentSrc', { get() { return self._src; } });
+          Object.defineProperty(this, 'src', {
+            get() { return self._src; },
+            set(val) {
+              const s = String(val || '');
+              self._src = s;
+              if (self.tagName === 'VIDEO' && /^http:\/\//i.test(s)) {
+                directHttpVideoSrcs.push(s);
+              }
+              if (mediaSourceByUrl.has(s)) {
+                mediaSourceByUrl.get(s)._openFor(self);
+                return;
+              }
+              if (s.startsWith('plugin://') || s.startsWith('blob:')) {
+                self.readyState = 4;
+                self.videoWidth = 1920;
+                self.videoHeight = 1080;
+                queueMicrotask(() => {
+                  self.dispatchEvent({ type: 'loadeddata' });
+                  self.dispatchEvent({ type: 'canplay' });
+                });
+              }
+            },
+          });
+        } else if (this.tagName === 'IMG') {
+          this.complete = false;
+          this.naturalWidth = 0;
+          this.naturalHeight = 0;
+          this.onload = null;
+          this.onerror = null;
+          this.decode = () => Promise.resolve();
+          Object.defineProperty(this, 'src', {
+            get() { return self._src; },
+            set(val) {
+              const s = String(val || '');
+              self._src = s;
+              if (/^http:\/\//i.test(s)) {
+                directHttpImgSrcs.push(s);
+                // Simulate Chrome 152 https: -> http://127.0.0.1 silent stall (never resolves!)
+                return;
+              }
+              if (s.startsWith('blob:') || s.startsWith('plugin://') || s.startsWith('data:')) {
+                self.complete = true;
+                self.naturalWidth = 1920;
+                self.naturalHeight = 1080;
+                queueMicrotask(() => {
+                  if (typeof self.onload === 'function') self.onload();
+                  self.dispatchEvent({ type: 'load' });
+                });
+              }
+            },
+          });
+        } else if (this.tagName === 'IFRAME') {
+          Object.defineProperty(this, 'src', {
+            get() { return self._src; },
+            set(val) {
+              const s = String(val || '');
+              self._src = s;
+              if (s) createdIframeSrcs.push(s);
+            },
+          });
+        } else if (this.tagName === 'CANVAS') {
+          this.width = 32;
+          this.height = 32;
+          this.getContext = () => ({
+            clearRect() {},
+            beginPath() {},
+            arc() {},
+            stroke() {},
+            fill() {},
+            drawImage() {},
+            getImageData: () => {
+              const data = new Uint8ClampedArray(32 * 32 * 4);
+              for (let i = 0; i < data.length; i += 4) {
+                data[i] = 48;
+                data[i + 1] = 148;
+                data[i + 2] = 242;
+                data[i + 3] = 255;
+              }
+              return { data };
+            },
+          });
+        }
+      }
+      get isConnected() {
+        let cur = this;
+        while (cur) {
+          if (cur === docRoot) return true;
+          cur = cur.parentNode;
+        }
+        return false;
+      }
+      get firstChild() { return this.children[0] || null; }
+      setAttribute(k, v) {
+        const key = String(k);
+        const val = String(v);
+        this._attrs.set(key, val);
+        if (key === 'id') this.id = val;
+        if (key === 'class') this.className = val;
+      }
+      getAttribute(k) {
+        const key = String(k);
+        if (key === 'id') return this.id || null;
+        if (key === 'class') return this.className || null;
+        return this._attrs.has(key) ? this._attrs.get(key) : null;
+      }
+      removeAttribute(k) {
+        const key = String(k);
+        this._attrs.delete(key);
+        if (key === 'src') {
+          this._src = '';
+          if (this.tagName === 'VIDEO' || this.tagName === 'AUDIO') this.readyState = 0;
+        }
+      }
+      appendChild(child) {
+        if (!child) return child;
+        if (child.parentNode) child.parentNode.removeChild(child);
+        child.parentNode = this;
+        this.children.push(child);
+        return child;
+      }
+      insertBefore(child, ref) {
+        if (!child) return child;
+        if (child.parentNode) child.parentNode.removeChild(child);
+        child.parentNode = this;
+        const idx = ref ? this.children.indexOf(ref) : -1;
+        if (idx >= 0) this.children.splice(idx, 0, child);
+        else this.children.push(child);
+        return child;
+      }
+      removeChild(child) {
+        const idx = this.children.indexOf(child);
+        if (idx >= 0) {
+          this.children.splice(idx, 1);
+          child.parentNode = null;
+        }
+        return child;
+      }
+      contains(other) {
+        let cur = other;
+        while (cur) {
+          if (cur === this) return true;
+          cur = cur.parentNode;
+        }
+        return false;
+      }
+      getBoundingClientRect() { return { left: 0, top: 0, right: 1440, bottom: 900, width: 1440, height: 900 }; }
+      addEventListener(type, fn) {
+        if (typeof fn !== 'function') return;
+        const list = this._listeners.get(type) || [];
+        list.push(fn);
+        this._listeners.set(type, list);
+      }
+      removeEventListener(type, fn) {
+        const list = this._listeners.get(type);
+        if (!list) return;
+        const idx = list.indexOf(fn);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+      dispatchEvent(evt) {
+        const list = (this._listeners.get(evt.type) || []).slice();
+        for (const fn of list) fn.call(this, evt);
+        return true;
+      }
+      click() {
+        const evt = { type: 'click', target: this, preventDefault() {}, stopPropagation() {} };
+        if (typeof this.onclick === 'function') this.onclick(evt);
+        this.dispatchEvent(evt);
+      }
+      querySelectorAll(selector) {
+        const parts = String(selector || '').split(',').map((s) => s.trim()).filter(Boolean);
+        const matchesPart = (node, p) => {
+          if (p.startsWith('#')) return node.id === p.slice(1);
+          if (p.startsWith('.')) return node.classList.contains(p.slice(1));
+          if (/^[a-z0-9]+$/i.test(p)) return node.tagName === p.toUpperCase();
+          return false;
+        };
+        const out = [];
+        const walk = (n) => {
+          for (const ch of n.children) {
+            if (parts.some((p) => matchesPart(ch, p))) out.push(ch);
+            walk(ch);
+          }
+        };
+        walk(this);
+        return out;
+      }
+      querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+    }
+
+    const docRoot = new MockNode('HTML');
+    docRoot.className = 'dark';
+    const docHead = new MockNode('HEAD');
+    const docBody = new MockNode('BODY');
+    docBody.className = 'dark';
+    const hostRootDiv = new MockNode('DIV');
+    hostRootDiv.id = 'root';
+    docBody.appendChild(hostRootDiv);
+    docRoot.appendChild(docHead);
+    docRoot.appendChild(docBody);
+
+    const mockDoc = {
+      documentElement: docRoot,
+      head: docHead,
+      body: docBody,
+      hidden: false,
+      fullscreenElement: null,
+      activeElement: docBody,
+      hasFocus: () => true,
+      createElement: (tag) => new MockNode(tag),
+      createDocumentFragment: () => new MockNode('FRAGMENT'),
+      getElementById: (id) => {
+        const target = String(id || '');
+        const search = (n) => {
+          if (n.id === target) return n;
+          for (const ch of n.children) {
+            const hit = search(ch);
+            if (hit) return hit;
+          }
+          return null;
+        };
+        return search(docRoot);
+      },
+      querySelector: (sel) => docRoot.querySelector(sel),
+      querySelectorAll: (sel) => docRoot.querySelectorAll(sel),
+      addEventListener: (t, fn) => docRoot.addEventListener(t, fn),
+      removeEventListener: (t, fn) => docRoot.removeEventListener(t, fn),
+      dispatchEvent: (e) => docRoot.dispatchEvent(e),
+    };
+
+    const mockFetch = async (url, init) => {
+      const u = String(url || '');
+      const method = String((init && init.method) || 'GET').toUpperCase();
+      fetchCalls.push({
+        url: u,
+        method,
+        elapsedMs: Date.now() - stepStartMs,
+        hasSignal: Boolean(init && init.signal),
+      });
+      if (u.includes('tok971-ok') && method === 'HEAD') {
+        return { ok: true, status: 200, headers: { get: () => null } };
+      }
+      if (u.includes('tok971-404') && method === 'HEAD') {
+        return { ok: false, status: 404, headers: { get: () => null } };
+      }
+      if (u.includes('huge-971mb.mp4')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (String(h || '').toLowerCase() === 'content-length' ? '1018167296' : null),
+          },
+          blob: async () => new Blob([new Uint8Array(16)]),
+        };
+      }
+      if (u.includes('/mse-fmp4/')) {
+        const fmp4Chunks = [
+          new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]),
+          new Uint8Array([0x00, 0x00, 0x00, 0x10, 0x6d, 0x6f, 0x6f, 0x66, 0x00, 0x00, 0x00, 0x08]),
+        ];
+        let idx = 0;
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => {
+              const k = String(h || '').toLowerCase();
+              if (k === 'x-prism-mse-mime') return 'video/mp4; codecs="avc1.640028"';
+              if (k === 'content-type') return 'video/mp4';
+              return null;
+            },
+          },
+          body: {
+            getReader() {
+              return {
+                async read() {
+                  if (idx < fmp4Chunks.length) return { done: false, value: fmp4Chunks[idx++] };
+                  return { done: true, value: undefined };
+                },
+                async cancel() {},
+              };
+            },
+          },
+        };
+      }
+      const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (h) => (String(h || '').toLowerCase() === 'content-length' ? String(pngBytes.byteLength) : null),
+        },
+        blob: async () => new Blob([pngBytes], { type: 'image/png' }),
+      };
+    };
+
+    const mockURL = {
+      createObjectURL(obj) {
+        const u = `blob:https://127.0.0.1:62133/prism-v207-${++blobSeq}`;
+        if (obj instanceof MockMediaSource) {
+          mediaSourceByUrl.set(u, obj);
+        } else {
+          assert.ok(obj && obj.size > 0, 'createObjectURL expected non-empty Blob or MediaSource');
+        }
+        createdBlobUrls.push(u);
+        return u;
+      },
+      revokeObjectURL(u) {
+        const s = String(u);
+        mediaSourceByUrl.delete(s);
+        revokedBlobUrls.push(s);
+      },
+    };
+
+    const winListeners = new Map();
+    const mockWin = {
+      document: mockDoc,
+      location: { protocol: 'https:', origin: 'https://127.0.0.1:62133', href: 'https://127.0.0.1:62133/' },
+      innerWidth: 1440,
+      innerHeight: 900,
+      devicePixelRatio: 1,
+      fetch: mockFetch,
+      URL: mockURL,
+      Image: function MockImage() { return new MockNode('IMG'); },
+      MediaSource: MockMediaSource,
+      AbortController,
+      Blob,
+      Event: class MockEvent { constructor(type) { this.type = type; } },
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: (cb) => setTimeout(() => cb(Date.now()), 16),
+      cancelAnimationFrame: (id) => clearTimeout(id),
+      getComputedStyle: () => ({ backgroundColor: 'rgb(7, 7, 8)', getPropertyValue: () => '' }),
+      matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
+      navigator: {},
+      __agyPrismCall: () => Promise.resolve({ ok: true, skinEnabled: true, config: {} }),
+      addEventListener(type, fn) {
+        const list = winListeners.get(type) || [];
+        list.push(fn);
+        winListeners.set(type, list);
+      },
+      removeEventListener(type, fn) {
+        const list = winListeners.get(type);
+        if (!list) return;
+        const idx = list.indexOf(fn);
+        if (idx >= 0) list.splice(idx, 1);
+      },
+      dispatchEvent(evt) {
+        for (const fn of (winListeners.get(evt.type) || []).slice()) fn(evt);
+      },
+    };
+    mockWin.window = mockWin;
+    mockWin.top = mockWin;
+
+    const vmCtx = vm.createContext({
+      window: mockWin,
+      document: mockDoc,
+      location: mockWin.location,
+      URL: mockURL,
+      Image: mockWin.Image,
+      MediaSource: MockMediaSource,
+      Blob,
+      AbortController,
+      Uint8Array,
+      Event: mockWin.Event,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: mockWin.requestAnimationFrame,
+      cancelAnimationFrame: mockWin.cancelAnimationFrame,
+      getComputedStyle: mockWin.getComputedStyle,
+    });
+
+    vm.runInContext(wallInjectSrc, vmCtx, { filename: 'wallpaper-inject.js' });
+    const prism = mockWin.__agyPrism;
+    assert.ok(prism && typeof prism.applyPayload === 'function', 'v2.0.7 wallpaper-inject.js failed to mount in https: VM');
+
+    try {
+      // 2A) `image` wallpaper on https://127.0.0.1 -> 0ms fetch+blob, directHttpImgSrcs === 0, --prism-wall-image has NO plaintext http://
+      stepStartMs = Date.now();
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-v207-img',
+          kind: 'image',
+          mediaUrl: 'http://127.0.0.1:49152/media/img1/wall.png',
+          thumbUrl: 'http://127.0.0.1:49152/preview/img1/thumb.png',
+        },
+      });
+      assert.ok(
+        fetchCalls.some((c) => c.url === 'http://127.0.0.1:49152/media/img1/wall.png' && c.elapsedMs < 80),
+        'image wallpaper did not call 0ms fetch() on https: host',
+      );
+      await sleep(35);
+      assert.equal(prism.status().wallpaperReady, true, 'image wallpaper did not become ready via 0ms fetch+blob');
+      const imgEls = mockDoc.getElementById('agy-prism-stage').querySelectorAll('img');
+      assert.equal(imgEls.length, 1);
+      assert.ok(imgEls[0].src.startsWith('blob:'), `Expected blob: src on image wallpaper, got ${imgEls[0].src}`);
+      const styleCssText = mockDoc.getElementById('agy-prism-css')?.textContent || '';
+      const wallVarMatch = /--prism-wall-image:\s*([^;]+);/.exec(styleCssText);
+      const wallVarVal = wallVarMatch ? wallVarMatch[1].trim() : docRoot.style.getPropertyValue('--prism-wall-image');
+      assert.equal(wallVarVal.includes('http://'), false, `--prism-wall-image leaked plaintext http://: ${wallVarVal}`);
+
+      // 2B) `slideshow` wallpaper on https://127.0.0.1 -> 0ms fetch+blob, directHttpImgSrcs === 0
+      stepStartMs = Date.now();
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        slides: [
+          'http://127.0.0.1:49152/slide/s1/0.png',
+          'http://127.0.0.1:49152/slide/s1/1.png',
+        ],
+        activeItem: {
+          id: 'vm-v207-slide',
+          kind: 'slideshow',
+          mediaUrl: 'http://127.0.0.1:49152/slide/s1/0.png',
+          thumbUrl: 'http://127.0.0.1:49152/preview/s1/thumb.png',
+        },
+      });
+      assert.ok(
+        fetchCalls.some((c) => c.url === 'http://127.0.0.1:49152/slide/s1/0.png' && c.elapsedMs < 80),
+        'slideshow wallpaper did not call 0ms fetch() on https: host',
+      );
+      await sleep(35);
+      assert.equal(prism.status().wallpaperReady, true, 'slideshow wallpaper did not become ready via 0ms fetch+blob');
+
+      // 2C) Simulated 971 MB video Scenario 1: `pluginMediaUrl` HEAD 200 -> direct zero-copy `video.src = pluginMediaUrl`
+      //     AND `accentMode: 'dynamic'` triggers `extractAccent(thumbUrl)` via 0ms fetch+blob + immediate revokeObjectURL!
+      stepStartMs = Date.now();
+      const revokesBeforeAccent = revokedBlobUrls.length;
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'dynamic' },
+        activeItem: {
+          id: 'vm-v207-971mb-plugin',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/tok971/huge-971mb.mp4',
+          pluginMediaUrl: 'plugin://agy-wallpaper-prism--prism_studio-53040/media-proxy/media/tok971-ok',
+          mseFmp4Url: 'http://127.0.0.1:49152/mse-fmp4/tok971',
+          thumbUrl: 'http://127.0.0.1:49152/preview/tok971/accent-thumb.png',
+        },
+      });
+      await sleep(60);
+      const stPlugin = prism.status();
+      assert.equal(stPlugin.wallpaperReady, true, '971 MB plugin:// HEAD 200 video did not become ready');
+      assert.equal(stPlugin.videoTransport, 'plugin', `Expected videoTransport="plugin", got ${stPlugin.videoTransport}`);
+      assert.equal(
+        stPlugin.videoSrc,
+        'plugin://agy-wallpaper-prism--prism_studio-53040/media-proxy/media/tok971-ok',
+        `Expected zero-copy video.src = pluginMediaUrl, got ${stPlugin.videoSrc}`,
+      );
+      assert.ok(
+        fetchCalls.some((c) => c.url === 'http://127.0.0.1:49152/preview/tok971/accent-thumb.png'),
+        'extractAccent(thumbUrl) did not fetch thumbUrl via 0ms fetch+blob on https: host',
+      );
+      assert.ok(
+        revokedBlobUrls.length > revokesBeforeAccent,
+        'extractAccent(thumbUrl) did not revoke its temporary blob URL after finish()',
+      );
+
+      // 2D) Simulated 971 MB video Scenario 2: `pluginMediaUrl` HEAD 404 -> skips plaintext http:// iframe
+      //     (0ms, NO 15.5s Chrome 152 hang!) -> content-length 1018167296 triggers MediaSource `/mse-fmp4/` streaming!
+      stepStartMs = Date.now();
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-v207-971mb-mse',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/tok971b/huge-971mb.mp4',
+          pluginMediaUrl: 'plugin://agy-wallpaper-prism--prism_studio-53040/media-proxy/media/tok971-404',
+          videoStageUrl: 'http://127.0.0.1:49152/video-stage/tok971b',
+          mseFmp4Url: 'http://127.0.0.1:49152/mse-fmp4/tok971b',
+          thumbUrl: 'http://127.0.0.1:49152/preview/tok971b/poster.png',
+        },
+      });
+      await sleep(80);
+      const stMse = prism.status();
+      assert.equal(stMse.wallpaperReady, true, '971 MB MediaSource /mse-fmp4/ video did not become ready');
+      assert.equal(stMse.videoTransport, 'mse', `Expected videoTransport="mse", got ${stMse.videoTransport}`);
+      assert.equal(mseAppendedChunks.length, 2, `Expected 2 SourceBuffer chunks pumped from /mse-fmp4/, got ${mseAppendedChunks.length}`);
+      assert.ok(mseEndOfStreamCount >= 1, 'Expected MediaSource.endOfStream() after stream completion');
+      assert.equal(
+        mockDoc.getElementById('agy-prism-stage').querySelectorAll('video').length,
+        1,
+        '971 MB MSE video should render <video> without degrading to static poster <img>',
+      );
+      assert.deepEqual(
+        createdIframeSrcs,
+        [],
+        `Real MediaSource https: env must NOT mount plaintext http:// video-stage iframe (seen: ${createdIframeSrcs.join(', ')})`,
+      );
+
+      // 2E) Also verify `panel-inject.js` thumbnail grid (`bindSafeThumb`) uses 0ms fetch+blob under https://127.0.0.1
+      vm.runInContext(panelInjectSrc, vmCtx, { filename: 'panel-inject.js' });
+      const panel = mockWin.__agyPrismPanel;
+      assert.ok(panel && typeof panel.syncState === 'function', 'panel-inject.js failed to mount in https: VM');
+      try {
+        panel.open();
+        const revokesBeforePanelDestroy = revokedBlobUrls.length;
+        panel.syncState({
+          skinEnabled: true,
+          items: [
+            {
+              id: 'panel-t1',
+              title: 'Panel HTTPS Thumb',
+              kind: 'image',
+              source: 'local',
+              thumbUrl: 'http://127.0.0.1:49152/preview/panel-t1/thumb.png',
+            },
+          ],
+        });
+        const libTabBtn = mockDoc.getElementById('agy-prism-popover')?.querySelectorAll('.pp-tab').find((b) => b.getAttribute('data-tab') === 'library');
+        assert.ok(libTabBtn, 'panel-inject.js missing library .pp-tab button');
+        libTabBtn.click();
+        await sleep(40);
+        assert.ok(
+          fetchCalls.some((c) => c.url === 'http://127.0.0.1:49152/preview/panel-t1/thumb.png'),
+          'panel-inject.js bindSafeThumb did not fetch thumbUrl via fetch+blob on https: host',
+        );
+        const panelImgs = mockDoc.getElementById('agy-prism-popover')?.querySelectorAll('img') || [];
+        assert.equal(panelImgs.length, 1, 'Expected 1 thumbnail <img> in panel library grid');
+        assert.ok(panelImgs[0].src.startsWith('blob:'), `Expected blob: src on panel thumbnail, got ${panelImgs[0].src}`);
+        panel.destroy();
+        assert.ok(
+          revokedBlobUrls.length > revokesBeforePanelDestroy,
+          'panel.destroy() did not revoke cached thumbBlobCache blob URLs',
+        );
+      } finally {
+        try { panel.destroy(); } catch {}
+      }
+
+      assert.deepEqual(directHttpImgSrcs, [], `ZERO plaintext http:// allowed in img.src on https: host (found: ${directHttpImgSrcs.join(', ')})`);
+      assert.deepEqual(directHttpVideoSrcs, [], `ZERO plaintext http:// allowed in video.src on https: host (found: ${directHttpVideoSrcs.join(', ')})`);
+
+      return `/media-proxy 206 (${proxyRange.body.length}B ftyp${mseHeadMime ? ` + MSE ${mseHeadMime}` : ''}) + 0 directHttpImgSrcs (image/slideshow/accent/panel-thumb) + 971MB plugin:// & MediaSource (${mseAppendedChunks.length} chunks) verified`;
+    } finally {
+      prism.destroy();
     }
   });
 
@@ -3811,6 +4597,327 @@ async function main() {
         assert.deepEqual(studioPage.pageExceptions, [], `3D Studio exception: ${studioPage.pageExceptions.join(' | ')}`);
 
         return `Bug1(pill r=${glassUiAudit.bug1.pillRadius}px + bodyBg=#00000000 + gap=${glassUiAudit.bug1.tbToPillGap}px + syncOverlay->#00000000/35) + Bug2(tb r=12px + overflow=visible + fixed 0,0) + Bug3(sticky=${stickyAlpha.toFixed(2)}/proj=${projAlpha.toFixed(2)} > sb=${sbAlpha.toFixed(2)}) + Bug4(right=${rightAlpha.toFixed(2)}==center & Studio .mini-aux==.mini-center) verified`;
+      } finally {
+        await browser.closePage(studioPage);
+        await browser.closePage(hubPage);
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // 3E. v2.0.7 Three-Point 1-Click Master Enable/Disable Switch E2E
+    //     (POST /api/skin/toggle + RPC skin.toggle + Canary Tripped Auto-Reset +
+    //      Studio #prism-master-toggle-btn + Ctrl+Alt+W [data-testid="prism-power-toggle"] +
+    //      Persistent #agy-prism-pill [data-skin-enabled="false"] + Ctrl+Alt+Shift+R Panic Escape)
+    // -----------------------------------------------------------------------
+    await check('v2.0.7 Three-Point 1-Click Master Toggle E2E: /api/skin/toggle (tripped canary auto-reset) + Studio #prism-master-toggle-btn + Ctrl+Alt+W [data-testid="prism-power-toggle"] + Persistent #agy-prism-pill + Panic Escape', '@exec-v207-backend / @exec-v207-host / @exec-v207-studio / @exec-v207-tests', async () => {
+      // 1. Backend POST /api/skin/toggle & RPC `skin.toggle` with Canary `tripped` auto-recovery
+      const toggleCanaryDir = path.join(SCRATCH_ROOT, 'v207-toggle-canary-data');
+      fs.mkdirSync(toggleCanaryDir, { recursive: true });
+      const installIdPath = path.join(REPO_ROOT, '.prism-install-id');
+      const boundInstallId = fs.existsSync(installIdPath) ? fs.readFileSync(installIdPath, 'utf8').trim() : '';
+      fs.writeFileSync(
+        path.join(toggleCanaryDir, 'config.json'),
+        JSON.stringify({ skinEnabled: true, startupMode: 'gentle-auto', liveBootDelay: 1.5 }, null, 2),
+        'utf8',
+      );
+      fs.writeFileSync(
+        path.join(toggleCanaryDir, 'canary.json'),
+        JSON.stringify(
+          {
+            version: 2,
+            state: 'arming',
+            browserSessionId: 'v207-crashed-session-prev',
+            windowTargetId: 'target-prev-207',
+            sidecarPid: 999998,
+            boundInstallId,
+            lastArmTs: Date.now() - 2500,
+            unfinishedAttempts: [Date.now() - 2500],
+          },
+          null,
+          2,
+        ),
+        'utf8',
+      );
+
+      const toggleSrv = await createPrismStudioServer({
+        dataDir: toggleCanaryDir,
+        token: 'v207-toggle-tok',
+        startCdp: false,
+        inspectShortcuts: false,
+      });
+      try {
+        const trippedBoot = (await invokeServerInMemory(toggleSrv.server, { method: 'GET', url: '/api/bootstrap' })).json();
+        assert.equal(trippedBoot.canary?.state, 'tripped', 'Expected seeded arming canary to trip on boot');
+        assert.equal(trippedBoot.skinEnabled, false, 'Tripped canary must start with skinEnabled === false');
+
+        // POST /api/skin/toggle { enabled: true } MUST auto-reset tripped canary and wake!
+        const enRes = await invokeServerInMemory(toggleSrv.server, {
+          method: 'POST',
+          url: '/api/skin/toggle',
+          headers: { 'Content-Type': 'application/json', 'X-Sidecar-Token': 'v207-toggle-tok' },
+          body: JSON.stringify({ enabled: true }),
+        });
+        assert.equal(enRes.status, 200, `POST /api/skin/toggle enable failed: ${enRes.text()}`);
+        const enBody = enRes.json();
+        assert.equal(enBody.ok, true);
+        assert.equal(enBody.skinEnabled, true);
+        assert.equal(enBody.state?.skinEnabled, true);
+        assert.notEqual(enBody.state?.canary?.state, 'tripped', 'POST /api/skin/toggle enable did not clear tripped canary');
+        assert.equal(enBody.state?.sessionAwake, true, 'POST /api/skin/toggle enable did not set sessionAwake=true');
+
+        // Host RPC `skin.toggle` disable -> re-enable
+        const rpcOff = await invokeServerInMemory(toggleSrv.server, {
+          method: 'POST',
+          url: `/host/${toggleSrv.hostCapToken}/rpc`,
+          headers: { 'Content-Type': 'application/json', 'X-Prism-Token': toggleSrv.hostCapToken },
+          body: JSON.stringify({ id: 't1', method: 'skin.toggle', params: { enabled: false } }),
+        });
+        assert.equal(rpcOff.status, 200);
+        assert.equal(rpcOff.json().ok, true);
+        assert.equal(rpcOff.json().result?.skinEnabled, false);
+
+        const rpcOn = await invokeServerInMemory(toggleSrv.server, {
+          method: 'POST',
+          url: `/host/${toggleSrv.hostCapToken}/rpc`,
+          headers: { 'Content-Type': 'application/json', 'X-Prism-Token': toggleSrv.hostCapToken },
+          body: JSON.stringify({ id: 't2', method: 'skin.toggle', params: {} }),
+        });
+        assert.equal(rpcOn.status, 200);
+        assert.equal(rpcOn.json().ok, true);
+        assert.equal(rpcOn.json().result?.skinEnabled, true, 'RPC skin.toggle with omitted enabled did not flip false -> true');
+      } finally {
+        await toggleSrv.close();
+      }
+
+      // 2. Headless Chrome E2E across Studio `#prism-master-toggle-btn`, Hub persistent `#agy-prism-pill`,
+      //    and `Ctrl+Alt+W` `[data-testid="prism-power-toggle"]`, ending with `Ctrl+Alt+Shift+R` Panic Escape!
+      await engine.applyWallpaper(auroraItem.id, {
+        skinEnabled: true,
+        startupMode: 'gentle-auto',
+        preset: 'islands',
+        layoutMode: 'islands',
+        glassOpacity: 0.74,
+        glassBlur: 16,
+        triggerMode: 'both',
+        language: 'zh',
+      });
+
+      const hubPage = await browser.openPage({
+        url: `${HUB_MOCK_ORIGIN}/hub`,
+        requestHandler: universalHttpRouter,
+      });
+      const studioPage = await browser.openPage({
+        url: `${studio.origin}/?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+        requestHandler: universalHttpRouter,
+      });
+
+      try {
+        await hubPage.evaluate(`window.__lastWco = null; window.electronNative = { setTitleBarOverlay(o){ window.__lastWco = o; return Promise.resolve(); } };`);
+        const bootstrapExpr = buildHostMicroBootstrap({
+          hostOrigin: studio.origin,
+          capToken: studio.hostCapToken,
+          triggerMode: 'both',
+          startupMode: 'gentle-auto',
+          skinEnabled: true,
+        });
+        await hubPage.evaluate(bootstrapExpr);
+
+        const readyDeadline = Date.now() + 4000;
+        while (Date.now() < readyDeadline) {
+          const ready = await hubPage.evaluate(`document.documentElement.getAttribute('data-agy-prism-wallpaper') === 'ready'`);
+          if (ready) break;
+          await sleep(45);
+        }
+        await sleep(500); // wait for Studio initial bootstrap render
+
+        const initCheck = await Promise.all([
+          studioPage.evaluate(`(() => {
+            const btn = document.getElementById('prism-master-toggle-btn');
+            return btn ? {
+              exists: true,
+              role: btn.getAttribute('role'),
+              ariaChecked: btn.getAttribute('aria-checked'),
+              dataEnabled: btn.dataset.enabled,
+              text: (document.getElementById('prism-master-toggle-text')?.textContent || '').trim(),
+            } : { exists: false };
+          })()`),
+          hubPage.evaluate(`(() => {
+            const pill = document.getElementById('agy-prism-pill');
+            return {
+              wallAttr: document.documentElement.getAttribute('data-agy-prism-wallpaper'),
+              hasPill: Boolean(pill),
+              pillSkinEnabled: pill ? pill.getAttribute('data-skin-enabled') : null,
+            };
+          })()`),
+        ]);
+        assert.equal(initCheck[0].exists, true, 'Studio topbar missing #prism-master-toggle-btn');
+        assert.equal(initCheck[0].role, 'switch');
+        assert.equal(initCheck[0].ariaChecked, 'true');
+        assert.equal(initCheck[0].dataEnabled, 'true');
+        assert.equal(initCheck[1].wallAttr, 'ready');
+        assert.equal(initCheck[1].hasPill, true, 'Hub missing initial #agy-prism-pill');
+        assert.equal(initCheck[1].pillSkinEnabled, 'true', `Expected initial #agy-prism-pill data-skin-enabled="true", got ${initCheck[1].pillSkinEnabled}`);
+
+        // Step A: Click Studio `#prism-master-toggle-btn` to DISABLE -> skin unloads, #agy-prism-pill SURVIVES with data-skin-enabled="false"!
+        await studioPage.evaluate(`document.getElementById('prism-master-toggle-btn').click()`);
+        const offCfgDeadline = Date.now() + 2500;
+        while (Date.now() < offCfgDeadline) {
+          const cfg = await engine.getConfig();
+          if (cfg.skinEnabled === false) break;
+          await sleep(40);
+        }
+        assert.equal((await engine.getConfig()).skinEnabled, false, 'Clicking #prism-master-toggle-btn did not set engine skinEnabled=false');
+
+        const studioAfterOff = await studioPage.evaluate(`(() => {
+          const btn = document.getElementById('prism-master-toggle-btn');
+          return { ariaChecked: btn.getAttribute('aria-checked'), dataEnabled: btn.dataset.enabled };
+        })()`);
+        assert.equal(studioAfterOff.ariaChecked, 'false');
+        assert.equal(studioAfterOff.dataEnabled, 'false');
+
+        // Wait for Hub EventSource (/host/<token>/events retry:2500) to deliver skinEnabled=false -> ss()
+        let hubAfterOff = null;
+        const sseOffDeadline = Date.now() + 4500;
+        while (Date.now() < sseOffDeadline) {
+          hubAfterOff = await hubPage.evaluate(`(() => {
+            const pill = document.getElementById('agy-prism-pill');
+            return {
+              wallAttr: document.documentElement.getAttribute('data-agy-prism-wallpaper'),
+              hasStage: Boolean(document.getElementById('agy-prism-stage')),
+              hasCss: Boolean(document.getElementById('agy-prism-css')),
+              hasPill: Boolean(pill),
+              pillSkinEnabled: pill ? pill.getAttribute('data-skin-enabled') : null,
+              bodyBg: getComputedStyle(document.body).backgroundColor,
+            };
+          })()`);
+          if (hubAfterOff.wallAttr === null && !hubAfterOff.hasStage) break;
+          await sleep(80);
+        }
+        assert.equal(hubAfterOff.wallAttr, null, 'Host did not strip data-agy-prism-wallpaper when disabled from Studio');
+        assert.equal(hubAfterOff.hasStage, false, 'Host did not remove #agy-prism-stage when disabled from Studio');
+        assert.equal(hubAfterOff.hasCss, false, 'Host did not remove #agy-prism-css when disabled from Studio');
+        assert.equal(hubAfterOff.bodyBg, 'rgb(7, 7, 8)', `Expected native dark body bg after disable, got ${hubAfterOff.bodyBg}`);
+        assert.equal(hubAfterOff.hasPill, true, 'FATAL REGRESSION: #agy-prism-pill was deleted by stripSkin on normal disable!');
+        assert.equal(
+          hubAfterOff.pillSkinEnabled,
+          'false',
+          `Expected persistent #agy-prism-pill data-skin-enabled="false", got ${hubAfterOff.pillSkinEnabled}`,
+        );
+
+        // Step B: Press Ctrl+Alt+W to summon Quick Popover -> verify `[data-testid="prism-power-toggle"]` is OFF -> click it to RE-ENABLE!
+        await hubPage.pressKey({ key: 'w', code: 'KeyW', windowsVirtualKeyCode: 87, modifiers: 3 });
+        const popOpenDeadline = Date.now() + 3000;
+        while (Date.now() < popOpenDeadline) {
+          const isOpen = await hubPage.evaluate(
+            `Boolean(window.__agyPrismPanel && window.__agyPrismPanel.status().open && document.querySelector('[data-testid="prism-power-toggle"]'))`,
+          );
+          if (isOpen) break;
+          await sleep(45);
+        }
+        const popBeforeReEnable = await hubPage.evaluate(`(() => {
+          const btn = document.querySelector('[data-testid="prism-power-toggle"]');
+          const pill = document.getElementById('agy-prism-pill');
+          return {
+            hasPowerBtn: Boolean(btn),
+            role: btn ? btn.getAttribute('role') : null,
+            ariaChecked: btn ? btn.getAttribute('aria-checked') : null,
+            hasPill: Boolean(pill),
+            pillSkinEnabled: pill ? pill.getAttribute('data-skin-enabled') : null,
+          };
+        })()`);
+        assert.equal(popBeforeReEnable.hasPowerBtn, true, 'Quick Popover missing [data-testid="prism-power-toggle"]');
+        assert.equal(popBeforeReEnable.role, 'switch');
+        assert.equal(popBeforeReEnable.ariaChecked, 'false', 'Expected popover power toggle aria-checked="false" while disabled');
+        assert.equal(popBeforeReEnable.hasPill, true, 'Upgraded #agy-prism-pill missing after opening Ctrl+Alt+W while disabled');
+        assert.equal(popBeforeReEnable.pillSkinEnabled, 'false');
+
+        // Click `[data-testid="prism-power-toggle"]` to 1-click RE-ENABLE!
+        await hubPage.evaluate(`document.querySelector('[data-testid="prism-power-toggle"]').click()`);
+        let hubAfterReEnable = null;
+        const reEnableDeadline = Date.now() + 4500;
+        while (Date.now() < reEnableDeadline) {
+          hubAfterReEnable = await hubPage.evaluate(`(() => {
+            const btn = document.querySelector('[data-testid="prism-power-toggle"]');
+            const pill = document.getElementById('agy-prism-pill');
+            return {
+              wallAttr: document.documentElement.getAttribute('data-agy-prism-wallpaper'),
+              ariaChecked: btn ? btn.getAttribute('aria-checked') : null,
+              pillSkinEnabled: pill ? pill.getAttribute('data-skin-enabled') : null,
+            };
+          })()`);
+          if (hubAfterReEnable.wallAttr === 'ready' && hubAfterReEnable.pillSkinEnabled === 'true') break;
+          await sleep(60);
+        }
+        assert.equal(hubAfterReEnable.wallAttr, 'ready', 'Clicking [data-testid="prism-power-toggle"] did not restore data-agy-prism-wallpaper="ready"');
+        assert.equal(hubAfterReEnable.ariaChecked, 'true');
+        assert.equal(hubAfterReEnable.pillSkinEnabled, 'true');
+        assert.equal((await engine.getConfig()).skinEnabled, true, 'Popover power toggle did not persist skinEnabled=true');
+
+        // Verify Studio `#prism-master-toggle-btn` also syncs back to enabled="true" via /api/events SSE!
+        let studioSyncedOn = false;
+        const studioSyncDeadline = Date.now() + 4500;
+        while (Date.now() < studioSyncDeadline) {
+          studioSyncedOn = await studioPage.evaluate(
+            `document.getElementById('prism-master-toggle-btn')?.dataset.enabled === 'true'`,
+          );
+          if (studioSyncedOn) break;
+          await sleep(80);
+        }
+        assert.equal(studioSyncedOn, true, 'Studio #prism-master-toggle-btn did not sync back to data-enabled="true" after popover re-enable');
+
+        // Step C: Disable once more with `panel.js` ALREADY LOADED -> verify BOTH `#agy-prism-pill` and `[data-testid="prism-power-toggle"]` survive & sync!
+        await studioPage.evaluate(`document.getElementById('prism-master-toggle-btn').click()`);
+        let loadedPanelOff = null;
+        const loadedOffDeadline = Date.now() + 4500;
+        while (Date.now() < loadedOffDeadline) {
+          loadedPanelOff = await hubPage.evaluate(`(() => {
+            const btn = document.querySelector('[data-testid="prism-power-toggle"]');
+            const pill = document.getElementById('agy-prism-pill');
+            return {
+              wallAttr: document.documentElement.getAttribute('data-agy-prism-wallpaper'),
+              hasPill: Boolean(pill),
+              pillSkinEnabled: pill ? pill.getAttribute('data-skin-enabled') : null,
+              powerAriaChecked: btn ? btn.getAttribute('aria-checked') : null,
+            };
+          })()`);
+          if (loadedPanelOff.wallAttr === null && loadedPanelOff.pillSkinEnabled === 'false' && loadedPanelOff.powerAriaChecked === 'false') break;
+          await sleep(80);
+        }
+        assert.equal(loadedPanelOff.wallAttr, null);
+        assert.equal(loadedPanelOff.hasPill, true, 'Full panel #agy-prism-pill must survive normal disable');
+        assert.equal(loadedPanelOff.pillSkinEnabled, 'false');
+        assert.equal(loadedPanelOff.powerAriaChecked, 'false', 'Open popover power toggle did not sync to aria-checked="false" via SSE');
+
+        // Re-enable from Studio `#prism-master-toggle-btn` -> restores ready!
+        await studioPage.evaluate(`document.getElementById('prism-master-toggle-btn').click()`);
+        let reOnFromStudio = false;
+        const reOnDeadline = Date.now() + 4500;
+        while (Date.now() < reOnDeadline) {
+          reOnFromStudio = await hubPage.evaluate(
+            `document.documentElement.getAttribute('data-agy-prism-wallpaper') === 'ready' && document.getElementById('agy-prism-pill')?.getAttribute('data-skin-enabled') === 'true'`,
+          );
+          if (reOnFromStudio) break;
+          await sleep(80);
+        }
+        assert.equal(reOnFromStudio, true, 'Re-enabling via Studio #prism-master-toggle-btn did not restore wallpaper="ready"');
+
+        // Step D: `Ctrl+Alt+Shift+R` Emergency Panic Escape MUST still remove ALL nodes (including `#agy-prism-pill` & `#agy-prism-popover`)!
+        await hubPage.pressKey({ key: 'R', code: 'KeyR', windowsVirtualKeyCode: 82, modifiers: 11 });
+        await sleep(250);
+        const panicAudit = await hubPage.evaluate(`({
+          nodes: Array.from(document.querySelectorAll('[id^="agy-prism-"], .prism-corner-orb')).map(e => e.id || e.className),
+          attrs: Array.from(document.documentElement.attributes).map(a => a.name).filter(n => /^data-(?:agy-)?prism/.test(n)),
+        })`);
+        assert.deepEqual(panicAudit.nodes, [], `Ctrl+Alt+Shift+R left residual nodes: ${panicAudit.nodes.join(', ')}`);
+        assert.deepEqual(panicAudit.attrs, [], `Ctrl+Alt+Shift+R left residual attrs: ${panicAudit.attrs.join(', ')}`);
+        assert.equal((await engine.getConfig()).skinEnabled, false, 'Ctrl+Alt+Shift+R did not persist skinEnabled=false');
+
+        assert.deepEqual(hubPage.consoleErrors, [], `3E Hub console.error: ${hubPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(hubPage.pageExceptions, [], `3E Hub exception: ${hubPage.pageExceptions.join(' | ')}`);
+        assert.deepEqual(studioPage.consoleErrors, [], `3E Studio console.error: ${studioPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(studioPage.pageExceptions, [], `3E Studio exception: ${studioPage.pageExceptions.join(' | ')}`);
+
+        return 'canary tripped->/api/skin/toggle auto-reset + Studio #prism-master-toggle-btn + persistent #agy-prism-pill + Ctrl+Alt+W [data-testid="prism-power-toggle"] + Ctrl+Alt+Shift+R full strip verified';
       } finally {
         await browser.closePage(studioPage);
         await browser.closePage(hubPage);

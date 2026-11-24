@@ -1,6 +1,6 @@
 # Wallpaper Prism (`agy-wallpaper-prism`) — 下一代 AI 维护者工程交接手册
 
-> **适用基线版本**：`v2.0.6`（GitHub: `https://github.com/azwosile/agy-wallpaper-prism`）  
+> **适用基线版本**：`v2.0.7`（GitHub: `https://github.com/azwosile/agy-wallpaper-prism`）  
 > **定位**：Google Antigravity 宿主整窗液态玻璃皮肤（Obsidian Prism 6 层光学体系）+ Steam Wallpaper Engine (`431960`) / 本地多媒体动态壁纸工作台插件。  
 > **核心工程信条**：**Zero Agent Tokens · Zero `app.asar` Modification · Zero-Enable Ephemeral CDP · Fail-Open First · Zero Session Disruption**
 
@@ -9,26 +9,25 @@
 ## 0. 当前工作区交接状态快照（下一位 AI 接手必读）
 
 ### 0.1 版本、运行态与全量验证基线
-- **当前代码版本**：`v2.0.6`（全仓 **7 处版本同步锚点**已全部对齐 `2.0.6`，详见 `§1.3`）。
+- **当前代码版本**：`v2.0.7`（全仓 **7 处版本同步锚点**已全部对齐 `2.0.7`，详见 `§1.3`）。
 - **本机安装同步状态**：`~/.gemini/config/plugins/agy-wallpaper-prism` 下全部 **23 个运行时核心文件**已通过 `node scripts/install-local.mjs` 真实文件拷贝同步（`SHA-256` 字节级一致）并在线热替换生效，无需重启宿主 `Antigravity.exe`。
-- **端到端验证基线**：`$env:PRISM_ALLOW_DIRTY_GIT='1'; node test/verify-all.mjs` 全量 **25 / 25 PASS**（覆盖 Suite 1 清单/Zero-CDP/Zero-PII/SHA-256 同步、Suite 2 引擎/金丝雀/PR #6 加固跨协议 `fetch+blob`/PR #7 `/video-stage/` 同源流式舞台与 Studio `/api/events` SSE、Suite 3 Headless Chrome `1440×900` 像素级 E2E 与 4 项毛玻璃 UI 架构断言）。
+- **端到端验证基线**：`node test/verify-all.mjs` 全量 **27 / 27 PASS**（覆盖 Suite 1 清单/Zero-CDP/Zero-PII/SHA-256 同步、Suite 2 引擎/金丝雀/PR #6 加固跨协议 `fetch+blob`/PR #7 `/video-stage/` 同源流式舞台与 Studio `/api/events` SSE/`v2.0.7` `plugin://` 206 代理 + `971 MB` `MediaSource` `/mse-fmp4/` 流式播放 + 全链路 `0ms fetch+blob` 图片零挂起回归、Suite 3 Headless Chrome `1440×900` 像素级 E2E + 4 项毛玻璃 UI 架构断言 + `v2.0.7` 三端一键启用/禁用主开关与持久化 `#agy-prism-pill` E2E）。
 
-### 0.2 未提交工作区状态（切勿执行破坏性回滚！）
+### 0.2 Git 提交基线与工作区状态（切勿执行破坏性回滚！）
 > [!CAUTION]
-> 当前 Git 分支为 `main`，`HEAD` 仍停留在 `v2.0.5` 基线提交 `7ec06864f1b3f1b69770ce638f6e61aa9dd32b58`（`docs: add comprehensive AI maintainer handoff manual (v2.0.5)`）。**全部 `v2.0.6` 源码、PR #6/#7 加固代码、4 项毛玻璃 UI 改造、单测、打包产物与本交接手册改动均位于当前未提交工作树中**，尚未执行 `git commit` / `git tag` / `git push`。接手时**严禁**执行 `git checkout -- .`、`git restore .`、`git reset --hard` 或 `git clean -fd`！
+> 当前 Git 分支为 `main`，`v2.0.6` 已合入 PR #6 & PR #7 提交至 `ba0b6de`（`release: Wallpaper Prism v2.0.6`）。`v2.0.7` 全部源码、测试断言升级、打包产物与交接文档同步位于当前工作树（提交前严禁执行 `git checkout -- .`、`git restore .`、`git reset --hard` 或 `git clean -fd`）。
 
-当前工作树 `git status --short` 涉及的全部 **18 个修改文件**如下：
+当前 `v2.0.7` 涉及的全部 **16 个更新文件**如下：
 
 ```text
  M README.md
  M docs/AI_HANDOFF.md
  M package.json
  M plugin.json
- M scripts/install-local.mjs
+ M sidecars/prism_studio/cdp-bridge.mjs
  M sidecars/prism_studio/index.html
  M sidecars/prism_studio/main.mjs
  M src/engine/media-server.mjs
- M src/engine/store.mjs
  M src/host/index.mjs
  M src/host/panel-inject.js
  M src/host/wallpaper-inject.js
@@ -36,7 +35,6 @@
  M src/shared/schema.mjs
  M src/studio-ui/app.mjs
  M src/studio-ui/styles.css
- M test/mock-hub-template.mjs
  M test/verify-all.mjs
 ```
 
@@ -69,22 +67,22 @@ agy-wallpaper-prism/
 │   │   ├── index.mjs                  # 引擎门面：生命周期、热缓存启动、后台异步扫描、SSE 状态广播
 │   │   ├── store.mjs                  # 原子写盘队列、fsync 金丝雀写入、v1 数据迁移、流式 SHA-256 上传去重
 │   │   ├── scanner.mjs                # Steam/WE 431960 发现、4 层本地目录递归扫描、路径穿越防护、热快照缓存
-│   │   ├── media-server.mjs           # Loopback 媒体服：HTTP 206 Range (512KB chunk)、/video-stage/ 流式舞台、WE 沙箱注入、FFmpeg 缩略图
+│   │   ├── media-server.mjs           # Loopback 媒体服：HTTP 206 Range (512KB chunk)、/mse-fmp4/ 零重编码流、/video-stage/、WE 沙箱注入、FFmpeg 缩略图
 │   │   ├── mp4-vfs.mjs                # 零磁盘拷贝虚拟 moov 前置（faststart，兼容 32位 stco 与 64位 co64）
 │   │   ├── pkg-scene.mjs              # WE PKGV0002 + LZ4 + TEXB0004 场景解包提取内嵌 MP4/音频流
 │   │   └── playlist.mjs               # 顺序/随机洗牌轮播与定时/播完切换状态机
 │   ├── host/
-│   │   ├── index.mjs                  # 宿主脚本加载缓存、buildClientSkinPayload (含 videoStageUrl)、纯静态模式 buildStaticCssSheet
-│   │   ├── wallpaper-inject.js        # 注入 Antigravity 主窗口的微内核（stage.js，ES2020 自包含 IIFE，含 WCO 胶囊与 4 项毛玻璃架构）
-│   │   └── panel-inject.js            # 宿主内 Ctrl+Alt+W 懒加载快捷浮窗（panel.js，0 KB 冷启动开销）
+│   │   ├── index.mjs                  # 宿主脚本加载缓存、buildClientSkinPayload (含 plugin*Url / mseFmp4Url / videoStageUrl)、纯静态模式 buildStaticCssSheet
+│   │   ├── wallpaper-inject.js        # 注入 Antigravity 主窗口的微内核（stage.js，ES2020 自包含 IIFE，含三级大视频流、0ms 图片/取色、WCO 胶囊与 4 项毛玻璃架构）
+│   │   └── panel-inject.js            # 宿主内 Ctrl+Alt+W 懒加载快捷浮窗（panel.js，含顶栏一键开关、持久化胶囊与 80 条上限 bindSafeThumb）
 │   └── studio-ui/
-│       ├── app.mjs                    # 右侧边栏完整工作台前端逻辑（单向事件委托至 #app + /api/events SSE 实时同步）
-│       ├── styles.css                 # 工作台样式表（含 21:9 迷你工作台浮岛预览，.mini-aux 对齐 .mini-center）
+│       ├── app.mjs                    # 右侧边栏完整工作台前端逻辑（顶栏 #prism-master-toggle-btn 主开关 + 单向事件委托至 #app + /api/events SSE 实时同步）
+│       ├── styles.css                 # 工作台样式表（含 .prism-master-toggle 主开关与 21:9 迷你工作台浮岛预览，.mini-aux 对齐 .mini-center）
 │       └── template.html              # 工作台 HTML 骨架
 ├── sidecars/prism_studio/
 │   ├── sidecar.json                   # AUX_PANE 契约（restart_policy 必须保持 "on-failure"）
-│   ├── main.mjs                       # 权威 Sidecar HTTP 服务 + /api/events SSE + /host/<capToken>/* 能力路由
-│   ├── cdp-bridge.mjs                 # 零侵入瞬态 CDP 桥接器、两阶段 fsync 金丝雀、普通快捷方式 .lnk 补丁/无损还原
+│   ├── main.mjs                       # 权威 Sidecar HTTP 服务 + plugin:// /media-proxy/* 206 流代理 + /api/skin/toggle + /api/events SSE + /host/<capToken>/*
+│   ├── cdp-bridge.mjs                 # 零侵入瞬态 CDP 桥接器、两阶段 fsync 金丝雀、ss() 保留胶囊卸载 / sa() 紧急逃生、普通快捷方式 .lnk 补丁
 │   └── index.html                     # 由 scripts/build.mjs 构建生成的单文件内联产物（纯 LF，切勿手改！）
 ├── host/cli.mjs                       # 命令行工具（status | wake | reset-canary | enable-autostart | restore）
 ├── scripts/
@@ -92,7 +90,7 @@ agy-wallpaper-prism/
 │   └── install-local.mjs              # 真实文件拷贝安装 + 同版本/跨版本 Sidecar/Hub/Panel/Iframe 强制热替换
 └── test/
     ├── mock-hub-template.mjs          # Antigravity 2.34.0 真实 DOM/CSS 权重模拟夹具（含顶栏下拉、项目文件夹、aux-pane-split 双栏探针）
-    └── verify-all.mjs                 # 25 项端到端全量验证套件（Manifest + 引擎 + PR #6/#7 VM 单测 + Headless Chrome 像素级 & 4 项 UI E2E）
+    └── verify-all.mjs                 # 27 项端到端全量验证套件（Manifest + 引擎 + PR #6/#7 + v2.0.7 plugin:// & MSE & 三端一键主开关 + Headless Chrome 像素级 E2E）
 ```
 
 > **关联兄弟仓库**：同父工作区下的 `agy-wallpaper-prism-intro`（`https://github.com/azwosile/agy-wallpaper-prism-intro`）为 B 站宣传视频工程（WebGL2 + TTS 合成管线），与插件本体完全解耦。
@@ -105,19 +103,19 @@ agy-wallpaper-prism/
 | **Sidecar 权威数据目录** | `ANTIGRAVITY_EXECUTABLE_DATA_DIR` 或 `~/.gemini/antigravity/sidecar_data/agy-wallpaper-prism/prism_studio/data` | 由 `resolveDefaultPrismDataDir`（`src/engine/store.mjs:178-190`）统一解析。存放 `config.json`、`canary.json`、`server_info.json`、`shortcut-backup.json`、`presets/`、`uploads/`、`cache/inventory-index.json`、`cache/thumbs/`、`cache/scene-media/`。插件目录更新/重装不会丢失用户配置。 |
 | **v1 历史遗留目录** | `~/.agy-wallpaper-prism` | 仅当默认启动（未显式传入测试 `dataDir` 或 `AGY_PRISM_DATA_DIR`）且新目录尚无 `config.json` 与 `.migrated-from-legacy.json` 时，由 `migrateLegacyPrismDataIfNeeded`（`src/engine/store.mjs:197-254`）自动非破坏性迁移。 |
 
-### 1.3 版本号升级必改的 7 处同步锚点（当前 `v2.0.6` 精确行号）
+### 1.3 版本号升级必改的 7 处同步锚点（当前 `v2.0.7` 精确行号）
 
-每次升级版本号（如 `2.0.6 -> 2.0.7`），**必须同步修改以下全部 7 处锚点**（另建议同步更新 `src/host/index.mjs:246, 317` 的静态样式表头部注释），否则 `install-local.mjs` 热升级校验或 `test/verify-all.mjs` Suite 1 第一项断言会直接失败：
+每次升级版本号（如 `2.0.7 -> 2.0.8`），**必须同步修改以下全部 7 处锚点**（另建议同步更新 `src/host/index.mjs:276, 347` 的静态样式表头部注释），否则 `install-local.mjs` 热升级校验或 `test/verify-all.mjs` Suite 1 第一项断言会直接失败：
 
-| 序号 | 文件路径 | 当前行号 | `v2.0.6` 精确锚点内容 |
+| 序号 | 文件路径 | 当前行号 | `v2.0.7` 精确锚点内容 |
 | :---: | :--- | :--- | :--- |
-| 1 | `plugin.json` | `L5` | `"version": "2.0.6",` |
-| 2 | `package.json` | `L3` | `"version": "2.0.6",` |
-| 3 | `README.md` | `L4`、`L54` | `> **Version**: \`2.0.6\`` 及架构树 `Official 10-key Antigravity plugin manifest (v2.0.6)` |
-| 4 | `src/shared/schema.mjs` | `L6`、`L13` | `export const PLUGIN_VERSION = '2.0.6';` 与 `PRISM_DOM.skinVersion: '2.0.6'` |
-| 5 | `src/host/wallpaper-inject.js` | `L1`、`L12` | 顶部注释与 `var VERSION = '2.0.6';` |
-| 6 | `src/host/panel-inject.js` | `L1`、`L12` | 顶部注释与 `var VERSION = '2.0.6';` |
-| 7 | `test/verify-all.mjs` | `L218-L224`（及顶部 `L3, L189, L198`） | Suite 1 版本一致性断言（`assert.equal(raw.version, '2.0.6', ...)` 等 7 项正则/相等校验） |
+| 1 | `plugin.json` | `L5` | `"version": "2.0.7",` |
+| 2 | `package.json` | `L3` | `"version": "2.0.7",` |
+| 3 | `README.md` | `L4`、`L55` | `> **Version**: \`2.0.7\`` 及架构树 `Official 10-key Antigravity plugin manifest (v2.0.7)` |
+| 4 | `src/shared/schema.mjs` | `L6`、`L13` | `export const PLUGIN_VERSION = '2.0.7';` 与 `PRISM_DOM.skinVersion: '2.0.7'` |
+| 5 | `src/host/wallpaper-inject.js` | `L1`、`L12` | 顶部注释与 `var VERSION = '2.0.7';` |
+| 6 | `src/host/panel-inject.js` | `L1`、`L12` | 顶部注释与 `var VERSION = '2.0.7';` |
+| 7 | `test/verify-all.mjs` | `L221-L227`（及顶部 `L3, L192, L201`） | Suite 1 版本一致性断言（`assert.equal(raw.version, '2.0.7', ...)` 等 7 项正则/相等校验） |
 
 ---
 
@@ -335,6 +333,37 @@ Antigravity `2.34.0` 的 `/customizations` 与 `/customizations/installed` 路�
 
 ---
 
+### 3.7 `v2.0.7` 专项架构：Chrome 152 `https:` 零挂起图片、`971 MB+` 大视频三级流式加载与三端一键主开关
+
+#### 1) Chrome 152 `https://127.0.0.1` 全链路 `0ms fetch+blob` 图片零挂起
+- **根因**：在 Antigravity `2.34.0`（Chrome 152）的 `https://127.0.0.1` 宿主中，直接向 `<img>.src`、`video.poster` 或 CSS `--prism-wall-image` 写入明文 `http://127.0.0.1` 回环地址会静默挂起至 `6000ms` 超时（既不触发 `onload` 也不触发 `onerror`）。
+- **`v2.0.7` 零挂起机制**：
+  - **`attachLoopbackImageSrc`**（`src/host/wallpaper-inject.js:2657-2786`）：命中 `isCrossSchemeLoopbackMediaUrl(url)` 时在 `0ms` 直接 `W.fetch(url) -> Blob -> URL.createObjectURL(blob)`（`directHttpImgSrcs === 0`），一次性消除 `image` 壁纸、`slideshow` 首帧与轮播以及大视频海报降级的 6s 挂起；所有 `img.__prismBlobUrl` 均由 `disposeWrap` 统一 `revokeObjectURL` 释放；
+  - **`extractAccent`**（`src/host/wallpaper-inject.js:822-899`）：跨协议字符串 URL 同样走 `0ms fetch+blob`（`4000ms` `AbortController` 超时），并在 `finish()` 立即 `revokeObjectURL` 释放临时 Blob；
+  - **浮窗缩略图网格 `bindSafeThumb`**（`src/host/panel-inject.js:609-730, 1735-1745`）：维护最大容量 `80` 条的 `thumbBlobCache`（LRU 淘汰并 `revokeObjectURL`，`destroy()` 全量清空），`https:` 宿主下不直赋 `http://`；
+  - **消除其余被动 Mixed Content 源**：`computeSkinTokens` 的 `--prism-wall-image`（`wallpaper-inject.js:1270-1281`）在跨协议时仅输出 `plugin://` 或 `'none'`；`mountDirectVideo` 的 `video.poster`（`wallpaper-inject.js:3773-3779`）仅在同协议或 `plugin://` 时赋值。
+
+#### 2) `971 MB+` / `>256 MiB` 超大视频三级零挂起流式管线（`plugin://` 206 代理 + `MediaSource` `/mse-fmp4/` 零重编码流）
+- **后端特权代理与无损 fMP4 分片流**：
+  - **`sidecars/prism_studio/main.mjs`**（`L205-210, L786-911`）：暴露 `getPluginOrigin()`（`plugin://agy-wallpaper-prism--prism_studio-<port>`，命中 Antigravity 宿主注册的 `secure: true` 特权协议）与免令牌白名单流式代理 `GET/HEAD /media-proxy/<subRoute>/*`（透传 `Range` -> `206 Partial Content`、`X-Prism-Mse-Mime` 与断连 `upReq.destroy()`，拒绝路径穿越返回 `403`）；
+  - **`src/engine/media-server.mjs`**（`L120-139, L974-1057, L1347-1349`）：新增 `GET/HEAD /mse-fmp4/<token>`（仅读前 `64 KiB` 探测编解码器并输出 `X-Prism-Mse-Mime`，`GET` 启动 `ffmpeg -c:v copy -an -f mp4 -movflags frag_keyframe+empty_moov+default_base_moof pipe:1` 零重编码纯解复用分片流，客户端断连或关闭时立即 `SIGKILL` 杜绝孤儿进程，无 `ffmpeg` 返回 `501`）；
+  - **`src/host/index.mjs`**（`L55-121`）：`buildClientSkinPayload` 通过 `toPluginProxyUrl` 输出 `pluginMediaUrl`、`pluginThumbUrl`、`pluginAudioUrl`、`pluginVideoStageUrl` 与 `mseFmp4Url`。
+- **宿主三级调度优先级**（`src/host/wallpaper-inject.js:2790-3088, 4128-4368`，`status().videoTransport` 报告实际传输通道 `'plugin' | 'iframe' | 'mse' | 'blob' | 'direct' | 'none'`）：
+  1. **Priority 1（`plugin://` 206 零拷贝直放）**：`item.pluginMediaUrl` 经 `800ms` `HEAD` 探测通过后直接 `video.src = item.pluginMediaUrl`，原生支持 `971 MB+` / `4 GB` 零内存拷贝秒开播放（`video.onerror` 自动单次兜底回退）；
+  2. **Priority 2（特权 `pluginVideoStageUrl` / 无 `MediaSource` 沙箱兼容 iframe）**：真实 `https:` 浏览器（存在 `window.MediaSource`）跳过明文 `http://` iframe（彻底消灭 Chrome 152 Mixed Content `15.5s` 阻塞），同时保留无 `MediaSource` VM 沙箱与 `plugin://` 舞台兼容（超时收紧至 `2500ms` + 最多 1 次重试）；
+  3. **Priority 3（`<=256 MiB` `0ms fetch+blob` -> `>256 MiB` `MediaSource` `/mse-fmp4/` 滚动驱逐流 -> `0ms fetch+blob` 静态封面）**：当 `content-length > 256 MiB` 触发 `BLOB_CAP_EXCEEDED` 且 `mseFmp4Url` 与 `MediaSource` 可用时，由 `mountMseStreamVideo` 通过 `SourceBuffer` 分块流式喂帧并在播放 `>25s` 且缓冲 `>20s` 时执行 `sb.remove(0, curT - 15)` 滚动驱逐，使 `971 MB+` 大视频常驻内存 `<32 MiB`；仅在无 `ffmpeg`（`501`）或 `SourceBuffer` 异常时平滑降级至 `0ms fetch+blob` 高清封面。
+
+#### 3) 三端便捷一键启用/禁用主开关与持久化 `#agy-prism-pill`
+- **权威统一后端入口**（`sidecars/prism_studio/main.mjs:559-581, 1196-1200`）：新增 RPC `skin.toggle` 与 `POST /api/skin/toggle`（支持显式 `{ enabled: boolean }` 或缺省翻转）；一键启用时若 `canary.state === 'tripped'` 自动解除历史熔断、`localSessionAwake = true` 并调用 `cdpBridge.wake()` 立即唤醒注入。
+- **微引导拆离 `ss()` 与 `sa()`**（`sidecars/prism_studio/cdp-bridge.mjs:1484-1505`）：
+  - 常态禁用（`m.skinEnabled === false`）调用 **`ss()`**：仅卸载 `window.__agyPrism` 与 7 个皮肤节点/皮肤 `data-*` 属性、还原 WCO，**保留 `#agy-prism-pill`（同步 `data-skin-enabled="false"`）、`.prism-corner-orb` 与 `window.__agyPrismPanel`（并续调 `syncState(m.data)`）**，让用户永远保留宿主内一键重开入口；占位胶囊支持 `Shift+Click` 直接调用 `rpc("skin.toggle", {})`；
+  - 紧急逃生（`Ctrl+Alt+Shift+R` / `4× Esc`）仍调用完整 **`sa()`**：全量剥离全部 `[id^="agy-prism-"], .prism-corner-orb` 与全部 `data-(?:agy-)?prism*` 属性并关闭 SSE 防止延迟帧复活。
+- **双前端入口同步**：
+  - **Studio 顶栏**（`src/studio-ui/app.mjs:3337-3351, 3812-3829, 4018-4064` & `src/studio-ui/styles.css:439-543`）：全 Tab 置顶 `#prism-master-toggle-btn`（`role="switch"`, `data-action="toggle-skin-master"`, `data-enabled`），对接 `topbar.skinToggleOn/Off/HintOn/HintOff` 词条与 `POST /api/skin/toggle`（带 `masterToggleBusy` 防重入与失败回滚）；
+  - **`Ctrl+Alt+W` 快捷浮窗顶栏与底部胶囊**（`src/host/panel-inject.js:896-928, 1147-1162`）：新增 `[data-testid="prism-power-toggle"]`（`role="switch"`, 调 `skin.toggle` RPC），`#agy-prism-pill` 与 `.prism-corner-orb` 实时同步 `data-skin-enabled="true"|"false"`，且 `#agy-prism-pill` 支持 `Shift+左键` 与鼠标中键（`auxclick` `button === 1`）免展开一键切换。
+
+---
+
 ## 4. 早期已攻克疑难归档（`v2.0.1`–`v2.0.5`，切勿在后续重构中回退）
 
 1. **动态壁纸全屏/切窗假死与后台冷启动误杀（`v2.0.1` + `v2.0.5`，`v2.0.6` 精化阈值）**
@@ -357,9 +386,9 @@ Antigravity `2.34.0` 的 `/customizations` 与 `/customizations/installed` 路�
 
 ---
 
-## 5. 标准开发、25 项全量验证、合入 PR #6 & PR #7 与发版 SOP
+## 5. 标准开发、27 项全量验证与发版 SOP
 
-### 5.1 本地修改、同版本热替换与 25 项全量验证闭环
+### 5.1 本地修改、同版本热替换与 27 项全量验证闭环
 
 ```powershell
 # 1. 修改 src/* 或 sidecars/* 后，重新打包单文件内联 Studio UI（sidecars/prism_studio/index.html，纯 LF）
@@ -368,39 +397,33 @@ node scripts/build.mjs
 # 2. 真实文件拷贝至 ~/.gemini/config/plugins/agy-wallpaper-prism 并强制热替换运行中宿主内核（零重启）
 node scripts/install-local.mjs
 
-# 3. 提交前运行全量 25 项验证套件（允许工作区存在未提交改动）
+# 3. 提交前运行全量 27 项验证套件（允许工作区存在未提交改动）
 $env:PRISM_ALLOW_DIRTY_GIT='1'; node test/verify-all.mjs
 
 # 4. Git 提交后再次运行严格模式验证（校验工作树干净 + 23 文件 SHA-256 一致 + 0 PII + 0 CRLF）
 node test/verify-all.mjs
 ```
 
-### 5.2 合入社区 PR #6 & PR #7 并提交发布 `v2.0.6` 标准流程
+### 5.2 发布 `v2.0.7` 标准流程（含 `v2.0.6` PR #6/#7 历史记录）
 
-处理社区 PR 的通用准则：先只读拉取 `git fetch origin pull/<PR_NUM>/head` 审查基线版本、`LF` 换行符、`index.html` 构建产物及五大工程红线；无冲突走 `git merge -X renormalize FETCH_HEAD`，存在旧基线冲突或工作区已完成深度加固时走 `git merge -s ours <PR_SHAS> --no-commit` 并附 `Co-authored-by` 保留社区贡献归属。
-
-针对当前工作区待提交的 **`v2.0.6` + PR #6（`be354e792d99625c333f19e0c4f02263682ff2a7`）+ PR #7（`0c67d36bf1d2f98c584b3a02aea5b480cd9fe55e`）**，执行以下精确命令：
+`v2.0.6` 已通过 `git merge -s ours` 挂接 PR #6（`be354e7`）与 PR #7（`0c67d36`）提交至 `ba0b6de` 并附 `Co-authored-by: zmzwynzj <177476355+zmzwynzj@users.noreply.github.com>`。发布 `v2.0.7` 时执行：
 
 ```powershell
-# 1. 拉取 PR #6 与 PR #7 头提交并以 -s ours 挂接双 Merge 父节点（保留当前工作区全部 v2.0.6 加固代码）
-git fetch origin pull/6/head:refs/heads/pr-6-head pull/7/head:refs/heads/pr-7-head
-git merge -s ours pr-6-head pr-7-head --no-commit
-
-# 2. 暂存全部 18 个 v2.0.6 修改文件并提交（附 Co-authored-by 使 GitHub 自动将 PR #6 与 PR #7 均标为 Merged）
+# 1. 提交 v2.0.7 全部变更
 git add -A
-git commit -m "release: Wallpaper Prism v2.0.6 (merge PR #6/#7 hardened streaming stage, Studio SSE & 4 glass UI fixes)" -m "Co-authored-by: zmzwynzj <177476355+zmzwynzj@users.noreply.github.com>"
-git branch -D pr-6-head pr-7-head
+git commit -m "release: Wallpaper Prism v2.0.7 (1-click master toggle, plugin:// 206 proxy, MSE >256MB streaming & zero-stall HTTPS images)"
 
-# 3. 运行严格无脏树全量验证（必须 25 / 25 PASS）
+# 2. 同步本机安装并运行严格无脏树全量验证（必须 27 / 27 PASS）
+node scripts/install-local.mjs
 node test/verify-all.mjs
 
-# 4. 打带注释的 v2.0.6 标签、推送远端并打包干净的 Release 压缩包
-git tag -a v2.0.6 -m "Wallpaper Prism v2.0.6"
-git push origin main v2.0.6
-git archive --format=zip --prefix=agy-wallpaper-prism/ -o agy-wallpaper-prism-v2.0.6.zip v2.0.6
+# 3. 打带注释的 v2.0.7 标签并推送远端
+git tag -a v2.0.7 -m "Wallpaper Prism v2.0.7"
+git push origin main v2.0.6 v2.0.7
 ```
 
-随后通过 GitHub CLI 或 REST API（通过 `git credential fill` 读取本机已授权 HTTPS 凭证，**严禁**将凭证输出至终端或日志）向 PR #6 / PR #7 发表致谢说明并创建 `v2.0.6` Release 上传 `agy-wallpaper-prism-v2.0.6.zip`。
-
-### 5.3 超大视频（`>256 MiB`）流式播放与二级降级说明
-在 `v2.0.6` 合入加固版 PR #7 后，`https://127.0.0.1:<port>` 宿主默认通过同源 `http://127.0.0.1:<mediaPort>/video-stage/<token>` 流式 `<iframe>` 走原生 `HTTP 206 Range` + `mp4-vfs` 播放视频壁纸，**已彻底解除 `>256 MiB` 超大原盘动态壁纸的内存与体积上限**。仅当 `/video-stage/` iframe 异常触发 `error` 或超时时，微内核才会单次自动回退至加固版 PR #6 `0ms fetch+blob` 路径，并保留 `MAX_BLOB_MEDIA_BYTES`（`256 MiB`）自动降级渲染 `item.thumbUrl` 高清静态封面作为二级防 OOM 保险。
+### 5.3 超大视频（`971 MB+` / `>256 MiB`）三级流式播放与兜底说明
+在 `v2.0.7` 中，`https://127.0.0.1:<port>` 宿主采用三级零挂起视频传输管线：
+1. **Tier 1（首选）**：通过 Antigravity 宿主特权 `plugin://agy-wallpaper-prism--prism_studio-<port>/media-proxy/media/<token>` 直连 `206 Partial Content` + `mp4-vfs` 零内存拷贝播放（`HEAD` 探测 `<=800ms`）；
+2. **Tier 2 / Tier 3（`plugin://` 不可用时）**：`<=256 MiB` 走 `0ms fetch+blob`；`>256 MiB`（如 `971 MB` 原盘视频）自动经 `MediaSource` + `GET /mse-fmp4/<token>`（`ffmpeg -c:v copy` 无损分片流 + `SourceBuffer` 滚动驱逐，常驻内存 `<32 MiB`）流式播放，跳过明文 `http://` iframe 的 `15.5s` Chrome 152 阻塞；
+3. **末级安全兜底**：若环境无 `ffmpeg`（`/mse-fmp4/` 返回 `501`）或编解码器不受支持，立即平滑降级至 `0ms fetch+blob` 渲染 `item.thumbUrl` 高清静态封面，保持 `data-agy-prism-wallpaper="ready"` 与整窗毛玻璃完好生效。

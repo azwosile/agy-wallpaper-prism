@@ -13,6 +13,10 @@ export const DICT = Object.freeze({
     'status.disabled': '已禁用',
     'status.skinOff': '皮肤已还原',
     'status.skinOn': '棱镜皮肤生效中',
+    'topbar.skinToggleOn': '已启用',
+    'topbar.skinToggleOff': '已禁用',
+    'topbar.skinToggleHintOn': '点击一键禁用棱镜皮肤与壁纸（还原宿主默认外观）',
+    'topbar.skinToggleHintOff': '点击一键启用棱镜皮肤与壁纸',
 
     // Tabs
     'tab.library': '壁纸库',
@@ -257,6 +261,10 @@ export const DICT = Object.freeze({
     'status.disabled': 'Plugin Disabled',
     'status.skinOff': 'Host Default Restored',
     'status.skinOn': 'Prism Skin Active',
+    'topbar.skinToggleOn': 'Enabled',
+    'topbar.skinToggleOff': 'Disabled',
+    'topbar.skinToggleHintOn': 'Click to disable Prism skin & wallpaper',
+    'topbar.skinToggleHintOff': 'Click to enable Prism skin & wallpaper',
 
     // Tabs
     'tab.library': 'Library',

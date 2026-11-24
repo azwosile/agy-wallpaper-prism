@@ -1,4 +1,4 @@
-// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.0.6).
+// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.0.7).
 //
 // Self-contained ES2020 browser IIFE injected over CDP alongside `wallpaper-inject.js`.
 // Strictly isolated inside `#agy-prism-popover` (`all: initial; position: fixed; z-index: 45`)
@@ -9,7 +9,7 @@
 (function agyPrismPanelMain() {
   'use strict';
 
-  var VERSION = '2.0.6';
+  var VERSION = '2.0.7';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   try {
@@ -164,6 +164,12 @@
       brand: 'Prism',
       connOn: '已连接',
       connOff: '待机中',
+      powerOn: '已启用',
+      powerOff: '已禁用',
+      powerTipOn: '点击一键禁用棱镜皮肤',
+      powerTipOff: '点击一键启用棱镜皮肤',
+      pillOff: 'Prism · 已关',
+      pillTip: 'Wallpaper Prism (左键: 面板 · Shift+点击/中键: 一键启用/禁用 · Ctrl+Alt+W)',
       openStudio: '打开完整 Prism 工作台',
       close: '关闭 (Esc)',
       prev: '上一张',
@@ -235,6 +241,12 @@
       brand: 'Prism',
       connOn: 'Connected',
       connOff: 'Standby',
+      powerOn: 'ON',
+      powerOff: 'OFF',
+      powerTipOn: 'Click to disable Prism skin',
+      powerTipOff: 'Click to enable Prism skin',
+      pillOff: 'Prism · OFF',
+      pillTip: 'Wallpaper Prism (Click: Panel · Shift+Click/Middle-Click: Enable/Disable · Ctrl+Alt+W)',
       openStudio: 'Open Full Prism Studio',
       close: 'Close (Esc)',
       prev: 'Previous',
@@ -470,8 +482,9 @@
     'backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);box-shadow:inset 0 1px 0 var(--pp-spec),0 6px 18px -6px rgba(0,0,0,.45);',
     'opacity:.48;transition:opacity .16s ease,transform .16s var(--pp-ease),color .16s ease;}',
     '#R .prism-corner-orb:hover,#R[data-open="true"] .prism-corner-orb{opacity:1;color:var(--pp-accent);transform:translateY(-1px);}',
-    '#R .prism-corner-orb i{position:absolute;right:0;top:0;width:7px;height:7px;border-radius:50%;background:var(--pp-faint);box-shadow:0 0 0 2px var(--pp-bg-solid);}',
+    '#R .prism-corner-orb i{position:absolute;right:0;top:0;width:7px;height:7px;border-radius:50%;background:var(--pp-faint);box-shadow:0 0 0 2px var(--pp-bg-solid);transition:background .15s ease,border-color .15s ease;}',
     '#R[data-conn="on"] .prism-corner-orb i{background:var(--pp-ok);}',
+    '#R[data-skin-enabled="false"] .prism-corner-orb i{background:transparent;border:1.5px solid var(--pp-faint);}',
     // Main Floating Sheet (384 x max 560px)
     '#R .prism-sheet{position:fixed;left:12px;bottom:48px;width:384px;max-width:calc(100vw - 16px);max-height:560px;display:flex;flex-direction:column;pointer-events:auto;',
     'color:var(--pp-fg);font-size:12.5px;line-height:1.45;-webkit-font-smoothing:antialiased;border-radius:var(--pp-r-sheet);border:1px solid var(--pp-border2);',
@@ -481,14 +494,21 @@
     '#R[data-open="true"] .prism-sheet{opacity:1;visibility:visible;transform:none;transition:opacity .16s ease,transform .18s var(--pp-ease),visibility 0s;}',
     '#R[data-open="false"] .prism-sheet{pointer-events:none;}',
     // Header
-    '#R .pp-head{display:flex;align-items:center;gap:5px;height:40px;padding:0 8px 0 12px;border-bottom:1px solid var(--pp-border);cursor:grab;user-select:none;flex-shrink:0;}',
+    '#R .pp-head{display:flex;align-items:center;gap:3px;height:40px;padding:0 7px 0 10px;border-bottom:1px solid var(--pp-border);cursor:grab;user-select:none;flex-shrink:0;}',
     '#R .pp-head:active{cursor:grabbing;}',
-    '#R .pp-logo{color:var(--pp-accent);display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;margin-right:2px;}',
-    '#R .pp-conn{display:inline-flex;align-items:center;gap:4px;height:19px;padding:0 7px;border-radius:999px;font-size:10.5px;color:var(--pp-muted);background:var(--pp-fill);border:1px solid var(--pp-border);}',
+    '#R .pp-logo{color:var(--pp-accent);display:flex;align-items:center;gap:4px;font-weight:600;font-size:12.5px;margin-right:1px;flex-shrink:0;}',
+    '#R .pp-conn{display:inline-flex;align-items:center;gap:4px;height:19px;padding:0 6px;border-radius:999px;font-size:10px;color:var(--pp-muted);background:var(--pp-fill);border:1px solid var(--pp-border);flex-shrink:0;white-space:nowrap;}',
     '#R .pp-conn i{width:5.5px;height:5.5px;border-radius:50%;background:var(--pp-faint);}',
     '#R[data-conn="on"] .pp-conn i{background:var(--pp-ok);}',
-    '#R .pp-grow{flex:1;}',
-    '#R .pp-ibtn{width:25px;height:25px;padding:0;border:none;border-radius:6px;background:transparent;color:var(--pp-fg2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .12s,color .12s;}',
+    '#R .pp-power-btn{display:inline-flex;align-items:center;gap:4px;height:21px;padding:0 7px;border-radius:999px;font-size:10.5px;font-weight:600;line-height:1;cursor:pointer;flex-shrink:0;white-space:nowrap;',
+    'border:1px solid var(--pp-border2);background:var(--pp-fill);color:var(--pp-muted);transition:background .15s ease,border-color .15s ease,color .15s ease,box-shadow .15s ease;}',
+    '#R .pp-power-btn:hover{border-color:var(--pp-accent);color:var(--pp-fg);}',
+    '#R .pp-power-btn i{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:transparent;border:1.5px solid var(--pp-faint);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;}',
+    '#R .pp-power-btn[aria-checked="true"]{border-color:color-mix(in srgb,var(--pp-ok) 55%,transparent);background:color-mix(in srgb,var(--pp-ok) 16%,transparent);color:var(--pp-fg);box-shadow:0 0 10px -2px color-mix(in srgb,var(--pp-ok) 45%,transparent);}',
+    '#R .pp-power-btn[aria-checked="true"]:hover{background:color-mix(in srgb,var(--pp-ok) 24%,transparent);border-color:var(--pp-ok);}',
+    '#R .pp-power-btn[aria-checked="true"] i{background:var(--pp-ok);border-color:var(--pp-ok);box-shadow:0 0 6px var(--pp-ok);}',
+    '#R .pp-grow{flex:1;min-width:2px;}',
+    '#R .pp-ibtn{width:23px;height:23px;padding:0;border:none;border-radius:6px;background:transparent;color:var(--pp-fg2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .12s,color .12s;}',
     '#R .pp-ibtn:hover{background:var(--pp-hover);color:var(--pp-fg);}',
     '#R .pp-lang{height:21px;padding:0 6px;border-radius:5px;border:1px solid var(--pp-border);background:var(--pp-fill);color:var(--pp-fg2);font-family:var(--pp-mono);font-size:10px;font-weight:600;cursor:pointer;}',
     '#R .pp-lang:hover{color:var(--pp-fg);border-color:var(--pp-border2);}',
@@ -577,9 +597,137 @@
     '#' + PILL_ID + '{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;margin-left:6px;border-radius:999px;' +
     'border:1px solid rgba(148,163,184,.24);background:rgba(128,138,158,.10);color:var(--foreground,inherit);' +
     'font-family:inherit;font-size:11px;font-weight:500;line-height:1;cursor:pointer;user-select:none;white-space:nowrap;' +
-    'transition:background .14s ease,border-color .14s ease;-webkit-app-region:no-drag;}\n' +
+    'transition:background .14s ease,border-color .14s ease,opacity .14s ease;-webkit-app-region:no-drag;}\n' +
     '#' + PILL_ID + ':hover{background:rgba(102,157,246,.16);border-color:rgba(102,157,246,.48);}\n' +
-    '#' + PILL_ID + ' i{width:6px;height:6px;border-radius:50%;background:var(--prism-accent,#669DF6);flex-shrink:0;}';
+    '#' + PILL_ID + ' i{width:6px;height:6px;border-radius:50%;background:var(--prism-accent,#669DF6);flex-shrink:0;box-sizing:border-box;transition:background .14s ease,border-color .14s ease;}\n' +
+    '#' + PILL_ID + '[data-skin-enabled="false"]{border-color:rgba(148,163,184,.15);background:rgba(128,138,158,.06);opacity:.78;}\n' +
+    '#' + PILL_ID + '[data-skin-enabled="false"] i{background:transparent;border:1.5px solid rgba(148,163,184,.65);}';
+
+  // ---------------------------------------------------------------------------
+  // Safe Cross-Scheme Loopback Thumbnail Cache (0ms fetch -> Blob URL on https:)
+  // ---------------------------------------------------------------------------
+  var THUMB_BLOB_CACHE_MAX = 80;
+  var thumbBlobCache = {};
+  var thumbBlobOrder = [];
+  var thumbBlobInflight = {};
+  var thumbAbortControllers = [];
+
+  function isCrossSchemeLoopbackThumb(url) {
+    return Boolean(
+      W.location &&
+      W.location.protocol === 'https:' &&
+      /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\//i.test(String(url || '').trim()) &&
+      typeof W.fetch === 'function' &&
+      typeof W.URL !== 'undefined' &&
+      typeof W.URL.createObjectURL === 'function'
+    );
+  }
+
+  function putThumbBlobCache(url, blobUrl) {
+    if (Object.prototype.hasOwnProperty.call(thumbBlobCache, url)) {
+      var prevUrl = thumbBlobCache[url];
+      if (prevUrl && prevUrl !== blobUrl) {
+        try {
+          W.URL.revokeObjectURL(prevUrl);
+        } catch (_) {}
+      }
+      var existingIdx = thumbBlobOrder.indexOf(url);
+      if (existingIdx >= 0) thumbBlobOrder.splice(existingIdx, 1);
+    }
+    thumbBlobCache[url] = blobUrl;
+    thumbBlobOrder.push(url);
+    while (thumbBlobOrder.length > THUMB_BLOB_CACHE_MAX) {
+      var evictKey = thumbBlobOrder.shift();
+      var evictBlob = thumbBlobCache[evictKey];
+      delete thumbBlobCache[evictKey];
+      if (evictBlob) {
+        try {
+          if (typeof W.URL !== 'undefined' && typeof W.URL.revokeObjectURL === 'function') {
+            W.URL.revokeObjectURL(evictBlob);
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  function clearThumbBlobCache() {
+    for (var i = 0; i < thumbAbortControllers.length; i += 1) {
+      try {
+        thumbAbortControllers[i].abort();
+      } catch (_) {}
+    }
+    thumbAbortControllers = [];
+    thumbBlobInflight = {};
+    for (var j = 0; j < thumbBlobOrder.length; j += 1) {
+      var k = thumbBlobOrder[j];
+      var bu = thumbBlobCache[k];
+      if (bu) {
+        try {
+          if (typeof W.URL !== 'undefined' && typeof W.URL.revokeObjectURL === 'function') {
+            W.URL.revokeObjectURL(bu);
+          }
+        } catch (_) {}
+      }
+    }
+    thumbBlobCache = {};
+    thumbBlobOrder = [];
+  }
+
+  function bindSafeThumb(thumbImg, rawUrl) {
+    if (!thumbImg || !rawUrl) return;
+    var url = String(rawUrl).trim();
+    if (!url) return;
+    if (!isCrossSchemeLoopbackThumb(url)) {
+      thumbImg.src = url;
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(thumbBlobCache, url)) {
+      thumbImg.src = thumbBlobCache[url];
+      return;
+    }
+    if (!thumbBlobInflight[url]) {
+      var ac = typeof W.AbortController === 'function' ? new W.AbortController() : null;
+      if (ac) thumbAbortControllers.push(ac);
+      thumbBlobInflight[url] = W.fetch(url, ac ? { signal: ac.signal } : undefined)
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : 0));
+          return res.blob();
+        })
+        .then(function (blob) {
+          delete thumbBlobInflight[url];
+          if (ac) {
+            var ai = thumbAbortControllers.indexOf(ac);
+            if (ai >= 0) thumbAbortControllers.splice(ai, 1);
+          }
+          if (destroyed || !blob || blob.size <= 0) return '';
+          var blobUrl = W.URL.createObjectURL(blob);
+          if (destroyed) {
+            try {
+              W.URL.revokeObjectURL(blobUrl);
+            } catch (_) {}
+            return '';
+          }
+          putThumbBlobCache(url, blobUrl);
+          return blobUrl;
+        })
+        .catch(function () {
+          delete thumbBlobInflight[url];
+          if (ac) {
+            var ai = thumbAbortControllers.indexOf(ac);
+            if (ai >= 0) thumbAbortControllers.splice(ai, 1);
+          }
+          return '';
+        });
+    }
+    thumbBlobInflight[url].then(function (blobUrl) {
+      if (destroyed || !thumbImg.parentNode) return;
+      if (blobUrl) {
+        thumbImg.src = blobUrl;
+      } else if (thumbImg.parentNode) {
+        thumbImg.parentNode.removeChild(thumbImg);
+      }
+    });
+  }
 
   // ---------------------------------------------------------------------------
   // RPC & Optimistic Sync
@@ -745,6 +893,40 @@
     if (acc && /^#|rgb/i.test(acc)) els.root.style.setProperty('--pp-accent', acc);
   }
 
+  function toggleSkinMaster(explicitEnabled) {
+    disarmRestore();
+    var next = typeof explicitEnabled === 'boolean' ? explicitEnabled : !store.skinEnabled;
+    store.skinEnabled = next;
+    if (!store.config || typeof store.config !== 'object') store.config = {};
+    store.config.skinEnabled = next;
+    if (W[SKIN_KEY]) {
+      try {
+        if (!next && typeof W[SKIN_KEY].applyPayload === 'function') {
+          W[SKIN_KEY].applyPayload({ skinEnabled: false });
+        } else if (next && typeof W[SKIN_KEY].updateConfig === 'function') {
+          W[SKIN_KEY].updateConfig({ skinEnabled: true });
+        }
+      } catch (_) {}
+    }
+    renderAll();
+    return callRpc('skin.toggle', { enabled: next }).then(function (r) {
+      if (r) ingestState(r.state || r);
+      return r;
+    });
+  }
+
+  function syncInlinePillState(pillEl) {
+    var pill = pillEl || doc.getElementById(PILL_ID);
+    if (!pill) return;
+    var on = Boolean(store.skinEnabled);
+    pill.setAttribute('data-skin-enabled', on ? 'true' : 'false');
+    pill.title = tr('pillTip');
+    var labelSpan = pill.querySelector ? pill.querySelector('span') : null;
+    if (labelSpan) {
+      labelSpan.textContent = on ? 'Prism' : tr('pillOff');
+    }
+  }
+
   function mountInlinePill() {
     var mode = String(cfgVal('triggerMode') || 'both');
     var wantPill = mode === 'pill' || mode === 'both';
@@ -761,6 +943,8 @@
       pStyle.id = PILL_STYLE_ID;
       pStyle.textContent = PILL_CSS;
       (doc.head || doc.documentElement).appendChild(pStyle);
+    } else if (pStyle.textContent !== PILL_CSS) {
+      pStyle.textContent = PILL_CSS;
     }
 
     var hostSlot =
@@ -785,18 +969,32 @@
         {
           id: PILL_ID,
           type: 'button',
-          title: 'Wallpaper Prism (Ctrl+Alt+W)',
+          title: tr('pillTip'),
           translate: 'no',
           'data-no-translate': 'true',
           'data-ag-no-i18n': '1',
+          'data-skin-enabled': store.skinEnabled ? 'true' : 'false',
           onclick: function (e) {
             e.stopPropagation();
+            if (e && e.shiftKey) {
+              e.preventDefault();
+              toggleSkinMaster();
+              return;
+            }
             toggle();
           },
+          onauxclick: function (e) {
+            if (e && e.button === 1) {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleSkinMaster();
+            }
+          },
         },
-        [h('i'), h('span', { text: 'Prism' })]
+        [h('i'), h('span', { text: store.skinEnabled ? 'Prism' : tr('pillOff') })]
       );
     }
+    syncInlinePillState(existing);
     if (existing.parentNode !== hostSlot) {
       hostSlot.appendChild(existing);
     }
@@ -946,6 +1144,22 @@
 
     els.connDot = h('i');
     els.connText = h('span');
+    els.powerDot = h('i');
+    els.powerText = h('span');
+    els.powerBtn = h(
+      'button',
+      {
+        type: 'button',
+        class: 'pp-power-btn',
+        'data-testid': 'prism-power-toggle',
+        role: 'switch',
+        'aria-checked': store.skinEnabled ? 'true' : 'false',
+        onclick: function () {
+          toggleSkinMaster();
+        },
+      },
+      [els.powerDot, els.powerText]
+    );
     els.prevBtn = h('button', {
       type: 'button',
       class: 'pp-ibtn',
@@ -1018,6 +1232,7 @@
     els.head = h('div', { class: 'pp-head' }, [
       h('span', { class: 'pp-logo', html: ICONS.prism + '<span>Prism</span>' }),
       h('span', { class: 'pp-conn' }, [els.connDot, els.connText]),
+      els.powerBtn,
       h('span', { class: 'pp-grow' }),
       els.prevBtn,
       els.playBtn,
@@ -1351,8 +1566,7 @@
       'data-armed': 'false',
       onclick: function () {
         if (!store.skinEnabled) {
-          store.skinEnabled = true;
-          pushConfigPatch({ skinEnabled: true }, true);
+          toggleSkinMaster(true);
           return;
         }
         if (!restoreArmed) {
@@ -1401,6 +1615,7 @@
         id: ROOT_ID,
         'data-open': 'false',
         'data-conn': 'off',
+        'data-skin-enabled': store.skinEnabled ? 'true' : 'false',
         'data-theme': 'dark',
         translate: 'no',
         'data-no-translate': 'true',
@@ -1519,7 +1734,6 @@
       var thumb = h('div', { class: 'pp-thumb' }, [h('span', { text: String(it.kind || 'IMG').toUpperCase() })]);
       if (it.thumbUrl) {
         var thumbImg = h('img', {
-          src: it.thumbUrl,
           loading: 'lazy',
           alt: '',
           onerror: function () {
@@ -1527,6 +1741,7 @@
           },
         });
         thumb.appendChild(thumbImg);
+        bindSafeThumb(thumbImg, it.thumbUrl);
       }
       if (isCur) thumb.appendChild(h('span', { class: 'pp-cur', html: ICONS.check }));
       var favBtn = h('button', {
@@ -1604,7 +1819,16 @@
   function renderAll() {
     if (!els.root) return;
     var lang = getLang();
+    var skinOn = Boolean(store.skinEnabled);
     renderConnectionState();
+    els.root.setAttribute('data-skin-enabled', skinOn ? 'true' : 'false');
+    if (els.orb) els.orb.setAttribute('data-skin-enabled', skinOn ? 'true' : 'false');
+    if (els.powerBtn) {
+      els.powerBtn.setAttribute('aria-checked', skinOn ? 'true' : 'false');
+      els.powerBtn.title = skinOn ? tr('powerTipOn') : tr('powerTipOff');
+      if (els.powerText) els.powerText.textContent = skinOn ? tr('powerOn') : tr('powerOff');
+    }
+    syncInlinePillState();
 
     // Header tooltips & state
     els.prevBtn.title = tr('prev');
@@ -1977,6 +2201,7 @@
       open: ui.open,
       drilldown: ui.drilldown,
       restoreArmed: restoreArmed,
+      skinEnabled: Boolean(store.skinEnabled),
       tab: ui.tab,
       theme: store.theme,
       connected: hasBinding() || store.connected,
@@ -1987,6 +2212,7 @@
   function destroy() {
     if (destroyed) return { installed: false };
     destroyed = true;
+    clearThumbBlobCache();
     clearTimeout(restoreTimer);
     clearTimeout(patchTimer);
     clearTimeout(searchTimer);

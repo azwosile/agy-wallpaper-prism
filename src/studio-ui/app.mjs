@@ -121,6 +121,8 @@ function bootPrismStudioApp() {
       statsSteam: 'Steam 路径',
       skinGateLabel: '启用整窗棱镜玻璃皮肤',
       skinReapply: '立即应用棱镜皮肤',
+      skinToggleToastOn: '棱镜皮肤已启用',
+      skinToggleToastOff: '已禁用棱镜皮肤，已还原宿主默认外观',
       extractedTitle: '32×32 动态色度直方图取色',
       dblClickFramingHint: '双击标题可一键归零 X / Y / 缩放 (50% / 50% / 100%)',
       slideInterval: '多图幻灯片切换秒数 (0=跟随WE)',
@@ -163,6 +165,8 @@ function bootPrismStudioApp() {
       statsSteam: 'Steam Root',
       skinGateLabel: 'Enable Whole-Window Prism Skin',
       skinReapply: 'Apply Prism Skin Now',
+      skinToggleToastOn: 'Prism skin enabled',
+      skinToggleToastOff: 'Prism skin disabled — native host restored',
       extractedTitle: '32×32 Chroma Histogram Accent',
       dblClickFramingHint: 'Double-click label to reset X / Y / Scale (50% / 50% / 100%)',
       slideInterval: 'Slideshow Crossfade Seconds (0=WE)',
@@ -204,6 +208,7 @@ function bootPrismStudioApp() {
     sessionAwake: false,
     canaryBusy: false,
     wakeBusy: false,
+    masterToggleBusy: false,
     autostart: {
       normalShortcutEnabled: false,
       anyShortcutEnabled: false,
@@ -279,6 +284,32 @@ function bootPrismStudioApp() {
 
   function tr(key, params = null) {
     return t(key, params, curLocale());
+  }
+
+  function trWithFallback(key, zhFallback, enFallback) {
+    const val = tr(key);
+    if (val && val !== key) return val;
+    return curLocale() === 'zh' ? zhFallback : enFallback;
+  }
+
+  function getMasterToggleLabel(enabled) {
+    return enabled
+      ? trWithFallback('topbar.skinToggleOn', '已启用', 'Enabled')
+      : trWithFallback('topbar.skinToggleOff', '已禁用', 'Disabled');
+  }
+
+  function getMasterToggleHint(enabled) {
+    return enabled
+      ? trWithFallback(
+          'topbar.skinToggleHintOn',
+          '点击一键禁用棱镜皮肤与壁纸（还原宿主默认外观）',
+          'Click to disable Prism skin & wallpaper',
+        )
+      : trWithFallback(
+          'topbar.skinToggleHintOff',
+          '点击一键启用棱镜皮肤与壁纸',
+          'Click to enable Prism skin & wallpaper',
+        );
   }
 
   function tx(extraKey) {
@@ -3304,6 +3335,20 @@ function bootPrismStudioApp() {
   }
 
   function updateTopStatusIndicators() {
+    const masterBtn = document.getElementById('prism-master-toggle-btn');
+    const masterTxt = document.getElementById('prism-master-toggle-text');
+    if (masterBtn) {
+      const enabledStr = store.skinEnabled ? 'true' : 'false';
+      const busyStr = store.masterToggleBusy ? 'true' : 'false';
+      masterBtn.setAttribute('aria-checked', enabledStr);
+      masterBtn.dataset.enabled = enabledStr;
+      masterBtn.setAttribute('aria-busy', busyStr);
+      masterBtn.dataset.busy = busyStr;
+      masterBtn.title = getMasterToggleHint(store.skinEnabled);
+    }
+    if (masterTxt) {
+      masterTxt.textContent = getMasterToggleLabel(store.skinEnabled);
+    }
     const pill = document.getElementById('prism-top-status-pill');
     const txt = document.getElementById('prism-top-status-text');
     const attached = isHostAttached();
@@ -3765,6 +3810,14 @@ function bootPrismStudioApp() {
           </div>
         </div>
         <div class="prism-topbar-actions">
+          <button id="prism-master-toggle-btn" type="button" class="prism-master-toggle"
+                  role="switch" aria-checked="${store.skinEnabled ? 'true' : 'false'}"
+                  data-enabled="${store.skinEnabled ? 'true' : 'false'}"
+                  data-action="toggle-skin-master"
+                  title="${esc(getMasterToggleHint(store.skinEnabled))}">
+            <span class="prism-master-toggle-dot"></span>
+            <span id="prism-master-toggle-text">${esc(getMasterToggleLabel(store.skinEnabled))}</span>
+          </button>
           <button id="prism-top-status-pill" type="button" class="prism-status-pill" data-status="standby"
                   data-action="switch-tab" data-tab="system">
             <span class="prism-status-dot"></span>
@@ -3959,6 +4012,54 @@ function bootPrismStudioApp() {
       updateTopStatusIndicators();
     } catch (err) {
       showToast(err.message || 'Failed to apply wallpaper', 'danger');
+    }
+  }
+
+  async function executeSkinToggle(nextEnabled) {
+    if (store.masterToggleBusy) return;
+    const prevEnabled = store.skinEnabled;
+    const targetEnabled = Boolean(nextEnabled);
+    store.masterToggleBusy = true;
+    store.skinEnabled = targetEnabled;
+    store.config = sanitizeConfig({ skinEnabled: targetEnabled }, store.config);
+    updateTopStatusIndicators();
+    try {
+      const res = await apiJson('/api/skin/toggle', {
+        method: 'POST',
+        body: { enabled: targetEnabled },
+      });
+      ingestServerState(res);
+      if (typeof res?.skinEnabled === 'boolean' && typeof res?.state?.skinEnabled !== 'boolean') {
+        store.skinEnabled = res.skinEnabled;
+        store.config = sanitizeConfig({ skinEnabled: res.skinEnabled }, store.config);
+      }
+      if (targetEnabled && res?.state?.sessionAwake === undefined && res?.sessionAwake === undefined) {
+        store.sessionAwake = true;
+      }
+      store.masterToggleBusy = false;
+      syncOpticalCssVars();
+      updateTopStatusIndicators();
+      if (store.activeTab === 'system') {
+        renderActiveSurface();
+      }
+      if (targetEnabled) {
+        ensureStandbyStatusPoll();
+      }
+      showToast(
+        store.skinEnabled ? tx('skinToggleToastOn') : tx('skinToggleToastOff'),
+        store.skinEnabled ? 'ok' : 'info',
+        3200,
+      );
+    } catch (err) {
+      store.skinEnabled = prevEnabled;
+      store.config = sanitizeConfig({ skinEnabled: prevEnabled }, store.config);
+      store.masterToggleBusy = false;
+      syncOpticalCssVars();
+      updateTopStatusIndicators();
+      if (store.activeTab === 'system') {
+        renderActiveSurface();
+      }
+      showToast(err.message || (targetEnabled ? 'Enable failed' : 'Disable failed'), 'danger');
     }
   }
 
@@ -4242,6 +4343,11 @@ function bootPrismStudioApp() {
           const nextLang = curLocale() === 'zh' ? 'en' : 'zh';
           queueConfigPatch({ language: nextLang }, true, false);
           renderActiveSurface();
+          break;
+        }
+        case 'toggle-skin-master': {
+          const nextEnabled = !store.skinEnabled;
+          await executeSkinToggle(nextEnabled);
           break;
         }
         case 'switch-tab': {
@@ -4954,8 +5060,7 @@ function bootPrismStudioApp() {
           break;
         }
         case 'enable-skin': {
-          queueConfigPatch({ skinEnabled: true }, true, false);
-          renderActiveSurface();
+          await executeSkinToggle(true);
           break;
         }
         case 'wake-skin': {
@@ -5293,11 +5398,12 @@ function bootPrismStudioApp() {
 
   function applyExternalStateSnapshot(payload) {
     if (!payload || typeof payload !== 'object') return;
-    if (configDebounceTimer || configFlushInFlight || Object.keys(pendingConfigPatch).length > 0) {
+    if (store.masterToggleBusy || configDebounceTimer || configFlushInFlight || Object.keys(pendingConfigPatch).length > 0) {
       return;
     }
     const wasAttached = isHostAttached();
     const prevCanaryState = store.canary?.state || 'idle';
+    const prevSkinEnabled = store.skinEnabled;
     const prevActiveId = getActiveId();
     const prevSig = externalStateSignature();
 
@@ -5306,6 +5412,7 @@ function bootPrismStudioApp() {
     const nextActiveId = getActiveId();
     const nextSig = externalStateSignature();
     const canaryChanged = (store.canary?.state || 'idle') !== prevCanaryState;
+    const skinChanged = store.skinEnabled !== prevSkinEnabled;
     const activeChanged = nextActiveId !== prevActiveId;
     const stateChanged = nextSig !== prevSig;
 
@@ -5334,7 +5441,7 @@ function bootPrismStudioApp() {
       }
     }
 
-    if ((!wasAttached && isHostAttached()) || canaryChanged) {
+    if ((!wasAttached && isHostAttached()) || canaryChanged || skinChanged) {
       if (store.activeTab === 'system' || store.canary?.state === 'tripped') {
         renderActiveSurface();
       }

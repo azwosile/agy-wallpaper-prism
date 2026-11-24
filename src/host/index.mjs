@@ -38,10 +38,22 @@ export function getHostPanelScript({ reload = false } = {}) {
 function resolveMediaUrl(rawUrl, mediaOrigin) {
   const u = String(rawUrl || '').trim();
   if (!u) return '';
-  if (/^(https?:|data:|blob:)/i.test(u)) return u;
+  if (/^(https?:|plugin:|data:|blob:)/i.test(u)) return u;
   const origin = String(mediaOrigin || '').replace(/\/+$/, '');
   if (!origin) return u;
   return u.startsWith('/') ? `${origin}${u}` : `${origin}/${u}`;
+}
+
+function toPluginProxyUrl(httpMediaUrl, mediaOrigin, pluginOrigin) {
+  const urlStr = String(httpMediaUrl || '').trim();
+  const mOrigin = String(mediaOrigin || '').trim().replace(/\/+$/, '');
+  const pOrigin = String(pluginOrigin || '').trim().replace(/\/+$/, '');
+  if (!urlStr || !mOrigin || !pOrigin) return '';
+  const prefix = `${mOrigin}/`;
+  if (!urlStr.startsWith(prefix)) return '';
+  const subpath = urlStr.slice(prefix.length);
+  if (!subpath) return '';
+  return `${pOrigin}/media-proxy/${subpath}`;
 }
 
 /**
@@ -51,6 +63,7 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
   const baseClean = sanitizeConfig(config || {});
   const wid = String(activeItem?.id || baseClean.activeWallpaperId || baseClean.wallpaperId || '');
   const effective = resolveEffectiveConfig(baseClean, wid);
+  const pluginOrigin = String(extra?.pluginOrigin || '').trim().replace(/\/+$/, '');
 
   // Hydrate cached wallpaper accent for this wallpaperId if available so host skips re-extraction
   const cachedAccent =
@@ -67,10 +80,21 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
     const sceneLiveUrl = resolveMediaUrl(activeItem.sceneLiveUrl, mediaOrigin);
     const videoStageUrl = resolveMediaUrl(activeItem.videoStageUrl, mediaOrigin);
     const webUrl = resolveMediaUrl(activeItem.webUrl, mediaOrigin);
+    const audioUrl = resolveMediaUrl(activeItem.audioUrl, mediaOrigin);
+    const mseFmp4Url = resolveMediaUrl(activeItem.mseFmp4Url, mediaOrigin);
     let mediaUrl = resolveMediaUrl(activeItem.mediaUrl, mediaOrigin);
     if (kind === 'scene' && (sceneMode === 'video' || sceneMode === 'scene-video') && sceneVideoUrl) {
       mediaUrl = sceneVideoUrl;
     }
+
+    const pluginMediaUrl =
+      toPluginProxyUrl(mediaUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginMediaUrl || '').trim();
+    const pluginThumbUrl =
+      toPluginProxyUrl(thumbUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginThumbUrl || '').trim();
+    const pluginAudioUrl =
+      toPluginProxyUrl(audioUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginAudioUrl || '').trim();
+    const pluginVideoStageUrl =
+      toPluginProxyUrl(videoStageUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginVideoStageUrl || '').trim();
 
     normalizedItem = {
       id: String(activeItem.id || wid),
@@ -82,10 +106,15 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
       thumbUrl,
       mediaUrl,
       videoStageUrl,
+      mseFmp4Url,
+      pluginMediaUrl,
+      pluginThumbUrl,
+      pluginAudioUrl,
+      pluginVideoStageUrl,
       sceneVideoUrl,
       sceneLiveUrl,
       webUrl,
-      audioUrl: resolveMediaUrl(activeItem.audioUrl, mediaOrigin),
+      audioUrl,
       slidesUrl: resolveMediaUrl(activeItem.slidesUrl, mediaOrigin),
       properties: activeItem.properties || null,
     };
@@ -105,6 +134,7 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
     config: effective,
     activeItem: normalizedItem,
     mediaOrigin: String(mediaOrigin || ''),
+    ...(pluginOrigin ? { pluginOrigin } : {}),
     ...(slides ? { slides } : {}),
     tokensPreview: {
       dark: resolveSchemeTokens(effective, 'dark'),
@@ -243,7 +273,7 @@ function buildPolarityTokenVarsCss(cfg, tok, isLight) {
  */
 export function buildStaticCssSheet(payload = {}) {
   if (payload && payload.skinEnabled === false) {
-    return '/* agy-wallpaper-prism v2.0.6 static-css: skin disabled */\n';
+    return '/* agy-wallpaper-prism v2.0.7 static-css: skin disabled */\n';
   }
   const rawCfg = payload?.config && typeof payload.config === 'object' ? payload.config : payload || DEFAULT_CONFIG;
   const activeItem = payload?.activeItem && typeof payload.activeItem === 'object' ? payload.activeItem : null;
@@ -314,7 +344,7 @@ export function buildStaticCssSheet(payload = {}) {
   const mainPageHostCss = mainPageCarriers.map((s) => `${s}${notHole}`).join(',\n');
   const mainPageBeforeCss = mainPageCarriers.map((s) => `${s}${notHole}::before`).join(',\n');
 
-  return `/* agy-wallpaper-prism v2.0.6 zero-JS static-css sheet */
+  return `/* agy-wallpaper-prism v2.0.7 zero-JS static-css sheet */
 :root, body.dark, html.dark body {
 ${buildPolarityTokenVarsCss(cfg, darkTok, false)}
   --prism-r-island: ${radiusIsland}px;
