@@ -688,8 +688,8 @@ button, input, select, textarea {
 .mini-sidebar {
   background-color: var(--sim-sidebar-bg, rgba(14, 15, 20, 0.56));
   background-image: var(--prism-sheen);
-  backdrop-filter: blur(var(--sim-blur, 12px)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--sim-blur, 12px)) saturate(140%);
+  backdrop-filter: blur(var(--sim-sidebar-blur, var(--sim-blur, 12px))) saturate(130%);
+  -webkit-backdrop-filter: blur(var(--sim-sidebar-blur, var(--sim-blur, 12px))) saturate(130%);
   border-radius: var(--sim-r-left, 8px);
   border: var(--sim-border, 1px solid rgba(255, 255, 255, 0.12));
   box-shadow: var(--sim-shadow, inset 0 1px 0 rgba(255,255,255,0.09), 0 6px 16px rgba(0,0,0,0.36));
@@ -721,13 +721,10 @@ button, input, select, textarea {
 }
 
 .mini-aux {
-  background-color: var(--sim-sidebar-bg, rgba(14, 15, 20, 0.56));
-  background-image: var(--prism-sheen);
-  backdrop-filter: blur(var(--sim-blur, 12px)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--sim-blur, 12px)) saturate(140%);
+  background-color: var(--sim-chat-bg, rgba(14, 14, 18, 0.32));
   border-radius: var(--sim-r-right, 8px);
   border: var(--sim-border, 1px solid rgba(255, 255, 255, 0.12));
-  box-shadow: var(--sim-shadow, inset 0 1px 0 rgba(255,255,255,0.09), 0 6px 16px rgba(0,0,0,0.36));
+  box-shadow: var(--sim-shadow, inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 16px rgba(0,0,0,0.32));
   padding: 6px;
   gap: 4px;
 }
@@ -1192,6 +1189,7 @@ button, input, select, textarea {
   cursor: text;
   min-width: 44px;
   text-align: right;
+  white-space: nowrap;
 }
 .prism-slider-val:hover {
   background: var(--prism-ctl-bg);

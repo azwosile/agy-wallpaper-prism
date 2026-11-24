@@ -10,14 +10,14 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveDefaultPrismDataDir } from '../src/engine/store.mjs';
 import { PRISM_DOM, DEFAULT_DEBUG_PORT } from '../src/shared/schema.mjs';
-import { buildClientSkinPayload } from '../src/host/index.mjs';
+import { buildClientSkinPayload, getHostSkinScript } from '../src/host/index.mjs';
 import { evaluateTargetEphemeral, listCdpTargets, probeCdpPort, readDevToolsActivePort, selectHubTargets } from '../sidecars/prism_studio/cdp-bridge.mjs';
 import { buildStudioBundle } from './build.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 
-export async function installLocalPlugin({ destRoot = '' } = {}) {
+export async function installLocalPlugin({ destRoot = '', skipSidecarReload = false } = {}) {
   const indexHtml = join(repoRoot, 'sidecars', 'prism_studio', 'index.html');
   if (!existsSync(indexHtml)) {
     await buildStudioBundle();
@@ -90,9 +90,10 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
   }
 
   // Trigger clean in-process Sidecar host script reload (allow ~650ms for host plugin watcher to respawn Sidecar if version bumped)
-  if (!destRoot) {
+  if (!destRoot && !skipSidecarReload) {
     try {
       await new Promise((r) => setTimeout(r, 650));
+      const freshSkinScript = getHostSkinScript({ reload: true });
       const serverInfoPath = join(resolveDefaultPrismDataDir(), 'server_info.json');
       let liveBootPayload = null;
       let livePort = 0;
@@ -126,9 +127,10 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
         }
       }
 
-      // Hot-upgrade any older in-memory `window.__agyPrism` / `window.__agyPrismPanel` or stale Sidecar/mediaOrigin inside open Hub windows
+      // Force-replace in-memory `window.__agyPrism` & `window.__agyPrismPanel` even on same-version (`2.0.6 -> 2.0.6`) hot installs
       const pf = readDevToolsActivePort();
       const cdpPorts = [...new Set([pf?.port, DEFAULT_DEBUG_PORT].filter((n) => Number.isInteger(n) && n > 0))];
+      const hotReplacedTargets = [];
       for (const cp of cdpPorts) {
         const pr = await probeCdpPort(cp).catch(() => ({ ok: false }));
         if (!pr.ok) continue;
@@ -139,13 +141,53 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
             var payload = ${JSON.stringify(liveBootPayload)};
             var expectedPrefix = ${JSON.stringify(livePort ? `http://127.0.0.1:${livePort}/host/` : '')};
             var targetVer = ${JSON.stringify(PRISM_DOM.skinVersion)};
-            if (payload) window.__AGY_PRISM_BOOT_PAYLOAD__ = payload;
+            var cur = window.__agyPrism;
+            var carry = payload || (cur && typeof cur.getLastPayload === 'function' ? cur.getLastPayload() : null) || window.__AGY_PRISM_BOOT_PAYLOAD__ || null;
+            if (carry) window.__AGY_PRISM_BOOT_PAYLOAD__ = carry;
             var hostBase = String(window.__agyPrismHostBase || '');
             var staleOrigin = Boolean(expectedPrefix) && (!hostBase || hostBase.indexOf(expectedPrefix) !== 0);
-            var cur = window.__agyPrism;
-            if (cur && cur.version === targetVer) {
-              if (payload && typeof cur.applyPayload === 'function') cur.applyPayload(payload);
+
+            var hadPanel = Boolean(window.__agyPrismPanel);
+            if (window.__agyPrismPanel) {
+              try {
+                if (typeof window.__agyPrismPanel.destroy === 'function') window.__agyPrismPanel.destroy();
+              } catch (e) {}
+              try {
+                delete window.__agyPrismPanel;
+              } catch (e) {
+                window.__agyPrismPanel = undefined;
+              }
             }
+            var ep = document.getElementById('agy-prism-panel-loader');
+            if (ep) ep.remove();
+            var triggerMode = (carry && carry.config && carry.config.triggerMode) || 'both';
+            if (hadPanel && triggerMode !== 'shortcut-only' && typeof window.__agyPrismSummonPanel === 'function' && !document.getElementById('agy-prism-pill') && document.body) {
+              var b = document.createElement('button');
+              b.id = 'agy-prism-pill';
+              b.type = 'button';
+              b.setAttribute('translate', 'no');
+              b.dataset.noTranslate = 'true';
+              b.dataset.agNoI18n = '1';
+              b.dataset.prismLazyStub = '1';
+              b.textContent = '\\u25C6 Prism';
+              b.style.cssText = 'all:initial;cursor:pointer;font:500 11px/18px system-ui,sans-serif;padding:2px 8px;border-radius:999px;color:#cbd5e1;background:rgba(20,20,26,.72);border:1px solid rgba(255,255,255,.14);z-index:44;';
+              var f = document.querySelector('.agy-composer-footer,[data-testid="agent-input-box"] footer');
+              if (f) f.appendChild(b);
+              else { b.style.position = 'fixed'; b.style.right = '14px'; b.style.bottom = '10px'; document.body.appendChild(b); }
+              b.onclick = function(ev) { ev.preventDefault(); ev.stopPropagation(); window.__agyPrismSummonPanel(); };
+            }
+
+            if (cur) {
+              try {
+                if (typeof cur.destroy === 'function') cur.destroy();
+              } catch (e) {}
+              try {
+                delete window.__agyPrism;
+              } catch (e) {
+                window.__agyPrism = undefined;
+              }
+            }
+
             if (staleOrigin) {
               if (window.__agyPrismSse) {
                 try { window.__agyPrismSse.close(); } catch (e) {}
@@ -153,34 +195,38 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
               }
               var sl = document.getElementById('agy-prism-stage-loader');
               if (sl) sl.remove();
-              var pl = document.getElementById('agy-prism-panel-loader');
-              if (pl) pl.remove();
               window.__agyPrismBootstrapped = false;
               return 'rebind';
             }
-            if (!hostBase) return false;
-            if (window.__agyPrismPanel && window.__agyPrismPanel.version !== targetVer) {
-              var ep = document.getElementById('agy-prism-panel-loader');
-              if (ep) ep.remove();
-              var sp = document.createElement('script');
-              sp.id = 'agy-prism-panel-loader';
-              sp.async = true;
-              sp.src = hostBase + '/panel.js?t=' + Date.now();
-              (document.head || document.documentElement).appendChild(sp);
+
+            var startupMode = (carry && carry.config && carry.config.startupMode) || 'gentle-auto';
+            var skinOn = !carry || carry.skinEnabled !== false;
+            if (startupMode === 'static-css') {
+              if (hostBase && skinOn) {
+                var linkEl = document.getElementById('agy-prism-static-css');
+                if (!linkEl) {
+                  linkEl = document.createElement('link');
+                  linkEl.id = 'agy-prism-static-css';
+                  linkEl.rel = 'stylesheet';
+                  (document.head || document.documentElement).appendChild(linkEl);
+                }
+                linkEl.href = hostBase + '/static.css?v=' + encodeURIComponent(targetVer) + '&t=' + Date.now();
+              }
+              return 'static-css-reloaded';
             }
-            if (cur && cur.version === targetVer) {
-              return 'updated';
-            }
+
             var ex = document.getElementById('agy-prism-stage-loader');
             if (ex) ex.remove();
-            var s = document.createElement('script');
-            s.id = 'agy-prism-stage-loader';
-            s.async = true;
-            s.src = hostBase + '/stage.js?t=' + Date.now();
-            (document.head || document.documentElement).appendChild(s);
-            return 'reloaded';
+            if (!skinOn) return 'disabled';
+            return (function(){
+              ${freshSkinScript}
+              return window.__agyPrism ? 'hot-replaced' : false;
+            })();
           })()`;
-          await evaluateTargetEphemeral(h.webSocketDebuggerUrl, expr).catch(() => {});
+          const mode = await evaluateTargetEphemeral(h.webSocketDebuggerUrl, expr).catch(() => null);
+          if (mode === 'hot-replaced' || mode === 'rebind') {
+            hotReplacedTargets.push(h.webSocketDebuggerUrl);
+          }
         }
         for (const t of targets) {
           if (t.type === 'iframe' && String(t.url || '').startsWith('plugin://agy-wallpaper-prism--prism_studio')) {
@@ -197,6 +243,22 @@ export async function installLocalPlugin({ destRoot = '' } = {}) {
           body: '{}',
           signal: AbortSignal.timeout(2500),
         }).catch(() => {});
+      }
+
+      if (hotReplacedTargets.length > 0 && liveBootPayload?.activeItem && liveBootPayload?.skinEnabled !== false) {
+        const deadline = Date.now() + 2200;
+        while (Date.now() < deadline) {
+          let allReady = true;
+          for (const wsUrl of hotReplacedTargets) {
+            const ok = await evaluateTargetEphemeral(
+              wsUrl,
+              'Boolean(window.__agyPrism && typeof window.__agyPrism.status === "function" && window.__agyPrism.status().wallpaperReady)',
+            ).catch(() => true);
+            if (!ok) allReady = false;
+          }
+          if (allReady) break;
+          await new Promise((r) => setTimeout(r, 120));
+        }
       }
     } catch {
       /* best-effort live reload; never fail installation */

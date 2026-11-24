@@ -263,10 +263,15 @@ function bootPrismStudioApp() {
 
   const accentMemCache = new Map();
   let configDebounceTimer = null;
+  let configFlushInFlight = false;
   let pendingConfigPatch = {};
   let currentStageMediaSig = '';
   let slideshowTimer = null;
   let statusPollTimer = null;
+  let studioEventSource = null;
+  let studioLastSseAt = 0;
+  let studioSyncPollTimer = null;
+  let externalSyncInFlight = false;
 
   function curLocale() {
     return resolveLocale(store.config.language);
@@ -462,7 +467,17 @@ function bootPrismStudioApp() {
     const fidBoost = (eff.glassFidelity / 100) * 0.14;
     const chatBoost = (eff.chatGlassFidelity / 100) * 0.14;
 
-    const sidebarAlpha = Math.min(0.98, g * (polarity === 'light' ? 0.80 : 0.72) + fidBoost * 0.6);
+    const rgbSum = (trip) =>
+      String(trip || '0, 0, 0')
+        .split(',')
+        .reduce((acc, s) => acc + (Number(s.trim()) || 0), 0);
+    const sbBaseRgb =
+      polarity !== 'light' && rgbSum(tokens.shadeRgb) > rgbSum(tokens.baseRgb)
+        ? tokens.baseRgb
+        : tokens.shadeRgb;
+    const rawSbOp = eff.sidebarOpacity !== null && eff.sidebarOpacity !== undefined ? eff.sidebarOpacity : eff.glassOpacity;
+    const sidebarAlpha = eff.glassSurfaces ? Math.min(0.98, Math.max(0.20, rawSbOp)) : 0.96;
+    const sbBlurPx = eff.glassSurfaces ? Math.round(((eff.sidebarBlur !== null && eff.sidebarBlur !== undefined ? eff.sidebarBlur : eff.glassBlur)) * 0.6) : 0;
     const chatAlpha = Math.min(0.95, g * (polarity === 'light' ? 0.60 : 0.38) + chatBoost);
     const composerAlpha = Math.min(0.99, g * 0.92 + fidBoost * 0.3);
 
@@ -492,7 +507,8 @@ function bootPrismStudioApp() {
     hub.style.setProperty('--sim-r-left', mapSidebarR(eff.leftSidebarRadius));
     hub.style.setProperty('--sim-r-right', mapSidebarR(eff.rightSidebarRadius));
     hub.style.setProperty('--sim-r-card', `${Math.max(3, baseR - 3)}px`);
-    hub.style.setProperty('--sim-sidebar-bg', `rgba(${tokens.shadeRgb}, ${sidebarAlpha.toFixed(3)})`);
+    hub.style.setProperty('--sim-sidebar-bg', `rgba(${sbBaseRgb}, ${sidebarAlpha.toFixed(3)})`);
+    hub.style.setProperty('--sim-sidebar-blur', `${sbBlurPx}px`);
     hub.style.setProperty('--sim-chat-bg', `rgba(${tokens.baseRgb}, ${chatAlpha.toFixed(3)})`);
     hub.style.setProperty('--sim-editor-bg', editorBg);
     hub.style.setProperty('--sim-code-blur', codeBlur);
@@ -1025,6 +1041,7 @@ function bootPrismStudioApp() {
     const patch = pendingConfigPatch;
     pendingConfigPatch = {};
     if (!patch || Object.keys(patch).length === 0) return;
+    configFlushInFlight = true;
     try {
       const res = await apiJson('/api/config', { method: 'POST', body: { patch } });
       ingestServerState(res);
@@ -1032,6 +1049,8 @@ function bootPrismStudioApp() {
       updateTopStatusIndicators();
     } catch (err) {
       showToast(err.message || 'Failed to save config', 'danger');
+    } finally {
+      configFlushInFlight = false;
     }
   }
 
@@ -1307,12 +1326,37 @@ function bootPrismStudioApp() {
     decimals = 0,
     suffix = '',
     dblResetFraming = false,
+    nullableFallbackKey = '',
+    fallbackValue = null,
   }) {
-    const uiVal = Number(value) * scale;
-    const uiDef = Number(defaultValue) * scale;
     const uiMin = min * scale;
     const uiMax = max * scale;
     const uiStep = step * scale;
+    if (nullableFallbackKey) {
+      const isAuto = value === null || value === undefined;
+      const resolvedVal = isAuto ? Number(fallbackValue) : Number(value);
+      const uiVal = resolvedVal * scale;
+      const isDirty = isAuto ? false : true;
+      const { pct, display: rawDisplay } = sliderMeta(uiVal, uiMin, uiMax, decimals, suffix);
+      const display = isAuto ? tr('glass.followMainFmt', { val: rawDisplay }) : rawDisplay;
+
+      return `
+      <div class="prism-slider-row" data-slider-key="${esc(key)}" data-dirty="${isDirty ? 'true' : 'false'}"
+           data-nullable="true" data-fallback-key="${esc(nullableFallbackKey)}"
+           data-scale="${scale}" data-min="${uiMin}" data-max="${uiMax}" data-step="${uiStep}"
+           data-decimals="${decimals}" data-suffix="${esc(suffix)}" data-default="${Number(defaultValue)}">
+        <span class="prism-slider-label" ${dblResetFraming ? `data-dblreset="true" title="${esc(tx('dblClickFramingHint'))}"` : ''}>${esc(label)}</span>
+        <span class="prism-slider-val" data-action="edit-slider-val" title="Click to enter exact value">${esc(display)}</span>
+        <button type="button" class="prism-reset-btn" data-action="reset-key" data-key="${esc(key)}" title="${esc(tr('common.reset'))}">↺</button>
+        <input type="range" class="prism-range" data-config-slider="${esc(key)}"
+               min="${uiMin}" max="${uiMax}" step="${uiStep}" value="${uiVal}"
+               style="--prism-pct:${pct}%" />
+      </div>
+    `;
+    }
+
+    const uiVal = Number(value) * scale;
+    const uiDef = Number(defaultValue) * scale;
     const isDirty = Math.abs(uiVal - uiDef) > uiStep * 0.25;
     const { pct, display } = sliderMeta(uiVal, uiMin, uiMax, decimals, suffix);
 
@@ -1887,7 +1931,7 @@ function bootPrismStudioApp() {
               <span>${esc(tr('glass.title'))}</span>
             </div>
             <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="glassSurfaces,glassOpacity,glassBlur,glassFidelity,chatGlassFidelity,codeReadabilityMode,contrastFloor,caretColor">↺</button>
+                    data-action="reset-module" data-keys="glassSurfaces,glassOpacity,glassBlur,sidebarOpacity,sidebarBlur,glassFidelity,chatGlassFidelity,codeReadabilityMode,contrastFloor,caretColor">↺</button>
           </summary>
           <div class="prism-section-body">
             ${renderSwitchRow({
@@ -1916,6 +1960,32 @@ function bootPrismStudioApp() {
               max: 48,
               step: 1,
               suffix: ' px',
+            })}
+            ${renderSliderRow({
+              key: 'sidebarOpacity',
+              label: tr('glass.sidebarOpacity'),
+              value: eff.sidebarOpacity,
+              defaultValue: DEFAULT_CONFIG.glassOpacity,
+              min: 0.20,
+              max: 0.98,
+              step: 0.01,
+              scale: 100,
+              decimals: 0,
+              suffix: ' %',
+              nullableFallbackKey: 'glassOpacity',
+              fallbackValue: eff.glassOpacity,
+            })}
+            ${renderSliderRow({
+              key: 'sidebarBlur',
+              label: tr('glass.sidebarBlur'),
+              value: eff.sidebarBlur,
+              defaultValue: DEFAULT_CONFIG.glassBlur,
+              min: 0,
+              max: 48,
+              step: 1,
+              suffix: ' px',
+              nullableFallbackKey: 'glassBlur',
+              fallbackValue: eff.glassBlur,
             })}
             ${renderSliderRow({
               key: 'glassFidelity',
@@ -3408,6 +3478,20 @@ function bootPrismStudioApp() {
           suffix: ' %',
         })}
         ${renderSliderRow({
+          key: 'sidebarOpacity',
+          label: isZh ? '侧栏玻璃不透明度' : 'Sidebar Opacity',
+          value: eff.sidebarOpacity,
+          defaultValue: DEFAULT_CONFIG.glassOpacity,
+          min: 0.20,
+          max: 0.98,
+          step: 0.01,
+          scale: 100,
+          decimals: 0,
+          suffix: ' %',
+          nullableFallbackKey: 'glassOpacity',
+          fallbackValue: eff.glassOpacity,
+        })}
+        ${renderSliderRow({
           key: 'scrimOpacity',
           label: isZh ? '背景压暗遮罩' : 'Contrast Scrim',
           value: eff.scrimOpacity,
@@ -3562,9 +3646,32 @@ function bootPrismStudioApp() {
         if (valSpan) {
           valSpan.textContent = `${decimals > 0 ? uiVal.toFixed(decimals) : Math.round(uiVal)}${suffix}`;
         }
-        row.dataset.dirty = Math.abs(rawVal - defRaw) > 0.001 ? 'true' : 'false';
+        row.dataset.dirty = row.dataset.nullable === 'true' ? 'true' : (Math.abs(rawVal - defRaw) > 0.001 ? 'true' : 'false');
       }
     });
+  }
+
+  function syncNullableFollowersInDom(fallbackKey, fallbackRawVal) {
+    document
+      .querySelectorAll(`.prism-slider-row[data-nullable="true"][data-fallback-key="${fallbackKey}"]`)
+      .forEach((fRow) => {
+        if (!(fRow instanceof HTMLElement) || fRow.dataset.dirty === 'true') return;
+        const fInput = fRow.querySelector('input.prism-range');
+        if (!(fInput instanceof HTMLInputElement)) return;
+        const fScale = Number(fRow.dataset.scale || 1);
+        const fDecimals = Number(fRow.dataset.decimals || 0);
+        const fSuffix = fRow.dataset.suffix || '';
+        const fMin = Number(fInput.min);
+        const fMax = Number(fInput.max);
+        const fUiVal = Math.max(fMin, Math.min(fMax, fallbackRawVal * fScale));
+        const { pct: fPct, display: rawDisp } = sliderMeta(fUiVal, fMin, fMax, fDecimals, fSuffix);
+        fInput.value = String(fUiVal);
+        fInput.style.setProperty('--prism-pct', `${fPct}%`);
+        const fValSpan = fRow.querySelector('.prism-slider-val');
+        if (fValSpan) {
+          fValSpan.textContent = tr('glass.followMainFmt', { val: rawDisp });
+        }
+      });
   }
 
   function renderActiveTabContentHtml() {
@@ -3970,7 +4077,7 @@ function bootPrismStudioApp() {
           if (valSpan) {
             valSpan.textContent = `${decimals > 0 ? uiVal.toFixed(decimals) : Math.round(uiVal)}${suffix}`;
           }
-          row.dataset.dirty = Math.abs(rawVal - defRaw) > 0.001 ? 'true' : 'false';
+          row.dataset.dirty = row.dataset.nullable === 'true' ? 'true' : (Math.abs(rawVal - defRaw) > 0.001 ? 'true' : 'false');
         }
         if (sliderKey === 'liveBootDelay') {
           const delayHint = document.getElementById('prism-boot-delay-hint');
@@ -3984,6 +4091,16 @@ function bootPrismStudioApp() {
           ? { volume: rawVal, muted: false, audioEnabled: true }
           : { [sliderKey]: rawVal };
         queueConfigPatch(extraPatch, false, sliderKey !== 'liveBootDelay');
+        if (sliderKey === 'glassOpacity' || sliderKey === 'glassBlur') {
+          const effNow = getEffectiveConfig();
+          const depAuto =
+            sliderKey === 'glassOpacity'
+              ? effNow.sidebarOpacity === null || effNow.sidebarOpacity === undefined
+              : effNow.sidebarBlur === null || effNow.sidebarBlur === undefined;
+          if (depAuto) {
+            syncNullableFollowersInDom(sliderKey, rawVal);
+          }
+        }
         return;
       }
 
@@ -4159,12 +4276,18 @@ function bootPrismStudioApp() {
             if (committed) return;
             committed = true;
             if (applyChange) {
-              const parsed = Number(numIn.value.replace(/[^0-9.-]/g, ''));
-              if (Number.isFinite(parsed)) {
-                const clampedUi = Math.max(min, Math.min(max, parsed));
-                const rawVal = clampedUi / scale;
-                const key = row.dataset.sliderKey;
-                if (key) queueConfigPatch({ [key]: rawVal }, true);
+              const key = row.dataset.sliderKey;
+              const rawTxt = numIn.value.trim();
+              if (row.dataset.nullable === 'true' && (rawTxt === '' || rawTxt.toLowerCase() === 'auto')) {
+                if (key) queueConfigPatch({ [key]: null }, true);
+              } else {
+                const numStr = rawTxt.replace(/[^0-9.-]/g, '');
+                const parsed = numStr === '' ? NaN : Number(numStr);
+                if (Number.isFinite(parsed)) {
+                  const clampedUi = Math.max(min, Math.min(max, parsed));
+                  const rawVal = clampedUi / scale;
+                  if (key) queueConfigPatch({ [key]: rawVal }, true);
+                }
               }
             }
             renderActiveSurface();
@@ -4184,7 +4307,10 @@ function bootPrismStudioApp() {
         }
         case 'reset-key': {
           const key = actEl.dataset.key;
-          if (key && key in DEFAULT_CONFIG) {
+          if (key === 'sidebarOpacity' || key === 'sidebarBlur') {
+            queueConfigPatch({ [key]: null }, true);
+            renderActiveSurface();
+          } else if (key && key in DEFAULT_CONFIG) {
             queueConfigPatch({ [key]: DEFAULT_CONFIG[key] }, true);
             renderActiveSurface();
           }
@@ -4195,7 +4321,11 @@ function bootPrismStudioApp() {
           const keys = (actEl.dataset.keys || '').split(',').filter(Boolean);
           const patch = {};
           for (const k of keys) {
-            if (k in DEFAULT_CONFIG) patch[k] = DEFAULT_CONFIG[k];
+            if (k === 'sidebarOpacity' || k === 'sidebarBlur') {
+              patch[k] = null;
+            } else if (k in DEFAULT_CONFIG) {
+              patch[k] = DEFAULT_CONFIG[k];
+            }
           }
           if (Object.keys(patch).length > 0) {
             queueConfigPatch(patch, true);
@@ -5095,8 +5225,16 @@ function bootPrismStudioApp() {
           vid.play().catch(() => {});
         }
       }
-      if (!document.hidden && !isHostAttached()) {
-        ensureStandbyStatusPoll();
+      if (!document.hidden) {
+        void syncExternalStateNow();
+        ensureLiveSyncPoll();
+        if (!isHostAttached()) ensureStandbyStatusPoll();
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      if (!document.hidden) {
+        void syncExternalStateNow();
       }
     });
 
@@ -5106,6 +5244,154 @@ function bootPrismStudioApp() {
         if (gridHost) gridHost.innerHTML = renderLibraryGridHtml();
       }
     });
+  }
+
+  function externalStateSignature() {
+    const c = store.config || {};
+    const activeId = getActiveId();
+    return JSON.stringify([
+      activeId,
+      store.activeItem?.mediaUrl || '',
+      store.activeItem?.sceneVideoUrl || '',
+      store.skinEnabled,
+      c.paused,
+      c.muted,
+      c.volume,
+      c.rotationEnabled,
+      c.rotationGroupId,
+      c.rotationOrder,
+      c.rotationTrigger,
+      c.rotationInterval,
+      c.preset,
+      c.activeProfilePresetId,
+      c.layoutMode,
+      c.themeMode,
+      c.colorScheme,
+      c.accentMode,
+      c.customAccent,
+      c.glassSurfaces,
+      c.glassOpacity,
+      c.glassBlur,
+      c.sidebarOpacity,
+      c.sidebarBlur,
+      c.transparentWindowControls,
+      c.cornerStyle,
+      c.leftSidebarRadius,
+      c.rightSidebarRadius,
+      c.islandGap,
+      c.workspacePad,
+      c.codeReadabilityMode,
+      c.borders,
+      c.shadows,
+      c.scrimOpacity,
+      c.mediaBlur,
+      c.vignette,
+      c.pauseOnBlur,
+      activeId ? c.perWallpaperOverrides?.[activeId] || null : null,
+    ]);
+  }
+
+  function applyExternalStateSnapshot(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    if (configDebounceTimer || configFlushInFlight || Object.keys(pendingConfigPatch).length > 0) {
+      return;
+    }
+    const wasAttached = isHostAttached();
+    const prevCanaryState = store.canary?.state || 'idle';
+    const prevActiveId = getActiveId();
+    const prevSig = externalStateSignature();
+
+    ingestServerState(payload);
+
+    const nextActiveId = getActiveId();
+    const nextSig = externalStateSignature();
+    const canaryChanged = (store.canary?.state || 'idle') !== prevCanaryState;
+    const activeChanged = nextActiveId !== prevActiveId;
+    const stateChanged = nextSig !== prevSig;
+
+    updateTopStatusIndicators();
+
+    if (activeChanged || stateChanged) {
+      patchActiveCardsInPlace(nextActiveId);
+      syncMiniPreviewMedia();
+      syncOpticalCssVars();
+      const activeEl = document.activeElement;
+      const isDraggingRange = activeEl instanceof HTMLInputElement && activeEl.type === 'range';
+      const isEditingField =
+        activeEl instanceof HTMLTextAreaElement ||
+        activeEl instanceof HTMLSelectElement ||
+        (activeEl instanceof HTMLInputElement && activeEl.type !== 'button' && activeEl.type !== 'checkbox');
+      if (!isDraggingRange) {
+        updateLeftRailPanels();
+        if (!isEditingField && (store.activeTab === 'skin' || store.activeTab === 'playback')) {
+          const scroller = document.getElementById('prism-tab-scroll');
+          if (scroller) {
+            const prevScroll = scroller.scrollTop;
+            scroller.innerHTML = renderActiveTabContentHtml();
+            scroller.scrollTop = prevScroll;
+          }
+        }
+      }
+    }
+
+    if ((!wasAttached && isHostAttached()) || canaryChanged) {
+      if (store.activeTab === 'system' || store.canary?.state === 'tripped') {
+        renderActiveSurface();
+      }
+    }
+  }
+
+  async function syncExternalStateNow() {
+    if (externalSyncInFlight || !store.ready) return;
+    externalSyncInFlight = true;
+    try {
+      const st = await apiJson('/api/status');
+      applyExternalStateSnapshot(st);
+    } catch {
+      // silent background sync
+    } finally {
+      externalSyncInFlight = false;
+    }
+  }
+
+  function connectStudioEvents() {
+    if (typeof window.EventSource !== 'function' || studioEventSource) return;
+    try {
+      const tok = new URLSearchParams(window.location.search).get('token') || window.__SIDECAR_BOOT__?.token || '';
+      const url = tok ? `/api/events?token=${encodeURIComponent(tok)}` : '/api/events';
+      const es = new window.EventSource(url);
+      studioEventSource = es;
+      const handleEvent = (ev) => {
+        studioLastSseAt = Date.now();
+        try {
+          const parsed = JSON.parse(ev.data);
+          applyExternalStateSnapshot(parsed);
+        } catch {
+          // ignore malformed event payload
+        }
+      };
+      es.addEventListener('state', handleEvent);
+      es.onmessage = handleEvent;
+      es.onerror = () => {
+        // Keep EventSource auto-retry active while live sync poll serves as fallback
+      };
+    } catch {
+      studioEventSource = null;
+    }
+  }
+
+  function ensureLiveSyncPoll() {
+    if (studioSyncPollTimer) return;
+    studioSyncPollTimer = setInterval(() => {
+      if (document.hidden || !store.ready) return;
+      const sseFresh =
+        studioEventSource &&
+        studioEventSource.readyState === 1 &&
+        studioLastSseAt > 0 &&
+        Date.now() - studioLastSseAt < 20_000;
+      if (sseFresh) return;
+      void syncExternalStateNow();
+    }, 2500);
   }
 
   function ensureStandbyStatusPoll() {
@@ -5119,17 +5405,8 @@ function bootPrismStudioApp() {
         return;
       }
       try {
-        const wasAttached = isHostAttached();
-        const prevCanaryState = store.canary?.state || 'idle';
         const st = await apiJson('/api/status');
-        ingestServerState(st);
-        updateTopStatusIndicators();
-        const canaryChanged = (store.canary?.state || 'idle') !== prevCanaryState;
-        if ((!wasAttached && isHostAttached()) || canaryChanged) {
-          if (store.activeTab === 'system' || store.canary?.state === 'tripped') {
-            renderActiveSurface();
-          }
-        }
+        applyExternalStateSnapshot(st);
         if (isHostAttached() && !needsCanaryWatch()) {
           clearInterval(statusPollTimer);
           statusPollTimer = null;
@@ -5168,6 +5445,8 @@ function bootPrismStudioApp() {
       renderActiveSurface();
     }
 
+    connectStudioEvents();
+    ensureLiveSyncPoll();
     ensureStandbyStatusPoll();
   }
 

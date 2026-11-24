@@ -150,6 +150,8 @@ export function buildMockAntigravityHubHtml({
     .bg-sidebar { background-color: var(--color-sidebar, var(--sidebar)); }
     .bg-card { background-color: var(--color-card, var(--card)); border: 1px solid var(--card-border); }
     .bg-popover { background-color: var(--popover); }
+    .sticky, [data-sidebar-section-drop-id] { position: sticky; }
+    .agy-card { background-color: transparent; }
 
     .agy-shell {
       display: flex;
@@ -414,7 +416,10 @@ export function buildMockAntigravityHubHtml({
               <span style="opacity:0.45">/</span>
               <span>agy-wallpaper-prism</span>
               <span class="hub-badge">Gentle Fail-Open v2.0</span>
+              <button id="hub-title-menu-btn" type="button" data-testid="title-menu-bar-item" style="background:transparent;border:none;color:inherit;padding:2px 8px;font:inherit;cursor:pointer">Workspace</button>
             </div>
+            <div id="hub-title-menu-dropdown" data-browser-occluder="true" class="surface-opaque bg-sidebar" style="position:absolute;top:100%;left:14px;z-index:8000;width:180px;padding:6px 10px;pointer-events:none;visibility:hidden">Title Menu Dropdown</div>
+            <div id="titlebar-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px;pointer-events:none;opacity:0"></div>
             <div style="display:flex;align-items:center;gap:12px;opacity:0.75">
               <span>Swarm · v2.0 Verified</span>
               <span>Ephemeral Zero-Enable CDP</span>
@@ -427,6 +432,11 @@ export function buildMockAntigravityHubHtml({
                 <div id="hub-sidebar-sticky-projects" data-index="0" class="bg-sidebar" style="position: sticky; top: 0px; z-index: 10; width: 100%">
                   <div data-testid="section-header" data-title="Projects">
                     <div id="hub-sidebar-sticky-inner" class="group/section-header bg-sidebar nav-section-label">Projects</div>
+                  </div>
+                </div>
+                <div id="hub-project-folder-wrap" class="bg-sidebar" data-index="1" data-sidebar-section-drop-id="proj-uuid-1" style="padding: 4px 0 2px">
+                  <div class="group/header" style="position:relative">
+                    <button id="hub-project-header-btn" type="button" data-project-card="true" data-testid="project-header" class="rounded-lg bg-sidebar" style="width:100%;text-align:left;padding:6px 10px;border:none;color:inherit;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Antigravity plugins<div id="project-header-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px;pointer-events:none;opacity:0"></div></button>
                   </div>
                 </div>
                 <div class="nav-item active">
@@ -538,12 +548,34 @@ export function buildMockAntigravityHubHtml({
       </div>
     </div>
 
-    <!-- Antigravity 2.34.0 off-screen probes inside #root: inner .dark + .browser-hole-opaque + settings modal + menu -->
+    <!-- Antigravity 2.34.0 off-screen probes inside #root: inner .dark + [data-side-panel-body] + .browser-hole-opaque + Customizations + aux-pane-split + settings modal + menu -->
     <div id="v234-inner-dark-probe" class="h-full w-full dark" style="position:fixed;left:-9999px;top:0;width:400px;height:300px;pointer-events:none">
       <div class="agy-inset-shell">
+        <aside id="v234-side-panel-probe" data-side-panel-body="true" class="bg-sidebar" style="width:220px;height:260px"><div id="v234-side-panel-inner-bg" class="bg-sidebar" style="height:28px">Group</div><div id="v234-drop-sticky-probe" class="bg-sidebar" data-sidebar-section-drop-id="main-section-header" style="height:24px">Projects</div><div id="v234-sidebar-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px"></div></aside>
         <div class="agy-sheet" data-sheet-inset="true">
           <div id="v234-browser-hole-probe" class="browser-hole-opaque">
-            <div id="v234-main-body-probe" data-main-content-body="true"></div>
+            <div id="v234-main-body-probe" data-main-content-body="true">
+              <div id="v234-customizations-probe" class="flex-1 flex flex-col overflow-hidden h-full min-h-0 bg-background">
+                <div id="v234-cust-sticky-bar" class="sticky top-0 z-20 bg-background"><nav data-testid="plugins-tabs" class="agy-pill"></nav><div class="agy-field"><input data-testid="customizations-search" /></div></div>
+                <div id="v234-cust-spotlight" class="agy-spotlight-card bg-card"></div>
+                <div id="v234-cust-card" class="agy-card" data-testid="customization-card"></div>
+                <div id="v234-cust-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px"></div>
+              </div>
+            </div>
+          </div>
+          <div id="v234-aux-split-probe" data-testid="aux-pane-split" style="display:flex;width:360px;height:200px">
+            <div id="v234-center-island-probe" class="browser-hole-opaque" style="flex:1;display:flex;flex-direction:column">
+              <div id="v234-main-header-probe" data-main-content-header="true" class="bg-background" style="height:40px">Main Header</div>
+              <div id="v234-center-conv-probe" data-testid="conversation-view" style="flex:1">Center Conversation</div>
+            </div>
+            <div id="v234-right-island-probe" class="browser-hole-opaque" style="width:160px;display:flex;flex-direction:column">
+              <div id="v234-right-strip-probe" data-side-panel-strip="true" class="bg-sidebar" style="height:36px">Aux Strip</div>
+              <div id="v234-right-body-probe" data-side-panel-body="true" class="bg-sidebar" style="flex:1">
+                <div data-testid="side-panel-new-tab-view">
+                  <input id="v234-new-tab-search-probe" data-testid="new-tab-search-input" type="text" placeholder="Search..." />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -576,7 +608,7 @@ export function buildMockAntigravityHubHtml({
   <div id="ide-workbench-probe" class="monaco-workbench" style="position:fixed;left:-9999px;top:0;width:800px;height:600px;pointer-events:none">
     <div class="part titlebar"></div>
     <div class="part activitybar"></div>
-    <div class="part sidebar"><div class="composite title"></div></div>
+    <div class="part sidebar"><div class="composite title"></div><div class="content" id="ide-sidebar-content-probe" style="height:120px;background:var(--vscode-sideBar-background,#252526)"></div></div>
     <div class="part editor">
       <div class="content">
         <div class="editor-group-container">

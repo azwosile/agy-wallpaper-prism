@@ -1,4 +1,4 @@
-// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism).
+// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.0.6).
 //
 // Self-contained ES2020 browser IIFE injected over CDP alongside `wallpaper-inject.js`.
 // Strictly isolated inside `#agy-prism-popover` (`all: initial; position: fixed; z-index: 45`)
@@ -9,7 +9,7 @@
 (function agyPrismPanelMain() {
   'use strict';
 
-  var VERSION = '2.0.5';
+  var VERSION = '2.0.6';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   try {
@@ -64,6 +64,8 @@
     glassSurfaces: true,
     glassOpacity: 0.76,
     glassBlur: 16,
+    sidebarOpacity: null,
+    sidebarBlur: null,
     scrimOpacity: 0.26,
     vignette: true,
     codeReadabilityMode: 'translucent',
@@ -86,6 +88,8 @@
       glassSurfaces: true,
       glassOpacity: 0.64,
       glassBlur: 18,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       scrimOpacity: 0.18,
       mediaBlur: 0,
       vignette: true,
@@ -97,6 +101,8 @@
       glassSurfaces: true,
       glassOpacity: 0.76,
       glassBlur: 16,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       scrimOpacity: 0.26,
       mediaBlur: 0,
       vignette: true,
@@ -108,6 +114,8 @@
       glassSurfaces: true,
       glassOpacity: 0.88,
       glassBlur: 20,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       scrimOpacity: 0.42,
       mediaBlur: 8,
       vignette: true,
@@ -119,6 +127,8 @@
       glassSurfaces: false,
       glassOpacity: 0.94,
       glassBlur: 0,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       scrimOpacity: 0.34,
       mediaBlur: 0,
       vignette: false,
@@ -190,6 +200,9 @@
       accentLabel: '强调色来源',
       s_glassOpacity: '界面不透明度',
       s_glassBlur: '毛玻璃模糊',
+      s_sidebarOpacity: '侧栏玻璃不透明度',
+      s_sidebarBlur: '侧栏毛玻璃模糊',
+      autoFollowPrefix: '跟随 · ',
       s_islandGap: '浮岛间距',
       s_scrimOpacity: '背景压暗遮罩',
       s_mediaBlur: '壁纸柔焦模糊',
@@ -258,6 +271,9 @@
       accentLabel: 'Accent Mode',
       s_glassOpacity: 'Glass Opacity',
       s_glassBlur: 'Backdrop Blur',
+      s_sidebarOpacity: 'Sidebar Opacity',
+      s_sidebarBlur: 'Sidebar Blur',
+      autoFollowPrefix: 'Auto · ',
       s_islandGap: 'Island Gap',
       s_scrimOpacity: 'Scrim Veil',
       s_mediaBlur: 'Wallpaper Blur',
@@ -862,7 +878,7 @@
     }
   }
 
-  function buildSliderRow(key, min, max, step, fmt) {
+  function buildSliderRow(key, min, max, step, fmt, fallbackKey) {
     var valSpan = h('span', { class: 'pp-sval' });
     var labelSpan = h('span', { class: 'pp-slabel' });
     var rstBtn = h('button', {
@@ -872,7 +888,7 @@
       html: ICONS.reset,
       onclick: function () {
         var p = { preset: 'custom' };
-        p[key] = DEFAULTS[key];
+        p[key] = fallbackKey ? null : DEFAULTS[key];
         pushConfigPatch(p, true);
       },
     });
@@ -880,6 +896,7 @@
       type: 'range',
       class: 'pp-range',
       'data-slider-key': key,
+      'data-dirty': 'false',
       min: min,
       max: max,
       step: step,
@@ -897,7 +914,17 @@
       },
     });
     var row = h('div', { class: 'pp-srow', 'data-dirty': 'false' }, [labelSpan, valSpan, rstBtn, range]);
-    sliderRefs[key] = { row: row, label: labelSpan, val: valSpan, rst: rstBtn, range: range, min: min, max: max, fmt: fmt };
+    sliderRefs[key] = {
+      row: row,
+      label: labelSpan,
+      val: valSpan,
+      rst: rstBtn,
+      range: range,
+      min: min,
+      max: max,
+      fmt: fmt,
+      fallbackKey: fallbackKey || null,
+    };
     return row;
   }
 
@@ -1231,6 +1258,8 @@
     var slidersSec = h('div', { class: 'pp-sec' }, [
       buildSliderRow('glassOpacity', 0.3, 0.98, 0.01, function (v) { return Math.round(v * 100) + '%'; }),
       buildSliderRow('glassBlur', 0, 48, 1, function (v) { return Math.round(v) + ' px'; }),
+      buildSliderRow('sidebarOpacity', 0.2, 0.98, 0.01, function (v) { return Math.round(v * 100) + '%'; }, 'glassOpacity'),
+      buildSliderRow('sidebarBlur', 0, 48, 1, function (v) { return Math.round(v) + ' px'; }, 'glassBlur'),
       buildSliderRow('islandGap', 0, 20, 1, function (v) { return Math.round(v) + ' px'; }),
       buildSliderRow('scrimOpacity', 0, 0.92, 0.01, function (v) { return Math.round(v * 100) + '%'; }),
       buildSliderRow('mediaBlur', 0, 64, 1, function (v) { return Math.round(v) + ' px'; }),
@@ -1653,16 +1682,40 @@
 
     for (var sk in sliderRefs) {
       var sr = sliderRefs[sk];
-      var val = Number(cfgVal(sk));
-      if (!Number.isFinite(val)) val = DEFAULTS[sk];
-      var pct = ((clamp(val, sr.min, sr.max) - sr.min) / (sr.max - sr.min)) * 100;
+      var rawVal = cfgVal(sk);
+      var hasExplicitNum = rawVal !== null && rawVal !== undefined && rawVal !== '' && Number.isFinite(Number(rawVal));
       sr.label.textContent = tr('s_' + sk);
-      sr.val.textContent = sr.fmt(val);
       sr.rst.title = tr('resetTip');
-      sr.range.value = String(val);
-      sr.range.style.setProperty('--pct', pct.toFixed(1) + '%');
-      var dirty = Math.abs(val - DEFAULTS[sk]) > (sr.max <= 1 ? 0.004 : 0.4);
-      sr.row.setAttribute('data-dirty', dirty ? 'true' : 'false');
+      if (sr.fallbackKey) {
+        if (!hasExplicitNum) {
+          var fbRaw = cfgVal(sr.fallbackKey);
+          var effVal = fbRaw !== null && fbRaw !== undefined && fbRaw !== '' && Number.isFinite(Number(fbRaw)) ? Number(fbRaw) : DEFAULTS[sr.fallbackKey];
+          var fbPct = ((clamp(effVal, sr.min, sr.max) - sr.min) / (sr.max - sr.min)) * 100;
+          sr.val.textContent = tr('autoFollowPrefix') + sr.fmt(effVal);
+          sr.range.value = String(clamp(effVal, sr.min, sr.max));
+          sr.range.style.setProperty('--pct', fbPct.toFixed(1) + '%');
+          sr.row.setAttribute('data-dirty', 'false');
+          sr.range.setAttribute('data-dirty', 'false');
+        } else {
+          var cVal = Number(rawVal);
+          var cPct = ((clamp(cVal, sr.min, sr.max) - sr.min) / (sr.max - sr.min)) * 100;
+          sr.val.textContent = sr.fmt(cVal);
+          sr.range.value = String(cVal);
+          sr.range.style.setProperty('--pct', cPct.toFixed(1) + '%');
+          sr.row.setAttribute('data-dirty', 'true');
+          sr.range.setAttribute('data-dirty', 'true');
+        }
+      } else {
+        var val = hasExplicitNum ? Number(rawVal) : DEFAULTS[sk];
+        var pct = ((clamp(val, sr.min, sr.max) - sr.min) / (sr.max - sr.min)) * 100;
+        sr.val.textContent = sr.fmt(val);
+        sr.range.value = String(val);
+        sr.range.style.setProperty('--pct', pct.toFixed(1) + '%');
+        var dirty = Math.abs(val - DEFAULTS[sk]) > (sr.max <= 1 ? 0.004 : 0.4);
+        var dirtyStr = dirty ? 'true' : 'false';
+        sr.row.setAttribute('data-dirty', dirtyStr);
+        sr.range.setAttribute('data-dirty', dirtyStr);
+      }
     }
 
     els.swGlassLbl.textContent = tr('sw_glass');

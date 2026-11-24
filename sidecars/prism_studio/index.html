@@ -696,8 +696,8 @@ button, input, select, textarea {
 .mini-sidebar {
   background-color: var(--sim-sidebar-bg, rgba(14, 15, 20, 0.56));
   background-image: var(--prism-sheen);
-  backdrop-filter: blur(var(--sim-blur, 12px)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--sim-blur, 12px)) saturate(140%);
+  backdrop-filter: blur(var(--sim-sidebar-blur, var(--sim-blur, 12px))) saturate(130%);
+  -webkit-backdrop-filter: blur(var(--sim-sidebar-blur, var(--sim-blur, 12px))) saturate(130%);
   border-radius: var(--sim-r-left, 8px);
   border: var(--sim-border, 1px solid rgba(255, 255, 255, 0.12));
   box-shadow: var(--sim-shadow, inset 0 1px 0 rgba(255,255,255,0.09), 0 6px 16px rgba(0,0,0,0.36));
@@ -729,13 +729,10 @@ button, input, select, textarea {
 }
 
 .mini-aux {
-  background-color: var(--sim-sidebar-bg, rgba(14, 15, 20, 0.56));
-  background-image: var(--prism-sheen);
-  backdrop-filter: blur(var(--sim-blur, 12px)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--sim-blur, 12px)) saturate(140%);
+  background-color: var(--sim-chat-bg, rgba(14, 14, 18, 0.32));
   border-radius: var(--sim-r-right, 8px);
   border: var(--sim-border, 1px solid rgba(255, 255, 255, 0.12));
-  box-shadow: var(--sim-shadow, inset 0 1px 0 rgba(255,255,255,0.09), 0 6px 16px rgba(0,0,0,0.36));
+  box-shadow: var(--sim-shadow, inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 16px rgba(0,0,0,0.32));
   padding: 6px;
   gap: 4px;
 }
@@ -1200,6 +1197,7 @@ button, input, select, textarea {
   cursor: text;
   min-width: 44px;
   text-align: right;
+  white-space: nowrap;
 }
 .prism-slider-val:hover {
   background: var(--prism-ctl-bg);
@@ -2405,11 +2403,11 @@ button, input, select, textarea {
 
   <script id="prism-studio-bundle">
 (() => {
-  // src/shared/schema.mjs
-  var PLUGIN_VERSION = "2.0.5";
+  // agy-wallpaper-prism/src/shared/schema.mjs
+  var PLUGIN_VERSION = "2.0.6";
   var DEFAULT_DEBUG_PORT = 9339;
   var PRISM_DOM = Object.freeze({
-    skinVersion: "2.0.5",
+    skinVersion: "2.0.6",
     skinAttr: "data-agy-prism-skin",
     glassAttr: "data-agy-prism-glass",
     wallpaperAttr: "data-agy-prism-wallpaper",
@@ -2795,6 +2793,8 @@ button, input, select, textarea {
         glassSurfaces: true,
         glassOpacity: 0.64,
         glassBlur: 18,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 82,
         chatGlassFidelity: 78,
         scrimOpacity: 0.18,
@@ -2819,6 +2819,8 @@ button, input, select, textarea {
         glassSurfaces: true,
         glassOpacity: 0.76,
         glassBlur: 16,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 92,
         chatGlassFidelity: 90,
         scrimOpacity: 0.26,
@@ -2843,6 +2845,8 @@ button, input, select, textarea {
         glassSurfaces: true,
         glassOpacity: 0.88,
         glassBlur: 20,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 100,
         chatGlassFidelity: 100,
         scrimOpacity: 0.42,
@@ -2867,6 +2871,8 @@ button, input, select, textarea {
         glassSurfaces: false,
         glassOpacity: 0.94,
         glassBlur: 0,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 100,
         chatGlassFidelity: 100,
         scrimOpacity: 0.34,
@@ -2900,6 +2906,8 @@ button, input, select, textarea {
         glassSurfaces: true,
         glassOpacity: 0.76,
         glassBlur: 16,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 92,
         chatGlassFidelity: 90,
         codeReadabilityMode: "translucent",
@@ -2927,6 +2935,8 @@ button, input, select, textarea {
         glassSurfaces: true,
         glassOpacity: 0.74,
         glassBlur: 18,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 94,
         chatGlassFidelity: 92,
         codeReadabilityMode: "translucent",
@@ -2954,6 +2964,8 @@ button, input, select, textarea {
         glassSurfaces: true,
         glassOpacity: 0.7,
         glassBlur: 14,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 88,
         chatGlassFidelity: 85,
         codeReadabilityMode: "translucent",
@@ -2981,6 +2993,8 @@ button, input, select, textarea {
         glassSurfaces: true,
         glassOpacity: 0.82,
         glassBlur: 28,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 96,
         chatGlassFidelity: 95,
         codeReadabilityMode: "frosted",
@@ -3008,6 +3022,8 @@ button, input, select, textarea {
         glassSurfaces: true,
         glassOpacity: 0.8,
         glassBlur: 20,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 95,
         chatGlassFidelity: 94,
         codeReadabilityMode: "translucent",
@@ -3035,6 +3051,8 @@ button, input, select, textarea {
         glassSurfaces: true,
         glassOpacity: 0.9,
         glassBlur: 22,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 100,
         chatGlassFidelity: 100,
         codeReadabilityMode: "solid",
@@ -3063,6 +3081,8 @@ button, input, select, textarea {
         glassSurfaces: true,
         glassOpacity: 0.68,
         glassBlur: 18,
+        sidebarOpacity: null,
+        sidebarBlur: null,
         glassFidelity: 88,
         chatGlassFidelity: 84,
         codeReadabilityMode: "translucent",
@@ -3105,6 +3125,8 @@ button, input, select, textarea {
     glassSurfaces: true,
     glassOpacity: 0.76,
     glassBlur: 16,
+    sidebarOpacity: null,
+    sidebarBlur: null,
     glassFidelity: 92,
     chatGlassFidelity: 90,
     codeReadabilityMode: "translucent",
@@ -3119,7 +3141,7 @@ button, input, select, textarea {
     mediaBlur: 0,
     mediaBrightness: 100,
     mediaContrast: 100,
-    mediaSaturate: 105,
+    mediaSaturate: 100,
     grainAlpha: 0.022,
     filterPreset: "none",
     fit: "cover",
@@ -3200,6 +3222,8 @@ button, input, select, textarea {
       "glassSurfaces",
       "glassOpacity",
       "glassBlur",
+      "sidebarOpacity",
+      "sidebarBlur",
       "glassFidelity",
       "chatGlassFidelity",
       "codeReadabilityMode",
@@ -3264,6 +3288,8 @@ button, input, select, textarea {
     "customAccent",
     "glassOpacity",
     "glassBlur",
+    "sidebarOpacity",
+    "sidebarBlur",
     "scrimOpacity",
     "mediaOpacity",
     "mediaBlur",
@@ -3287,6 +3313,16 @@ button, input, select, textarea {
   function num(v, fallback, min, max, decimals = 4) {
     const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
     if (typeof n !== "number" || !Number.isFinite(n)) return fallback;
+    const c = clamp(n, min, max);
+    const f = 10 ** decimals;
+    return Math.round(c * f) / f;
+  }
+  function nullableNum(v, min, max, decimals = 4) {
+    if (v === null || v === void 0 || v === "" || v === "auto") return null;
+    const s = typeof v === "string" ? v.trim() : null;
+    if (s === "" || s === "auto") return null;
+    const n = s !== null ? Number(s) : v;
+    if (typeof n !== "number" || !Number.isFinite(n)) return null;
     const c = clamp(n, min, max);
     const f = 10 ** decimals;
     return Math.round(c * f) / f;
@@ -3470,6 +3506,8 @@ button, input, select, textarea {
       glassSurfaces: bool(merged.glassSurfaces, DEFAULT_CONFIG.glassSurfaces),
       glassOpacity: num(merged.glassOpacity, DEFAULT_CONFIG.glassOpacity, 0.3, 0.98, 3),
       glassBlur: num(merged.glassBlur, DEFAULT_CONFIG.glassBlur, 0, 48, 0),
+      sidebarOpacity: nullableNum(merged.sidebarOpacity, 0.2, 0.98, 3),
+      sidebarBlur: nullableNum(merged.sidebarBlur, 0, 48, 0),
       glassFidelity: num(merged.glassFidelity, DEFAULT_CONFIG.glassFidelity, 0, 100, 0),
       chatGlassFidelity: num(merged.chatGlassFidelity, DEFAULT_CONFIG.chatGlassFidelity, 0, 100, 0),
       codeReadabilityMode: oneOf(merged.codeReadabilityMode, CODE_READABILITY_MODES, DEFAULT_CONFIG.codeReadabilityMode),
@@ -3552,7 +3590,7 @@ button, input, select, textarea {
     return sanitizeConfig(filtered, clean);
   }
 
-  // src/shared/i18n.mjs
+  // agy-wallpaper-prism/src/shared/i18n.mjs
   var DICT = Object.freeze({
     zh: Object.freeze({
       // App & Header
@@ -3638,6 +3676,9 @@ button, input, select, textarea {
       "glass.surfaces": "\u542F\u7528\u6BDB\u73BB\u7483\u78E8\u7802\u9762\u677F",
       "glass.opacity": "\u754C\u9762\u57FA\u7840\u4E0D\u900F\u660E\u5EA6",
       "glass.blur": "\u6BDB\u73BB\u7483\u6A21\u7CCA\u534A\u5F84",
+      "glass.sidebarOpacity": "\u4FA7\u8FB9\u680F\u73BB\u7483\u4E0D\u900F\u660E\u5EA6",
+      "glass.sidebarBlur": "\u4FA7\u8FB9\u680F\u6BDB\u73BB\u7483\u6A21\u7CCA",
+      "glass.followMainFmt": "\u8DDF\u968F \xB7 {val}",
       "glass.fidelity": "\u754C\u9762 WCAG \u53EF\u8BFB\u6027\u4FDD\u771F\u5EA6",
       "glass.chatFidelity": "\u5BF9\u8BDD\u533A\u53EF\u8BFB\u6027\u4FDD\u771F\u5EA6",
       "glass.codeMode": "\u4EE3\u7801\u4E0E\u7EC8\u7AEF\u5E95\u677F\u6A21\u5F0F",
@@ -3866,6 +3907,9 @@ button, input, select, textarea {
       "glass.surfaces": "Frosted Glass Chrome Surfaces",
       "glass.opacity": "Master Surface Opacity",
       "glass.blur": "Backdrop Blur Radius",
+      "glass.sidebarOpacity": "Sidebar Glass Opacity",
+      "glass.sidebarBlur": "Sidebar Backdrop Blur",
+      "glass.followMainFmt": "Auto \xB7 {val}",
       "glass.fidelity": "UI WCAG Readability Fidelity",
       "glass.chatFidelity": "Chat Well Readability Fidelity",
       "glass.codeMode": "Code & Terminal Surface Mode",
@@ -4029,7 +4073,7 @@ button, input, select, textarea {
     return str;
   }
 
-  // src/studio-ui/app.mjs
+  // agy-wallpaper-prism/src/studio-ui/app.mjs
   function bootPrismStudioApp() {
     const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
     const rawSidecarFetch = (url, init2) => window.sidecar?.fetch ? window.sidecar.fetch(url, init2) : window.fetch(url, init2);
@@ -4245,10 +4289,15 @@ button, input, select, textarea {
     };
     const accentMemCache = /* @__PURE__ */ new Map();
     let configDebounceTimer = null;
+    let configFlushInFlight = false;
     let pendingConfigPatch = {};
     let currentStageMediaSig = "";
     let slideshowTimer = null;
     let statusPollTimer = null;
+    let studioEventSource = null;
+    let studioLastSseAt = 0;
+    let studioSyncPollTimer = null;
+    let externalSyncInFlight = false;
     function curLocale() {
       return resolveLocale(store.config.language);
     }
@@ -4401,7 +4450,11 @@ button, input, select, textarea {
       const blurPx = eff.glassSurfaces ? Math.round(eff.glassBlur * 0.6) : 0;
       const fidBoost = eff.glassFidelity / 100 * 0.14;
       const chatBoost = eff.chatGlassFidelity / 100 * 0.14;
-      const sidebarAlpha = Math.min(0.98, g * (polarity === "light" ? 0.8 : 0.72) + fidBoost * 0.6);
+      const rgbSum = (trip) => String(trip || "0, 0, 0").split(",").reduce((acc, s) => acc + (Number(s.trim()) || 0), 0);
+      const sbBaseRgb = polarity !== "light" && rgbSum(tokens.shadeRgb) > rgbSum(tokens.baseRgb) ? tokens.baseRgb : tokens.shadeRgb;
+      const rawSbOp = eff.sidebarOpacity !== null && eff.sidebarOpacity !== void 0 ? eff.sidebarOpacity : eff.glassOpacity;
+      const sidebarAlpha = eff.glassSurfaces ? Math.min(0.98, Math.max(0.2, rawSbOp)) : 0.96;
+      const sbBlurPx = eff.glassSurfaces ? Math.round((eff.sidebarBlur !== null && eff.sidebarBlur !== void 0 ? eff.sidebarBlur : eff.glassBlur) * 0.6) : 0;
       const chatAlpha = Math.min(0.95, g * (polarity === "light" ? 0.6 : 0.38) + chatBoost);
       const composerAlpha = Math.min(0.99, g * 0.92 + fidBoost * 0.3);
       const floorAlpha = eff.contrastFloor ? polarity === "light" ? 0.84 : 0.72 : 0.44;
@@ -4421,7 +4474,8 @@ button, input, select, textarea {
       hub.style.setProperty("--sim-r-left", mapSidebarR(eff.leftSidebarRadius));
       hub.style.setProperty("--sim-r-right", mapSidebarR(eff.rightSidebarRadius));
       hub.style.setProperty("--sim-r-card", `${Math.max(3, baseR - 3)}px`);
-      hub.style.setProperty("--sim-sidebar-bg", `rgba(${tokens.shadeRgb}, ${sidebarAlpha.toFixed(3)})`);
+      hub.style.setProperty("--sim-sidebar-bg", `rgba(${sbBaseRgb}, ${sidebarAlpha.toFixed(3)})`);
+      hub.style.setProperty("--sim-sidebar-blur", `${sbBlurPx}px`);
       hub.style.setProperty("--sim-chat-bg", `rgba(${tokens.baseRgb}, ${chatAlpha.toFixed(3)})`);
       hub.style.setProperty("--sim-editor-bg", editorBg);
       hub.style.setProperty("--sim-code-blur", codeBlur);
@@ -4899,6 +4953,7 @@ button, input, select, textarea {
       const patch = pendingConfigPatch;
       pendingConfigPatch = {};
       if (!patch || Object.keys(patch).length === 0) return;
+      configFlushInFlight = true;
       try {
         const res = await apiJson("/api/config", { method: "POST", body: { patch } });
         ingestServerState(res);
@@ -4906,6 +4961,8 @@ button, input, select, textarea {
         updateTopStatusIndicators();
       } catch (err) {
         showToast(err.message || "Failed to save config", "danger");
+      } finally {
+        configFlushInFlight = false;
       }
     }
     function stripHtml(str) {
@@ -5121,13 +5178,36 @@ button, input, select, textarea {
       scale = 1,
       decimals = 0,
       suffix = "",
-      dblResetFraming = false
+      dblResetFraming = false,
+      nullableFallbackKey = "",
+      fallbackValue = null
     }) {
-      const uiVal = Number(value) * scale;
-      const uiDef = Number(defaultValue) * scale;
       const uiMin = min * scale;
       const uiMax = max * scale;
       const uiStep = step * scale;
+      if (nullableFallbackKey) {
+        const isAuto = value === null || value === void 0;
+        const resolvedVal = isAuto ? Number(fallbackValue) : Number(value);
+        const uiVal2 = resolvedVal * scale;
+        const isDirty2 = isAuto ? false : true;
+        const { pct: pct2, display: rawDisplay } = sliderMeta(uiVal2, uiMin, uiMax, decimals, suffix);
+        const display2 = isAuto ? tr("glass.followMainFmt", { val: rawDisplay }) : rawDisplay;
+        return `
+      <div class="prism-slider-row" data-slider-key="${esc(key)}" data-dirty="${isDirty2 ? "true" : "false"}"
+           data-nullable="true" data-fallback-key="${esc(nullableFallbackKey)}"
+           data-scale="${scale}" data-min="${uiMin}" data-max="${uiMax}" data-step="${uiStep}"
+           data-decimals="${decimals}" data-suffix="${esc(suffix)}" data-default="${Number(defaultValue)}">
+        <span class="prism-slider-label" ${dblResetFraming ? `data-dblreset="true" title="${esc(tx("dblClickFramingHint"))}"` : ""}>${esc(label)}</span>
+        <span class="prism-slider-val" data-action="edit-slider-val" title="Click to enter exact value">${esc(display2)}</span>
+        <button type="button" class="prism-reset-btn" data-action="reset-key" data-key="${esc(key)}" title="${esc(tr("common.reset"))}">\u21BA</button>
+        <input type="range" class="prism-range" data-config-slider="${esc(key)}"
+               min="${uiMin}" max="${uiMax}" step="${uiStep}" value="${uiVal2}"
+               style="--prism-pct:${pct2}%" />
+      </div>
+    `;
+      }
+      const uiVal = Number(value) * scale;
+      const uiDef = Number(defaultValue) * scale;
       const isDirty = Math.abs(uiVal - uiDef) > uiStep * 0.25;
       const { pct, display } = sliderMeta(uiVal, uiMin, uiMax, decimals, suffix);
       return `
@@ -5653,7 +5733,7 @@ button, input, select, textarea {
               <span>${esc(tr("glass.title"))}</span>
             </div>
             <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="glassSurfaces,glassOpacity,glassBlur,glassFidelity,chatGlassFidelity,codeReadabilityMode,contrastFloor,caretColor">\u21BA</button>
+                    data-action="reset-module" data-keys="glassSurfaces,glassOpacity,glassBlur,sidebarOpacity,sidebarBlur,glassFidelity,chatGlassFidelity,codeReadabilityMode,contrastFloor,caretColor">\u21BA</button>
           </summary>
           <div class="prism-section-body">
             ${renderSwitchRow({
@@ -5682,6 +5762,32 @@ button, input, select, textarea {
         max: 48,
         step: 1,
         suffix: " px"
+      })}
+            ${renderSliderRow({
+        key: "sidebarOpacity",
+        label: tr("glass.sidebarOpacity"),
+        value: eff.sidebarOpacity,
+        defaultValue: DEFAULT_CONFIG.glassOpacity,
+        min: 0.2,
+        max: 0.98,
+        step: 0.01,
+        scale: 100,
+        decimals: 0,
+        suffix: " %",
+        nullableFallbackKey: "glassOpacity",
+        fallbackValue: eff.glassOpacity
+      })}
+            ${renderSliderRow({
+        key: "sidebarBlur",
+        label: tr("glass.sidebarBlur"),
+        value: eff.sidebarBlur,
+        defaultValue: DEFAULT_CONFIG.glassBlur,
+        min: 0,
+        max: 48,
+        step: 1,
+        suffix: " px",
+        nullableFallbackKey: "glassBlur",
+        fallbackValue: eff.glassBlur
       })}
             ${renderSliderRow({
         key: "glassFidelity",
@@ -6995,6 +7101,20 @@ button, input, select, textarea {
         suffix: " %"
       })}
         ${renderSliderRow({
+        key: "sidebarOpacity",
+        label: isZh ? "\u4FA7\u680F\u73BB\u7483\u4E0D\u900F\u660E\u5EA6" : "Sidebar Opacity",
+        value: eff.sidebarOpacity,
+        defaultValue: DEFAULT_CONFIG.glassOpacity,
+        min: 0.2,
+        max: 0.98,
+        step: 0.01,
+        scale: 100,
+        decimals: 0,
+        suffix: " %",
+        nullableFallbackKey: "glassOpacity",
+        fallbackValue: eff.glassOpacity
+      })}
+        ${renderSliderRow({
         key: "scrimOpacity",
         label: isZh ? "\u80CC\u666F\u538B\u6697\u906E\u7F69" : "Contrast Scrim",
         value: eff.scrimOpacity,
@@ -7138,7 +7258,27 @@ button, input, select, textarea {
           if (valSpan) {
             valSpan.textContent = `${decimals > 0 ? uiVal.toFixed(decimals) : Math.round(uiVal)}${suffix}`;
           }
-          row.dataset.dirty = Math.abs(rawVal - defRaw) > 1e-3 ? "true" : "false";
+          row.dataset.dirty = row.dataset.nullable === "true" ? "true" : Math.abs(rawVal - defRaw) > 1e-3 ? "true" : "false";
+        }
+      });
+    }
+    function syncNullableFollowersInDom(fallbackKey, fallbackRawVal) {
+      document.querySelectorAll(`.prism-slider-row[data-nullable="true"][data-fallback-key="${fallbackKey}"]`).forEach((fRow) => {
+        if (!(fRow instanceof HTMLElement) || fRow.dataset.dirty === "true") return;
+        const fInput = fRow.querySelector("input.prism-range");
+        if (!(fInput instanceof HTMLInputElement)) return;
+        const fScale = Number(fRow.dataset.scale || 1);
+        const fDecimals = Number(fRow.dataset.decimals || 0);
+        const fSuffix = fRow.dataset.suffix || "";
+        const fMin = Number(fInput.min);
+        const fMax = Number(fInput.max);
+        const fUiVal = Math.max(fMin, Math.min(fMax, fallbackRawVal * fScale));
+        const { pct: fPct, display: rawDisp } = sliderMeta(fUiVal, fMin, fMax, fDecimals, fSuffix);
+        fInput.value = String(fUiVal);
+        fInput.style.setProperty("--prism-pct", `${fPct}%`);
+        const fValSpan = fRow.querySelector(".prism-slider-val");
+        if (fValSpan) {
+          fValSpan.textContent = tr("glass.followMainFmt", { val: rawDisp });
         }
       });
     }
@@ -7491,7 +7631,7 @@ button, input, select, textarea {
             if (valSpan) {
               valSpan.textContent = `${decimals > 0 ? uiVal.toFixed(decimals) : Math.round(uiVal)}${suffix}`;
             }
-            row.dataset.dirty = Math.abs(rawVal - defRaw) > 1e-3 ? "true" : "false";
+            row.dataset.dirty = row.dataset.nullable === "true" ? "true" : Math.abs(rawVal - defRaw) > 1e-3 ? "true" : "false";
           }
           if (sliderKey === "liveBootDelay") {
             const delayHint = document.getElementById("prism-boot-delay-hint");
@@ -7502,6 +7642,13 @@ button, input, select, textarea {
           syncPairedSlidersInDom(sliderKey, rawVal, tEl);
           const extraPatch = sliderKey === "volume" && rawVal > 0 && getEffectiveConfig().muted ? { volume: rawVal, muted: false, audioEnabled: true } : { [sliderKey]: rawVal };
           queueConfigPatch(extraPatch, false, sliderKey !== "liveBootDelay");
+          if (sliderKey === "glassOpacity" || sliderKey === "glassBlur") {
+            const effNow = getEffectiveConfig();
+            const depAuto = sliderKey === "glassOpacity" ? effNow.sidebarOpacity === null || effNow.sidebarOpacity === void 0 : effNow.sidebarBlur === null || effNow.sidebarBlur === void 0;
+            if (depAuto) {
+              syncNullableFollowersInDom(sliderKey, rawVal);
+            }
+          }
           return;
         }
         const weSliderKey = tEl.dataset.weSlider;
@@ -7653,12 +7800,18 @@ button, input, select, textarea {
               if (committed) return;
               committed = true;
               if (applyChange) {
-                const parsed = Number(numIn.value.replace(/[^0-9.-]/g, ""));
-                if (Number.isFinite(parsed)) {
-                  const clampedUi = Math.max(min, Math.min(max, parsed));
-                  const rawVal = clampedUi / scale;
-                  const key = row.dataset.sliderKey;
-                  if (key) queueConfigPatch({ [key]: rawVal }, true);
+                const key = row.dataset.sliderKey;
+                const rawTxt = numIn.value.trim();
+                if (row.dataset.nullable === "true" && (rawTxt === "" || rawTxt.toLowerCase() === "auto")) {
+                  if (key) queueConfigPatch({ [key]: null }, true);
+                } else {
+                  const numStr = rawTxt.replace(/[^0-9.-]/g, "");
+                  const parsed = numStr === "" ? NaN : Number(numStr);
+                  if (Number.isFinite(parsed)) {
+                    const clampedUi = Math.max(min, Math.min(max, parsed));
+                    const rawVal = clampedUi / scale;
+                    if (key) queueConfigPatch({ [key]: rawVal }, true);
+                  }
                 }
               }
               renderActiveSurface();
@@ -7677,7 +7830,10 @@ button, input, select, textarea {
           }
           case "reset-key": {
             const key = actEl.dataset.key;
-            if (key && key in DEFAULT_CONFIG) {
+            if (key === "sidebarOpacity" || key === "sidebarBlur") {
+              queueConfigPatch({ [key]: null }, true);
+              renderActiveSurface();
+            } else if (key && key in DEFAULT_CONFIG) {
               queueConfigPatch({ [key]: DEFAULT_CONFIG[key] }, true);
               renderActiveSurface();
             }
@@ -7688,7 +7844,11 @@ button, input, select, textarea {
             const keys = (actEl.dataset.keys || "").split(",").filter(Boolean);
             const patch = {};
             for (const k of keys) {
-              if (k in DEFAULT_CONFIG) patch[k] = DEFAULT_CONFIG[k];
+              if (k === "sidebarOpacity" || k === "sidebarBlur") {
+                patch[k] = null;
+              } else if (k in DEFAULT_CONFIG) {
+                patch[k] = DEFAULT_CONFIG[k];
+              }
             }
             if (Object.keys(patch).length > 0) {
               queueConfigPatch(patch, true);
@@ -8557,8 +8717,15 @@ button, input, select, textarea {
             });
           }
         }
-        if (!document.hidden && !isHostAttached()) {
-          ensureStandbyStatusPoll();
+        if (!document.hidden) {
+          void syncExternalStateNow();
+          ensureLiveSyncPoll();
+          if (!isHostAttached()) ensureStandbyStatusPoll();
+        }
+      });
+      window.addEventListener("focus", () => {
+        if (!document.hidden) {
+          void syncExternalStateNow();
         }
       });
       window.addEventListener("resize", () => {
@@ -8567,6 +8734,134 @@ button, input, select, textarea {
           if (gridHost) gridHost.innerHTML = renderLibraryGridHtml();
         }
       });
+    }
+    function externalStateSignature() {
+      const c = store.config || {};
+      const activeId = getActiveId();
+      return JSON.stringify([
+        activeId,
+        store.activeItem?.mediaUrl || "",
+        store.activeItem?.sceneVideoUrl || "",
+        store.skinEnabled,
+        c.paused,
+        c.muted,
+        c.volume,
+        c.rotationEnabled,
+        c.rotationGroupId,
+        c.rotationOrder,
+        c.rotationTrigger,
+        c.rotationInterval,
+        c.preset,
+        c.activeProfilePresetId,
+        c.layoutMode,
+        c.themeMode,
+        c.colorScheme,
+        c.accentMode,
+        c.customAccent,
+        c.glassSurfaces,
+        c.glassOpacity,
+        c.glassBlur,
+        c.sidebarOpacity,
+        c.sidebarBlur,
+        c.transparentWindowControls,
+        c.cornerStyle,
+        c.leftSidebarRadius,
+        c.rightSidebarRadius,
+        c.islandGap,
+        c.workspacePad,
+        c.codeReadabilityMode,
+        c.borders,
+        c.shadows,
+        c.scrimOpacity,
+        c.mediaBlur,
+        c.vignette,
+        c.pauseOnBlur,
+        activeId ? c.perWallpaperOverrides?.[activeId] || null : null
+      ]);
+    }
+    function applyExternalStateSnapshot(payload) {
+      if (!payload || typeof payload !== "object") return;
+      if (configDebounceTimer || configFlushInFlight || Object.keys(pendingConfigPatch).length > 0) {
+        return;
+      }
+      const wasAttached = isHostAttached();
+      const prevCanaryState = store.canary?.state || "idle";
+      const prevActiveId = getActiveId();
+      const prevSig = externalStateSignature();
+      ingestServerState(payload);
+      const nextActiveId = getActiveId();
+      const nextSig = externalStateSignature();
+      const canaryChanged = (store.canary?.state || "idle") !== prevCanaryState;
+      const activeChanged = nextActiveId !== prevActiveId;
+      const stateChanged = nextSig !== prevSig;
+      updateTopStatusIndicators();
+      if (activeChanged || stateChanged) {
+        patchActiveCardsInPlace(nextActiveId);
+        syncMiniPreviewMedia();
+        syncOpticalCssVars();
+        const activeEl = document.activeElement;
+        const isDraggingRange = activeEl instanceof HTMLInputElement && activeEl.type === "range";
+        const isEditingField = activeEl instanceof HTMLTextAreaElement || activeEl instanceof HTMLSelectElement || activeEl instanceof HTMLInputElement && activeEl.type !== "button" && activeEl.type !== "checkbox";
+        if (!isDraggingRange) {
+          updateLeftRailPanels();
+          if (!isEditingField && (store.activeTab === "skin" || store.activeTab === "playback")) {
+            const scroller = document.getElementById("prism-tab-scroll");
+            if (scroller) {
+              const prevScroll = scroller.scrollTop;
+              scroller.innerHTML = renderActiveTabContentHtml();
+              scroller.scrollTop = prevScroll;
+            }
+          }
+        }
+      }
+      if (!wasAttached && isHostAttached() || canaryChanged) {
+        if (store.activeTab === "system" || store.canary?.state === "tripped") {
+          renderActiveSurface();
+        }
+      }
+    }
+    async function syncExternalStateNow() {
+      if (externalSyncInFlight || !store.ready) return;
+      externalSyncInFlight = true;
+      try {
+        const st = await apiJson("/api/status");
+        applyExternalStateSnapshot(st);
+      } catch {
+      } finally {
+        externalSyncInFlight = false;
+      }
+    }
+    function connectStudioEvents() {
+      if (typeof window.EventSource !== "function" || studioEventSource) return;
+      try {
+        const tok = new URLSearchParams(window.location.search).get("token") || window.__SIDECAR_BOOT__?.token || "";
+        const url = tok ? `/api/events?token=${encodeURIComponent(tok)}` : "/api/events";
+        const es = new window.EventSource(url);
+        studioEventSource = es;
+        const handleEvent = (ev) => {
+          studioLastSseAt = Date.now();
+          try {
+            const parsed = JSON.parse(ev.data);
+            applyExternalStateSnapshot(parsed);
+          } catch {
+          }
+        };
+        es.addEventListener("state", handleEvent);
+        es.onmessage = handleEvent;
+        es.onerror = () => {
+        };
+      } catch {
+        studioEventSource = null;
+      }
+    }
+    function ensureLiveSyncPoll() {
+      if (studioSyncPollTimer) return;
+      studioSyncPollTimer = setInterval(() => {
+        if (document.hidden || !store.ready) return;
+        const sseFresh = studioEventSource && studioEventSource.readyState === 1 && studioLastSseAt > 0 && Date.now() - studioLastSseAt < 2e4;
+        if (sseFresh) return;
+        void syncExternalStateNow();
+      }, 2500);
     }
     function ensureStandbyStatusPoll() {
       const needsCanaryWatch = () => store.canary?.state === "arming";
@@ -8579,17 +8874,8 @@ button, input, select, textarea {
           return;
         }
         try {
-          const wasAttached = isHostAttached();
-          const prevCanaryState = store.canary?.state || "idle";
           const st = await apiJson("/api/status");
-          ingestServerState(st);
-          updateTopStatusIndicators();
-          const canaryChanged = (store.canary?.state || "idle") !== prevCanaryState;
-          if (!wasAttached && isHostAttached() || canaryChanged) {
-            if (store.activeTab === "system" || store.canary?.state === "tripped") {
-              renderActiveSurface();
-            }
-          }
+          applyExternalStateSnapshot(st);
           if (isHostAttached() && !needsCanaryWatch()) {
             clearInterval(statusPollTimer);
             statusPollTimer = null;
@@ -8619,6 +8905,8 @@ button, input, select, textarea {
         store.ready = true;
         renderActiveSurface();
       }
+      connectStudioEvents();
+      ensureLiveSyncPoll();
       ensureStandbyStatusPoll();
     }
     if (document.readyState === "loading") {

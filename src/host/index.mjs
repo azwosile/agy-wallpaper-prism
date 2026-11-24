@@ -65,6 +65,7 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
     const thumbUrl = resolveMediaUrl(activeItem.thumbUrl, mediaOrigin);
     const sceneVideoUrl = resolveMediaUrl(activeItem.sceneVideoUrl, mediaOrigin);
     const sceneLiveUrl = resolveMediaUrl(activeItem.sceneLiveUrl, mediaOrigin);
+    const videoStageUrl = resolveMediaUrl(activeItem.videoStageUrl, mediaOrigin);
     const webUrl = resolveMediaUrl(activeItem.webUrl, mediaOrigin);
     let mediaUrl = resolveMediaUrl(activeItem.mediaUrl, mediaOrigin);
     if (kind === 'scene' && (sceneMode === 'video' || sceneMode === 'scene-video') && sceneVideoUrl) {
@@ -80,6 +81,7 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
       schemeColor: String(activeItem.schemeColor || ''),
       thumbUrl,
       mediaUrl,
+      videoStageUrl,
       sceneVideoUrl,
       sceneLiveUrl,
       webUrl,
@@ -117,12 +119,59 @@ function escapeCssUrl(rawUrl) {
   return s.replace(/["\\]/g, '\\$&');
 }
 
+function parseRgbTriplet(triplet) {
+  const parts = String(triplet || '')
+    .split(',')
+    .map((s) => Number(s.trim()) || 0);
+  return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+}
+
+function rgbSum(triplet) {
+  const parts = parseRgbTriplet(triplet);
+  return parts[0] + parts[1] + parts[2];
+}
+
+function mixTriplet(tripletA, rgbB, weightB) {
+  const a = parseRgbTriplet(tripletA);
+  const w = Math.min(1, Math.max(0, Number(weightB) || 0));
+  return `${Math.round(a[0] * (1 - w) + rgbB[0] * w)}, ${Math.round(a[1] * (1 - w) + rgbB[1] * w)}, ${Math.round(a[2] * (1 - w) + rgbB[2] * w)}`;
+}
+
 function buildPolarityTokenVarsCss(cfg, tok, isLight) {
-  const glassOp = Math.min(0.98, Math.max(0.3, Number(cfg.glassOpacity ?? 0.72)));
-  const fidelity = Math.min(1, Math.max(0, Number(cfg.glassFidelity ?? 78) / 100));
-  const chatFid = Math.min(1, Math.max(0, Number(cfg.chatGlassFidelity ?? 68) / 100));
+  const glassOp = Math.min(0.98, Math.max(0.25, Number(cfg.glassOpacity ?? 0.76)));
+  const fidelity = Math.min(1, Math.max(0, Number(cfg.glassFidelity ?? 92) / 100));
+  const chatFid = Math.min(1, Math.max(0, Number(cfg.chatGlassFidelity ?? 90) / 100));
+  const sbBaseRgb = !isLight && rgbSum(tok.shadeRgb) > rgbSum(tok.baseRgb) ? tok.baseRgb : tok.shadeRgb;
+  const hasCustomSbOp =
+    cfg.sidebarOpacity !== null &&
+    cfg.sidebarOpacity !== undefined &&
+    cfg.sidebarOpacity !== '' &&
+    cfg.sidebarOpacity !== 'auto' &&
+    Number.isFinite(Number(cfg.sidebarOpacity));
+  const effSbOp = hasCustomSbOp ? Math.min(0.98, Math.max(0.2, Number(cfg.sidebarOpacity))) : glassOp;
+  const minSbFloor = hasCustomSbOp ? 0.2 : cfg.contrastFloor !== false ? (isLight ? 0.62 : 0.52) : 0.25;
+  const sbAlpha =
+    cfg.glassSurfaces === false
+      ? 1
+      : Math.min(0.99, Math.max(effSbOp, minSbFloor * (hasCustomSbOp ? 1 : fidelity)));
+  const deepSbRgb = isLight ? mixTriplet(sbBaseRgb, [215, 224, 238], 0.35) : mixTriplet(sbBaseRgb, [3, 4, 7], 0.55);
+  const deepSbAlpha =
+    cfg.glassSurfaces === false
+      ? 1
+      : isLight
+        ? Math.min(0.97, Math.max(0.45, Math.max(effSbOp + 0.14, 0.90)))
+        : Math.min(0.96, Math.max(0.35, Math.max(effSbOp + 0.12, 0.88)));
   const blurPx = cfg.glassSurfaces === false ? 0 : Math.round(Number(cfg.glassBlur ?? 16) * (0.45 + 0.55 * fidelity));
-  const sbAlpha = cfg.glassSurfaces === false ? 0.96 : Math.min(0.96, Math.max(0.32, glassOp + (isLight ? 0.06 : 0.02)));
+  const hasCustomSbBlur =
+    cfg.sidebarBlur !== null &&
+    cfg.sidebarBlur !== undefined &&
+    cfg.sidebarBlur !== '' &&
+    cfg.sidebarBlur !== 'auto' &&
+    Number.isFinite(Number(cfg.sidebarBlur));
+  const sbBlurPx =
+    cfg.glassSurfaces === false
+      ? 0
+      : Math.min(48, Math.max(0, Math.round(hasCustomSbBlur ? Number(cfg.sidebarBlur) : Number(cfg.glassBlur ?? 16))));
   const chatAlpha = cfg.glassSurfaces === false ? 0.96 : Math.min(0.96, Math.max(0.28, glassOp * (0.55 + 0.45 * chatFid)));
   const cardAlpha = cfg.glassSurfaces === false ? 0.96 : Math.min(0.97, Math.max(0.42, glassOp + 0.08));
   const compAlpha = cfg.glassSurfaces === false ? 0.97 : Math.min(0.97, Math.max(0.56, glassOp + 0.14));
@@ -144,8 +193,12 @@ function buildPolarityTokenVarsCss(cfg, tok, isLight) {
   return [
     `  --prism-native-floor: ${isLight ? '#f8fafc' : '#070708'};`,
     `  --prism-shade-rgb: ${tok.shadeRgb};`,
+    `  --prism-sidebar-rgb: ${sbBaseRgb};`,
+    `  --prism-sidebar-deep-rgb: ${deepSbRgb};`,
     `  --prism-base-rgb: ${tok.baseRgb};`,
-    `  --prism-sticky-sidebar-bg: rgba(${tok.shadeRgb}, ${isLight ? '0.940' : '0.900'});`,
+    `  --prism-tint-1-rgb: ${tok.tint1Rgb};`,
+    `  --prism-tint-2-rgb: ${tok.tint2Rgb};`,
+    `  --prism-sticky-sidebar-bg: rgba(${deepSbRgb}, ${isLight ? '0.940' : '0.910'});`,
     `  --prism-fg: ${tok.fg};`,
     `  --prism-fg-2: ${tok.fg2};`,
     `  --prism-fg-muted: ${tok.fgMuted};`,
@@ -153,8 +206,10 @@ function buildPolarityTokenVarsCss(cfg, tok, isLight) {
     `  --prism-accent: ${tok.accent};`,
     `  --prism-accent-rgb: ${tok.accentRgb};`,
     `  --prism-accent-fg: ${tok.accentFg};`,
+    `  --prism-accent-border: rgba(${tok.accentRgb}, ${isLight ? '0.420' : '0.480'});`,
     `  --prism-link: ${tok.link};`,
-    `  --prism-surface-sidebar: rgba(${tok.shadeRgb}, ${sbAlpha.toFixed(3)});`,
+    `  --prism-surface-sidebar: rgba(${sbBaseRgb}, ${sbAlpha.toFixed(3)});`,
+    `  --prism-surface-sidebar-deep: rgba(${deepSbRgb}, ${deepSbAlpha.toFixed(3)});`,
     `  --prism-surface-chat: rgba(${tok.baseRgb}, ${chatAlpha.toFixed(3)});`,
     `  --prism-surface-card: rgba(${tok.tint1Rgb}, ${cardAlpha.toFixed(3)});`,
     `  --prism-surface-composer: rgba(${tok.tint1Rgb}, ${compAlpha.toFixed(3)});`,
@@ -163,14 +218,21 @@ function buildPolarityTokenVarsCss(cfg, tok, isLight) {
     `  --prism-surface-popover: rgba(${tok.popoverRgb}, ${popAlpha.toFixed(3)});`,
     `  --prism-secondary-bg: rgba(${tok.tint2Rgb}, ${Math.min(0.92, cardAlpha * 0.82).toFixed(3)});`,
     `  --prism-muted-bg: rgba(${tok.ptRgb}, ${isLight ? '0.065' : '0.060'});`,
+    `  --prism-cust-pill-bg: rgba(${sbBaseRgb}, ${isLight ? '0.720' : '0.620'});`,
+    `  --prism-new-tab-input-bg: rgba(${tok.tint1Rgb}, ${isLight ? '0.680' : '0.460'});`,
+    `  --prism-proj-act-bg: rgba(${deepSbRgb}, ${isLight ? '0.820' : '0.740'});`,
     `  --prism-border-island: ${bScale === 0 ? 'transparent' : `rgba(${tok.ptRgb}, ${islandBorderA})`};`,
     `  --prism-border-card: ${bScale === 0 ? 'transparent' : `rgba(${tok.ptRgb}, ${cardBorderA})`};`,
     `  --prism-border-hairline: rgba(${tok.ptRgb}, ${hairBorderA});`,
     `  --prism-border-popover: rgba(${tok.ptRgb}, ${isLight ? '0.160' : '0.150'});`,
-    `  --prism-sidebar-backdrop: ${blurPx > 0 ? `blur(${blurPx}px) saturate(${isLight ? 145 : 140}%)` : 'none'};`,
+    `  --prism-specular-top: ${bScale === 0 ? 'transparent' : isLight ? 'rgba(255, 255, 255, 0.880)' : 'rgba(255, 255, 255, 0.075)'};`,
+    `  --prism-sheen: ${isLight ? 'linear-gradient(172deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0) 40%)' : 'linear-gradient(172deg, rgba(255, 255, 255, 0.042) 0%, rgba(255, 255, 255, 0) 38%)'};`,
+    `  --prism-sidebar-backdrop: ${sbBlurPx > 0 ? `blur(${sbBlurPx}px) saturate(${isLight ? 135 : 125}%)` : 'none'};`,
     `  --prism-composer-backdrop: ${blurPx > 0 ? `blur(${Math.round(blurPx * 1.1)}px) saturate(150%)` : 'none'};`,
     `  --prism-shadow-island: ${cfg.shadows === false ? 'none' : isLight ? '0 10px 28px -8px rgba(15, 23, 42, 0.12)' : '0 14px 34px -8px rgba(0, 0, 0, 0.46)'};`,
     `  --prism-shadow-popover: ${isLight ? '0 18px 44px -8px rgba(15, 23, 42, 0.22)' : '0 22px 52px -8px rgba(0, 0, 0, 0.68)'};`,
+    `  --prism-sticky-shadow: inset 0 1px 0 ${bScale === 0 ? 'transparent' : isLight ? 'rgba(255, 255, 255, 0.880)' : 'rgba(255, 255, 255, 0.075)'}, 0 3px 10px rgba(0, 0, 0, ${isLight ? '0.06' : '0.24'});`,
+    `  --prism-proj-shadow: inset 0 1px 0 ${bScale === 0 ? 'transparent' : isLight ? 'rgba(255, 255, 255, 0.880)' : 'rgba(255, 255, 255, 0.075)'}, 0 2px 8px rgba(0, 0, 0, ${isLight ? '0.05' : '0.22'});`,
   ].join('\n');
 }
 
@@ -181,7 +243,7 @@ function buildPolarityTokenVarsCss(cfg, tok, isLight) {
  */
 export function buildStaticCssSheet(payload = {}) {
   if (payload && payload.skinEnabled === false) {
-    return '/* agy-wallpaper-prism v2.0.4 static-css: skin disabled */\n';
+    return '/* agy-wallpaper-prism v2.0.6 static-css: skin disabled */\n';
   }
   const rawCfg = payload?.config && typeof payload.config === 'object' ? payload.config : payload || DEFAULT_CONFIG;
   const activeItem = payload?.activeItem && typeof payload.activeItem === 'object' ? payload.activeItem : null;
@@ -203,6 +265,19 @@ export function buildStaticCssSheet(payload = {}) {
     cfg.fit === 'contain' ? 'contain' : cfg.fit === 'center' ? 'auto' : cfg.fit === 'fill' ? '100% 100%' : 'cover';
   const radiusIsland = cfg.layoutMode === 'islands' ? (cfg.cornerStyle === 'sharp' ? 6 : cfg.cornerStyle === 'soft' ? 16 : 12) : 0;
   const radiusCard = cfg.cornerStyle === 'sharp' ? 6 : cfg.cornerStyle === 'soft' ? 14 : 10;
+  const radiusCtl =
+    cfg.layoutMode === 'flush'
+      ? cfg.cornerStyle === 'sharp'
+        ? 4
+        : cfg.cornerStyle === 'soft'
+          ? 8
+          : 6
+      : cfg.cornerStyle === 'sharp'
+        ? 4
+        : cfg.cornerStyle === 'soft'
+          ? 9
+          : 7;
+  const radiusXs = Math.max(2, radiusCtl - (cfg.layoutMode === 'flush' ? 2 : 3));
 
   const wallBgDark = safeImg
     ? `linear-gradient(180deg, rgba(${darkTok.shadeRgb}, ${(scrimOp * 0.85).toFixed(3)}), rgba(${darkTok.shadeRgb}, ${(scrimOp * 1.1).toFixed(3)})), url("${safeImg}")`
@@ -212,18 +287,50 @@ export function buildStaticCssSheet(payload = {}) {
     : `radial-gradient(ellipse 80% 70% at 22% 24%, rgba(${lightTok.accentRgb}, 0.18) 0%, transparent 65%), radial-gradient(ellipse 75% 75% at 80% 78%, rgba(${lightTok.accentRgb}, 0.12) 0%, #f4f7fb 100%)`;
 
   const sibEx =
-    ':not(#gemini-neko-pet-root):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
+    ':not(#gemini-neko-pet-root):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(#agy-prism-wco-pill):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
   const dlgDescEx =
     ':not(.settings-modal-backdrop *):not(.settings-modal-container *):not(.agy-dialog *):not([role="dialog"] *):not([role="alertdialog"] *):not([role="menu"] *):not([role="listbox"] *):not([data-radix-popper-content-wrapper] *):not(.agy-popover *):not(.quick-input-widget *)';
   const notHole = ':not([data-has-browser-hole="true"]):not([data-browser-hole])';
+  const leftSbScope =
+    ':is([data-testid="sidebar-split"] > div:first-child, .agy-sidebar, aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *))';
 
-  return `/* agy-wallpaper-prism v2.0.4 zero-JS static-css sheet */
+  const tbCarriers = ['[data-testid="title-menu-bar"]', '.monaco-workbench .part.titlebar'];
+  const tbHostCss = tbCarriers.map((s) => `${s}${notHole}`).join(',\n');
+  const tbBeforeCss = tbCarriers.map((s) => `${s}${notHole}::before`).join(',\n');
+
+  const sbCarriers = [
+    '[data-testid="sidebar-split"] > div:first-child',
+    '.agy-sidebar:not([data-testid="sidebar-split"] > div:first-child *)',
+    'aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *):not(.agy-sidebar *):not([data-testid="sidebar-split"] > div:first-child *)',
+    '.monaco-workbench .part.activitybar',
+    '.monaco-workbench .part.sidebar',
+  ];
+  const sbHostCss = sbCarriers.map((s) => `${s}${notHole}`).join(',\n');
+  const sbBeforeCss = sbCarriers.map((s) => `${s}${notHole}::before`).join(',\n');
+  const mainPageCarriers = [
+    'div.bg-background:not(.agy-shell):not(.sticky):not([style*="sticky"]):not(.agy-dialog):not(.settings-modal-container):has([data-testid="customizations-search"], [data-testid="customizations-marketplace"], [data-testid="customizations-installed"])',
+    '[data-testid="plugin-detail"]',
+  ];
+  const mainPageHostCss = mainPageCarriers.map((s) => `${s}${notHole}`).join(',\n');
+  const mainPageBeforeCss = mainPageCarriers.map((s) => `${s}${notHole}::before`).join(',\n');
+
+  return `/* agy-wallpaper-prism v2.0.6 zero-JS static-css sheet */
 :root, body.dark, html.dark body {
 ${buildPolarityTokenVarsCss(cfg, darkTok, false)}
+  --prism-r-island: ${radiusIsland}px;
+  --prism-r-card: ${radiusCard}px;
+  --prism-r-ctl: ${radiusCtl}px;
+  --prism-r-xs: ${radiusXs}px;
+  --prism-workspace-pad: ${Number(cfg.workspacePad ?? 8)}px;
   --prism-static-wall: ${wallBgDark};
 }
 body.light, html.light body {
 ${buildPolarityTokenVarsCss(cfg, lightTok, true)}
+  --prism-r-island: ${radiusIsland}px;
+  --prism-r-card: ${radiusCard}px;
+  --prism-r-ctl: ${radiusCtl}px;
+  --prism-r-xs: ${radiusXs}px;
+  --prism-workspace-pad: ${Number(cfg.workspacePad ?? 8)}px;
   --prism-static-wall: ${wallBgLight};
 }
 
@@ -257,7 +364,7 @@ body[data-has-browser-hole="true"]::before {
 }
 
 body,
-:where(#root, #root > div, #root .dark, #root .light, #root .theme-dark, #root .theme-light, .agy-shell, .agy-inset-shell, .agy-sheet:not([data-browser-occluder]))${sibEx}${dlgDescEx} {
+:where(#root, #root > div, #root .dark, #root .light, #root .theme-dark, #root .theme-light, .agy-shell, .agy-inset-shell, .agy-sheet:not([data-browser-occluder]), .monaco-workbench)${sibEx}${dlgDescEx} {
   --background: transparent !important;
   --color-background: transparent !important;
   --body-background: transparent !important;
@@ -278,22 +385,60 @@ body,
   --color-primary: var(--prism-accent) !important;
   --primary-foreground: var(--prism-accent-fg) !important;
   --link: var(--prism-link) !important;
+  --vscode-sideBar-background: transparent !important;
+  --vscode-sideBarSectionHeader-background: transparent !important;
+  --vscode-activityBar-background: transparent !important;
+}${
+  cfg.transparentWindowControls !== false
+    ? `
+html:not([data-has-browser-hole="true"]) body {
+  --background: #00000000 !important;
+}`
+    : ''
 }
 
 #root, .monaco-workbench { position: relative; z-index: 1; }
-:where(#root, #root > div${sibEx}, #root > div > div${sibEx}, #root > div > div > div${sibEx}, .agy-shell, .agy-inset-shell, .agy-sheet:not([data-browser-occluder]), .browser-hole-ancestor, .browser-hole-opaque${sibEx}${dlgDescEx}, .agy-sheet[data-sheet-inset] [data-main-content-body], [data-has-browser-hole="true"]${sibEx}, [data-browser-hole]:not([data-browser-hole="false"]), .monaco-workbench) {
+:where(#root, #root > div${sibEx}, #root > div > div${sibEx}, #root > div > div > div${sibEx}, .agy-shell, .agy-inset-shell, .agy-sheet:not([data-browser-occluder]), .browser-hole-ancestor, .browser-hole-opaque${sibEx}${dlgDescEx}, .agy-sheet[data-sheet-inset] [data-main-content-body], .agy-sheet [data-side-panel-body], [data-has-browser-hole="true"]${sibEx}, [data-browser-hole]:not([data-browser-hole="false"]), .monaco-workbench) {
   background-color: transparent !important;
   background-image: none !important;
 }
 
-:is([data-testid="sidebar-split"] > div:first-child, .agy-sidebar, .monaco-workbench .part.activitybar, .monaco-workbench .part.sidebar, .monaco-workbench .part.auxiliarybar)${notHole} {
+${tbHostCss} {
   position: relative !important;
   isolation: isolate;
+  overflow: visible !important;
+  z-index: 40;
   background-color: transparent !important;
+  background-image: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-:is([data-testid="sidebar-split"] > div:first-child, .agy-sidebar, .monaco-workbench .part.activitybar, .monaco-workbench .part.sidebar, .monaco-workbench .part.auxiliarybar)${notHole}::before {
+${tbBeforeCss} {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--prism-surface-sidebar);
+  background-image: var(--prism-sheen);
+  backdrop-filter: var(--prism-sidebar-backdrop);
+  -webkit-backdrop-filter: var(--prism-sidebar-backdrop);
+  box-shadow: inset 0 1px 0 var(--prism-specular-top);
+}
+:is([data-testid="title-menu-bar"] button, [data-testid="title-menu-bar-item"]) {
+  border-radius: var(--prism-r-ctl) !important;
+}
+
+${sbHostCss} {
+  position: relative !important;
+  isolation: isolate;
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+${sbBeforeCss} {
   content: "";
   position: absolute;
   inset: 0;
@@ -303,6 +448,12 @@ body,
   background-color: var(--prism-surface-sidebar);
   backdrop-filter: var(--prism-sidebar-backdrop);
   -webkit-backdrop-filter: var(--prism-sidebar-backdrop);
+}
+${leftSbScope} .bg-sidebar:not([style*="sticky"]):not(.sticky):not([data-sidebar-section-drop-id]):not([data-testid="project-header"]):not([data-project-card]) {
+  background-color: transparent !important;
+}
+.monaco-workbench :is(.part.sidebar, .part.auxiliarybar, .part.activitybar) > :is(.content, .title, .composite.title, .header-or-footer) {
+  background-color: transparent !important;
 }
 :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]):has(.agy-row-actions):is(:hover, :focus-visible, :has(:focus-visible)) > .min-w-0 {
   -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 98px), transparent calc(100% - 76px)) !important;
@@ -318,30 +469,120 @@ body,
   color: var(--prism-fg) !important;
   background-color: var(--prism-surface-popover) !important;
 }
-:is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])),
-.sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none) {
+${leftSbScope} [data-sidebar-section-drop-id]:has([data-testid="project-header"], [data-project-card]) {
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+${leftSbScope} [data-sidebar-section-drop-id]:has([data-testid="project-header"], [data-project-card])::before {
+  content: none !important;
+}
+${leftSbScope} :is([data-sidebar-section-drop-id], [data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])):not(:has([data-testid="project-header"])):not(:has([data-project-card])),
+.sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none):not(:has([data-testid="project-header"])):not(:has([data-project-card])) {
   isolation: isolate;
   background-color: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  border-radius: var(--prism-r-ctl) !important;
 }
-:is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"]))::before,
-.sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none)::before {
+${leftSbScope} :is([data-sidebar-section-drop-id], [data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])):not(:has([data-testid="project-header"])):not(:has([data-project-card]))::before,
+.sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none):not(:has([data-testid="project-header"])):not(:has([data-project-card]))::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
+  border-radius: var(--prism-r-ctl) !important;
   pointer-events: none;
   background-color: var(--prism-sticky-sidebar-bg) !important;
+  background-image: var(--prism-sheen);
+  backdrop-filter: blur(16px) saturate(145%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(145%) !important;
+  border: 1px solid var(--prism-border-hairline);
+  box-shadow: var(--prism-sticky-shadow);
+}
+${leftSbScope} :is([data-sidebar-section-drop-id], [data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):not(:has([data-testid="project-header"])):not(:has([data-project-card])) .bg-sidebar {
+  background-color: transparent !important;
+}
+:is(button[data-testid="project-header"], [data-project-card="true"]) {
+  position: relative !important;
+  isolation: isolate;
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-radius: var(--prism-r-ctl) !important;
+}
+:is(button[data-testid="project-header"], [data-project-card="true"])::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--prism-surface-sidebar-deep) !important;
+  background-image: var(--prism-sheen);
   backdrop-filter: blur(14px) saturate(140%) !important;
   -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
-  box-shadow: 0 1px 0 var(--prism-border-hairline);
+  border: 1px solid var(--prism-border-card);
+  box-shadow: var(--prism-proj-shadow);
 }
-:is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]) .bg-sidebar {
-  background-color: transparent !important;
+:is(button[data-testid="project-header"]:is(:hover, :focus-visible), .group\\/header:hover button[data-testid="project-header"], [data-project-card="true"]:is(:hover, :focus-visible))::before {
+  border-color: var(--prism-accent-border) !important;
+}
+${leftSbScope} .group\\/header > div.absolute > :is(button, a) {
+  border-radius: var(--prism-r-xs) !important;
+  color: var(--prism-fg-2) !important;
+  background-color: var(--prism-proj-act-bg) !important;
+  border: 1px solid var(--prism-border-hairline) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+${leftSbScope} .group\\/header > div.absolute > :is(button, a):is(:hover, :focus-visible) {
+  color: var(--prism-fg) !important;
+  background-color: var(--prism-surface-popover) !important;
+  border-color: var(--prism-border-card) !important;
 }
 .surface-opaque.bg-background {
   background-color: var(--prism-surface-card) !important;
+}
+
+${mainPageHostCss} {
+  position: relative !important;
+  isolation: isolate;
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+${mainPageBeforeCss} {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--prism-surface-sidebar);
+  background-image: var(--prism-sheen);
+  backdrop-filter: var(--prism-sidebar-backdrop);
+  -webkit-backdrop-filter: var(--prism-sidebar-backdrop);
+  box-shadow: inset 0 1px 0 var(--prism-specular-top);
+}
+:is([data-testid="customization-card"], .agy-spotlight-card, [data-testid="marketplace-bundles-banner"]) {
+  background-color: var(--prism-surface-card) !important;
+  border: 1px solid var(--prism-border-card) !important;
+  box-shadow: inset 0 1px 0 var(--prism-specular-top) !important;
+}
+[data-testid="customization-card"]:hover {
+  background-color: var(--prism-secondary-bg) !important;
+  border-color: var(--prism-accent-border) !important;
+}
+:is(.agy-field:has([data-testid="customizations-search"]), [data-testid="plugins-tabs"]) {
+  background-color: var(--prism-cust-pill-bg) !important;
+  border-color: var(--prism-border-card) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
 }
 
 :is([data-testid="agent-input-box"], #antigravity\\.agentSidePanelInputBox > .surface-composer-card, .surface-composer-card, .agy-composer) {
@@ -366,7 +607,28 @@ body,
   -webkit-backdrop-filter: var(--prism-composer-backdrop);
 }
 
-[data-testid="conversation-view"] { background-color: var(--prism-surface-chat) !important; backdrop-filter: none !important; }
+[data-testid="conversation-view"]${notHole},
+[data-main-content-header]${notHole} {
+  background-color: var(--prism-surface-chat) !important;
+  backdrop-filter: none !important;
+}
+[data-side-panel-strip] {
+  border-bottom: 1px solid var(--prism-border-hairline) !important;
+}
+[data-testid="new-tab-search-input"] {
+  background-color: var(--prism-new-tab-input-bg) !important;
+  border: 1px solid var(--prism-border-card) !important;
+  border-radius: var(--prism-r-ctl) !important;
+  backdrop-filter: blur(10px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(130%) !important;
+}
+[data-testid="new-tab-search-input"]:focus {
+  border-color: var(--prism-accent-border) !important;
+}
+[data-testid^="new-tab-card-"]:is(:hover, :focus-visible) {
+  background-color: var(--prism-secondary-bg) !important;
+  border-radius: var(--prism-r-ctl) !important;
+}
 [data-testid="browser-error-overlay"], .monaco-workbench .part.editor > .content, .monaco-workbench .editor-group-container, .monaco-workbench .part.panel, [data-testid="background-task-command"] {
   background-color: var(--prism-surface-editor) !important;
   backdrop-filter: none !important;
@@ -374,13 +636,53 @@ body,
 ${
   cfg.layoutMode === 'islands'
     ? `.agy-shell { padding: ${Number(cfg.workspacePad ?? 8)}px !important; gap: ${Number(cfg.islandGap ?? 8)}px !important; box-sizing: border-box !important; }
-:is([data-testid="sidebar-split"] > div:first-child, .agy-sidebar, [data-testid="aux-pane-split"] > div:first-child, .agy-shell > main, [data-testid="aux-pane-split"] > div:last-child:not([hidden]):not([aria-hidden="true"]))${notHole} {
+:is([data-testid="title-menu-bar"], .monaco-workbench .part.titlebar)${notHole} {
   border-radius: ${radiusIsland}px !important;
   border: 1px solid var(--prism-border-island) !important;
   box-shadow: var(--prism-shadow-island) !important;
 }
+[data-testid="title-menu-bar"]${notHole} {
+  width: auto !important;
+  margin-right: max(0px, calc(var(--prism-wco-inset-right, 0px) - var(--prism-workspace-pad, 0px))) !important;
+}
+:is([data-testid="sidebar-split"] > div:first-child, .agy-sidebar, aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *))${notHole} {
+  border-radius: ${radiusIsland}px !important;
+  border: 1px solid var(--prism-border-island) !important;
+  box-shadow: var(--prism-shadow-island) !important;
+}
+:is([data-testid="aux-pane-split"] > :is(div, main, section):first-child, .agy-shell > main, [data-testid="aux-pane-split"] > :is(div, aside, section):last-child:not(:first-child):not([hidden]):not([aria-hidden="true"]), .monaco-workbench .part.auxiliarybar)${notHole} {
+  border-radius: ${radiusIsland}px !important;
+  border: 1px solid var(--prism-border-island) !important;
+  box-shadow: var(--prism-shadow-island) !important;
+  background-color: var(--prism-surface-chat) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+[data-testid="aux-pane-split"] :is([data-testid="conversation-view"], [data-main-content-header], [data-side-panel-strip], .agy-sheet [data-side-panel-body], [data-side-panel-body]) {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+:is([data-main-content-body], .agy-sheet [data-side-panel-body])::after {
+  display: none !important;
+}
 :is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2) { width: ${Number(cfg.islandGap ?? 8)}px !important; background: transparent !important; border: none !important; }`
-    : `:is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2) { width: 1px !important; background-color: var(--prism-border-hairline) !important; }`
+    : `:is([data-testid="title-menu-bar"], .monaco-workbench .part.titlebar)${notHole} {
+  border-radius: 0px !important;
+  border: none !important;
+  border-bottom: 1px solid var(--prism-border-hairline) !important;
+  box-shadow: none !important;
+}
+[data-testid="title-menu-bar"]${notHole} {
+  width: auto !important;
+  margin-right: var(--prism-wco-inset-right, 0px) !important;
+}
+:is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2) { width: 1px !important; background-color: var(--prism-border-hairline) !important; }
+:is(.agy-sidebar, aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *))${notHole} { border-right: 1px solid var(--prism-border-hairline) !important; }
+:is([data-side-panel-strip], .agy-sheet [data-side-panel-body], .monaco-workbench .part.auxiliarybar)${notHole} {
+  background-color: var(--prism-surface-chat) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}`
 }
 
 .settings-modal-backdrop {
@@ -402,13 +704,16 @@ ${
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-:is([role="menu"], [role="listbox"], [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]), [role="alertdialog"], .settings-modal-container, .agy-dialog, .agy-popover, .agy-menu, [data-radix-popper-content-wrapper] > *) {
+:is([role="menu"], [role="listbox"], [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]), [role="alertdialog"], .settings-modal-container, .agy-dialog, .agy-popover, .agy-menu, [data-radix-popper-content-wrapper] > *, [data-testid="title-menu-bar"] [data-browser-occluder="true"], .surface-opaque.bg-sidebar:not(.sticky):not([style*="sticky"])) {
   --background: var(--prism-surface-popover) !important;
   --color-background: var(--prism-surface-popover) !important;
   --content: var(--prism-surface-popover) !important;
   background-color: var(--prism-surface-popover) !important;
   border: 1px solid var(--prism-border-popover) !important;
   box-shadow: var(--prism-shadow-popover) !important;
+}
+:is([data-testid="title-menu-bar"] [data-browser-occluder="true"], .surface-opaque.bg-sidebar:not(.sticky):not([style*="sticky"])) {
+  border-radius: ${radiusCard}px !important;
 }
 :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {
   --background: var(--prism-surface-popover) !important;

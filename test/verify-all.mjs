@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.0.0
+ * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.0.6
  *
- * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.0.0 specifications across:
- *   Suite 1 — Manifest (v2.0.0), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
+ * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.0.6 specifications across:
+ *   Suite 1 — Manifest (v2.0.6), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
  *             Zero-PII Audit & SHA-256 Workspace <-> Global Plugin Sync
  *   Suite 2 — Backend Engine, DSH Parity, Co-Keyed Storage, Two-Phase `fsync` Boot Canary Circuit-Breaker
- *             (`canary.json` arming -> tripped, `/api/canary/reset`, `/api/skin/wake`) & Static CSS Mode
- *   Suite 3 — Studio v2.0 UI (`Host & System` 3-way Startup Strategy + Canary + Panic Badge) &
+ *             (`canary.json` arming -> tripped, `/api/canary/reset`, `/api/skin/wake`), PR #6 Hardened `fetch+blob`,
+ *             PR #7 `/video-stage/` Streaming Iframe + Studio `/api/events` SSE & Static CSS Mode
+ *   Suite 3 — Studio v2.0 UI (`Host & System` 3-way Startup Strategy + Canary + Panic Badge + 21:9 `.mini-aux` Parity) &
  *             Antigravity 2.34.0 Hub Headless Chrome E2E:
  *               1) Zero-Enable Ephemeral Micro-Bootstrap & Lazy `/host/<token>/panel.js` Load (0 KB boot)
  *               2) Fail-Open Media-Ready Gate (404 video -> solid #070708, `z-index: -1` inert stage, clickable `#root`;
@@ -18,7 +19,9 @@
  *               4) 2.34.0 3-Layer `[data-browser-hole]` Synchronous Rounded GPU Cutout (`clip-path: path(...)`,
  *                  12px bottom arcs, `alpha = 0` compositor pixel proof, `elementFromPoint`, synchronous resize)
  *               5) `Ctrl+Alt+Shift+R` Emergency Panic Strip + `skinEnabled === false` Persistence
- *               6) Two 1440x900 Full-Window Verification Screenshots
+ *               6) Four v2.0.6 Glass UI Fixes (WCO `#agy-prism-wco-pill` + `syncOverlay` guard, rounded glass titlebar,
+ *                  deep rounded `Projects` & `[data-testid="project-header"]` capsules, right aux-pane = center chat alignment)
+ *               7) Full-Window Verification Screenshots
  */
 
 import assert from 'node:assert/strict';
@@ -28,6 +31,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import zlib from 'node:zlib';
 
 import { launchHeadlessBrowser, readPngDimensions } from './cdp-browser.mjs';
@@ -182,7 +186,7 @@ function decodePngRgba(pngBuf) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  console.log('=== agy-wallpaper-prism v2.0.0 Full Verification Harness ===');
+  console.log('=== agy-wallpaper-prism v2.0.6 Full Verification Harness ===');
   fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
   fs.mkdirSync(DEFAULT_ARTIFACT_DIR, { recursive: true });
   const fixturesDir = path.join(SCRATCH_ROOT, 'fixtures');
@@ -191,20 +195,33 @@ async function main() {
   // =========================================================================
   // SUITE 1: Manifest, Bundle, Zero-Enable CDP Audit, Zero-PII & Byte Sync
   // =========================================================================
-  console.log('\n--- Suite 1: Manifest (v2.0.0), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
+  console.log('\n--- Suite 1: Manifest (v2.0.6), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
 
-  await check('plugin.json & package.json strict v2.0.5 schema & GitHub repository metadata', '@gentle-skin-architect', () => {
+  await check('plugin.json, package.json & 7-point v2.0.6 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
     const pPath = path.join(REPO_ROOT, 'plugin.json');
     const pkgPath = path.join(REPO_ROOT, 'package.json');
+    const readmePath = path.join(REPO_ROOT, 'README.md');
+    const schemaPath = path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs');
+    const wallInjectPath = path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js');
+    const panelInjectPath = path.join(REPO_ROOT, 'src', 'host', 'panel-inject.js');
     assert.ok(fs.existsSync(pPath), 'plugin.json missing');
     assert.ok(fs.existsSync(pkgPath), 'package.json missing');
     const raw = JSON.parse(fs.readFileSync(pPath, 'utf8'));
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const readme = fs.readFileSync(readmePath, 'utf8');
+    const schemaSrc = fs.readFileSync(schemaPath, 'utf8');
+    const wallInjectSrc = fs.readFileSync(wallInjectPath, 'utf8');
+    const panelInjectSrc = fs.readFileSync(panelInjectPath, 'utf8');
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.0.5', `Expected plugin.json version 2.0.5, got ${raw.version}`);
-    assert.equal(pkg.version, '2.0.5', `Expected package.json version 2.0.5, got ${pkg.version}`);
+    assert.equal(raw.version, '2.0.6', `Expected plugin.json version 2.0.6, got ${raw.version}`);
+    assert.equal(pkg.version, '2.0.6', `Expected package.json version 2.0.6, got ${pkg.version}`);
+    assert.match(readme, /\*\*Version\*\*:\s*`2\.0\.6`/, 'Expected README.md **Version**: `2.0.6`');
+    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.0\.6'/, 'Expected schema.mjs PLUGIN_VERSION = 2.0.6');
+    assert.match(schemaSrc, /skinVersion:\s*'2\.0\.6'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.0.6');
+    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.0\.6'/, 'Expected wallpaper-inject.js VERSION = 2.0.6');
+    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.0\.6'/, 'Expected panel-inject.js VERSION = 2.0.6');
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -216,7 +233,7 @@ async function main() {
       `Unexpected homepage in plugin.json: ${raw.homepage}`,
     );
     assert.ok(Array.isArray(raw.suggestedPrompts) && raw.suggestedPrompts.length <= 3, 'suggestedPrompts must be <= 3');
-    return `v${raw.version}, keys=${Object.keys(raw).length}/10`;
+    return `v${raw.version} synced across all 7 anchors, keys=${Object.keys(raw).length}/10`;
   });
 
   await check('Git repository branch (`main`), `origin` remote URL & working tree audit', '@resilience-designer', () => {
@@ -976,6 +993,927 @@ async function main() {
     return `playlist + presets + cold-init=${initMs}ms + 2 .lnk losslessly restored`;
   });
 
+  await check('Cross-scheme HTTPS->HTTP zero-delay fetch+blob, >256MB poster fallback, 404 fail-open & URL revocation (PR #6 hardened)', '@fix-host / @checker-fix', async () => {
+    const wallInjectSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+    const fetchCalls = [];
+    const createdBlobUrls = [];
+    const revokedBlobUrls = [];
+    const directHttpVideoSrcs = [];
+    let blobSeq = 0;
+    let stepStartMs = Date.now();
+
+    class MockStyle {
+      constructor() {
+        this._props = new Map();
+        this.display = '';
+        this.opacity = '';
+        this.transition = '';
+        this.clipPath = '';
+        this.transform = '';
+        this.background = '';
+        this.cssText = '';
+      }
+      setProperty(k, v) {
+        this._props.set(String(k), String(v));
+      }
+      removeProperty(k) {
+        this._props.delete(String(k));
+      }
+      getPropertyValue(k) {
+        return this._props.get(String(k)) || '';
+      }
+    }
+
+    class MockNode {
+      constructor(tagName) {
+        this.tagName = String(tagName || 'DIV').toUpperCase();
+        this.id = '';
+        this.className = '';
+        this.style = new MockStyle();
+        this._attrs = new Map();
+        this.children = [];
+        this.parentNode = null;
+        this._listeners = new Map();
+        this.inert = false;
+        this.textContent = '';
+        this._src = '';
+        const self = this;
+        this.classList = {
+          contains(cls) {
+            return String(self.className || '').split(/\s+/).filter(Boolean).includes(cls);
+          },
+        };
+
+        if (this.tagName === 'VIDEO' || this.tagName === 'AUDIO') {
+          this.readyState = 0;
+          this.videoWidth = 0;
+          this.videoHeight = 0;
+          this.paused = true;
+          this.muted = true;
+          this.defaultMuted = true;
+          this.volume = 1;
+          this.playbackRate = 1;
+          this.loop = true;
+          this.ended = false;
+          this.error = null;
+          this.networkState = 0;
+          this.play = () => {
+            this.paused = false;
+            return Promise.resolve();
+          };
+          this.pause = () => {
+            this.paused = true;
+          };
+          this.load = () => {};
+          Object.defineProperty(this, 'currentSrc', {
+            get() {
+              return self._src;
+            },
+          });
+          Object.defineProperty(this, 'src', {
+            get() {
+              return self._src;
+            },
+            set(val) {
+              const s = String(val || '');
+              self._src = s;
+              if (self.tagName === 'VIDEO' && /^http:\/\//i.test(s)) {
+                directHttpVideoSrcs.push(s);
+              }
+              if (s.startsWith('blob:')) {
+                self.readyState = 4;
+                self.videoWidth = 1920;
+                self.videoHeight = 1080;
+                queueMicrotask(() => {
+                  self.dispatchEvent({ type: 'loadeddata' });
+                  self.dispatchEvent({ type: 'canplay' });
+                });
+              }
+            },
+          });
+        } else if (this.tagName === 'IMG') {
+          this.complete = false;
+          this.naturalWidth = 0;
+          this.naturalHeight = 0;
+          this.onload = null;
+          this.onerror = null;
+          this.decode = () => Promise.resolve();
+          Object.defineProperty(this, 'src', {
+            get() {
+              return self._src;
+            },
+            set(val) {
+              const s = String(val || '');
+              self._src = s;
+              if (s) {
+                self.complete = true;
+                self.naturalWidth = 1920;
+                self.naturalHeight = 1080;
+                queueMicrotask(() => {
+                  if (typeof self.onload === 'function') self.onload();
+                  self.dispatchEvent({ type: 'load' });
+                });
+              }
+            },
+          });
+        } else if (this.tagName === 'CANVAS') {
+          this.width = 300;
+          this.height = 150;
+          this.getContext = () => ({
+            clearRect() {},
+            beginPath() {},
+            arc() {},
+            stroke() {},
+            fill() {},
+            drawImage() {},
+            getImageData: () => ({ data: new Uint8ClampedArray(64) }),
+          });
+        }
+      }
+
+      get isConnected() {
+        let cur = this;
+        while (cur) {
+          if (cur === docRoot) return true;
+          cur = cur.parentNode;
+        }
+        return false;
+      }
+
+      get firstChild() {
+        return this.children[0] || null;
+      }
+
+      setAttribute(k, v) {
+        const key = String(k);
+        const val = String(v);
+        this._attrs.set(key, val);
+        if (key === 'id') this.id = val;
+        if (key === 'class') this.className = val;
+      }
+
+      getAttribute(k) {
+        const key = String(k);
+        if (key === 'id') return this.id || null;
+        if (key === 'class') return this.className || null;
+        return this._attrs.has(key) ? this._attrs.get(key) : null;
+      }
+
+      removeAttribute(k) {
+        const key = String(k);
+        this._attrs.delete(key);
+        if (key === 'src') {
+          this._src = '';
+          if (this.tagName === 'VIDEO' || this.tagName === 'AUDIO') {
+            this.readyState = 0;
+          }
+        }
+      }
+
+      appendChild(child) {
+        if (!child) return child;
+        if (child.parentNode) child.parentNode.removeChild(child);
+        child.parentNode = this;
+        this.children.push(child);
+        return child;
+      }
+
+      insertBefore(child, ref) {
+        if (!child) return child;
+        if (child.parentNode) child.parentNode.removeChild(child);
+        child.parentNode = this;
+        const idx = ref ? this.children.indexOf(ref) : -1;
+        if (idx >= 0) this.children.splice(idx, 0, child);
+        else this.children.push(child);
+        return child;
+      }
+
+      removeChild(child) {
+        const idx = this.children.indexOf(child);
+        if (idx >= 0) {
+          this.children.splice(idx, 1);
+          child.parentNode = null;
+        }
+        return child;
+      }
+
+      contains(other) {
+        let cur = other;
+        while (cur) {
+          if (cur === this) return true;
+          cur = cur.parentNode;
+        }
+        return false;
+      }
+
+      getBoundingClientRect() {
+        return { left: 0, top: 0, right: 1440, bottom: 900, width: 1440, height: 900 };
+      }
+
+      addEventListener(type, fn) {
+        if (typeof fn !== 'function') return;
+        const list = this._listeners.get(type) || [];
+        list.push(fn);
+        this._listeners.set(type, list);
+      }
+
+      removeEventListener(type, fn) {
+        const list = this._listeners.get(type);
+        if (!list) return;
+        const idx = list.indexOf(fn);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+
+      dispatchEvent(evt) {
+        const list = (this._listeners.get(evt.type) || []).slice();
+        for (const fn of list) {
+          fn.call(this, evt);
+        }
+        return true;
+      }
+
+      querySelectorAll(selector) {
+        const parts = String(selector || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const matchesPart = (node, p) => {
+          if (p.startsWith('#')) return node.id === p.slice(1);
+          if (p.startsWith('.')) return node.classList.contains(p.slice(1));
+          if (/^[a-z0-9]+$/i.test(p)) return node.tagName === p.toUpperCase();
+          return false;
+        };
+        const out = [];
+        const walk = (n) => {
+          for (const ch of n.children) {
+            if (parts.some((p) => matchesPart(ch, p))) out.push(ch);
+            walk(ch);
+          }
+        };
+        walk(this);
+        return out;
+      }
+
+      querySelector(selector) {
+        return this.querySelectorAll(selector)[0] || null;
+      }
+    }
+
+    const docRoot = new MockNode('HTML');
+    docRoot.className = 'dark';
+    const docHead = new MockNode('HEAD');
+    const docBody = new MockNode('BODY');
+    docBody.className = 'dark';
+    const hostRootDiv = new MockNode('DIV');
+    hostRootDiv.id = 'root';
+    docBody.appendChild(hostRootDiv);
+    docRoot.appendChild(docHead);
+    docRoot.appendChild(docBody);
+
+    const mockDoc = {
+      documentElement: docRoot,
+      head: docHead,
+      body: docBody,
+      hidden: false,
+      fullscreenElement: null,
+      activeElement: docBody,
+      hasFocus: () => true,
+      createElement: (tag) => new MockNode(tag),
+      getElementById: (id) => {
+        const target = String(id || '');
+        const search = (n) => {
+          if (n.id === target) return n;
+          for (const ch of n.children) {
+            const hit = search(ch);
+            if (hit) return hit;
+          }
+          return null;
+        };
+        return search(docRoot);
+      },
+      querySelector: (sel) => docRoot.querySelector(sel),
+      querySelectorAll: (sel) => docRoot.querySelectorAll(sel),
+      addEventListener: (t, fn) => docRoot.addEventListener(t, fn),
+      removeEventListener: (t, fn) => docRoot.removeEventListener(t, fn),
+      dispatchEvent: (e) => docRoot.dispatchEvent(e),
+    };
+
+    const mockFetch = async (url, init) => {
+      const u = String(url || '');
+      fetchCalls.push({
+        url: u,
+        elapsedMs: Date.now() - stepStartMs,
+        hasSignal: Boolean(init && init.signal),
+      });
+      if (u.includes('missing-404.mp4')) {
+        return {
+          ok: false,
+          status: 404,
+          headers: { get: () => null },
+          blob: async () => new Blob([]),
+        };
+      }
+      if (u.includes('oversize-300mb.mp4')) {
+        const overBytes = 300 * 1024 * 1024;
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (String(h || '').toLowerCase() === 'content-length' ? String(overBytes) : null),
+          },
+          blob: async () => new Blob([new Uint8Array(16)]),
+        };
+      }
+      const payloadBytes = new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (h) => (String(h || '').toLowerCase() === 'content-length' ? String(payloadBytes.byteLength) : null),
+        },
+        blob: async () => new Blob([payloadBytes], { type: 'video/mp4' }),
+      };
+    };
+
+    const mockURL = {
+      createObjectURL(blob) {
+        assert.ok(blob && blob.size > 0, 'createObjectURL expected non-empty Blob');
+        const u = `blob:https://127.0.0.1:62133/prism-vm-${++blobSeq}`;
+        createdBlobUrls.push(u);
+        return u;
+      },
+      revokeObjectURL(u) {
+        revokedBlobUrls.push(String(u));
+      },
+    };
+
+    const winListeners = new Map();
+    const mockWin = {
+      document: mockDoc,
+      location: { protocol: 'https:', origin: 'https://127.0.0.1:62133', href: 'https://127.0.0.1:62133/' },
+      innerWidth: 1440,
+      innerHeight: 900,
+      devicePixelRatio: 2,
+      fetch: mockFetch,
+      URL: mockURL,
+      AbortController,
+      Blob,
+      Event: class MockEvent {
+        constructor(type) {
+          this.type = type;
+        }
+      },
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: (cb) => setTimeout(() => cb(Date.now()), 16),
+      cancelAnimationFrame: (id) => clearTimeout(id),
+      getComputedStyle: () => ({ backgroundColor: 'rgb(7, 7, 8)', getPropertyValue: () => '' }),
+      matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
+      navigator: {},
+      addEventListener(type, fn) {
+        const list = winListeners.get(type) || [];
+        list.push(fn);
+        winListeners.set(type, list);
+      },
+      removeEventListener(type, fn) {
+        const list = winListeners.get(type);
+        if (!list) return;
+        const idx = list.indexOf(fn);
+        if (idx >= 0) list.splice(idx, 1);
+      },
+      dispatchEvent(evt) {
+        for (const fn of (winListeners.get(evt.type) || []).slice()) fn(evt);
+      },
+    };
+    mockWin.window = mockWin;
+    mockWin.top = mockWin;
+
+    const ctx = vm.createContext({
+      window: mockWin,
+      document: mockDoc,
+      location: mockWin.location,
+      URL: mockURL,
+      Blob,
+      AbortController,
+      Event: mockWin.Event,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: mockWin.requestAnimationFrame,
+      cancelAnimationFrame: mockWin.cancelAnimationFrame,
+      getComputedStyle: mockWin.getComputedStyle,
+    });
+
+    vm.runInContext(wallInjectSrc, ctx, { filename: 'wallpaper-inject.js' });
+    const prism = mockWin.__agyPrism;
+    assert.ok(prism && typeof prism.applyPayload === 'function', 'wallpaper-inject.js failed to mount in node:vm');
+
+    try {
+      // 1) Zero-delay HTTPS -> HTTP loopback fetch+blob (0ms, no 900ms probe wait, no direct http:// src assignment)
+      stepStartMs = Date.now();
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { fxEnabled: true, switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-vid-1',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/tok1/video-1.mp4',
+          thumbUrl: '',
+        },
+      });
+
+      assert.equal(fetchCalls.length, 1, 'Expected immediate 0ms fetch() call inside applyPayload on https: host');
+      assert.ok(fetchCalls[0].elapsedMs < 80, `Expected zero-delay fetch (<80ms), got ${fetchCalls[0].elapsedMs}ms`);
+      assert.equal(fetchCalls[0].hasSignal, true, 'Expected AbortController signal attached to blob fetch');
+      assert.deepEqual(directHttpVideoSrcs, [], 'https: host MUST NOT assign http://127.0.0.1 directly to video.src');
+
+      await sleep(35);
+      const st1 = prism.status();
+      assert.equal(st1.wallpaperReady, true, 'Expected wallpaperReady=true after blob video decoded');
+      assert.equal(docRoot.getAttribute('data-agy-prism-wallpaper'), 'ready');
+      assert.equal(createdBlobUrls.length, 1);
+      assert.equal(st1.videoSrc, createdBlobUrls[0]);
+      const fx1 = mockDoc.getElementById('agy-prism-fx-canvas');
+      assert.ok(fx1, 'Expected #agy-prism-fx-canvas mounted when fxEnabled=true');
+      assert.equal(fx1.style.display, '', 'Expected #agy-prism-fx-canvas visible when wallpaperReady=true');
+      assert.equal(fx1.width, 1440, 'Expected 1x CSS viewport width on #agy-prism-fx-canvas (not multiplied by DPR=2)');
+      assert.equal(fx1.height, 900, 'Expected 1x CSS viewport height on #agy-prism-fx-canvas');
+
+      // 2) Switching wallpaper revokes previous blob: URL automatically
+      stepStartMs = Date.now();
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { fxEnabled: true, switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-vid-2',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/tok2/video-2.mp4',
+          thumbUrl: '',
+        },
+      });
+      await sleep(35);
+      assert.ok(
+        revokedBlobUrls.includes(createdBlobUrls[0]),
+        `Expected outgoing blob URL ${createdBlobUrls[0]} to be revoked on switch (revoked: ${revokedBlobUrls.join(', ')})`,
+      );
+      assert.equal(prism.status().videoSrc, createdBlobUrls[1]);
+
+      // 3) >256 MiB Content-Length video with thumbUrl gracefully degrades to <img> poster keeping data-agy-prism-wallpaper="ready"
+      stepStartMs = Date.now();
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { fxEnabled: true, switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-vid-oversize',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/tok3/oversize-300mb.mp4',
+          thumbUrl: 'http://127.0.0.1:49152/preview/tok3/poster-ok.png',
+        },
+      });
+      await sleep(40);
+      assert.ok(revokedBlobUrls.includes(createdBlobUrls[1]), 'Expected second video blob URL to be revoked when poster fallback commits');
+      assert.equal(prism.status().wallpaperReady, true, 'Expected >256MB video with thumbUrl to stay wallpaperReady=true via poster fallback');
+      assert.equal(docRoot.getAttribute('data-agy-prism-wallpaper'), 'ready');
+      const stageEl = mockDoc.getElementById('agy-prism-stage');
+      assert.equal(stageEl.querySelectorAll('video').length, 0, 'Oversized <video> element must be removed during poster fallback');
+      const posterImgs = stageEl.querySelectorAll('img');
+      assert.equal(posterImgs.length, 1, 'Expected fallback <img class="agy-prism-media-el"> in stage');
+      assert.ok(posterImgs[0].src.includes('poster-ok.png'), `Unexpected poster fallback src: ${posterImgs[0].src}`);
+
+      // 4) 404 broken video fails open (data-agy-prism-wallpaper removed) AND hides #agy-prism-fx-canvas
+      stepStartMs = Date.now();
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { fxEnabled: true, switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-vid-404',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/tok4/missing-404.mp4',
+          thumbUrl: '',
+        },
+      });
+      await sleep(40);
+      assert.equal(prism.status().wallpaperReady, false, '404 video MUST fail open with wallpaperReady=false');
+      assert.equal(docRoot.getAttribute('data-agy-prism-wallpaper'), null, '404 video MUST clear data-agy-prism-wallpaper');
+      const fx404 = mockDoc.getElementById('agy-prism-fx-canvas');
+      assert.ok(fx404, '#agy-prism-fx-canvas node still managed by fxEnabled');
+      assert.equal(fx404.style.display, 'none', '#agy-prism-fx-canvas MUST be display:none when wallpaperReady=false');
+
+      return `0ms fetch+blob (${fetchCalls[0].elapsedMs}ms) + ${revokedBlobUrls.length} blob revocations + >256MB poster fallback + 404 fail-open & fx hidden`;
+    } finally {
+      prism.destroy();
+    }
+  });
+
+  await check('PR #7 Cross-scheme /video-stage/ iframe streaming (900ms anti-jank + 0 fetch + ready/ended + error->0ms blob fallback) & Studio /api/events SSE + /api/status config', '@exec-engine-sidecar / @exec-host-skin / @exec-studio-ui', async () => {
+    // 1. Verify /video-stage/<token> HTML (GET + HEAD + scene-video) & 900ms anti-jank gate + buildClientSkinPayload videoStageUrl
+    const libRes = await engine.listLibrary({ refresh: false });
+    const libArr = Array.isArray(libRes) ? libRes : libRes.items || [];
+    const vidItem = libArr.find((x) => x.kind === 'video' && x.videoStageUrl);
+    assert.ok(vidItem, 'Expected scanned video item to expose videoStageUrl');
+    assert.match(vidItem.videoStageUrl, /\/video-stage\//, `Unexpected videoStageUrl: ${vidItem.videoStageUrl}`);
+
+    const sceneVidItem = libArr.find((x) => String(x.workshopId) === '100004' || String(x.id).includes('100004'));
+    assert.ok(sceneVidItem && /\?src=scene-video/.test(String(sceneVidItem.videoStageUrl || '')), `Expected scene video item 100004 to expose ?src=scene-video videoStageUrl, got: ${sceneVidItem?.videoStageUrl}`);
+
+    const stagePath = new URL(vidItem.videoStageUrl).pathname + '?sid=test-sid-1';
+    const stageResp = await invokeServerInMemory(mediaHttpServer, { method: 'GET', url: stagePath });
+    assert.equal(stageResp.status, 200, `Expected 200 for ${stagePath}, got ${stageResp.status}`);
+    assert.match(String(stageResp.headers['content-type'] || ''), /text\/html/i);
+    assert.equal(String(stageResp.headers['cache-control'] || ''), 'no-store');
+    const stageHtml = stageResp.text();
+    assert.ok(stageHtml.includes('prism-video-stage') && stageHtml.includes('/media/'), 'video-stage HTML missing same-origin video or postMessage bridge');
+    assert.ok(stageHtml.includes('lastCheckAt') && stageHtml.includes('900'), 'video-stage HTML missing v2.0.6 900ms anti-jank watchdog gate');
+    assert.ok(stageHtml.includes('dur-0.75') && stageHtml.includes('curT+0.04'), 'video-stage HTML missing v2.0.6 tightened stall recovery thresholds');
+    assert.ok(!stageHtml.includes('-0.035'), 'video-stage HTML must NOT include forbidden -0.035 backward GOP seek');
+    assert.ok(stageHtml.includes('filter: none'), 'video-stage HTML missing DirectComposition zero-copy filter: none');
+
+    const headResp = await invokeServerInMemory(mediaHttpServer, { method: 'HEAD', url: stagePath });
+    assert.equal(headResp.status, 200, `Expected 200 for HEAD ${stagePath}, got ${headResp.status}`);
+    assert.equal(headResp.body.length, 0, 'HEAD /video-stage/ must return empty body');
+
+    const { buildClientSkinPayload: buildPayload } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'host', 'index.mjs')).href);
+    const payload = buildPayload(await engine.getConfig(), vidItem, engine.getMediaOrigin(), { skinEnabled: true });
+    assert.equal(payload.activeItem?.videoStageUrl, vidItem.videoStageUrl, 'buildClientSkinPayload dropped videoStageUrl');
+
+    // 2. Verify Studio /api/events SSE & /api/status config inclusion
+    const sseResp = await invokeServerInMemory(studio.server, { method: 'GET', url: '/api/events' });
+    assert.equal(sseResp.status, 200, `Studio /api/events returned ${sseResp.status}`);
+    assert.match(String(sseResp.headers['content-type'] || ''), /text\/event-stream/i);
+    const sseText = sseResp.text();
+    assert.ok(sseText.includes('event: state') && sseText.includes('"activeItem"'), 'Studio /api/events missing initial state snapshot');
+
+    const statusResp = await invokeServerInMemory(studio.server, { method: 'GET', url: '/api/status' });
+    assert.equal(statusResp.status, 200, `Studio /api/status returned ${statusResp.status}`);
+    const statusJson = statusResp.json();
+    assert.ok(statusJson.config && typeof statusJson.config === 'object', 'Studio /api/status missing config payload for live sync');
+
+    // 3. Verify wallpaper-inject.js mounts <iframe data-prism-video-stage="1"> (0 fetch calls), handles ready/ended,
+    //    AND automatically falls back to 0ms fetch+blob when iframe triggers error!
+    const injectCode = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+    const fetchCalls = [];
+    const postedToFrame = [];
+    const rpcCalls = [];
+    const createdBlobUrls = [];
+    const revokedBlobUrls = [];
+    const winListeners = new Map();
+    let blobSeq = 0;
+    let fallbackStartMs = Date.now();
+
+    const makeEl = (tag) => {
+      const attrs = new Map();
+      const listeners = new Map();
+      const children = [];
+      let _src = '';
+      const el = {
+        tagName: String(tag).toUpperCase(),
+        style: {
+          _props: new Map(),
+          setProperty(k, v) { this._props.set(String(k), String(v)); },
+          removeProperty(k) { this._props.delete(String(k)); },
+          getPropertyValue(k) { return this._props.get(String(k)) || ''; },
+          display: '',
+          opacity: '',
+          transition: '',
+          clipPath: '',
+          transform: '',
+          background: '',
+          cssText: '',
+        },
+        className: '',
+        id: '',
+        textContent: '',
+        parentNode: null,
+        inert: false,
+        children,
+        contentWindow: tag === 'iframe' ? { postMessage(msg) { postedToFrame.push(msg); } } : null,
+        get isConnected() {
+          let cur = el;
+          while (cur) {
+            if (cur === htmlEl) return true;
+            cur = cur.parentNode;
+          }
+          return false;
+        },
+        get firstChild() { return children[0] || null; },
+        get childNodes() { return children; },
+        get classList() {
+          return {
+            add() {},
+            remove() {},
+            contains(cls) { return String(el.className || '').split(/\s+/).filter(Boolean).includes(cls); },
+          };
+        },
+        setAttribute(k, v) {
+          const key = String(k);
+          const val = String(v);
+          attrs.set(key, val);
+          if (key === 'id') el.id = val;
+          if (key === 'class') el.className = val;
+        },
+        getAttribute(k) {
+          const key = String(k);
+          if (key === 'id') return el.id || null;
+          if (key === 'class') return el.className || null;
+          return attrs.has(key) ? attrs.get(key) : null;
+        },
+        removeAttribute(k) {
+          const key = String(k);
+          attrs.delete(key);
+          if (key === 'src') {
+            _src = '';
+            if (el.tagName === 'VIDEO' || el.tagName === 'AUDIO') el.readyState = 0;
+          }
+        },
+        hasAttribute(k) { return attrs.has(String(k)); },
+        appendChild(c) {
+          if (c.parentNode) c.parentNode.removeChild(c);
+          c.parentNode = el;
+          children.push(c);
+          return c;
+        },
+        insertBefore(c, ref) {
+          if (c.parentNode) c.parentNode.removeChild(c);
+          c.parentNode = el;
+          const idx = ref ? children.indexOf(ref) : -1;
+          if (idx >= 0) children.splice(idx, 0, c);
+          else children.push(c);
+          return c;
+        },
+        removeChild(c) {
+          const idx = children.indexOf(c);
+          if (idx >= 0) children.splice(idx, 1);
+          c.parentNode = null;
+          return c;
+        },
+        contains(c) { return c === el || children.includes(c) || children.some((x) => x.contains && x.contains(c)); },
+        querySelector(sel) {
+          if (sel === '.agy-prism-scrim') return children.find((x) => x.className === 'agy-prism-scrim') || null;
+          return el.querySelectorAll(sel)[0] || null;
+        },
+        querySelectorAll(sel) {
+          const parts = String(sel || '').split(',').map((s) => s.trim()).filter(Boolean);
+          const matchesPart = (node, p) => {
+            if (p.startsWith('#')) return node.id === p.slice(1);
+            if (p.startsWith('.')) return node.classList.contains(p.slice(1));
+            if (/^[a-z0-9]+$/i.test(p)) return node.tagName === p.toUpperCase();
+            return false;
+          };
+          const out = [];
+          const walk = (n) => {
+            for (const ch of n.children) {
+              if (parts.some((p) => matchesPart(ch, p))) out.push(ch);
+              walk(ch);
+            }
+          };
+          walk(el);
+          return out;
+        },
+        addEventListener(type, fn) {
+          if (!listeners.has(type)) listeners.set(type, new Set());
+          listeners.get(type).add(fn);
+        },
+        removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
+        dispatchEvent(ev) { for (const fn of [...(listeners.get(ev.type) || [])]) fn.call(el, ev); return true; },
+        getBoundingClientRect() { return { left: 0, top: 0, right: 1440, bottom: 900, width: 1440, height: 900 }; },
+        get currentSrc() { return _src; },
+        get src() { return _src; },
+        set src(v) {
+          _src = String(v || '');
+          attrs.set('src', _src);
+          if ((el.tagName === 'VIDEO' || el.tagName === 'AUDIO') && _src.startsWith('blob:')) {
+            el.readyState = 4;
+            el.videoWidth = 1920;
+            el.videoHeight = 1080;
+            queueMicrotask(() => {
+              el.dispatchEvent({ type: 'loadeddata' });
+              el.dispatchEvent({ type: 'canplay' });
+            });
+          }
+        },
+      };
+      if (el.tagName === 'VIDEO' || el.tagName === 'AUDIO') {
+        el.readyState = 0;
+        el.videoWidth = 0;
+        el.videoHeight = 0;
+        el.paused = true;
+        el.muted = true;
+        el.defaultMuted = true;
+        el.volume = 1;
+        el.playbackRate = 1;
+        el.loop = true;
+        el.ended = false;
+        el.error = null;
+        el.networkState = 0;
+        el.play = () => { el.paused = false; return Promise.resolve(); };
+        el.pause = () => { el.paused = true; };
+        el.load = () => {};
+      }
+      return el;
+    };
+
+    const htmlEl = makeEl('html');
+    htmlEl.className = 'dark';
+    const headEl = makeEl('head');
+    const bodyEl = makeEl('body');
+    bodyEl.className = 'dark';
+    const rootEl = makeEl('div');
+    rootEl.id = 'root';
+    bodyEl.appendChild(rootEl);
+    htmlEl.appendChild(headEl);
+    htmlEl.appendChild(bodyEl);
+
+    const mockDoc = {
+      documentElement: htmlEl,
+      head: headEl,
+      body: bodyEl,
+      hidden: false,
+      visibilityState: 'visible',
+      fullscreenElement: null,
+      activeElement: bodyEl,
+      createElement: (t) => makeEl(t),
+      getElementById: (id) => {
+        const search = (n) => {
+          if (n.id === id) return n;
+          for (const ch of n.children) {
+            const hit = search(ch);
+            if (hit) return hit;
+          }
+          return null;
+        };
+        return search(htmlEl);
+      },
+      querySelector: (sel) => htmlEl.querySelector(sel),
+      querySelectorAll: (sel) => htmlEl.querySelectorAll(sel),
+      addEventListener() {},
+      removeEventListener() {},
+      hasFocus: () => true,
+    };
+
+    const mockURL = {
+      createObjectURL(blob) {
+        assert.ok(blob && blob.size > 0, 'createObjectURL expected non-empty Blob');
+        const u = `blob:https://127.0.0.1:50734/prism-stage-fb-${++blobSeq}`;
+        createdBlobUrls.push(u);
+        return u;
+      },
+      revokeObjectURL(u) {
+        revokedBlobUrls.push(String(u));
+      },
+    };
+
+    const mockWin = {
+      document: mockDoc,
+      location: { protocol: 'https:', origin: 'https://127.0.0.1:50734', href: 'https://127.0.0.1:50734/' },
+      innerWidth: 1440,
+      innerHeight: 900,
+      devicePixelRatio: 1,
+      top: null,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: (fn) => setTimeout(() => fn(Date.now()), 16),
+      cancelAnimationFrame: clearTimeout,
+      getComputedStyle: () => ({ backgroundColor: 'rgb(7, 7, 8)', getPropertyValue: () => '' }),
+      matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
+      navigator: {},
+      addEventListener(type, fn) {
+        if (!winListeners.has(type)) winListeners.set(type, new Set());
+        winListeners.get(type).add(fn);
+      },
+      removeEventListener(type, fn) { winListeners.get(type)?.delete(fn); },
+      dispatchMessage(data, source) {
+        for (const fn of [...(winListeners.get('message') || [])]) fn({ data, source });
+      },
+      __agyPrismCall(arg, params) {
+        const parsed = typeof arg === 'string' && arg.startsWith('{') ? JSON.parse(arg) : { method: arg, params };
+        rpcCalls.push(parsed);
+        return Promise.resolve({ ok: true });
+      },
+      AbortController,
+      Blob,
+      Event: class Event { constructor(t) { this.type = t; } },
+      URL: mockURL,
+      async fetch(u, init) {
+        fetchCalls.push({ url: String(u), elapsedMs: Date.now() - fallbackStartMs, hasSignal: Boolean(init && init.signal) });
+        const payloadBytes = new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (h) => (String(h || '').toLowerCase() === 'content-length' ? String(payloadBytes.byteLength) : null) },
+          blob: async () => new Blob([payloadBytes], { type: 'video/mp4' }),
+        };
+      },
+    };
+    mockWin.window = mockWin;
+    mockWin.top = mockWin;
+    mockWin.self = mockWin;
+
+    vm.runInNewContext(injectCode, {
+      window: mockWin,
+      document: mockDoc,
+      location: mockWin.location,
+      URL: mockURL,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: mockWin.requestAnimationFrame,
+      cancelAnimationFrame: mockWin.cancelAnimationFrame,
+      getComputedStyle: mockWin.getComputedStyle,
+      Blob,
+      AbortController,
+      Event: mockWin.Event,
+      Promise,
+      Math,
+      JSON,
+      Object,
+      Array,
+      String,
+      Number,
+      Boolean,
+      RegExp,
+      Error,
+    });
+
+    try {
+      // 3A) Happy path: /video-stage/ iframe mounts with 0 fetch calls, handles ready & ended
+      mockWin.__agyPrism.applyPayload({
+        skinEnabled: true,
+        config: { skinEnabled: true, layoutMode: 'flush', paused: false, muted: true, rotationEnabled: true, rotationTrigger: 'videoEnd' },
+        activeItem: {
+          id: 'loc-huge',
+          title: 'Huge 4GB Local Video',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:52075/media/loc-huge',
+          videoStageUrl: 'http://127.0.0.1:52075/video-stage/loc-huge',
+        },
+      });
+
+      const stageEl = mockDoc.getElementById('agy-prism-stage');
+      const iframes = stageEl.querySelectorAll('iframe');
+      assert.equal(iframes.length, 1, 'Expected cross-scheme video with videoStageUrl to mount streaming iframe');
+      assert.equal(iframes[0].getAttribute('data-prism-video-stage'), '1');
+      assert.equal(fetchCalls.length, 0, 'Cross-scheme video-stage iframe must NOT trigger full-file fetch+blob');
+
+      const sid = new URL(iframes[0].src).searchParams.get('sid');
+      assert.ok(sid, 'Expected sid query param on video-stage iframe src');
+
+      mockWin.dispatchMessage({ type: 'prism-video-stage', event: 'ready', sid, videoWidth: 1920, videoHeight: 1080 }, iframes[0].contentWindow);
+      assert.equal(htmlEl.getAttribute('data-agy-prism-wallpaper'), 'ready', 'video-stage ready message did not mark wallpaper ready');
+      assert.equal(mockWin.__agyPrism.status().videoStageMode, 'iframe');
+      assert.equal(mockWin.__agyPrism.status().videoReadyState, 4);
+      assert.ok(postedToFrame.some((m) => m && m.type === 'prism-video-ctl' && m.sid === sid), 'Host did not send prism-video-ctl to video-stage iframe');
+
+      mockWin.dispatchMessage({ type: 'prism-video-stage', event: 'ended', sid }, iframes[0].contentWindow);
+      assert.ok(rpcCalls.some((c) => c.method === 'playlist.step' && c.params?.reason === 'videoEnd'), 'video-stage ended event did not trigger playlist.step');
+
+      const styleEl = mockDoc.getElementById('agy-prism-css');
+      assert.ok(styleEl && styleEl.textContent.includes('[data-main-content-header]') && styleEl.textContent.includes('var(--prism-surface-chat)'), 'Missing [data-main-content-header] chat surface tint rule');
+
+      // 3B) Error fallback path: when /video-stage/ iframe emits error, seamlessly fall back to 0ms fetch+blob <video>
+      fetchCalls.length = 0;
+      mockWin.__agyPrism.applyPayload({
+        skinEnabled: true,
+        config: { skinEnabled: true, layoutMode: 'flush', switchTransition: 'cut', paused: false, muted: true },
+        activeItem: {
+          id: 'loc-stage-err',
+          title: 'Iframe Error Fallback Video',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:52075/media/loc-stage-err.mp4',
+          videoStageUrl: 'http://127.0.0.1:52075/video-stage/loc-stage-err',
+        },
+      });
+      const iframes2 = stageEl.querySelectorAll('iframe');
+      const iframe2 = iframes2.find((f) => String(f.src || '').includes('loc-stage-err'));
+      assert.ok(iframe2, `Expected incoming video-stage iframe for loc-stage-err before error injection (found ${iframes2.length})`);
+      assert.equal(fetchCalls.length, 0, 'Must not fetch before iframe error');
+      const sid2 = new URL(iframe2.src).searchParams.get('sid');
+
+      fallbackStartMs = Date.now();
+      mockWin.dispatchMessage({ type: 'prism-video-stage', event: 'error', sid: sid2, code: 4 }, iframe2.contentWindow);
+      assert.equal(fetchCalls.length, 1, 'Iframe error did not immediately trigger 0ms fetch+blob fallback');
+      assert.ok(fetchCalls[0].elapsedMs < 80, `Expected 0ms fallback fetch (<80ms), got ${fetchCalls[0].elapsedMs}ms`);
+      assert.equal(fetchCalls[0].url, 'http://127.0.0.1:52075/media/loc-stage-err.mp4');
+
+      await sleep(40);
+      const stFb = mockWin.__agyPrism.status();
+      assert.equal(stFb.videoStageMode, 'video', `Expected videoStageMode="video" after iframe fallback, got ${stFb.videoStageMode}`);
+      assert.equal(stFb.wallpaperReady, true, 'Expected wallpaperReady=true after fetch+blob fallback');
+      assert.equal(htmlEl.getAttribute('data-agy-prism-wallpaper'), 'ready');
+      assert.ok(String(stFb.videoSrc).startsWith('blob:'), `Expected blob: videoSrc after fallback, got ${stFb.videoSrc}`);
+      assert.equal(stageEl.querySelectorAll('iframe').length, 0, 'Failed video-stage iframe was not cleaned up after fallback');
+
+      return `/video-stage/ 200+HEAD (900ms gate, 0 fetch) + ready/ended + error->0ms blob fallback (${fetchCalls[0].elapsedMs}ms) + Studio SSE & /api/status config verified`;
+    } finally {
+      mockWin.__agyPrism.destroy();
+    }
+  });
+
   // =========================================================================
   // SUITE 3: Studio v2.0 UI & Antigravity 2.34.0 Hub Headless Chrome E2E
   // =========================================================================
@@ -1267,6 +2205,13 @@ async function main() {
       const css = buildStaticCssSheet(payload);
       assert.ok(typeof css === 'string' && css.length > 200, 'buildStaticCssSheet returned empty CSS');
       assert.ok(css.includes('data-has-browser-hole'), 'buildStaticCssSheet missing [data-has-browser-hole] transparency yield');
+      assert.ok(css.includes('customizations-search'), 'buildStaticCssSheet missing Customizations carrier rules');
+      assert.ok(css.includes('data-sidebar-section-drop-id'), 'buildStaticCssSheet missing [data-sidebar-section-drop-id] sticky header rule');
+      assert.ok(css.includes('[data-testid="title-menu-bar"]'), 'buildStaticCssSheet missing rounded glass title-menu-bar rule');
+      assert.ok(css.includes('--background: #00000000 !important'), 'buildStaticCssSheet missing body --background: #00000000 WCO guard');
+      assert.ok(css.includes('[data-testid="project-header"]'), 'buildStaticCssSheet missing deep rounded project-header capsule rule');
+      assert.ok(css.includes('--prism-surface-sidebar-deep'), 'buildStaticCssSheet missing --prism-surface-sidebar-deep token');
+      assert.ok(css.includes('[data-testid="new-tab-search-input"]'), 'buildStaticCssSheet missing right aux-pane new-tab-search-input glass rule');
       return `${css.length}B static CSS sheet verified`;
     });
 
@@ -1480,6 +2425,39 @@ async function main() {
           assert.ok(validVidGate.videoWidth > 0, `Expected decoded videoWidth > 0 at wallpaper="ready", got ${validVidGate.videoWidth}`);
         }
 
+        // Verify D3D11 zero-copy hardware video overlay pass-through:
+        //   - default video (`mediaSaturate: 100`) AND legacy persisted `mediaSaturate: 105` output `--prism-media-filter: none`
+        //   - manual `mediaSaturate: 130` outputs `saturate(130%)`
+        const mediaFilterAudit = await hubPage.evaluate(`(() => {
+          const readFilter = () => getComputedStyle(document.documentElement).getPropertyValue('--prism-media-filter').trim();
+          const defaultFilter = readFilter();
+          window.__agyPrism.updateConfig({ mediaSaturate: 105 });
+          const legacy105Filter = readFilter();
+          window.__agyPrism.updateConfig({ mediaSaturate: 130 });
+          const manual130Filter = readFilter();
+          window.__agyPrism.updateConfig({ mediaSaturate: 100 });
+          const restored100Filter = readFilter();
+          const v = document.querySelector('#agy-prism-stage video');
+          const videoComputedFilter = v ? getComputedStyle(v).filter : '';
+          return { defaultFilter, legacy105Filter, manual130Filter, restored100Filter, videoComputedFilter };
+        })()`);
+        assert.equal(
+          mediaFilterAudit.defaultFilter,
+          'none',
+          `Expected default video --prism-media-filter === 'none' for D3D11 overlay pass-through, got '${mediaFilterAudit.defaultFilter}'`,
+        );
+        assert.equal(
+          mediaFilterAudit.legacy105Filter,
+          'none',
+          `Expected legacy mediaSaturate:105 --prism-media-filter === 'none', got '${mediaFilterAudit.legacy105Filter}'`,
+        );
+        assert.ok(
+          mediaFilterAudit.manual130Filter.includes('saturate(130%)'),
+          `Expected manual mediaSaturate:130 --prism-media-filter to include 'saturate(130%)', got '${mediaFilterAudit.manual130Filter}'`,
+        );
+        assert.equal(mediaFilterAudit.restored100Filter, 'none');
+        assert.equal(mediaFilterAudit.videoComputedFilter, 'none', `Expected <video> computed filter === 'none', got '${mediaFilterAudit.videoComputedFilter}'`);
+
         // Verify v2.0.1 anti-occlusion containment (`contain: style`, never `paint`), rVFC keep-alive, and fullscreen/focus wake
         const vidLivenessAudit = await hubPage.evaluate(`(() => {
           const stage = document.getElementById('agy-prism-stage');
@@ -1586,6 +2564,14 @@ async function main() {
           const holeOpaqueCs = getComputedStyle(document.getElementById('v234-browser-hole-probe'));
           const mainBodyCs = getComputedStyle(document.getElementById('v234-main-body-probe'));
 
+          const custProbe = document.getElementById('v234-customizations-probe');
+          const custHostCs = getComputedStyle(custProbe);
+          const custBeforeCs = getComputedStyle(custProbe, '::before');
+          const custCardCs = getComputedStyle(document.getElementById('v234-cust-card'));
+          const custSpotlightCs = getComputedStyle(document.getElementById('v234-cust-spotlight'));
+          const custFixedRect = document.getElementById('v234-cust-fixed-probe').getBoundingClientRect();
+          const dropStickyBeforeCs = getComputedStyle(document.getElementById('v234-drop-sticky-probe'), '::before');
+
           const bd = document.getElementById('v234-settings-backdrop-probe');
           bd.style.display = 'flex';
           const bdCs = getComputedStyle(bd);
@@ -1617,6 +2603,15 @@ async function main() {
             holeOpaqueBg: holeOpaqueCs.backgroundColor,
             holeShellCanvas: holeOpaqueCs.getPropertyValue('--shell-canvas').trim(),
             mainBodyBg: mainBodyCs.backgroundColor,
+            custHostBlur: custHostCs.backdropFilter || custHostCs.webkitBackdropFilter || 'none',
+            custBeforeBg: custBeforeCs.backgroundColor,
+            custBeforeBlur: custBeforeCs.backdropFilter || custBeforeCs.webkitBackdropFilter || 'none',
+            custCardBg: custCardCs.backgroundColor,
+            custSpotlightBg: custSpotlightCs.backgroundColor,
+            custFixedTop: Math.round(custFixedRect.top),
+            custFixedLeft: Math.round(custFixedRect.left),
+            dropStickyBeforeBg: dropStickyBeforeCs.backgroundColor,
+            dropStickyBeforeBlur: dropStickyBeforeCs.backdropFilter || dropStickyBeforeCs.webkitBackdropFilter || 'none',
             backdropBg: bdCs.backgroundColor,
             dialogBg: dlgCs.backgroundColor,
             detailBg: detailCs.backgroundColor,
@@ -1651,6 +2646,35 @@ async function main() {
         assert.equal(v234Audit.gutterWidth, '8px');
         assert.equal(v234Audit.fixedProbeTop, 0, 'position:fixed child inside .surface-composer-card trapped!');
         assert.equal(v234Audit.fixedProbeLeft, 0);
+
+        // Customizations dark frosted glass page carrier + cards + untrapped fixed probe + [data-sidebar-section-drop-id] sticky header
+        assert.equal(v234Audit.custHostBlur, 'none', '#v234-customizations-probe parent must keep backdrop-filter: none');
+        assert.ok(
+          parseAlphaFromCssColor(v234Audit.custBeforeBg) >= 0.70,
+          `Expected #v234-customizations-probe::before alpha >= 0.70, got ${v234Audit.custBeforeBg}`,
+        );
+        assert.ok(
+          String(v234Audit.custBeforeBlur).includes('blur('),
+          `Expected #v234-customizations-probe::before backdropFilter to include 'blur(', got ${v234Audit.custBeforeBlur}`,
+        );
+        assert.ok(
+          parseAlphaFromCssColor(v234Audit.custCardBg) >= 0.50,
+          `Expected #v234-cust-card alpha >= 0.50 (not transparent), got ${v234Audit.custCardBg}`,
+        );
+        assert.ok(
+          parseAlphaFromCssColor(v234Audit.custSpotlightBg) >= 0.50,
+          `Expected #v234-cust-spotlight alpha >= 0.50, got ${v234Audit.custSpotlightBg}`,
+        );
+        assert.equal(v234Audit.custFixedTop, 0, `#v234-cust-fixed-probe top trapped (${v234Audit.custFixedTop}) instead of 0!`);
+        assert.equal(v234Audit.custFixedLeft, 0, `#v234-cust-fixed-probe left trapped (${v234Audit.custFixedLeft}) instead of 0!`);
+        assert.ok(
+          parseAlphaFromCssColor(v234Audit.dropStickyBeforeBg) >= 0.85,
+          `Expected #v234-drop-sticky-probe::before alpha >= 0.85, got ${v234Audit.dropStickyBeforeBg}`,
+        );
+        assert.ok(
+          String(v234Audit.dropStickyBeforeBlur).includes('blur('),
+          `Expected #v234-drop-sticky-probe::before backdropFilter to include 'blur(', got ${v234Audit.dropStickyBeforeBlur}`,
+        );
 
         // Settings modal, inner `.hover:bg-background` tab & `[role="menu"]` solid legibility (`alpha >= 0.94`)
         assert.ok(parseAlphaFromCssColor(v234Audit.backdropBg) >= 0.25, `Settings backdrop alpha too low: ${v234Audit.backdropBg}`);
@@ -2096,6 +3120,699 @@ async function main() {
 
         return `Lazy panel.js + Fail-Open 404/H.264 + 2.34.0 selectors + rounded [data-browser-hole] (alpha=0) + Ctrl+Alt+Shift+R verified, Shot=${Math.round(sHubV234.bytes / 1024)}KB`;
       } finally {
+        await browser.closePage(hubPage);
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // 3C. v2.0.6 Sidebar Dark Glass Base, ::before Frosted Carriers, Studio UI Auto-Follow/Reset Sliders & Quick Popover Sliders E2E
+    // -----------------------------------------------------------------------
+    const shotStudioSkinV206Path = path.join(DEFAULT_ARTIFACT_DIR, 'v206-studio-skin-sidebar-sliders.png');
+
+    await check('v2.0.6 Sidebar Dark Glass Base, ::before Frosted Carriers ([data-side-panel-body] & .part.sidebar), Studio UI Auto-Follow/Reset Sliders & Ctrl+Alt+W Popover Sliders E2E', '@gentle-skin-architect / @exec-host / @exec-studio', async () => {
+      await engine.applyWallpaper(auroraItem.id, {
+        skinEnabled: true,
+        startupMode: 'gentle-auto',
+        preset: 'islands',
+        layoutMode: 'islands',
+        islandGap: 8,
+        workspacePad: 8,
+        cornerStyle: 'balanced',
+        colorScheme: 'host-native',
+        themeMode: 'dark',
+        glassSurfaces: true,
+        glassOpacity: 0.76,
+        glassBlur: 16,
+        sidebarOpacity: null,
+        sidebarBlur: null,
+        contrastFloor: true,
+        triggerMode: 'both',
+        language: 'zh',
+      });
+
+      const hubPage = await browser.openPage({
+        url: `${HUB_MOCK_ORIGIN}/hub`,
+        requestHandler: universalHttpRouter,
+      });
+      const studioPage = await browser.openPage({
+        url: `${studio.origin}/?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+        requestHandler: universalHttpRouter,
+      });
+
+      try {
+        const bootstrapExpr = buildHostMicroBootstrap({
+          hostOrigin: studio.origin,
+          capToken: studio.hostCapToken,
+          triggerMode: 'both',
+          startupMode: 'gentle-auto',
+          skinEnabled: true,
+        });
+        await hubPage.evaluate(bootstrapExpr);
+
+        const bootDeadline = Date.now() + 3000;
+        while (Date.now() < bootDeadline) {
+          const ready = await hubPage.evaluate(
+            `Boolean(window.__agyPrism && typeof window.__agyPrism.applyPayload === 'function')`,
+          );
+          if (ready) break;
+          await sleep(40);
+        }
+
+        const stInit = await studio.getState();
+        const initPayload = buildClientSkinPayload(stInit.config, stInit.activeItem, stInit.mediaOrigin, {
+          skinEnabled: true,
+        });
+        await hubPage.evaluate(`window.__agyPrism.applyPayload(${JSON.stringify(initPayload)})`);
+
+        const wallDeadline = Date.now() + 3000;
+        while (Date.now() < wallDeadline) {
+          const wAttr = await hubPage.evaluate(`document.documentElement.getAttribute('data-agy-prism-wallpaper')`);
+          if (wAttr === 'ready') break;
+          await sleep(35);
+        }
+
+        // (a) Default config (sidebarOpacity: null, sidebarBlur: null):
+        //     .agy-sidebar::before, #v234-side-panel-probe::before, #ide-workbench-probe .part.sidebar::before
+        //     backgroundColor alpha >= 0.70, backdropFilter includes 'blur(16px)';
+        //     inner #v234-side-panel-inner-bg & #ide-sidebar-content-probe backgroundColor === 'rgba(0, 0, 0, 0)';
+        //     #v234-sidebar-fixed-probe getBoundingClientRect().top === 0 && left === 0 (untrapped!)
+        const defaultSidebarAudit = await hubPage.evaluate(`(() => {
+          const agySb = document.querySelector('.agy-sidebar');
+          const v234Sb = document.getElementById('v234-side-panel-probe');
+          const ideSb = document.querySelector('#ide-workbench-probe .part.sidebar');
+          const agyBefore = getComputedStyle(agySb, '::before');
+          const v234Before = getComputedStyle(v234Sb, '::before');
+          const ideBefore = getComputedStyle(ideSb, '::before');
+          const innerBgCs = getComputedStyle(document.getElementById('v234-side-panel-inner-bg'));
+          const ideContentCs = getComputedStyle(document.getElementById('ide-sidebar-content-probe'));
+          const fixedRect = document.getElementById('v234-sidebar-fixed-probe').getBoundingClientRect();
+          return {
+            sidebarRgbVar: getComputedStyle(document.documentElement).getPropertyValue('--prism-sidebar-rgb').trim(),
+            agyHostBlur: getComputedStyle(agySb).backdropFilter || getComputedStyle(agySb).webkitBackdropFilter || 'none',
+            v234HostBlur: getComputedStyle(v234Sb).backdropFilter || getComputedStyle(v234Sb).webkitBackdropFilter || 'none',
+            ideHostBlur: getComputedStyle(ideSb).backdropFilter || getComputedStyle(ideSb).webkitBackdropFilter || 'none',
+            agyBeforeBg: agyBefore.backgroundColor,
+            agyBeforeBlur: agyBefore.backdropFilter || agyBefore.webkitBackdropFilter || 'none',
+            v234BeforeBg: v234Before.backgroundColor,
+            v234BeforeBlur: v234Before.backdropFilter || v234Before.webkitBackdropFilter || 'none',
+            ideBeforeBg: ideBefore.backgroundColor,
+            ideBeforeBlur: ideBefore.backdropFilter || ideBefore.webkitBackdropFilter || 'none',
+            innerBg: innerBgCs.backgroundColor,
+            ideContentBg: ideContentCs.backgroundColor,
+            fixedTop: fixedRect.top,
+            fixedLeft: fixedRect.left,
+          };
+        })()`);
+
+        const agyAlpha0 = parseAlphaFromCssColor(defaultSidebarAudit.agyBeforeBg);
+        const v234Alpha0 = parseAlphaFromCssColor(defaultSidebarAudit.v234BeforeBg);
+        const ideAlpha0 = parseAlphaFromCssColor(defaultSidebarAudit.ideBeforeBg);
+
+        assert.equal(
+          defaultSidebarAudit.sidebarRgbVar,
+          '7, 7, 8',
+          `Expected host-native dark --prism-sidebar-rgb to select deep base '7, 7, 8', got '${defaultSidebarAudit.sidebarRgbVar}'`,
+        );
+        assert.ok(agyAlpha0 >= 0.70, `Expected .agy-sidebar::before alpha >= 0.70, got ${agyAlpha0} (${defaultSidebarAudit.agyBeforeBg})`);
+        assert.ok(v234Alpha0 >= 0.70, `Expected #v234-side-panel-probe::before alpha >= 0.70, got ${v234Alpha0} (${defaultSidebarAudit.v234BeforeBg})`);
+        assert.ok(ideAlpha0 >= 0.70, `Expected #ide-workbench-probe .part.sidebar::before alpha >= 0.70, got ${ideAlpha0} (${defaultSidebarAudit.ideBeforeBg})`);
+
+        assert.ok(
+          String(defaultSidebarAudit.agyBeforeBlur).includes('blur(16px)'),
+          `Expected .agy-sidebar::before backdropFilter to include 'blur(16px)', got ${defaultSidebarAudit.agyBeforeBlur}`,
+        );
+        assert.ok(
+          String(defaultSidebarAudit.v234BeforeBlur).includes('blur(16px)'),
+          `Expected #v234-side-panel-probe::before backdropFilter to include 'blur(16px)', got ${defaultSidebarAudit.v234BeforeBlur}`,
+        );
+        assert.ok(
+          String(defaultSidebarAudit.ideBeforeBlur).includes('blur(16px)'),
+          `Expected #ide-workbench-probe .part.sidebar::before backdropFilter to include 'blur(16px)', got ${defaultSidebarAudit.ideBeforeBlur}`,
+        );
+
+        assert.equal(defaultSidebarAudit.agyHostBlur, 'none', '.agy-sidebar parent element must have backdrop-filter: none');
+        assert.equal(defaultSidebarAudit.v234HostBlur, 'none', '#v234-side-panel-probe parent element must have backdrop-filter: none');
+        assert.equal(defaultSidebarAudit.ideHostBlur, 'none', '.part.sidebar parent element must have backdrop-filter: none');
+
+        assert.equal(
+          defaultSidebarAudit.innerBg,
+          'rgba(0, 0, 0, 0)',
+          `Expected #v234-side-panel-inner-bg backgroundColor 'rgba(0, 0, 0, 0)', got ${defaultSidebarAudit.innerBg}`,
+        );
+        assert.equal(
+          defaultSidebarAudit.ideContentBg,
+          'rgba(0, 0, 0, 0)',
+          `Expected #ide-sidebar-content-probe backgroundColor 'rgba(0, 0, 0, 0)', got ${defaultSidebarAudit.ideContentBg}`,
+        );
+        assert.equal(
+          defaultSidebarAudit.fixedTop,
+          0,
+          `#v234-sidebar-fixed-probe top trapped (${defaultSidebarAudit.fixedTop}) instead of 0!`,
+        );
+        assert.equal(
+          defaultSidebarAudit.fixedLeft,
+          0,
+          `#v234-sidebar-fixed-probe left trapped (${defaultSidebarAudit.fixedLeft}) instead of 0!`,
+        );
+
+        // (c) Ctrl+Alt+W Quick Popover (#agy-prism-popover) has [data-slider-key="sidebarOpacity"] & [data-slider-key="sidebarBlur"] with data-dirty="false"
+        await hubPage.pressKey({
+          key: 'w',
+          code: 'KeyW',
+          windowsVirtualKeyCode: 87,
+          modifiers: 3, // Alt (1) + Ctrl (2)
+        });
+        const popDeadline = Date.now() + 3000;
+        while (Date.now() < popDeadline) {
+          const isOpen = await hubPage.evaluate(
+            `Boolean(window.__agyPrismPanel && typeof window.__agyPrismPanel.status === 'function' && window.__agyPrismPanel.status().open)`,
+          );
+          if (isOpen) break;
+          await sleep(40);
+        }
+
+        const popSlidersAudit = await hubPage.evaluate(`(() => {
+          const pop = document.getElementById('agy-prism-popover');
+          if (!pop) return { hasPop: false };
+          const sbOp = pop.querySelector('[data-slider-key="sidebarOpacity"]');
+          const sbBlur = pop.querySelector('[data-slider-key="sidebarBlur"]');
+          const sbOpRow = sbOp ? sbOp.closest('.pp-srow') : null;
+          const sbBlurRow = sbBlur ? sbBlur.closest('.pp-srow') : null;
+          return {
+            hasPop: true,
+            hasSbOp: Boolean(sbOp),
+            hasSbBlur: Boolean(sbBlur),
+            sbOpDirty: sbOp ? sbOp.getAttribute('data-dirty') : null,
+            sbBlurDirty: sbBlur ? sbBlur.getAttribute('data-dirty') : null,
+            sbOpRowDirty: sbOpRow ? sbOpRow.getAttribute('data-dirty') : null,
+            sbBlurRowDirty: sbBlurRow ? sbBlurRow.getAttribute('data-dirty') : null,
+            sbOpValText: sbOpRow && sbOpRow.querySelector('.pp-sval') ? sbOpRow.querySelector('.pp-sval').textContent : '',
+            sbBlurValText: sbBlurRow && sbBlurRow.querySelector('.pp-sval') ? sbBlurRow.querySelector('.pp-sval').textContent : '',
+          };
+        })()`);
+
+        assert.equal(popSlidersAudit.hasPop, true, '#agy-prism-popover missing after Ctrl+Alt+W');
+        assert.equal(popSlidersAudit.hasSbOp, true, 'Missing [data-slider-key="sidebarOpacity"] in #agy-prism-popover');
+        assert.equal(popSlidersAudit.hasSbBlur, true, 'Missing [data-slider-key="sidebarBlur"] in #agy-prism-popover');
+        assert.equal(popSlidersAudit.sbOpDirty, 'false', `Expected popover sidebarOpacity data-dirty="false", got ${popSlidersAudit.sbOpDirty}`);
+        assert.equal(popSlidersAudit.sbBlurDirty, 'false', `Expected popover sidebarBlur data-dirty="false", got ${popSlidersAudit.sbBlurDirty}`);
+        assert.ok(
+          popSlidersAudit.sbOpValText.includes('跟随') || popSlidersAudit.sbOpValText.includes('Auto'),
+          `Expected popover sidebarOpacity readout to include '跟随' or 'Auto', got '${popSlidersAudit.sbOpValText}'`,
+        );
+        assert.ok(
+          popSlidersAudit.sbBlurValText.includes('跟随') || popSlidersAudit.sbBlurValText.includes('Auto'),
+          `Expected popover sidebarBlur readout to include '跟随' or 'Auto', got '${popSlidersAudit.sbBlurValText}'`,
+        );
+
+        // (b) Studio UI Appearance (Skin) tab has input[data-config-slider="sidebarOpacity"] & input[data-config-slider="sidebarBlur"],
+        //     default data-dirty="false" and readout contains '跟随' or 'Auto';
+        //     setting { sidebarOpacity: 0.88, sidebarBlur: 28 } raises host .agy-sidebar::before & #v234-side-panel-probe::before
+        //     alpha >= 0.86 & backdropFilter includes 'blur(28px)';
+        //     clicking [data-action="reset-key"][data-key="sidebarOpacity"] & [data-key="sidebarBlur"] restores null!
+        await sleep(500);
+        await studioPage.evaluate(`(() => {
+          const skinTab = document.querySelector('[data-action="switch-tab"][data-tab="skin"]');
+          if (skinTab) skinTab.click();
+        })()`);
+        await sleep(220);
+
+        const studioInitSliders = await studioPage.evaluate(`(() => {
+          const sbBlurIn = document.querySelector('input[data-config-slider="sidebarBlur"]');
+          const sec = sbBlurIn ? sbBlurIn.closest('.prism-section') : null;
+          const sbOpIn = sec ? sec.querySelector('input[data-config-slider="sidebarOpacity"]') : document.querySelector('input[data-config-slider="sidebarOpacity"]');
+          const railOpIn = document.querySelector('#prism-rail-optics-card input[data-config-slider="sidebarOpacity"]');
+          const opRow = sbOpIn ? sbOpIn.closest('.prism-slider-row') : null;
+          const blurRow = sbBlurIn ? sbBlurIn.closest('.prism-slider-row') : null;
+          if (opRow) opRow.scrollIntoView({ block: 'center' });
+          return {
+            hasOpSlider: Boolean(sbOpIn),
+            hasBlurSlider: Boolean(sbBlurIn),
+            hasRailOpSlider: Boolean(railOpIn),
+            opDirty: opRow ? opRow.getAttribute('data-dirty') : null,
+            blurDirty: blurRow ? blurRow.getAttribute('data-dirty') : null,
+            opText: opRow && opRow.querySelector('.prism-slider-val') ? opRow.querySelector('.prism-slider-val').textContent.trim() : '',
+            blurText: blurRow && blurRow.querySelector('.prism-slider-val') ? blurRow.querySelector('.prism-slider-val').textContent.trim() : '',
+          };
+        })()`);
+
+        assert.equal(studioInitSliders.hasOpSlider, true, 'Studio Skin tab missing input[data-config-slider="sidebarOpacity"]');
+        assert.equal(studioInitSliders.hasBlurSlider, true, 'Studio Skin tab missing input[data-config-slider="sidebarBlur"]');
+        assert.equal(studioInitSliders.hasRailOpSlider, true, 'Studio Left Rail optics card missing input[data-config-slider="sidebarOpacity"]');
+        assert.equal(studioInitSliders.opDirty, 'false', `Expected Studio sidebarOpacity row data-dirty="false", got ${studioInitSliders.opDirty}`);
+        assert.equal(studioInitSliders.blurDirty, 'false', `Expected Studio sidebarBlur row data-dirty="false", got ${studioInitSliders.blurDirty}`);
+        assert.ok(
+          studioInitSliders.opText.includes('跟随') || studioInitSliders.opText.includes('Auto'),
+          `Expected Studio sidebarOpacity readout to include '跟随' or 'Auto', got '${studioInitSliders.opText}'`,
+        );
+        assert.ok(
+          studioInitSliders.blurText.includes('跟随') || studioInitSliders.blurText.includes('Auto'),
+          `Expected Studio sidebarBlur readout to include '跟随' or 'Auto', got '${studioInitSliders.blurText}'`,
+        );
+
+        await sleep(100);
+        const sSkinV206 = await studioPage.capturePng(shotStudioSkinV206Path, { expectedWidth: 1440, expectedHeight: 900 });
+        screenshots.push({
+          path: shotStudioSkinV206Path,
+          caption: 'Studio v2.0.6 Skin tab & Left Rail Sidebar Glass Opacity / Blur auto-follow sliders',
+        });
+        assert.ok(sSkinV206.bytes > 20000, 'Studio Skin v2.0.6 screenshot suspiciously small');
+
+        // Drive { sidebarOpacity: 0.88, sidebarBlur: 28 } directly through Studio UI sliders -> flushes POST /api/config to Engine
+        const studioAfterDrag = await studioPage.evaluate(`(() => {
+          const sbBlurIn = document.querySelector('input[data-config-slider="sidebarBlur"]');
+          const sec = sbBlurIn.closest('.prism-section');
+          const sbOpIn = sec.querySelector('input[data-config-slider="sidebarOpacity"]');
+          sbOpIn.value = '88';
+          sbOpIn.dispatchEvent(new Event('input', { bubbles: true }));
+          sbOpIn.dispatchEvent(new Event('change', { bubbles: true }));
+          sbBlurIn.value = '28';
+          sbBlurIn.dispatchEvent(new Event('input', { bubbles: true }));
+          sbBlurIn.dispatchEvent(new Event('change', { bubbles: true }));
+          const railRow = document.querySelector('#prism-rail-optics-card .prism-slider-row[data-slider-key="sidebarOpacity"]');
+          return {
+            opDirty: sbOpIn.closest('.prism-slider-row').getAttribute('data-dirty'),
+            blurDirty: sbBlurIn.closest('.prism-slider-row').getAttribute('data-dirty'),
+            railDirty: railRow ? railRow.getAttribute('data-dirty') : null,
+            railText: railRow && railRow.querySelector('.prism-slider-val') ? railRow.querySelector('.prism-slider-val').textContent.trim() : '',
+          };
+        })()`);
+        assert.equal(studioAfterDrag.opDirty, 'true');
+        assert.equal(studioAfterDrag.blurDirty, 'true');
+        assert.equal(studioAfterDrag.railDirty, 'true', 'Paired Left-Rail sidebarOpacity slider did not sync dirty="true"');
+        assert.ok(!studioAfterDrag.railText.includes('跟随') && studioAfterDrag.railText.includes('88'), `Unexpected paired rail readout: ${studioAfterDrag.railText}`);
+
+        await sleep(220);
+        const cfgCustom = await engine.getConfig();
+        assert.equal(cfgCustom.sidebarOpacity, 0.88, `Expected engine sidebarOpacity=0.88, got ${cfgCustom.sidebarOpacity}`);
+        assert.equal(cfgCustom.sidebarBlur, 28, `Expected engine sidebarBlur=28, got ${cfgCustom.sidebarBlur}`);
+
+        // Push updated state to host microkernel & verify .agy-sidebar::before and #v234-side-panel-probe::before >= 0.86 & blur(28px)
+        const stCustom = await studio.getState();
+        const customPayload = buildClientSkinPayload(stCustom.config, stCustom.activeItem, stCustom.mediaOrigin, {
+          skinEnabled: true,
+        });
+        await hubPage.evaluate(`window.__agyPrism.applyPayload(${JSON.stringify(customPayload)})`);
+        await sleep(80);
+
+        const customHostAudit = await hubPage.evaluate(`(() => {
+          const agyBefore = getComputedStyle(document.querySelector('.agy-sidebar'), '::before');
+          const v234Before = getComputedStyle(document.getElementById('v234-side-panel-probe'), '::before');
+          return {
+            agyBg: agyBefore.backgroundColor,
+            agyBlur: agyBefore.backdropFilter || agyBefore.webkitBackdropFilter || 'none',
+            v234Bg: v234Before.backgroundColor,
+            v234Blur: v234Before.backdropFilter || v234Before.webkitBackdropFilter || 'none',
+          };
+        })()`);
+
+        const agyAlpha88 = parseAlphaFromCssColor(customHostAudit.agyBg);
+        const v234Alpha88 = parseAlphaFromCssColor(customHostAudit.v234Bg);
+        assert.ok(agyAlpha88 >= 0.86, `Expected .agy-sidebar::before alpha >= 0.86 at sidebarOpacity=0.88, got ${agyAlpha88} (${customHostAudit.agyBg})`);
+        assert.ok(v234Alpha88 >= 0.86, `Expected #v234-side-panel-probe::before alpha >= 0.86 at sidebarOpacity=0.88, got ${v234Alpha88} (${customHostAudit.v234Bg})`);
+        assert.ok(
+          String(customHostAudit.agyBlur).includes('blur(28px)'),
+          `Expected .agy-sidebar::before backdropFilter to include 'blur(28px)', got ${customHostAudit.agyBlur}`,
+        );
+        assert.ok(
+          String(customHostAudit.v234Blur).includes('blur(28px)'),
+          `Expected #v234-side-panel-probe::before backdropFilter to include 'blur(28px)', got ${customHostAudit.v234Blur}`,
+        );
+
+        // Click Studio UI [data-action="reset-key"][data-key="sidebarOpacity"] & [data-key="sidebarBlur"] -> config restores null!
+        // Note: each reset-key click triggers renderActiveSurface(), so re-query live DOM after clicking sidebarOpacity!
+        await studioPage.evaluate(`(() => {
+          const sbBlurIn = document.querySelector('input[data-config-slider="sidebarBlur"]');
+          const sec = sbBlurIn ? sbBlurIn.closest('.prism-section') : document;
+          const rstOp = sec.querySelector('[data-action="reset-key"][data-key="sidebarOpacity"]');
+          if (rstOp) rstOp.click();
+        })()`);
+        await sleep(120);
+        await studioPage.evaluate(`(() => {
+          const sbBlurIn = document.querySelector('input[data-config-slider="sidebarBlur"]');
+          const sec = sbBlurIn ? sbBlurIn.closest('.prism-section') : document;
+          const rstBlur = sec.querySelector('[data-action="reset-key"][data-key="sidebarBlur"]');
+          if (rstBlur) rstBlur.click();
+        })()`);
+        await sleep(220);
+
+        const cfgReset = await engine.getConfig();
+        assert.equal(cfgReset.sidebarOpacity, null, `Expected sidebarOpacity === null after reset-key, got ${cfgReset.sidebarOpacity}`);
+        assert.equal(cfgReset.sidebarBlur, null, `Expected sidebarBlur === null after reset-key, got ${cfgReset.sidebarBlur}`);
+
+        const studioAfterReset = await studioPage.evaluate(`(() => {
+          const sbBlurIn = document.querySelector('input[data-config-slider="sidebarBlur"]');
+          const sec = sbBlurIn.closest('.prism-section');
+          const sbOpIn = sec.querySelector('input[data-config-slider="sidebarOpacity"]');
+          const opRow = sbOpIn.closest('.prism-slider-row');
+          const blurRow = sbBlurIn.closest('.prism-slider-row');
+          return {
+            opDirty: opRow.getAttribute('data-dirty'),
+            blurDirty: blurRow.getAttribute('data-dirty'),
+            opText: opRow.querySelector('.prism-slider-val').textContent.trim(),
+            blurText: blurRow.querySelector('.prism-slider-val').textContent.trim(),
+          };
+        })()`);
+        assert.equal(studioAfterReset.opDirty, 'false');
+        assert.equal(studioAfterReset.blurDirty, 'false');
+        assert.ok(studioAfterReset.opText.includes('跟随') || studioAfterReset.opText.includes('Auto'));
+        assert.ok(studioAfterReset.blurText.includes('跟随') || studioAfterReset.blurText.includes('Auto'));
+
+        // Also verify host microkernel optimistic updateConfig({ sidebarOpacity: null, sidebarBlur: null }) restores auto-follow!
+        const hostAfterNullPatch = await hubPage.evaluate(`(() => {
+          window.__agyPrism.updateConfig({ sidebarOpacity: null, sidebarBlur: null });
+          const agyBefore = getComputedStyle(document.querySelector('.agy-sidebar'), '::before');
+          return {
+            agyBg: agyBefore.backgroundColor,
+            agyBlur: agyBefore.backdropFilter || agyBefore.webkitBackdropFilter || 'none',
+          };
+        })()`);
+        const restoredAlpha = parseAlphaFromCssColor(hostAfterNullPatch.agyBg);
+        assert.ok(
+          restoredAlpha >= 0.70 && restoredAlpha <= 0.80,
+          `Expected updateConfig(null) to restore auto-follow alpha ~0.76, got ${restoredAlpha} (${hostAfterNullPatch.agyBg})`,
+        );
+        assert.ok(
+          String(hostAfterNullPatch.agyBlur).includes('blur(16px)'),
+          `Expected updateConfig(null) to restore blur(16px), got ${hostAfterNullPatch.agyBlur}`,
+        );
+
+        assert.deepEqual(hubPage.consoleErrors, [], `v2.0.6 Hub console.error: ${hubPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(hubPage.pageExceptions, [], `v2.0.6 Hub exception: ${hubPage.pageExceptions.join(' | ')}`);
+        assert.deepEqual(studioPage.consoleErrors, [], `v2.0.6 Studio console.error: ${studioPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(studioPage.pageExceptions, [], `v2.0.6 Studio exception: ${studioPage.pageExceptions.join(' | ')}`);
+
+        return `default alpha=${agyAlpha0.toFixed(2)}/blur(16px) -> custom 0.88/${agyAlpha88.toFixed(2)}/blur(28px) -> reset null + popover & fixed-probe (0,0) verified, Shot=${Math.round(sSkinV206.bytes / 1024)}KB`;
+      } finally {
+        await browser.closePage(studioPage);
+        await browser.closePage(hubPage);
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // 3D. v2.0.6 Four Glass UI Fixes Strict E2E (Bug 1 WCO Pill + syncOverlay Guard,
+    //     Bug 2 Rounded Glass Titlebar, Bug 3 Deep Rounded Projects & Folder Capsules,
+    //     Bug 4 Right Aux-Pane = Main-Chat Alignment & Studio 21:9 .mini-aux Parity)
+    // -----------------------------------------------------------------------
+    await check('v2.0.6 Four Glass UI Fixes E2E: WCO Pill & syncOverlay Guard (Bug 1), Rounded Glass Titlebar (Bug 2), Deep Rounded Projects/Folders (Bug 3), Aux-Pane = Main-Chat & Studio .mini-aux Parity (Bug 4)', '@exec-host-skin / @exec-studio-ui', async () => {
+      await engine.applyWallpaper(auroraItem.id, {
+        skinEnabled: true,
+        startupMode: 'gentle-auto',
+        preset: 'islands',
+        layoutMode: 'islands',
+        islandGap: 8,
+        workspacePad: 8,
+        cornerStyle: 'balanced',
+        colorScheme: 'host-native',
+        themeMode: 'dark',
+        glassSurfaces: true,
+        glassOpacity: 0.76,
+        glassBlur: 16,
+        sidebarOpacity: null,
+        sidebarBlur: null,
+        transparentWindowControls: true,
+        contrastFloor: true,
+        triggerMode: 'both',
+        language: 'zh',
+      });
+
+      const hubPage = await browser.openPage({
+        url: `${HUB_MOCK_ORIGIN}/hub`,
+        requestHandler: universalHttpRouter,
+        initScript: `
+          Object.defineProperty(navigator, 'windowControlsOverlay', {
+            configurable: true,
+            value: {
+              visible: true,
+              getTitlebarAreaRect() {
+                return { x: 0, y: 0, width: 1300, height: 35, right: 1300, bottom: 35, left: 0, top: 0 };
+              },
+              addEventListener() {},
+              removeEventListener() {},
+            },
+          });
+          window.__wcoCalls = [];
+          window.__lastWco = null;
+          window.electronNative = {
+            setTitleBarOverlay(opts) {
+              window.__wcoCalls.push(opts);
+              window.__lastWco = opts;
+              return Promise.resolve();
+            },
+          };
+          window.__meterOverlayCalls = [];
+          window.__origSyncOverlay = function origSyncOverlay(opts) {
+            window.__meterOverlayCalls.push(opts);
+            return Promise.resolve();
+          };
+          window.contextMeterAPI = { syncOverlay: window.__origSyncOverlay };
+        `,
+      });
+      const studioPage = await browser.openPage({
+        url: `${studio.origin}/?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+        requestHandler: universalHttpRouter,
+      });
+
+      try {
+        const bootstrapExpr = buildHostMicroBootstrap({
+          hostOrigin: studio.origin,
+          capToken: studio.hostCapToken,
+          triggerMode: 'both',
+          startupMode: 'gentle-auto',
+          skinEnabled: true,
+        });
+        await hubPage.evaluate(bootstrapExpr);
+
+        const bootDeadline = Date.now() + 3000;
+        while (Date.now() < bootDeadline) {
+          const ready = await hubPage.evaluate(
+            `Boolean(window.__agyPrism && typeof window.__agyPrism.applyPayload === 'function')`,
+          );
+          if (ready) break;
+          await sleep(40);
+        }
+
+        const stInit = await studio.getState();
+        const initPayload = buildClientSkinPayload(stInit.config, stInit.activeItem, stInit.mediaOrigin, {
+          skinEnabled: true,
+        });
+        await hubPage.evaluate(`window.__agyPrism.applyPayload(${JSON.stringify(initPayload)})`);
+
+        const wallDeadline = Date.now() + 3000;
+        while (Date.now() < wallDeadline) {
+          const wAttr = await hubPage.evaluate(`document.documentElement.getAttribute('data-agy-prism-wallpaper')`);
+          if (wAttr === 'ready') break;
+          await sleep(35);
+        }
+        await sleep(80);
+
+        const glassUiAudit = await hubPage.evaluate(`(() => {
+          // Bug 1: WCO pill + contextMeterAPI.syncOverlay interception
+          window.contextMeterAPI.syncOverlay({ color: 'transparent', symbolColor: '#ffffff', height: 40 });
+          const lastMeterCall = window.__meterOverlayCalls[window.__meterOverlayCalls.length - 1] || null;
+          const wcoPill = document.getElementById('agy-prism-wco-pill');
+          const wcoPillCs = wcoPill ? getComputedStyle(wcoPill) : null;
+          const wcoPillBeforeCs = wcoPill ? getComputedStyle(wcoPill, '::before') : null;
+          const wcoPillRect = wcoPill ? wcoPill.getBoundingClientRect() : null;
+          const wcoInsetRight = getComputedStyle(document.documentElement).getPropertyValue('--prism-wco-inset-right').trim();
+          const bodyBgVar = getComputedStyle(document.body).getPropertyValue('--background').trim();
+          const rootDarkBgVar = getComputedStyle(document.getElementById('v234-root-theme-wrap')).getPropertyValue('--background').trim();
+
+          // Bug 2: Rounded glass titlebar & dropdown safety
+          const tb = document.querySelector('[data-testid="title-menu-bar"]');
+          const tbCs = getComputedStyle(tb);
+          const tbRect = tb.getBoundingClientRect();
+          const tbToPillGap = wcoPillRect ? Math.round(wcoPillRect.left - tbRect.right) : -1;
+          const tbBeforeCs = getComputedStyle(tb, '::before');
+          const tbFixedRect = document.getElementById('titlebar-fixed-probe').getBoundingClientRect();
+          const tbDropdownCs = getComputedStyle(document.getElementById('hub-title-menu-dropdown'));
+
+          // Bug 3: Deep rounded Projects sticky header + project-header folder capsules + transparent folder wrapper
+          const sbBeforeCs = getComputedStyle(document.querySelector('.agy-sidebar'), '::before');
+          const stickyProj = document.getElementById('hub-sidebar-sticky-projects');
+          const stickyProjCs = getComputedStyle(stickyProj);
+          const stickyProjBeforeCs = getComputedStyle(stickyProj, '::before');
+          const folderWrap = document.getElementById('hub-project-folder-wrap');
+          const folderWrapCs = getComputedStyle(folderWrap);
+          const folderWrapBeforeCs = getComputedStyle(folderWrap, '::before');
+          const projBtn = document.getElementById('hub-project-header-btn');
+          const projBtnCs = getComputedStyle(projBtn);
+          const projBtnBeforeCs = getComputedStyle(projBtn, '::before');
+          const projFixedRect = document.getElementById('project-header-fixed-probe').getBoundingClientRect();
+
+          // Bug 4: Right aux-pane matches center main-chat (NOT dark left sidebar), inner right-body transparent
+          const centerIslandCs = getComputedStyle(document.getElementById('v234-center-island-probe'));
+          const rightIslandCs = getComputedStyle(document.getElementById('v234-right-island-probe'));
+          const rightBodyCs = getComputedStyle(document.getElementById('v234-right-body-probe'));
+          const mainHeaderCs = getComputedStyle(document.getElementById('v234-main-header-probe'));
+          const newTabSearchCs = getComputedStyle(document.getElementById('v234-new-tab-search-probe'));
+
+          // Verify left-sidebar custom slider controls ONLY left sidebar, NOT right aux-pane!
+          // Read live CSSStyleDeclaration string values BEFORE restoring null config!
+          window.__agyPrism.updateConfig({ sidebarOpacity: 0.92, sidebarBlur: 24 });
+          const sbAfterCustomCs = getComputedStyle(document.querySelector('.agy-sidebar'), '::before');
+          const rightIslandAfterCustomCs = getComputedStyle(document.getElementById('v234-right-island-probe'));
+          const sbAfterCustomBg = sbAfterCustomCs.backgroundColor;
+          const sbAfterCustomBlur = sbAfterCustomCs.backdropFilter || sbAfterCustomCs.webkitBackdropFilter || 'none';
+          const rightIslandAfterCustomBg = rightIslandAfterCustomCs.backgroundColor;
+          window.__agyPrism.updateConfig({ sidebarOpacity: null, sidebarBlur: null });
+
+          return {
+            bug1: {
+              hasPill: Boolean(wcoPill),
+              pillDisplay: wcoPillCs ? wcoPillCs.display : '',
+              pillRadius: wcoPillCs ? parseFloat(wcoPillCs.borderTopLeftRadius) : 0,
+              pillBeforeBlur: wcoPillBeforeCs ? (wcoPillBeforeCs.backdropFilter || wcoPillBeforeCs.webkitBackdropFilter || 'none') : 'none',
+              pillBeforeBg: wcoPillBeforeCs ? wcoPillBeforeCs.backgroundColor : '',
+              wcoInsetRight,
+              bodyBgVar,
+              rootDarkBgVar,
+              tbToPillGap,
+              lastMeterCall,
+              lastWco: window.__lastWco,
+            },
+            bug2: {
+              tbRadius: tbCs.borderTopLeftRadius,
+              tbHostBlur: tbCs.backdropFilter || tbCs.webkitBackdropFilter || 'none',
+              tbOverflow: tbCs.overflow,
+              tbBeforeBlur: tbBeforeCs.backdropFilter || tbBeforeCs.webkitBackdropFilter || 'none',
+              tbBeforeBg: tbBeforeCs.backgroundColor,
+              tbFixedTop: Math.round(tbFixedRect.top),
+              tbFixedLeft: Math.round(tbFixedRect.left),
+              tbDropdownBg: tbDropdownCs.backgroundColor,
+            },
+            bug3: {
+              sbBeforeBg: sbBeforeCs.backgroundColor,
+              stickyHostBlur: stickyProjCs.backdropFilter || stickyProjCs.webkitBackdropFilter || 'none',
+              stickyBeforeRadius: parseFloat(stickyProjBeforeCs.borderTopLeftRadius) || 0,
+              stickyBeforeBlur: stickyProjBeforeCs.backdropFilter || stickyProjBeforeCs.webkitBackdropFilter || 'none',
+              stickyBeforeBg: stickyProjBeforeCs.backgroundColor,
+              projHostBlur: projBtnCs.backdropFilter || projBtnCs.webkitBackdropFilter || 'none',
+              projBeforeRadius: parseFloat(projBtnBeforeCs.borderTopLeftRadius) || 0,
+              projBeforeBlur: projBtnBeforeCs.backdropFilter || projBtnBeforeCs.webkitBackdropFilter || 'none',
+              projBeforeBg: projBtnBeforeCs.backgroundColor,
+              projFixedTop: Math.round(projFixedRect.top),
+              projFixedLeft: Math.round(projFixedRect.left),
+              folderWrapBg: folderWrapCs.backgroundColor,
+              folderWrapBeforeContent: folderWrapBeforeCs.content,
+            },
+            bug4: {
+              centerIslandBg: centerIslandCs.backgroundColor,
+              rightIslandBg: rightIslandCs.backgroundColor,
+              rightBodyBg: rightBodyCs.backgroundColor,
+              mainHeaderBg: mainHeaderCs.backgroundColor,
+              newTabSearchBorder: newTabSearchCs.borderTopWidth,
+              sbAfterCustomBg,
+              sbAfterCustomBlur,
+              rightIslandAfterCustomBg,
+            },
+          };
+        })()`);
+
+        // Bug 1 Assertions
+        assert.equal(glassUiAudit.bug1.hasPill, true, 'Bug 1: #agy-prism-wco-pill not mounted');
+        assert.equal(glassUiAudit.bug1.pillDisplay, 'block', `Bug 1: #agy-prism-wco-pill display expected block, got ${glassUiAudit.bug1.pillDisplay}`);
+        assert.ok(glassUiAudit.bug1.pillRadius >= 6, `Bug 1: #agy-prism-wco-pill border-radius expected >= 6px, got ${glassUiAudit.bug1.pillRadius}px`);
+        assert.ok(String(glassUiAudit.bug1.pillBeforeBlur).includes('blur('), `Bug 1: #agy-prism-wco-pill::before missing blur(, got ${glassUiAudit.bug1.pillBeforeBlur}`);
+        assert.equal(glassUiAudit.bug1.lastMeterCall?.color, '#00000000', `Bug 1: contextMeterAPI.syncOverlay({ color: 'transparent' }) not rewritten to #00000000 (got ${JSON.stringify(glassUiAudit.bug1.lastMeterCall)})`);
+        assert.equal(glassUiAudit.bug1.lastMeterCall?.height, 35, `Bug 1: contextMeterAPI.syncOverlay height not normalized to 35 (got ${glassUiAudit.bug1.lastMeterCall?.height})`);
+        assert.equal(glassUiAudit.bug1.wcoInsetRight, '148px', `Bug 1: expected --prism-wco-inset-right = 148px (140 + 8), got ${glassUiAudit.bug1.wcoInsetRight}`);
+        assert.equal(glassUiAudit.bug1.bodyBgVar, '#00000000', `Bug 1: expected body --background === '#00000000' for frozen contextBridge meter-renderer guard, got '${glassUiAudit.bug1.bodyBgVar}'`);
+        assert.equal(glassUiAudit.bug1.rootDarkBgVar, 'transparent', `Bug 1: inner #v234-root-theme-wrap --background must stay 'transparent', got '${glassUiAudit.bug1.rootDarkBgVar}'`);
+        assert.equal(glassUiAudit.bug1.tbToPillGap, 8, `Bug 1/2: expected titlebar-to-WCO-pill gap === 8px (no double-counted workspacePad), got ${glassUiAudit.bug1.tbToPillGap}px`);
+
+        // Bug 2 Assertions
+        assert.equal(glassUiAudit.bug2.tbRadius, '12px', `Bug 2: [data-testid="title-menu-bar"] islands borderRadius expected 12px, got ${glassUiAudit.bug2.tbRadius}`);
+        assert.equal(glassUiAudit.bug2.tbHostBlur, 'none', `Bug 2: [data-testid="title-menu-bar"] parent backdropFilter must be none, got ${glassUiAudit.bug2.tbHostBlur}`);
+        assert.equal(glassUiAudit.bug2.tbOverflow, 'visible', `Bug 2: [data-testid="title-menu-bar"] overflow must be visible, got ${glassUiAudit.bug2.tbOverflow}`);
+        assert.ok(String(glassUiAudit.bug2.tbBeforeBlur).includes('blur('), `Bug 2: [data-testid="title-menu-bar"]::before missing blur(, got ${glassUiAudit.bug2.tbBeforeBlur}`);
+        assert.equal(glassUiAudit.bug2.tbFixedTop, 0, `Bug 2: #titlebar-fixed-probe top trapped at ${glassUiAudit.bug2.tbFixedTop}`);
+        assert.equal(glassUiAudit.bug2.tbFixedLeft, 0, `Bug 2: #titlebar-fixed-probe left trapped at ${glassUiAudit.bug2.tbFixedLeft}`);
+        assert.ok(
+          parseAlphaFromCssColor(glassUiAudit.bug2.tbDropdownBg) >= 0.94,
+          `Bug 2: #hub-title-menu-dropdown alpha expected >= 0.94, got ${glassUiAudit.bug2.tbDropdownBg}`,
+        );
+
+        // Bug 3 Assertions
+        const sbAlpha = parseAlphaFromCssColor(glassUiAudit.bug3.sbBeforeBg);
+        const stickyAlpha = parseAlphaFromCssColor(glassUiAudit.bug3.stickyBeforeBg);
+        const projAlpha = parseAlphaFromCssColor(glassUiAudit.bug3.projBeforeBg);
+        assert.ok(glassUiAudit.bug3.stickyBeforeRadius >= 6, `Bug 3: #hub-sidebar-sticky-projects::before radius expected >= 6px, got ${glassUiAudit.bug3.stickyBeforeRadius}px`);
+        assert.ok(glassUiAudit.bug3.projBeforeRadius >= 6, `Bug 3: #hub-project-header-btn::before radius expected >= 6px, got ${glassUiAudit.bug3.projBeforeRadius}px`);
+        assert.ok(String(glassUiAudit.bug3.stickyBeforeBlur).includes('blur('), `Bug 3: #hub-sidebar-sticky-projects::before missing blur(, got ${glassUiAudit.bug3.stickyBeforeBlur}`);
+        assert.ok(String(glassUiAudit.bug3.projBeforeBlur).includes('blur('), `Bug 3: #hub-project-header-btn::before missing blur(, got ${glassUiAudit.bug3.projBeforeBlur}`);
+        assert.ok(
+          stickyAlpha > sbAlpha + 0.08,
+          `Bug 3: #hub-sidebar-sticky-projects::before alpha (${stickyAlpha}) must be significantly darker than .agy-sidebar::before (${sbAlpha})`,
+        );
+        assert.ok(
+          projAlpha > sbAlpha + 0.08,
+          `Bug 3: #hub-project-header-btn::before alpha (${projAlpha}) must be significantly darker than .agy-sidebar::before (${sbAlpha})`,
+        );
+        assert.equal(glassUiAudit.bug3.stickyHostBlur, 'none', 'Bug 3: #hub-sidebar-sticky-projects parent backdropFilter must be none');
+        assert.equal(glassUiAudit.bug3.projHostBlur, 'none', 'Bug 3: #hub-project-header-btn parent backdropFilter must be none');
+        assert.equal(glassUiAudit.bug3.projFixedTop, 0, `Bug 3: #project-header-fixed-probe top trapped at ${glassUiAudit.bug3.projFixedTop}`);
+        assert.equal(glassUiAudit.bug3.projFixedLeft, 0, `Bug 3: #project-header-fixed-probe left trapped at ${glassUiAudit.bug3.projFixedLeft}`);
+        assert.equal(glassUiAudit.bug3.folderWrapBg, 'rgba(0, 0, 0, 0)', `Bug 3: #hub-project-folder-wrap background must be transparent, got ${glassUiAudit.bug3.folderWrapBg}`);
+        assert.equal(glassUiAudit.bug3.folderWrapBeforeContent, 'none', `Bug 3: #hub-project-folder-wrap::before content must be none, got ${glassUiAudit.bug3.folderWrapBeforeContent}`);
+
+        // Bug 4 Assertions (Host)
+        const centerAlpha = parseAlphaFromCssColor(glassUiAudit.bug4.centerIslandBg);
+        const rightAlpha = parseAlphaFromCssColor(glassUiAudit.bug4.rightIslandBg);
+        assert.equal(
+          glassUiAudit.bug4.rightIslandBg,
+          glassUiAudit.bug4.centerIslandBg,
+          `Bug 4: right aux-pane (${glassUiAudit.bug4.rightIslandBg}) must match center main-chat (${glassUiAudit.bug4.centerIslandBg})`,
+        );
+        assert.ok(rightAlpha < 0.55, `Bug 4: right aux-pane alpha (${rightAlpha}) must stay translucent main-chat (< 0.55), NOT dark left-sidebar!`);
+        assert.ok(centerAlpha < 0.55, `Bug 4: center island alpha (${centerAlpha}) expected < 0.55`);
+        assert.equal(glassUiAudit.bug4.rightBodyBg, 'rgba(0, 0, 0, 0)', `Bug 4: inner #v234-right-body-probe must be transparent (no double stacking), got ${glassUiAudit.bug4.rightBodyBg}`);
+        assert.equal(glassUiAudit.bug4.mainHeaderBg, 'rgba(0, 0, 0, 0)', `Bug 4: inner #v234-main-header-probe in islands mode must be transparent (no double stacking), got ${glassUiAudit.bug4.mainHeaderBg}`);
+        assert.ok(
+          parseAlphaFromCssColor(glassUiAudit.bug4.sbAfterCustomBg) >= 0.90 && String(glassUiAudit.bug4.sbAfterCustomBlur).includes('blur(24px)'),
+          `Bug 4: left .agy-sidebar::before must remain independently controlled by sidebarOpacity/sidebarBlur (got ${glassUiAudit.bug4.sbAfterCustomBg} / ${glassUiAudit.bug4.sbAfterCustomBlur})`,
+        );
+        assert.equal(
+          glassUiAudit.bug4.rightIslandAfterCustomBg,
+          glassUiAudit.bug4.centerIslandBg,
+          `Bug 4: changing sidebarOpacity/sidebarBlur leaked into right aux-pane (${glassUiAudit.bug4.rightIslandAfterCustomBg})!`,
+        );
+
+        // Bug 4 Assertion (Studio 21:9 Mini Preview `.mini-aux` === `.mini-center`)
+        await sleep(600);
+        const studioMiniAudit = await studioPage.evaluate(`(() => {
+          const aux = document.querySelector('.mini-aux');
+          const center = document.querySelector('.mini-center');
+          const sidebar = document.querySelector('.mini-sidebar');
+          return {
+            hasAll: Boolean(aux && center && sidebar),
+            auxBg: aux ? getComputedStyle(aux).backgroundColor : '',
+            centerBg: center ? getComputedStyle(center).backgroundColor : '',
+            sidebarBg: sidebar ? getComputedStyle(sidebar).backgroundColor : '',
+            auxBlur: aux ? (getComputedStyle(aux).backdropFilter || getComputedStyle(aux).webkitBackdropFilter || 'none') : '',
+          };
+        })()`);
+        assert.equal(studioMiniAudit.hasAll, true, 'Bug 4: Studio 21:9 mini preview elements (.mini-aux/.mini-center/.mini-sidebar) missing');
+        assert.equal(
+          studioMiniAudit.auxBg,
+          studioMiniAudit.centerBg,
+          `Bug 4: Studio 21:9 .mini-aux bg (${studioMiniAudit.auxBg}) must match .mini-center bg (${studioMiniAudit.centerBg})`,
+        );
+        assert.notEqual(
+          studioMiniAudit.auxBg,
+          studioMiniAudit.sidebarBg,
+          `Bug 4: Studio 21:9 .mini-aux bg (${studioMiniAudit.auxBg}) must NOT match dark .mini-sidebar bg (${studioMiniAudit.sidebarBg})`,
+        );
+        assert.equal(studioMiniAudit.auxBlur, 'none', `Bug 4: Studio 21:9 .mini-aux backdropFilter expected none, got ${studioMiniAudit.auxBlur}`);
+
+        assert.deepEqual(hubPage.consoleErrors, [], `3D Hub console.error: ${hubPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(hubPage.pageExceptions, [], `3D Hub exception: ${hubPage.pageExceptions.join(' | ')}`);
+        assert.deepEqual(studioPage.consoleErrors, [], `3D Studio console.error: ${studioPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(studioPage.pageExceptions, [], `3D Studio exception: ${studioPage.pageExceptions.join(' | ')}`);
+
+        return `Bug1(pill r=${glassUiAudit.bug1.pillRadius}px + bodyBg=#00000000 + gap=${glassUiAudit.bug1.tbToPillGap}px + syncOverlay->#00000000/35) + Bug2(tb r=12px + overflow=visible + fixed 0,0) + Bug3(sticky=${stickyAlpha.toFixed(2)}/proj=${projAlpha.toFixed(2)} > sb=${sbAlpha.toFixed(2)}) + Bug4(right=${rightAlpha.toFixed(2)}==center & Studio .mini-aux==.mini-center) verified`;
+      } finally {
+        await browser.closePage(studioPage);
         await browser.closePage(hubPage);
       }
     });

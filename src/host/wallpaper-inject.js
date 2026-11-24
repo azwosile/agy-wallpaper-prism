@@ -1,4 +1,4 @@
-// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.0.4).
+// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.0.6).
 //
 // Gentle Fail-Open ES2020 browser IIFE loaded post-hydration (`stage.js`) or in headless verification harnesses.
 // Zero `Page.enable`/`Runtime.enable`, zero `app.asar` modifications, `z-index: -1` inert stage,
@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.0.5';
+  var VERSION = '2.0.6';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -22,6 +22,8 @@
   var STATIC_STYLE_ID = 'agy-prism-static-css';
   var CARET_STYLE_ID = 'agy-prism-caret-css';
   var FX_CANVAS_ID = 'agy-prism-fx-canvas';
+  var WCO_PILL_ID = 'agy-prism-wco-pill';
+  var TARGET_WCO_HEIGHT = 35;
   var ROOT_ATTR = 'data-agy-prism-skin';
   var GLASS_ATTR = 'data-agy-prism-glass';
   var WALLPAPER_ATTR = 'data-agy-prism-wallpaper';
@@ -312,6 +314,8 @@
   var SIBLING_EXCLUDE =
     ':not(#gemini-neko-pet-root):not(#gemini-neko-observer-modal):not(#gemini-neko-stats-bar):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(#' +
     STAGE_ID +
+    '):not(#' +
+    WCO_PILL_ID +
     '):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
 
   var DIALOG_DESCENDANT_EXCLUDE =
@@ -328,9 +332,7 @@
     '.browser-hole-ancestor',
     '.browser-hole-opaque' + SIBLING_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
     '.agy-sheet[data-sheet-inset] [data-main-content-body]',
-    '.agy-inset-shell [data-side-panel-body]',
-    '.agy-inset-shell .agy-sheet[data-sheet-inset] [data-side-panel-strip]',
-    '.agy-inset-shell .agy-sheet[data-sheet-inset] [data-main-content-header]',
+    '.agy-sheet [data-side-panel-body]',
     '[data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane]',
     '[data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane] > [data-pane-id]',
     '.agy-inset-shell > [data-split-root] > [data-split-sash]',
@@ -344,10 +346,20 @@
   // so `position: fixed` descendants (Radix poppers, dropdowns, modals) are NEVER trapped!
   var GLASS_CARRIER_SIDEBARS = [
     '[data-testid="sidebar-split"] > div:first-child',
-    '.agy-sidebar',
+    '.agy-sidebar:not([data-testid="sidebar-split"] > div:first-child *)',
+    'aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *):not(.agy-sidebar *):not([data-testid="sidebar-split"] > div:first-child *)',
     '.monaco-workbench .part.activitybar',
     '.monaco-workbench .part.sidebar',
-    '.monaco-workbench .part.auxiliarybar',
+  ];
+
+  var GLASS_CARRIER_TITLEBARS = [
+    '[data-testid="title-menu-bar"]',
+    '.monaco-workbench .part.titlebar',
+  ];
+
+  var GLASS_CARRIER_MAIN_PAGES = [
+    'div.bg-background:not(.agy-shell):not(.sticky):not([style*="sticky"]):not(.agy-dialog):not(.settings-modal-container):has([data-testid="customizations-search"], [data-testid="customizations-marketplace"], [data-testid="customizations-installed"])',
+    '[data-testid="plugin-detail"]',
   ];
 
   var GLASS_CARRIER_COMPOSERS = [
@@ -369,6 +381,8 @@
     '[role="listbox"]',
     '[role="tooltip"]',
     '[data-radix-popper-content-wrapper] > *',
+    '[data-testid="title-menu-bar"] [data-browser-occluder="true"]',
+    '.surface-opaque.bg-sidebar:not(.sticky):not([style*="sticky"])',
     '[data-testid="context-menu-popup"]',
     '[data-testid="context-menu-submenu-popup"]',
     '[data-testid="permissions-menu"]',
@@ -523,6 +537,7 @@
   var state = {
     skinEnabled: true,
     wallpaperReady: false,
+    rawCfg: {},
     cfg: {},
     item: null,
     mediaOrigin: '',
@@ -541,6 +556,7 @@
     wakeNudgeTimer: 0,
     lastVidCheckTime: -1,
     lastVidCheckFrames: -1,
+    lastVidCheckAt: 0,
     vidStallCount: 0,
     rvfcCount: 0,
     unmuteGestureCleanup: null,
@@ -552,9 +568,15 @@
     activeVideo: null,
     activeAudio: null,
     activeIframe: null,
+    activeVideoStageFrame: null,
+    activeVideoStageSid: '',
+    activeVideoStageReady: false,
+    activeVideoStageUrl: '',
+    videoStageMessageCleanup: null,
     activeMediaKey: '',
     failedMediaKey: '',
     failedMediaRetries: 0,
+    preferBlobMedia: false,
     transitionTimer: 0,
     lastHostFocus: null,
     lastSidecarSig: '',
@@ -562,17 +584,30 @@
     lastCaretSig: '',
     lastWcoSig: '',
     wcoThemeTimer: 0,
+    wcoConfirmTimer: 0,
+    wcoConfirmTimer2: 0,
+    wcoHeightRepairCount: 0,
+    origContextMeterSyncOverlay: null,
+    wrappedContextMeterApi: null,
+    wrappedContextMeterFn: null,
+    replacedContextMeterApi: false,
+    origContextMeterApiObj: null,
+    wcoOverlayTarget: null,
+    wcoGeometryCleanup: null,
     lastHoleClip: '',
     watchdog15Timer: 0,
     watchdog80Timer: 0,
     appliedVars: {},
+    accentRgbStr: '102, 157, 246',
     parallaxTargetX: 0,
     parallaxTargetY: 0,
     parallaxCurX: 0,
     parallaxCurY: 0,
     parallaxRaf: 0,
+    lastParallaxFrameAt: 0,
     fxParticles: [],
     fxRaf: 0,
+    lastFxFrameAt: 0,
     lastTrailAt: 0,
   };
 
@@ -893,6 +928,8 @@
       glassSurfaces: bool(c.glassSurfaces != null ? c.glassSurfaces : c.glassEnabled, true),
       glassOpacity: normUnit(c.glassOpacity != null ? c.glassOpacity : c.widgetFill != null ? c.widgetFill : 0.76, 0.76, 0.25, 0.98),
       glassBlur: clamp(num(c.glassBlur != null ? c.glassBlur : c.blur, 16), 0, 48),
+      sidebarOpacity: c.sidebarOpacity === null || c.sidebarOpacity === undefined || c.sidebarOpacity === '' || c.sidebarOpacity === 'auto' ? null : normUnit(c.sidebarOpacity, 0.76, 0.20, 0.98),
+      sidebarBlur: c.sidebarBlur === null || c.sidebarBlur === undefined || c.sidebarBlur === '' || c.sidebarBlur === 'auto' ? null : clamp(num(c.sidebarBlur, 16), 0, 48),
       glassFidelity: normUnit(c.glassFidelity != null ? c.glassFidelity : 92, 0.92, 0, 1),
       chatGlassFidelity: normUnit(c.chatGlassFidelity != null ? c.chatGlassFidelity : 90, 0.90, 0, 1),
       scrimOpacity: normUnit(c.scrimOpacity != null ? c.scrimOpacity : c.scrim != null ? c.scrim : 0.26, 0.26, 0, 0.94),
@@ -916,7 +953,7 @@
       mediaBlur: clamp(num(c.mediaBlur != null ? c.mediaBlur : c.wallpaperBlur != null ? c.wallpaperBlur : c.blurPx, 0), 0, 64),
       mediaBrightness: normFactor(c.mediaBrightness != null ? c.mediaBrightness : c.backgroundBrightness != null ? c.backgroundBrightness : 100, 1, 0.4, 1.6),
       mediaContrast: normFactor(c.mediaContrast != null ? c.mediaContrast : c.backgroundContrast != null ? c.backgroundContrast : 100, 1, 0.4, 2.0),
-      mediaSaturate: normFactor(c.mediaSaturate != null ? c.mediaSaturate : c.backgroundSaturate != null ? c.backgroundSaturate : 105, 1.05, 0, 2.0),
+      mediaSaturate: normFactor(c.mediaSaturate != null ? c.mediaSaturate : c.backgroundSaturate != null ? c.backgroundSaturate : 100, 1, 0, 2.0),
       grainAlpha: normUnit(c.grainAlpha, 0.022, 0, 0.2),
       switchTransition: trans,
       switchTransitionDir: transDir,
@@ -926,6 +963,7 @@
       muted: c.audioEnabled != null ? !c.audioEnabled : c.videoAudioEnabled != null ? !c.videoAudioEnabled : bool(c.muted, true),
       volume: normUnit(c.volume != null ? c.volume : c.videoVolume != null ? c.videoVolume : 0.5, 0.5, 0, 1),
       playbackRate: clamp(num(c.playbackRate, 1), 0.25, 2),
+      fpsCap: clamp(num(c.fpsCap, 0), 0, 120),
       rotationEnabled: bool(c.rotationEnabled, false),
       rotationTrigger: String(c.rotationTrigger || 'interval'),
       pauseOnHidden: bool(c.pauseOnHidden, true),
@@ -997,6 +1035,7 @@
     var schemePair = COLOR_SCHEMES[cfg.colorScheme] || COLOR_SCHEMES['prism-default'];
     var S = isLight ? schemePair.light : schemePair.dark;
     var acc = resolveAccent(cfg, S, isLight);
+    state.accentRgbStr = acc.rgbStr;
     var R = computeRadii(cfg);
 
     var ptRgb = parseRgbTriplet(S.pt);
@@ -1009,19 +1048,37 @@
     var g = cfg.glassOpacity;
     var solidChrome = !cfg.glassSurfaces;
 
-    var rawSidebarA = isLight ? clamp(g * 0.80, 0.42, 0.97) : clamp(g * 0.72, 0.24, 0.96);
+    var sbBaseRgb = !isLight && (shadeRgb[0] + shadeRgb[1] + shadeRgb[2] > baseRgb[0] + baseRgb[1] + baseRgb[2]) ? baseRgb : shadeRgb;
+    var hasCustomSbOp = cfg.sidebarOpacity !== null && cfg.sidebarOpacity !== undefined;
+    var effSbOp = hasCustomSbOp ? cfg.sidebarOpacity : g;
+    var minSidebarFloor = hasCustomSbOp ? 0.20 : (cfg.contrastFloor ? (isLight ? 0.62 : 0.52) : 0.25);
+    var deepSbRgb = isLight ? mixRgb(sbBaseRgb, [215, 224, 238], 0.35) : mixRgb(sbBaseRgb, [3, 4, 7], 0.55);
+    var deepSbAlpha = solidChrome
+      ? 1
+      : isLight
+        ? clamp(Math.max(effSbOp + 0.14, 0.90), 0.45, 0.97)
+        : clamp(Math.max(effSbOp + 0.12, 0.88), 0.35, 0.96);
+
     var rawChatA = cfg.layoutMode === 'flush' && !isLight ? clamp(g * 0.24, 0, 0.82) : isLight ? clamp(g * 0.62, 0.28, 0.92) : clamp(g * 0.42, 0.08, 0.88);
     var rawEditorA = isLight ? clamp(g * 0.96, 0.55, 0.99) : clamp(g * 0.92, 0.45, 0.98);
     var rawCardA = isLight ? clamp(g * 0.86, 0.50, 0.98) : clamp(g * 0.78, 0.32, 0.96);
     var rawCompA = isLight ? clamp(g * 0.94, 0.65, 0.99) : clamp(g * 0.92, 0.48, 0.98);
 
-    var minSidebarFloor = isLight ? 0.58 : 0.42;
     var minChatFloor = isLight ? 0.42 : 0.16;
     var minEditorFloor = cfg.contrastFloor ? (isLight ? 0.84 : 0.72) : (isLight ? 0.52 : 0.38);
     var minCardFloor = isLight ? 0.62 : 0.48;
     var minCompFloor = isLight ? 0.72 : 0.58;
 
-    var surfSidebar = computeFlooredRgba(shadeRgb, acc.wallTint, cfg.wallTintMix, rawSidebarA, cfg.glassFidelity, minSidebarFloor, solidChrome);
+    var surfSidebar = computeFlooredRgba(
+      sbBaseRgb,
+      acc.wallTint,
+      cfg.wallTintMix * 0.75,
+      effSbOp,
+      hasCustomSbOp ? 1 : cfg.glassFidelity,
+      minSidebarFloor,
+      solidChrome
+    );
+    var surfSidebarDeep = rgbaStr(mixRgb(deepSbRgb, acc.wallTint, cfg.wallTintMix * 0.45), deepSbAlpha);
     var surfChat = computeFlooredRgba(baseRgb, acc.wallTint, cfg.wallTintMix * 0.75, rawChatA, cfg.chatGlassFidelity, minChatFloor, solidChrome);
     var surfEditor = computeFlooredRgba(
       baseRgb,
@@ -1065,15 +1122,24 @@
       : 'radial-gradient(ellipse 56% 64% at 50% 48%, rgba(9,9,11,0.06) 0%, rgba(9,9,11,0.28) 58%, rgba(9,9,11,0.62) 100%)';
 
     var blurMd = cfg.glassSurfaces ? cfg.glassBlur : 0;
+    var sbBlurPx = cfg.glassSurfaces ? (cfg.sidebarBlur !== null && cfg.sidebarBlur !== undefined ? cfg.sidebarBlur : cfg.glassBlur) : 0;
     var blurLg = cfg.glassSurfaces ? Math.min(48, cfg.glassBlur + 4) : 0;
     var blurXl = Math.max(20, cfg.glassBlur + 8);
 
     var fitCss = cfg.fit === 'center' ? 'none' : cfg.fit;
+    var isZeroCopyOverlaySafe =
+      cfg.mediaBlur === 0 &&
+      cfg.filterPreset === 'none' &&
+      Math.abs(cfg.mediaBrightness - 1) <= 0.01 &&
+      Math.abs(cfg.mediaContrast - 1) <= 0.01 &&
+      (Math.abs(cfg.mediaSaturate - 1) <= 0.01 || Math.abs(cfg.mediaSaturate - 1.05) <= 0.006);
     var filterParts = [];
     if (cfg.mediaBlur > 0) filterParts.push('blur(' + cfg.mediaBlur + 'px)');
     if (Math.abs(cfg.mediaBrightness - 1) > 0.01) filterParts.push('brightness(' + Math.round(cfg.mediaBrightness * 100) + '%)');
     if (Math.abs(cfg.mediaContrast - 1) > 0.01) filterParts.push('contrast(' + Math.round(cfg.mediaContrast * 100) + '%)');
-    if (Math.abs(cfg.mediaSaturate - 1) > 0.01) filterParts.push('saturate(' + Math.round(cfg.mediaSaturate * 100) + '%)');
+    if (!isZeroCopyOverlaySafe && Math.abs(cfg.mediaSaturate - 1) > 0.01) {
+      filterParts.push('saturate(' + Math.round(cfg.mediaSaturate * 100) + '%)');
+    }
     if (cfg.filterPreset === 'vivid') filterParts.push('saturate(135%) contrast(108%)');
     else if (cfg.filterPreset === 'warm') filterParts.push('sepia(22%) saturate(118%)');
     else if (cfg.filterPreset === 'cool') filterParts.push('hue-rotate(14deg) saturate(110%)');
@@ -1094,6 +1160,8 @@
     var vars = {
       '--prism-pt-rgb': S.pt,
       '--prism-shade-rgb': S.shade,
+      '--prism-sidebar-rgb': sbBaseRgb[0] + ', ' + sbBaseRgb[1] + ', ' + sbBaseRgb[2],
+      '--prism-sidebar-deep-rgb': deepSbRgb[0] + ', ' + deepSbRgb[1] + ', ' + deepSbRgb[2],
       '--prism-base-rgb': S.base,
       '--prism-tint-1-rgb': S.tint1,
       '--prism-tint-2-rgb': S.tint2,
@@ -1111,6 +1179,7 @@
       '--prism-link': S.link,
       '--prism-surface-canvas': 'transparent',
       '--prism-surface-sidebar': surfSidebar,
+      '--prism-surface-sidebar-deep': surfSidebarDeep,
       '--prism-surface-chat': surfChat,
       '--prism-surface-editor': surfEditor,
       '--prism-surface-card': surfCard,
@@ -1124,7 +1193,7 @@
       '--prism-blur-md': blurMd + 'px',
       '--prism-blur-lg': blurLg + 'px',
       '--prism-blur-xl': blurXl + 'px',
-      '--prism-sidebar-backdrop': blurMd > 0 ? 'blur(' + blurMd + 'px) saturate(135%)' : 'none',
+      '--prism-sidebar-backdrop': sbBlurPx > 0 ? 'blur(' + sbBlurPx + 'px) saturate(' + (isLight ? '135%' : '125%') + ')' : 'none',
       '--prism-composer-backdrop': blurLg > 0 ? 'blur(' + blurLg + 'px) saturate(140%)' : 'none',
       '--prism-code-backdrop': cfg.codeReadabilityMode === 'frosted' && blurMd > 0 ? 'blur(12px) saturate(130%)' : 'none',
       '--prism-border-hairline': borderHairline,
@@ -1171,6 +1240,7 @@
       state.effectiveTheme,
       cfg.colorScheme === 'host-native' ? 'host' : 'prism',
       cfg.layoutMode,
+      cfg.parallaxEnabled ? 'px1' : 'px0',
     ].join('|');
 
     return {
@@ -1205,6 +1275,7 @@
         }
       }
       root.style.removeProperty('--prism-hole-clip');
+      root.style.removeProperty('--prism-wco-inset-right');
     }
     state.appliedVars = {};
     state.lastHoleClip = '';
@@ -1242,6 +1313,45 @@
       '  background: transparent !important;\n' +
       '  background-color: transparent !important;\n' +
       '}\n' +
+      '#' + WCO_PILL_ID + ' {\n' +
+      '  position: fixed !important;\n' +
+      '  z-index: 55 !important;\n' +
+      '  pointer-events: none !important;\n' +
+      '  user-select: none !important;\n' +
+      '  -webkit-user-select: none !important;\n' +
+      '  isolation: isolate;\n' +
+      '  box-sizing: border-box !important;\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  display: none;\n' +
+      '}\n' +
+      GW + '[' + WCO_ATTR + '="transparent"] #' + WCO_PILL_ID + ' {\n' +
+      '  display: block;\n' +
+      '  border-radius: var(--prism-r-island) !important;\n' +
+      '  border: 1px solid var(--prism-border-island) !important;\n' +
+      '  box-shadow: var(--prism-shadow-island) !important;\n' +
+      '}\n' +
+      GW + '[' + WCO_ATTR + '="transparent"][data-prism-layout="flush"] #' + WCO_PILL_ID + ' {\n' +
+      '  border-radius: 0px !important;\n' +
+      '  border: none !important;\n' +
+      '  border-bottom: 1px solid var(--prism-border-hairline) !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      GW + '[' + WCO_ATTR + '="transparent"] #' + WCO_PILL_ID + '::before {\n' +
+      '  content: "";\n' +
+      '  position: absolute;\n' +
+      '  inset: 0;\n' +
+      '  z-index: -1;\n' +
+      '  border-radius: inherit;\n' +
+      '  pointer-events: none;\n' +
+      '  background-color: var(--prism-surface-sidebar);\n' +
+      '  background-image: var(--prism-sheen);\n' +
+      '  backdrop-filter: var(--prism-sidebar-backdrop);\n' +
+      '  -webkit-backdrop-filter: var(--prism-sidebar-backdrop);\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-top);\n' +
+      '}\n' +
       GW + '[data-prism-kind="image"] body:not(:has(> #' + STAGE_ID + ' .agy-prism-media-wrap))::before {\n' +
       '  content: "";\n' +
       '  position: fixed;\n' +
@@ -1261,7 +1371,7 @@
     // 2. Fail-Open Token Overrides (strictly gated on GW so broken/404 media keeps 100% solid native surfaces!)
     out.push(
       GW + ' body,\n' +
-      GW + ' :where(#root, #root > div, #root .dark, #root .light, #root .theme-dark, #root .theme-light, .agy-shell, .agy-inset-shell, .agy-sheet:not([data-browser-occluder]), [data-split-panes] [data-testid="pane-titlebar-toolbar"])' +
+      GW + ' :where(#root, #root > div, #root .dark, #root .light, #root .theme-dark, #root .theme-light, .agy-shell, .agy-inset-shell, .agy-sheet:not([data-browser-occluder]), [data-split-panes] [data-testid="pane-titlebar-toolbar"], .monaco-workbench)' +
       ':where(' + SIBLING_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE + ') {\n' +
       '  --background: transparent !important;\n' +
       '  --color-background: transparent !important;\n' +
@@ -1299,11 +1409,16 @@
       '  --vscode-editor-background: transparent !important;\n' +
       '  --vscode-editorGutter-background: transparent !important;\n' +
       '  --vscode-sideBar-background: transparent !important;\n' +
+      '  --vscode-sideBarSectionHeader-background: transparent !important;\n' +
+      '  --vscode-activityBar-background: transparent !important;\n' +
       '  --vscode-panel-background: transparent !important;\n' +
       '  --vscode-terminal-background: transparent !important;\n' +
       '  --editor-diff-inserted-line-background: rgba(46, 160, 67, 0.24) !important;\n' +
       '  --editor-diff-removed-line-background: rgba(248, 81, 73, 0.24) !important;\n' +
       '  --editor-selection-background: var(--prism-editor-selection-bg) !important;\n' +
+      '}\n' +
+      GW + '[' + WCO_ATTR + '="transparent"] body {\n' +
+      '  --background: #00000000 !important;\n' +
       '}'
     );
 
@@ -1334,7 +1449,7 @@
       '  inset: 0;\n' +
       '  width: 100%;\n' +
       '  height: 100%;\n' +
-      '  will-change: transform, opacity, clip-path;\n' +
+      '  will-change: ' + (cfg.parallaxEnabled ? 'transform' : 'auto') + ';\n' +
       '  transform: translate3d(var(--prism-px, 0px), var(--prism-py, 0px), 0);\n' +
       '}\n' +
       '#' + STAGE_ID + ' .agy-prism-media-el {\n' +
@@ -1391,6 +1506,44 @@
       ' {\n' +
       '  background-color: transparent !important;\n' +
       '  background-image: none !important;\n' +
+      '}'
+    );
+
+    var LEFT_SB_SCOPE =
+      ':is([data-testid="sidebar-split"] > div:first-child, .agy-sidebar, aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *))';
+    var tbHostList = GLASS_CARRIER_TITLEBARS.map(function (s) {
+      return GW + ' ' + s + NOT_HOLE;
+    }).join(',\n');
+    var tbBeforeList = GLASS_CARRIER_TITLEBARS.map(function (s) {
+      return GW + ' ' + s + NOT_HOLE + '::before';
+    }).join(',\n');
+
+    out.push(
+      tbHostList + ' {\n' +
+      '  position: relative !important;\n' +
+      '  isolation: isolate;\n' +
+      '  overflow: visible !important;\n' +
+      '  z-index: 40;\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      tbBeforeList + ' {\n' +
+      '  content: "";\n' +
+      '  position: absolute;\n' +
+      '  inset: 0;\n' +
+      '  z-index: -1;\n' +
+      '  border-radius: inherit;\n' +
+      '  pointer-events: none;\n' +
+      '  background-color: var(--prism-surface-sidebar);\n' +
+      '  background-image: var(--prism-sheen);\n' +
+      '  backdrop-filter: var(--prism-sidebar-backdrop);\n' +
+      '  -webkit-backdrop-filter: var(--prism-sidebar-backdrop);\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-top);\n' +
+      '}\n' +
+      GW + ' :is([data-testid="title-menu-bar"] button, [data-testid="title-menu-bar-item"]) {\n' +
+      '  border-radius: var(--prism-r-ctl) !important;\n' +
       '}'
     );
 
@@ -1460,30 +1613,132 @@
       '  border-color: var(--prism-border-card) !important;\n' +
       '  box-shadow: 0 2px 8px rgba(0, 0, 0, ' + (isLight ? '0.14' : '0.38') + ') !important;\n' +
       '}\n' +
-      GW + ' :is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])),\n' +
-      GW + ' .sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none) {\n' +
+      GW + ' ' + LEFT_SB_SCOPE + ' .bg-sidebar:not([style*="sticky"]):not(.sticky):not([data-sidebar-section-drop-id]):not([data-testid="project-header"]):not([data-project-card]) { background-color: transparent !important; }\n' +
+      GW + ' .monaco-workbench :is(.part.sidebar, .part.auxiliarybar, .part.activitybar) > :is(.content, .title, .composite.title, .header-or-footer) { background-color: transparent !important; }\n' +
+      GW + ' ' + LEFT_SB_SCOPE + ' [data-sidebar-section-drop-id]:has([data-testid="project-header"], [data-project-card]) {\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      GW + ' ' + LEFT_SB_SCOPE + ' [data-sidebar-section-drop-id]:has([data-testid="project-header"], [data-project-card])::before {\n' +
+      '  content: none !important;\n' +
+      '}\n' +
+      GW + ' ' + LEFT_SB_SCOPE + ' :is([data-sidebar-section-drop-id], [data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])):not(:has([data-testid="project-header"])):not(:has([data-project-card])),\n' +
+      GW + ' .sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none):not(:has([data-testid="project-header"])):not(:has([data-project-card])) {\n' +
       '  isolation: isolate;\n' +
       '  background-color: transparent !important;\n' +
       '  backdrop-filter: none !important;\n' +
       '  -webkit-backdrop-filter: none !important;\n' +
+      '  border-radius: var(--prism-r-ctl) !important;\n' +
       '}\n' +
-      GW + ' :is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"]))::before,\n' +
-      GW + ' .sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none)::before {\n' +
+      GW + ' ' + LEFT_SB_SCOPE + ' :is([data-sidebar-section-drop-id], [data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])):not(:has([data-testid="project-header"])):not(:has([data-project-card]))::before,\n' +
+      GW + ' .sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none):not(:has([data-testid="project-header"])):not(:has([data-project-card]))::before {\n' +
       '  content: "";\n' +
       '  position: absolute;\n' +
       '  inset: 0;\n' +
       '  z-index: -1;\n' +
+      '  border-radius: var(--prism-r-ctl) !important;\n' +
       '  pointer-events: none;\n' +
-      '  background-color: rgba(var(--prism-shade-rgb), ' + (isLight ? '0.94' : '0.90') + ') !important;\n' +
+      '  background-color: rgba(var(--prism-sidebar-deep-rgb, var(--prism-sidebar-rgb)), ' + (isLight ? '0.94' : '0.91') + ') !important;\n' +
+      '  background-image: var(--prism-sheen);\n' +
+      '  backdrop-filter: blur(16px) saturate(145%) !important;\n' +
+      '  -webkit-backdrop-filter: blur(16px) saturate(145%) !important;\n' +
+      '  border: 1px solid var(--prism-border-hairline);\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-top), 0 3px 10px rgba(0, 0, 0, ' + (isLight ? '0.06' : '0.24') + ');\n' +
+      '}\n' +
+      GW + ' ' + LEFT_SB_SCOPE + ' :is([data-sidebar-section-drop-id], [data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):not(:has([data-testid="project-header"])):not(:has([data-project-card])) .bg-sidebar {\n' +
+      '  background-color: transparent !important;\n' +
+      '}\n' +
+      GW + ' :is(button[data-testid="project-header"], [data-project-card="true"]) {\n' +
+      '  position: relative !important;\n' +
+      '  isolation: isolate;\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  border-radius: var(--prism-r-ctl) !important;\n' +
+      '}\n' +
+      GW + ' :is(button[data-testid="project-header"], [data-project-card="true"])::before {\n' +
+      '  content: "";\n' +
+      '  position: absolute;\n' +
+      '  inset: 0;\n' +
+      '  z-index: -1;\n' +
+      '  border-radius: inherit;\n' +
+      '  pointer-events: none;\n' +
+      '  background-color: var(--prism-surface-sidebar-deep) !important;\n' +
+      '  background-image: var(--prism-sheen);\n' +
       '  backdrop-filter: blur(14px) saturate(140%) !important;\n' +
       '  -webkit-backdrop-filter: blur(14px) saturate(140%) !important;\n' +
-      '  box-shadow: 0 1px 0 var(--prism-border-hairline);\n' +
+      '  border: 1px solid var(--prism-border-card);\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-top), 0 2px 8px rgba(0, 0, 0, ' + (isLight ? '0.05' : '0.22') + ');\n' +
       '}\n' +
-      GW + ' :is(.agy-sidebar, [data-testid="sidebar-split"] > div:first-child) :is([data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]) .bg-sidebar {\n' +
-      '  background-color: transparent !important;\n' +
+      GW + ' :is(button[data-testid="project-header"]:is(:hover, :focus-visible), .group\\/header:hover button[data-testid="project-header"], [data-project-card="true"]:is(:hover, :focus-visible))::before {\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      GW + ' ' + LEFT_SB_SCOPE + ' .group\\/header > div.absolute > :is(button, a) {\n' +
+      '  border-radius: var(--prism-r-xs) !important;\n' +
+      '  color: var(--prism-fg-2) !important;\n' +
+      '  background-color: rgba(var(--prism-sidebar-deep-rgb, var(--prism-shade-rgb)), ' + (isLight ? '0.82' : '0.74') + ') !important;\n' +
+      '  border: 1px solid var(--prism-border-hairline) !important;\n' +
+      '  backdrop-filter: blur(8px) !important;\n' +
+      '  -webkit-backdrop-filter: blur(8px) !important;\n' +
+      '  box-shadow: 0 1px 4px rgba(0, 0, 0, ' + (isLight ? '0.08' : '0.26') + ') !important;\n' +
+      '}\n' +
+      GW + ' ' + LEFT_SB_SCOPE + ' .group\\/header > div.absolute > :is(button, a):is(:hover, :focus-visible) {\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '  background-color: rgba(var(--prism-tint-2-rgb), 0.94) !important;\n' +
+      '  border-color: var(--prism-border-card) !important;\n' +
       '}\n' +
       GW + ' .surface-opaque.bg-background {\n' +
       '  background-color: var(--prism-surface-card) !important;\n' +
+      '}'
+    );
+
+    var mainPageHostList = GLASS_CARRIER_MAIN_PAGES.map(function (s) {
+      return GW + ' ' + s + NOT_HOLE;
+    }).join(',\n');
+    var mainPageBeforeList = GLASS_CARRIER_MAIN_PAGES.map(function (s) {
+      return GW + ' ' + s + NOT_HOLE + '::before';
+    }).join(',\n');
+
+    out.push(
+      mainPageHostList + ' {\n' +
+      '  position: relative !important;\n' +
+      '  isolation: isolate;\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      mainPageBeforeList + ' {\n' +
+      '  content: "";\n' +
+      '  position: absolute;\n' +
+      '  inset: 0;\n' +
+      '  z-index: -1;\n' +
+      '  border-radius: inherit;\n' +
+      '  pointer-events: none;\n' +
+      '  background-color: var(--prism-surface-sidebar);\n' +
+      '  background-image: var(--prism-sheen);\n' +
+      '  backdrop-filter: var(--prism-sidebar-backdrop);\n' +
+      '  -webkit-backdrop-filter: var(--prism-sidebar-backdrop);\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-top);\n' +
+      '}\n' +
+      GW + ' :is([data-testid="customization-card"], .agy-spotlight-card, [data-testid="marketplace-bundles-banner"]) {\n' +
+      '  background-color: var(--prism-surface-card) !important;\n' +
+      '  border: 1px solid var(--prism-border-card) !important;\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-top) !important;\n' +
+      '}\n' +
+      GW + ' [data-testid="customization-card"]:hover {\n' +
+      '  background-color: var(--prism-secondary-bg) !important;\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      GW + ' :is(.agy-field:has([data-testid="customizations-search"]), [data-testid="plugins-tabs"]) {\n' +
+      '  background-color: rgba(var(--prism-sidebar-rgb, var(--prism-shade-rgb)), ' + (isLight ? '0.72' : '0.62') + ') !important;\n' +
+      '  border-color: var(--prism-border-card) !important;\n' +
+      '  backdrop-filter: blur(10px) !important;\n' +
+      '  -webkit-backdrop-filter: blur(10px) !important;\n' +
       '}'
     );
 
@@ -1521,9 +1776,27 @@
     );
 
     out.push(
-      GW + ' [data-testid="conversation-view"] {\n' +
+      GW + ' [data-testid="conversation-view"]' + NOT_HOLE + ',\n' +
+      GW + ' [data-main-content-header]' + NOT_HOLE + ' {\n' +
       '  background-color: var(--prism-surface-chat) !important;\n' +
       '  backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' [data-side-panel-strip] {\n' +
+      '  border-bottom: 1px solid var(--prism-border-hairline) !important;\n' +
+      '}\n' +
+      GW + ' [data-testid="new-tab-search-input"] {\n' +
+      '  background-color: rgba(var(--prism-tint-1-rgb), ' + (isLight ? '0.68' : '0.46') + ') !important;\n' +
+      '  border: 1px solid var(--prism-border-card) !important;\n' +
+      '  border-radius: var(--prism-r-ctl) !important;\n' +
+      '  backdrop-filter: blur(10px) saturate(130%) !important;\n' +
+      '  -webkit-backdrop-filter: blur(10px) saturate(130%) !important;\n' +
+      '}\n' +
+      GW + ' [data-testid="new-tab-search-input"]:focus {\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      GW + ' [data-testid^="new-tab-card-"]:is(:hover, :focus-visible) {\n' +
+      '  background-color: var(--prism-secondary-bg) !important;\n' +
+      '  border-radius: var(--prism-r-ctl) !important;\n' +
       '}\n' +
       GW + ' [data-testid="browser-error-overlay"] {\n' +
       '  background-color: var(--prism-surface-editor) !important;\n' +
@@ -1564,8 +1837,19 @@
         '  gap: var(--prism-island-gap) !important;\n' +
         '  box-sizing: border-box !important;\n' +
         '}\n' +
+        GW + '[data-prism-layout="islands"] [data-testid="title-menu-bar"]' + NOT_HOLE + ',\n' +
+        GW + '[data-prism-layout="islands"] .monaco-workbench .part.titlebar' + NOT_HOLE + ' {\n' +
+        '  border-radius: var(--prism-r-island) !important;\n' +
+        '  border: 1px solid var(--prism-border-island) !important;\n' +
+        '  box-shadow: var(--prism-shadow-island) !important;\n' +
+        '}\n' +
+        GW + '[data-prism-layout="islands"] [data-testid="title-menu-bar"]' + NOT_HOLE + ' {\n' +
+        '  width: auto !important;\n' +
+        '  margin-right: max(0px, calc(var(--prism-wco-inset-right, 0px) - var(--prism-workspace-pad, 0px))) !important;\n' +
+        '}\n' +
         GW + '[data-prism-layout="islands"] [data-testid="sidebar-split"] > div:first-child' + NOT_HOLE + ',\n' +
-        GW + '[data-prism-layout="islands"] .agy-sidebar' + NOT_HOLE + ' {\n' +
+        GW + '[data-prism-layout="islands"] .agy-sidebar' + NOT_HOLE + ',\n' +
+        GW + '[data-prism-layout="islands"] aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *)' + NOT_HOLE + ' {\n' +
         '  border-radius: var(--prism-r-left-island) !important;\n' +
         '  border: 1px solid var(--prism-border-island) !important;\n' +
         '  box-shadow: var(--prism-shadow-island) !important;\n' +
@@ -1586,33 +1870,65 @@
         '  background: var(--prism-accent);\n' +
         '  opacity: 0.78;\n' +
         '}\n' +
-        GW + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] > div:first-child' + NOT_HOLE + ',\n' +
-        GW + '[data-prism-layout="islands"] .agy-shell > main' + NOT_HOLE + ' {\n' +
-        '  border-radius: var(--prism-r-island) !important;\n' +
-        '  border: 1px solid var(--prism-border-island) !important;\n' +
-        '  box-shadow: var(--prism-shadow-island) !important;\n' +
-        '  background-color: var(--prism-surface-chat);\n' +
-        '}\n' +
-        GW + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] > div:last-child:not([hidden]):not([aria-hidden="true"])' + NOT_HOLE + ' {\n' +
-        '  border-radius: var(--prism-r-right-island) !important;\n' +
-        '  border: 1px solid var(--prism-border-island) !important;\n' +
-        '  box-shadow: var(--prism-shadow-island) !important;\n' +
-        '}\n' +
         GW + '[data-prism-layout="islands"] .monaco-workbench :is(.part.activitybar, .part.sidebar, .part.editor .editor-group-container, .part.panel, .part.auxiliarybar) {\n' +
         '  margin: calc(var(--prism-island-gap) * 0.5) !important;\n' +
         '  border-radius: var(--prism-r-island) !important;\n' +
         '  border: 1px solid var(--prism-border-island) !important;\n' +
         '  box-shadow: var(--prism-shadow-island) !important;\n' +
+        '}\n' +
+        GW + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] > :is(div, main, section):first-child' + NOT_HOLE + ',\n' +
+        GW + '[data-prism-layout="islands"] .agy-shell > main' + NOT_HOLE + ' {\n' +
+        '  border-radius: var(--prism-r-island) !important;\n' +
+        '  border: 1px solid var(--prism-border-island) !important;\n' +
+        '  box-shadow: var(--prism-shadow-island) !important;\n' +
+        '  background-color: var(--prism-surface-chat) !important;\n' +
+        '  backdrop-filter: none !important;\n' +
+        '  -webkit-backdrop-filter: none !important;\n' +
+        '}\n' +
+        GW + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] > :is(div, aside, section):last-child:not(:first-child):not([hidden]):not([aria-hidden="true"])' + NOT_HOLE + ',\n' +
+        GW + '[data-prism-layout="islands"] .monaco-workbench .part.auxiliarybar' + NOT_HOLE + ' {\n' +
+        '  border-radius: var(--prism-r-right-island) !important;\n' +
+        '  border: 1px solid var(--prism-border-island) !important;\n' +
+        '  box-shadow: var(--prism-shadow-island) !important;\n' +
+        '  background-color: var(--prism-surface-chat) !important;\n' +
+        '  backdrop-filter: none !important;\n' +
+        '  -webkit-backdrop-filter: none !important;\n' +
+        '}\n' +
+        GW + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] :is([data-testid="conversation-view"], [data-main-content-header], [data-side-panel-strip], .agy-sheet [data-side-panel-body], [data-side-panel-body]) {\n' +
+        '  background-color: transparent !important;\n' +
+        '  background-image: none !important;\n' +
+        '}\n' +
+        GW + '[data-prism-layout="islands"] :is([data-main-content-body], .agy-sheet [data-side-panel-body])::after {\n' +
+        '  display: none !important;\n' +
         '}'
       );
     } else {
       out.push(
+        GW + '[data-prism-layout="flush"] [data-testid="title-menu-bar"]' + NOT_HOLE + ',\n' +
+        GW + '[data-prism-layout="flush"] .monaco-workbench .part.titlebar' + NOT_HOLE + ' {\n' +
+        '  border-radius: 0px !important;\n' +
+        '  border: none !important;\n' +
+        '  border-bottom: 1px solid var(--prism-border-hairline) !important;\n' +
+        '  box-shadow: none !important;\n' +
+        '}\n' +
+        GW + '[data-prism-layout="flush"] [data-testid="title-menu-bar"]' + NOT_HOLE + ' {\n' +
+        '  width: auto !important;\n' +
+        '  margin-right: var(--prism-wco-inset-right, 0px) !important;\n' +
+        '}\n' +
         GW + '[data-prism-layout="flush"] :is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2) {\n' +
         '  width: 1px !important;\n' +
         '  background-color: var(--prism-border-hairline) !important;\n' +
         '}\n' +
-        GW + '[data-prism-layout="flush"] .agy-sidebar' + NOT_HOLE + ' {\n' +
+        GW + '[data-prism-layout="flush"] .agy-sidebar' + NOT_HOLE + ',\n' +
+        GW + '[data-prism-layout="flush"] aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *)' + NOT_HOLE + ' {\n' +
         '  border-right: 1px solid var(--prism-border-hairline) !important;\n' +
+        '}\n' +
+        GW + '[data-prism-layout="flush"] [data-side-panel-strip]' + NOT_HOLE + ',\n' +
+        GW + '[data-prism-layout="flush"] .agy-sheet [data-side-panel-body]' + NOT_HOLE + ',\n' +
+        GW + '[data-prism-layout="flush"] .monaco-workbench .part.auxiliarybar' + NOT_HOLE + ' {\n' +
+        '  background-color: var(--prism-surface-chat) !important;\n' +
+        '  backdrop-filter: none !important;\n' +
+        '  -webkit-backdrop-filter: none !important;\n' +
         '}'
       );
     }
@@ -1655,6 +1971,9 @@
       '  -webkit-backdrop-filter: blur(var(--prism-blur-xl)) saturate(150%) !important;\n' +
       '  border: 1px solid var(--prism-border-popover) !important;\n' +
       '  box-shadow: inset 0 1px 0 var(--prism-specular-top), var(--prism-shadow-popover) !important;\n' +
+      '}\n\n' +
+      GG + ' :is([data-testid="title-menu-bar"] [data-browser-occluder="true"], .surface-opaque.bg-sidebar:not(.sticky):not([style*="sticky"])) {\n' +
+      '  border-radius: var(--prism-r-card) !important;\n' +
       '}\n\n' +
       GG + ' :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {\n' +
       '  --background: var(--prism-surface-popover) !important;\n' +
@@ -1956,7 +2275,17 @@
         root.removeAttribute(WALLPAPER_ATTR);
       }
     }
-    if (next) syncBrowserHoleCutout();
+    var fxEl = doc.getElementById(FX_CANVAS_ID);
+    if (fxEl && fxEl.style) {
+      fxEl.style.display = next ? '' : 'none';
+    }
+    if (!next) {
+      state.fxParticles = [];
+    }
+    if (next) {
+      syncBrowserHoleCutout();
+      scheduleWcoConfirmTimers();
+    }
   }
 
   function clearRootWatchdogTimers() {
@@ -2129,19 +2458,284 @@
         vids[i].pause();
       } catch (_) {}
     }
+    var frames = wrap.querySelectorAll('iframe');
+    for (var j = 0; j < frames.length; j += 1) {
+      try {
+        if (frames[j].contentWindow) {
+          frames[j].contentWindow.postMessage({ type: 'prism-video-ctl', paused: true }, '*');
+        }
+      } catch (_) {}
+    }
+  }
+
+  var MAX_BLOB_MEDIA_BYTES = 256 * 1024 * 1024;
+  var BLOB_FETCH_TIMEOUT_MS = 20000;
+
+  function isCrossSchemeLoopbackUrl(url) {
+    return Boolean(
+      W.location &&
+      W.location.protocol === 'https:' &&
+      /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\//i.test(String(url || '').trim())
+    );
+  }
+
+  function isCrossSchemeLoopbackMediaUrl(url) {
+    return Boolean(
+      isCrossSchemeLoopbackUrl(url) &&
+      typeof W.fetch === 'function' &&
+      typeof W.URL !== 'undefined' &&
+      typeof W.URL.createObjectURL === 'function'
+    );
+  }
+
+  // Antigravity 2.34.0 (Chrome 152) serves the main hub on `https://127.0.0.1:<port>`, where direct
+  // `<video>`/`<audio>` `type:"Media"` requests to `http://127.0.0.1:<mediaPort>` stall indefinitely at
+  // `readyState === 0`. Zero-delay `fetch()` -> `blob:` bypasses the Media loader hang with a 20s timeout
+  // and 256 MiB safety cap.
+  function attachLoopbackMediaSrc(el, url, opts) {
+    if (!el || !url) return;
+    opts = opts || {};
+    var wrap = opts.wrap || null;
+    var isStale = typeof opts.isStale === 'function' ? opts.isStale : function () { return destroyed; };
+    var token = (el.__prismMediaToken = (el.__prismMediaToken || 0) + 1);
+    clearTimeout(el.__prismProbeTimer);
+    el.__prismProbeTimer = 0;
+    clearTimeout(el.__prismFetchTimer);
+    el.__prismFetchTimer = 0;
+
+    var isCurrent = function () {
+      return !destroyed && el.__prismMediaToken === token && !isStale();
+    };
+
+    var startBlobFetch = function () {
+      if (!isCurrent() || el.__prismFetchingBlob) return;
+      el.__prismFetchingBlob = true;
+      el.__prismTimedOut = false;
+
+      var ac = typeof W.AbortController === 'function' ? new W.AbortController() : null;
+      if (ac && wrap) {
+        if (!wrap.__prismAbortControllers) wrap.__prismAbortControllers = [];
+        wrap.__prismAbortControllers.push(ac);
+      }
+      var fetchTimer = setTimeout(function () {
+        el.__prismTimedOut = true;
+        try {
+          if (ac) ac.abort();
+        } catch (_) {}
+      }, BLOB_FETCH_TIMEOUT_MS);
+      el.__prismFetchTimer = fetchTimer;
+
+      W.fetch(url, ac ? { signal: ac.signal } : undefined)
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : 0));
+          var lenHeader = res.headers && typeof res.headers.get === 'function' ? Number(res.headers.get('content-length')) : 0;
+          if (Number.isFinite(lenHeader) && lenHeader > MAX_BLOB_MEDIA_BYTES) {
+            try {
+              if (ac) ac.abort();
+            } catch (_) {}
+            var capErr = new Error('Media exceeds blob cap');
+            capErr.code = 'BLOB_CAP_EXCEEDED';
+            throw capErr;
+          }
+          return res.blob();
+        })
+        .then(function (blob) {
+          clearTimeout(fetchTimer);
+          el.__prismFetchTimer = 0;
+          if (!isCurrent()) {
+            el.__prismFetchingBlob = false;
+            return;
+          }
+          if (!blob || blob.size <= 0) {
+            throw new Error('Empty media blob');
+          }
+          if (blob.size > MAX_BLOB_MEDIA_BYTES) {
+            var capErr = new Error('Media exceeds blob cap');
+            capErr.code = 'BLOB_CAP_EXCEEDED';
+            throw capErr;
+          }
+          var blobUrl = W.URL.createObjectURL(blob);
+          if (!isCurrent()) {
+            el.__prismFetchingBlob = false;
+            try {
+              W.URL.revokeObjectURL(blobUrl);
+            } catch (_) {}
+            return;
+          }
+          state.preferBlobMedia = true;
+          el.__prismFetchingBlob = false;
+          if (el.__prismBlobUrl) {
+            try {
+              W.URL.revokeObjectURL(el.__prismBlobUrl);
+            } catch (_) {}
+          }
+          el.__prismBlobUrl = blobUrl;
+          el.src = blobUrl;
+          if (typeof opts.onReady === 'function') opts.onReady();
+        })
+        .catch(function (err) {
+          clearTimeout(fetchTimer);
+          el.__prismFetchTimer = 0;
+          el.__prismFetchingBlob = false;
+          if (!isCurrent()) return;
+          if (err && err.name === 'AbortError' && !el.__prismTimedOut) return;
+          if (typeof opts.onError === 'function') opts.onError(err);
+        });
+    };
+
+    if (!isCrossSchemeLoopbackMediaUrl(url)) {
+      el.src = url;
+      return;
+    }
+
+    startBlobFetch();
+  }
+
+  function attachLoopbackImageSrc(img, url, wrap, onFail) {
+    if (!img || !url) {
+      if (typeof onFail === 'function') onFail();
+      return;
+    }
+    var token = (img.__prismMediaToken = (img.__prismMediaToken || 0) + 1);
+    img.__prismTriedBlob = false;
+    img.__prismFetchingBlob = false;
+    img.__prismTimedOut = false;
+    clearTimeout(img.__prismFetchTimer);
+    img.__prismFetchTimer = 0;
+    if (img.__prismBlobUrl) {
+      try {
+        if (typeof W.URL !== 'undefined' && typeof W.URL.revokeObjectURL === 'function') {
+          W.URL.revokeObjectURL(img.__prismBlobUrl);
+        }
+      } catch (_) {}
+      img.__prismBlobUrl = '';
+    }
+
+    var isCurrent = function () {
+      return !destroyed && img.__prismMediaToken === token && (!wrap || !img.parentNode || img.parentNode === wrap);
+    };
+
+    var failOnce = false;
+    var triggerFail = function () {
+      if (failOnce) return;
+      failOnce = true;
+      if (typeof onFail === 'function') onFail();
+    };
+
+    var handleError = function () {
+      if (!isCurrent() || img.__prismFetchingBlob) return;
+      if (!img.__prismTriedBlob && isCrossSchemeLoopbackMediaUrl(url)) {
+        img.__prismTriedBlob = true;
+        img.__prismFetchingBlob = true;
+        img.__prismTimedOut = false;
+        var ac = typeof W.AbortController === 'function' ? new W.AbortController() : null;
+        if (ac && wrap) {
+          if (!wrap.__prismAbortControllers) wrap.__prismAbortControllers = [];
+          wrap.__prismAbortControllers.push(ac);
+        }
+        var fetchTimer = setTimeout(function () {
+          img.__prismTimedOut = true;
+          try {
+            if (ac) ac.abort();
+          } catch (_) {}
+        }, BLOB_FETCH_TIMEOUT_MS);
+        img.__prismFetchTimer = fetchTimer;
+
+        W.fetch(url, ac ? { signal: ac.signal } : undefined)
+          .then(function (res) {
+            if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : 0));
+            var lenHeader = res.headers && typeof res.headers.get === 'function' ? Number(res.headers.get('content-length')) : 0;
+            if (Number.isFinite(lenHeader) && lenHeader > MAX_BLOB_MEDIA_BYTES) {
+              try {
+                if (ac) ac.abort();
+              } catch (_) {}
+              throw new Error('Image exceeds blob cap');
+            }
+            return res.blob();
+          })
+          .then(function (blob) {
+            clearTimeout(fetchTimer);
+            img.__prismFetchTimer = 0;
+            if (!isCurrent()) {
+              img.__prismFetchingBlob = false;
+              return;
+            }
+            if (!blob || blob.size <= 0 || blob.size > MAX_BLOB_MEDIA_BYTES) {
+              throw new Error('Invalid image blob');
+            }
+            var blobUrl = W.URL.createObjectURL(blob);
+            if (!isCurrent()) {
+              img.__prismFetchingBlob = false;
+              try {
+                W.URL.revokeObjectURL(blobUrl);
+              } catch (_) {}
+              return;
+            }
+            img.__prismFetchingBlob = false;
+            if (img.__prismBlobUrl) {
+              try {
+                W.URL.revokeObjectURL(img.__prismBlobUrl);
+              } catch (_) {}
+            }
+            img.__prismBlobUrl = blobUrl;
+            img.src = blobUrl;
+          })
+          .catch(function (err) {
+            clearTimeout(fetchTimer);
+            img.__prismFetchTimer = 0;
+            img.__prismFetchingBlob = false;
+            if (!isCurrent()) return;
+            if (err && err.name === 'AbortError' && !img.__prismTimedOut) return;
+            triggerFail();
+          });
+        return;
+      }
+      triggerFail();
+    };
+
+    img.onerror = handleError;
+    if (typeof img.addEventListener === 'function') {
+      img.addEventListener('error', handleError);
+    }
+    img.src = url;
   }
 
   function disposeWrap(wrap) {
     if (!wrap) return;
     var idx = state.outgoingWraps.indexOf(wrap);
     if (idx >= 0) state.outgoingWraps.splice(idx, 1);
-    var vids = wrap.querySelectorAll ? wrap.querySelectorAll('video, audio') : [];
-    for (var i = 0; i < vids.length; i += 1) {
+    if (wrap.__prismAbortControllers) {
+      for (var k = 0; k < wrap.__prismAbortControllers.length; k += 1) {
+        try {
+          wrap.__prismAbortControllers[k].abort();
+        } catch (_) {}
+      }
+      wrap.__prismAbortControllers = null;
+    }
+    var mediaEls = wrap.querySelectorAll ? wrap.querySelectorAll('video, audio, img') : [];
+    if ((!mediaEls || !mediaEls.length) && wrap.children && wrap.children.length) {
+      mediaEls = wrap.children;
+    }
+    for (var i = 0; i < mediaEls.length; i += 1) {
+      var el = mediaEls[i];
+      if (!el) continue;
       try {
-        vids[i].pause();
-        vids[i].removeAttribute('src');
-        vids[i].srcObject = null;
-        vids[i].load();
+        el.__prismMediaToken = (el.__prismMediaToken || 0) + 1;
+        clearTimeout(el.__prismProbeTimer);
+        el.__prismProbeTimer = 0;
+        clearTimeout(el.__prismFetchTimer);
+        el.__prismFetchTimer = 0;
+        el.__prismFetchingBlob = false;
+        if (typeof el.pause === 'function') el.pause();
+        if (typeof el.removeAttribute === 'function') el.removeAttribute('src');
+        if ('srcObject' in el) el.srcObject = null;
+        if (typeof el.load === 'function') el.load();
+        if (el.__prismBlobUrl) {
+          if (typeof W.URL !== 'undefined' && typeof W.URL.revokeObjectURL === 'function') {
+            W.URL.revokeObjectURL(el.__prismBlobUrl);
+          }
+          el.__prismBlobUrl = '';
+        }
       } catch (_) {}
     }
     var ifs = wrap.querySelectorAll ? wrap.querySelectorAll('iframe') : [];
@@ -2278,6 +2872,43 @@
     }
   }
 
+  function clearVideoStageListener() {
+    if (state.videoStageMessageCleanup) {
+      try {
+        state.videoStageMessageCleanup();
+      } catch (_) {}
+      state.videoStageMessageCleanup = null;
+    }
+  }
+
+  function sendVideoStageControl(extra) {
+    var frame = state.activeVideoStageFrame;
+    if (!frame || !frame.contentWindow) return;
+    var cfg = state.cfg;
+    var shouldPause = Boolean(cfg.paused || state.autoPaused || cfg.agentBusyPaused);
+    var wantLoop = !(cfg.rotationEnabled && cfg.rotationTrigger === 'videoEnd');
+    var fitCss = cfg.fit === 'center' ? 'none' : String(cfg.fit || 'cover');
+    var msg = {
+      type: 'prism-video-ctl',
+      sid: state.activeVideoStageSid,
+      paused: shouldPause,
+      muted: Boolean(cfg.muted || cfg.volume <= 0.005),
+      volume: clamp(cfg.volume, 0, 1),
+      playbackRate: cfg.playbackRate,
+      loop: wantLoop,
+      fit: fitCss,
+      pos: cfg.posX + '% ' + cfg.posY + '%',
+    };
+    if (extra && typeof extra === 'object') {
+      for (var k in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, k)) msg[k] = extra[k];
+      }
+    }
+    try {
+      frame.contentWindow.postMessage(msg, '*');
+    } catch (_) {}
+  }
+
   function syncMediaPlaybackState() {
     var cfg = state.cfg;
     var shouldPause = Boolean(cfg.paused || state.autoPaused || cfg.agentBusyPaused);
@@ -2289,7 +2920,9 @@
         if (vid.loop !== wantLoop) vid.loop = wantLoop;
         vid.volume = clamp(cfg.volume, 0, 1);
 
-        if (shouldPause) {
+        if (vid.__prismFetchingBlob) {
+          if (cfg.muted || cfg.volume <= 0.005 || shouldPause) vid.muted = true;
+        } else if (shouldPause) {
           if (vid.__prismPriming && vid.readyState < 2) {
             // Allow newly mounted video to decode frame 1 muted before honoring auto-pause (e.g. pauseOnBlur when clicking in sidecar UI)
             vid.muted = true;
@@ -2329,9 +2962,14 @@
       try {
         state.activeAudio.volume = cfg.muted ? 0 : clamp(cfg.volume, 0, 1);
         state.activeAudio.muted = cfg.muted;
-        if (shouldPause || cfg.muted) state.activeAudio.pause();
-        else state.activeAudio.play().catch(function () {});
+        if (!state.activeAudio.__prismFetchingBlob) {
+          if (shouldPause || cfg.muted) state.activeAudio.pause();
+          else state.activeAudio.play().catch(function () {});
+        }
       } catch (_) {}
+    }
+    if (state.activeVideoStageFrame) {
+      sendVideoStageControl();
     }
     if (state.activeIframe && state.activeIframe.contentWindow) {
       try {
@@ -2361,6 +2999,9 @@
           state.activeVideo.volume = clamp(state.cfg.volume, 0, 1);
           if (!state.cfg.paused && !state.autoPaused) state.activeVideo.play().catch(function () {});
         } catch (_) {}
+      }
+      if (state.activeVideoStageFrame && !state.cfg.muted && state.cfg.volume > 0) {
+        sendVideoStageControl({ unmute: true, muted: false });
       }
     };
     doc.addEventListener('pointerdown', handler, { once: true, capture: true });
@@ -2402,8 +3043,9 @@
       rawMediaUrl = String((item && (item.mediaUrl || item.thumbUrl)) || cfg.sourceUrl || '').trim();
     }
     var mediaUrl = rawMediaUrl;
+    var videoStageBase = effKind === 'video' ? String((item && item.videoStageUrl) || '').trim() : '';
     var audioUrl = String((item && item.audioUrl) || '').trim();
-    var mediaKey = effKind + '|' + mediaUrl + '|' + audioUrl + '|' + (state.slides ? state.slides.length : 0);
+    var mediaKey = effKind + '|' + mediaUrl + '|' + videoStageBase + '|' + audioUrl + '|' + (state.slides ? state.slides.length : 0);
 
     var hasActive = Boolean(state.activeWrap && state.activeWrap.isConnected && state.wallpaperReady);
     var hasLivePending = Boolean(state.pendingWrap && state.pendingWrap.isConnected && state.pendingMediaTimer);
@@ -2438,6 +3080,11 @@
     state.activeVideo = null;
     state.activeAudio = null;
     state.activeIframe = null;
+    clearVideoStageListener();
+    state.activeVideoStageFrame = null;
+    state.activeVideoStageSid = '';
+    state.activeVideoStageReady = false;
+    state.activeVideoStageUrl = '';
 
     var nextWrap = doc.createElement('div');
     nextWrap.className = 'agy-prism-media-wrap';
@@ -2476,6 +3123,13 @@
       if (state.activeVideo && nextWrap.contains(state.activeVideo)) state.activeVideo = null;
       if (state.activeAudio && nextWrap.contains(state.activeAudio)) state.activeAudio = null;
       if (state.activeIframe && nextWrap.contains(state.activeIframe)) state.activeIframe = null;
+      if (state.activeVideoStageFrame && nextWrap.contains(state.activeVideoStageFrame)) {
+        clearVideoStageListener();
+        state.activeVideoStageFrame = null;
+        state.activeVideoStageSid = '';
+        state.activeVideoStageReady = false;
+        state.activeVideoStageUrl = '';
+      }
       disposeWrap(nextWrap);
       flushOutgoingWraps();
       if (prevWrap) disposeWrap(prevWrap);
@@ -2542,6 +3196,7 @@
         settledImg = true;
         failMount();
       };
+      var imgWaitTicks = 0;
       var armImgGuard = function (delayMs) {
         clearTimeout(state.pendingMediaTimer);
         state.pendingMediaTimer = setTimeout(function () {
@@ -2549,7 +3204,8 @@
           if (settledImg) return;
           if (img.complete && img.naturalWidth > 0) {
             onImgDecoded();
-          } else if (doc.hidden && !img.complete) {
+          } else if ((doc.hidden && !img.complete) || (img.__prismFetchingBlob && imgWaitTicks < 8)) {
+            imgWaitTicks += 1;
             armImgGuard(3000);
           } else {
             onImgFailed();
@@ -2558,7 +3214,7 @@
       };
       state.pendingWrap = nextWrap;
       armImgGuard(6000);
-      img.onload = function () {
+      var handleImgLoaded = function () {
         var dec = typeof img.decode === 'function' ? img.decode() : null;
         if (dec && typeof dec.then === 'function') {
           dec.then(onImgDecoded, onImgDecoded);
@@ -2566,9 +3222,12 @@
           onImgDecoded();
         }
       };
-      img.onerror = onImgFailed;
-      img.src = mediaUrl;
+      img.onload = handleImgLoaded;
+      if (typeof img.addEventListener === 'function') {
+        img.addEventListener('load', handleImgLoaded);
+      }
       nextWrap.appendChild(img);
+      attachLoopbackImageSrc(img, mediaUrl, nextWrap, onImgFailed);
       return;
     }
 
@@ -2608,8 +3267,7 @@
               outgoing.style.opacity = '0';
               frontIsA = !frontIsA;
             };
-            incoming.onerror = function () {};
-            incoming.src = list[state.slideIdx];
+            attachLoopbackImageSrc(incoming, list[state.slideIdx], nextWrap, function () {});
           }, Math.max(5, intervalSec) * 1000);
         }
       };
@@ -2642,9 +3300,23 @@
         settledSlide = true;
         failMount();
       };
+      var slideWaitTicks = 0;
+      var armSlideGuard = function (delayMs) {
+        clearTimeout(state.pendingMediaTimer);
+        state.pendingMediaTimer = setTimeout(function () {
+          state.pendingMediaTimer = 0;
+          if (settledSlide) return;
+          if (imgA.__prismFetchingBlob && slideWaitTicks < 8) {
+            slideWaitTicks += 1;
+            armSlideGuard(3000);
+          } else {
+            onSlideFailed();
+          }
+        }, delayMs);
+      };
       state.pendingWrap = nextWrap;
-      state.pendingMediaTimer = setTimeout(onSlideFailed, 6000);
-      imgA.onload = function () {
+      armSlideGuard(6000);
+      var handleSlideLoaded = function () {
         var dec = typeof imgA.decode === 'function' ? imgA.decode() : null;
         if (dec && typeof dec.then === 'function') {
           dec.then(onSlideDecoded, onSlideDecoded);
@@ -2652,218 +3324,480 @@
           onSlideDecoded();
         }
       };
-      imgA.onerror = onSlideFailed;
-      imgA.src = firstSlide;
+      imgA.onload = handleSlideLoaded;
+      if (typeof imgA.addEventListener === 'function') {
+        imgA.addEventListener('load', handleSlideLoaded);
+      }
+      attachLoopbackImageSrc(imgA, firstSlide, nextWrap, onSlideFailed);
       return;
     }
 
     if (effKind === 'video') {
-      var video = doc.createElement('video');
-      video.className = 'agy-prism-media-el';
-      // Always start muted & connected in DOM BEFORE setting video.src so Chromium autoplay never blocks (#31/#32).
-      video.defaultMuted = true;
-      video.muted = true;
-      video.playsInline = true;
-      video.autoplay = true;
-      video.preload = 'auto';
-      video.loop = !(cfg.rotationEnabled && cfg.rotationTrigger === 'videoEnd');
-      video.playbackRate = cfg.playbackRate;
-      video.setAttribute('muted', '');
-      video.setAttribute('playsinline', '');
-      video.setAttribute('autoplay', '');
-      video.setAttribute('disablepictureinpicture', '');
-      if (item && item.thumbUrl) {
-        video.poster = String(item.thumbUrl);
-      }
-      video.__prismPriming = true;
-      video.__prismEffectiveEnd = 0;
-      state.lastVidCheckTime = -1;
-      state.lastVidCheckFrames = -1;
-      state.vidStallCount = 0;
-
-      var wrapLoopOrAdvance = function () {
-        if (state.cfg.rotationEnabled && state.cfg.rotationTrigger === 'videoEnd') {
-          callHostRpc('playlist.step', { direction: 1, reason: 'videoEnd' });
-        } else {
-          try {
-            video.currentTime = 0;
-            if (!state.cfg.paused && !state.autoPaused && !state.cfg.agentBusyPaused) {
-              video.play().catch(function () {});
-            }
-          } catch (_) {}
-        }
-      };
-
-      video.addEventListener('ended', wrapLoopOrAdvance);
-      video.addEventListener('timeupdate', function () {
-        if (
-          video === state.activeVideo &&
-          video.__prismEffectiveEnd > 0 &&
-          !video.seeking &&
-          video.currentTime >= video.__prismEffectiveEnd
-        ) {
-          wrapLoopOrAdvance();
-        }
-      });
-
-      // Keep an active requestVideoFrameCallback consumer registered while visible so Chromium's
-      // VideoFrameSubmitter never suspends a muted background <video> as "occluded" in fullscreen.
-      var armRvfcKeepAlive = function () {
-        if (typeof video.requestVideoFrameCallback !== 'function') return;
-        if (video.__prismRvfcActive) return;
-        video.__prismRvfcActive = true;
-        var onFrame = function () {
-          if (destroyed || state.activeVideo !== video) {
-            video.__prismRvfcActive = false;
-            return;
-          }
-          state.rvfcCount += 1;
-          if (!doc.hidden && !state.cfg.paused && !state.autoPaused) {
-            try {
-              video.requestVideoFrameCallback(onFrame);
-              return;
-            } catch (_) {}
-          }
-          video.__prismRvfcActive = false;
-        };
-        try {
-          video.requestVideoFrameCallback(onFrame);
-        } catch (_) {
-          video.__prismRvfcActive = false;
-        }
-      };
-      video.__prismArmRvfc = armRvfcKeepAlive;
-
-      if (audioUrl) {
-        var aud = doc.createElement('audio');
-        aud.loop = true;
-        aud.preload = 'auto';
-        aud.src = audioUrl;
-        nextWrap.appendChild(aud);
-        state.activeAudio = aud;
-      }
-
-      nextWrap.appendChild(video);
-      state.activeVideo = video;
-
-      // Freeze outgoing 4K60 decoder immediately so incoming video decodes frame 1 without GPU contention.
-      if (prevWrap) pauseWrapMedia(prevWrap);
-
-      var needsCrossfade = Boolean(validPrevWrap && cfg.switchTransition !== 'cut' && !doc.hidden);
-      nextWrap.style.opacity = needsCrossfade ? '0' : '0.001';
-      state.pendingWrap = nextWrap;
-      stage.insertBefore(nextWrap, scrimNode || null);
-
-      var finishPriming = function () {
-        if (!video.__prismPriming) return;
-        video.__prismPriming = false;
-        if (!destroyed && state.activeVideo === video) {
-          syncMediaPlaybackState();
-        }
-      };
-      var ensureVidPlaying = function () {
-        if (!destroyed && state.activeVideo === video && video.paused) {
-          syncMediaPlaybackState();
-        }
-      };
-
-      var settledVid = false;
-      var onVideoDecoded = function () {
-        if (settledVid) return;
-        if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideo !== video) {
-          settledVid = true;
+      var mountDirectVideo = function () {
+        if (destroyed || mountSeq !== state.mediaMountSeq) {
           disposeWrap(nextWrap);
           return;
         }
-        if (video.readyState < 2 || !(video.videoWidth > 0)) return;
-        settledVid = true;
-        clearTimeout(state.pendingMediaTimer);
-        state.pendingMediaTimer = 0;
-        if (!needsCrossfade) nextWrap.style.opacity = '';
-        finishPriming();
-        commitMount();
-        armRvfcKeepAlive();
-        if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
-          extractAccent(item.thumbUrl, item.id).then(function (acc) {
-            if (acc && !destroyed) {
-              state.cfg.extractedAccent = acc;
-              refreshSkinStyles();
-            }
-          });
+        var video = doc.createElement('video');
+        video.className = 'agy-prism-media-el';
+        // Always start muted & connected in DOM BEFORE setting video.src so Chromium autoplay never blocks (#31/#32).
+        video.defaultMuted = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.autoplay = true;
+        video.preload = 'auto';
+        video.loop = !(cfg.rotationEnabled && cfg.rotationTrigger === 'videoEnd');
+        video.playbackRate = cfg.playbackRate;
+        video.setAttribute('muted', '');
+        video.setAttribute('playsinline', '');
+        video.setAttribute('autoplay', '');
+        video.setAttribute('disablepictureinpicture', '');
+        if (item && item.thumbUrl) {
+          video.poster = String(item.thumbUrl);
         }
-      };
-      var onVideoFailed = function () {
-        if (settledVid) return;
-        settledVid = true;
-        video.__prismPriming = false;
-        failMount();
-      };
+        video.__prismPriming = true;
+        video.__prismEffectiveEnd = 0;
+        state.lastVidCheckTime = -1;
+        state.lastVidCheckFrames = -1;
+        state.lastVidCheckAt = 0;
+        state.vidStallCount = 0;
 
-      video.addEventListener('loadedmetadata', ensureVidPlaying, { once: true });
-      video.addEventListener('loadeddata', onVideoDecoded);
-      video.addEventListener('canplay', function () {
-        ensureVidPlaying();
-        onVideoDecoded();
-      });
-      video.addEventListener('playing', function () {
-        onVideoDecoded();
-        armRvfcKeepAlive();
-      });
-      video.addEventListener('stalled', function () {
-        scheduleWakeVideoCheck(350);
-      });
-      video.addEventListener('waiting', function () {
-        scheduleWakeVideoCheck(450);
-      });
-      video.addEventListener('timeupdate', onVideoDecoded);
-      video.addEventListener('error', onVideoFailed, { once: true });
-      if (typeof video.requestVideoFrameCallback === 'function') {
-        try {
-          video.requestVideoFrameCallback(function () {
-            onVideoDecoded();
-          });
-        } catch (_) {}
-      }
-
-      var pendingVidChecks = 0;
-      var armPendingVideoGuard = function (delayMs) {
-        clearTimeout(state.pendingMediaTimer);
-        state.pendingMediaTimer = setTimeout(function () {
-          state.pendingMediaTimer = 0;
-          if (settledVid || destroyed || mountSeq !== state.mediaMountSeq || state.activeVideo !== video) return;
-          if (video.readyState >= 2 && video.videoWidth > 0) {
-            onVideoDecoded();
-            return;
-          }
-          // Broken URL / 404 / unsupported codec -> fail-open immediately!
-          if (video.error || video.networkState === 3) {
-            onVideoFailed();
-            return;
-          }
-          // Window minimized (`doc.hidden`) or DWM-occluded behind another window (`readyState >= 1`,
-          // `videoWidth > 0`, `error === null`): Chromium defers decoding Frame 1 until un-occluded.
-          // Keep `<video>` alive instead of destroying it, nudge `play()`, and re-check on wake!
-          pendingVidChecks += 1;
-          if (doc.hidden || (video.readyState >= 1 && video.videoWidth > 0) || pendingVidChecks <= 3) {
-            if (!doc.hidden) {
-              try {
-                video.muted = true;
+        var wrapLoopOrAdvance = function () {
+          if (state.cfg.rotationEnabled && state.cfg.rotationTrigger === 'videoEnd') {
+            callHostRpc('playlist.step', { direction: 1, reason: 'videoEnd' });
+          } else {
+            try {
+              video.currentTime = 0;
+              if (!state.cfg.paused && !state.autoPaused && !state.cfg.agentBusyPaused) {
                 video.play().catch(function () {});
+              }
+            } catch (_) {}
+          }
+        };
+
+        video.addEventListener('ended', wrapLoopOrAdvance);
+        video.addEventListener('timeupdate', function () {
+          if (
+            video === state.activeVideo &&
+            video.__prismEffectiveEnd > 0 &&
+            !video.seeking &&
+            video.currentTime >= video.__prismEffectiveEnd
+          ) {
+            wrapLoopOrAdvance();
+          }
+        });
+
+        // Keep an active requestVideoFrameCallback consumer registered while visible so Chromium's
+        // VideoFrameSubmitter never suspends a muted background <video> as "occluded" in fullscreen.
+        var armRvfcKeepAlive = function () {
+          if (typeof video.requestVideoFrameCallback !== 'function') return;
+          if (video.__prismRvfcActive) return;
+          video.__prismRvfcActive = true;
+          var onFrame = function () {
+            if (destroyed || state.activeVideo !== video) {
+              video.__prismRvfcActive = false;
+              return;
+            }
+            state.rvfcCount += 1;
+            if (!doc.hidden && !state.cfg.paused && !state.autoPaused) {
+              try {
+                video.requestVideoFrameCallback(onFrame);
+                return;
               } catch (_) {}
             }
-            armPendingVideoGuard(2500);
+            video.__prismRvfcActive = false;
+          };
+          try {
+            video.requestVideoFrameCallback(onFrame);
+          } catch (_) {
+            video.__prismRvfcActive = false;
+          }
+        };
+        video.__prismArmRvfc = armRvfcKeepAlive;
+
+        if (audioUrl) {
+          var aud = doc.createElement('audio');
+          aud.loop = true;
+          aud.preload = 'auto';
+          nextWrap.appendChild(aud);
+          state.activeAudio = aud;
+          attachLoopbackMediaSrc(aud, audioUrl, {
+            wrap: nextWrap,
+            isStale: function () {
+              return mountSeq !== state.mediaMountSeq || state.activeAudio !== aud;
+            },
+            onReady: syncMediaPlaybackState,
+          });
+        }
+
+        nextWrap.appendChild(video);
+        state.activeVideo = video;
+
+        // Freeze outgoing 4K60 decoder immediately so incoming video decodes frame 1 without GPU contention.
+        if (prevWrap) pauseWrapMedia(prevWrap);
+
+        var needsCrossfade = Boolean(validPrevWrap && cfg.switchTransition !== 'cut' && !doc.hidden);
+        nextWrap.style.opacity = needsCrossfade ? '0' : '0.001';
+        state.pendingWrap = nextWrap;
+        if (nextWrap.parentNode !== stage) {
+          stage.insertBefore(nextWrap, scrimNode || null);
+        }
+
+        var finishPriming = function () {
+          if (!video.__prismPriming) return;
+          video.__prismPriming = false;
+          if (!destroyed && state.activeVideo === video) {
+            syncMediaPlaybackState();
+          }
+        };
+        var ensureVidPlaying = function () {
+          if (!destroyed && state.activeVideo === video && video.paused) {
+            syncMediaPlaybackState();
+          }
+        };
+
+        var settledVid = false;
+        var onVideoDecoded = function () {
+          if (settledVid) return;
+          if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideo !== video) {
+            settledVid = true;
+            disposeWrap(nextWrap);
             return;
           }
-          onVideoFailed();
-        }, delayMs);
-      };
-      armPendingVideoGuard(6000);
+          if (video.readyState < 2 || !(video.videoWidth > 0)) return;
+          settledVid = true;
+          clearTimeout(state.pendingMediaTimer);
+          state.pendingMediaTimer = 0;
+          if (!needsCrossfade) nextWrap.style.opacity = '';
+          finishPriming();
+          commitMount();
+          armRvfcKeepAlive();
+          if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
+            extractAccent(item.thumbUrl, item.id).then(function (acc) {
+              if (acc && !destroyed) {
+                state.cfg.extractedAccent = acc;
+                refreshSkinStyles();
+              }
+            });
+          }
+        };
+        var onVideoFailed = function () {
+          if (settledVid) return;
+          settledVid = true;
+          video.__prismPriming = false;
+          failMount();
+        };
 
-      video.src = mediaUrl;
-      syncMediaPlaybackState();
-      if (video.readyState >= 2 && video.videoWidth > 0) {
-        onVideoDecoded();
+        video.addEventListener('loadedmetadata', ensureVidPlaying, { once: true });
+        video.addEventListener('loadeddata', onVideoDecoded);
+        video.addEventListener('canplay', function () {
+          ensureVidPlaying();
+          onVideoDecoded();
+        });
+        video.addEventListener('playing', function () {
+          onVideoDecoded();
+          armRvfcKeepAlive();
+        });
+        video.addEventListener('stalled', function () {
+          scheduleWakeVideoCheck(350);
+        });
+        video.addEventListener('waiting', function () {
+          scheduleWakeVideoCheck(450);
+        });
+        video.addEventListener('timeupdate', onVideoDecoded);
+        video.addEventListener('error', onVideoFailed, { once: true });
+        if (typeof video.requestVideoFrameCallback === 'function') {
+          try {
+            video.requestVideoFrameCallback(function () {
+              onVideoDecoded();
+            });
+          } catch (_) {}
+        }
+
+        var pendingVidChecks = 0;
+        var blobWaitTicks = 0;
+        var armPendingVideoGuard = function (delayMs) {
+          clearTimeout(state.pendingMediaTimer);
+          state.pendingMediaTimer = setTimeout(function () {
+            state.pendingMediaTimer = 0;
+            if (settledVid || destroyed || mountSeq !== state.mediaMountSeq || state.activeVideo !== video) return;
+            if (video.readyState >= 2 && video.videoWidth > 0) {
+              onVideoDecoded();
+              return;
+            }
+            if (video.__prismFetchingBlob) {
+              if (blobWaitTicks < 16) {
+                blobWaitTicks += 1;
+                armPendingVideoGuard(1500);
+                return;
+              }
+              onVideoFailed();
+              return;
+            }
+            // Broken URL / 404 / unsupported codec -> fail-open immediately!
+            if (video.error || video.networkState === 3) {
+              onVideoFailed();
+              return;
+            }
+            // Window minimized (`doc.hidden`) or DWM-occluded behind another window (`readyState >= 1`,
+            // `videoWidth > 0`, `error === null`): Chromium defers decoding Frame 1 until un-occluded.
+            // Keep `<video>` alive instead of destroying it, nudge `play()`, and re-check on wake!
+            pendingVidChecks += 1;
+            if (doc.hidden || (video.readyState >= 1 && video.videoWidth > 0) || pendingVidChecks <= 3) {
+              if (!doc.hidden) {
+                try {
+                  video.muted = true;
+                  video.play().catch(function () {});
+                } catch (_) {}
+              }
+              armPendingVideoGuard(2500);
+              return;
+            }
+            onVideoFailed();
+          }, delayMs);
+        };
+        armPendingVideoGuard(6000);
+
+        attachLoopbackMediaSrc(video, mediaUrl, {
+          wrap: nextWrap,
+          isStale: function () {
+            return mountSeq !== state.mediaMountSeq || state.activeVideo !== video;
+          },
+          onReady: syncMediaPlaybackState,
+          onError: function (err) {
+            if (err && err.code === 'BLOB_CAP_EXCEEDED' && item && item.thumbUrl) {
+              if (settledVid || destroyed || mountSeq !== state.mediaMountSeq) return;
+              settledVid = true;
+              video.__prismPriming = false;
+              clearTimeout(state.pendingMediaTimer);
+              state.pendingMediaTimer = 0;
+              if (state.activeVideo === video) state.activeVideo = null;
+              try {
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+              } catch (_) {}
+              if (video.parentNode) video.parentNode.removeChild(video);
+
+              var posterImg = doc.createElement('img');
+              posterImg.className = 'agy-prism-media-el';
+              posterImg.crossOrigin = 'anonymous';
+              posterImg.alt = '';
+              posterImg.decoding = 'async';
+              nextWrap.appendChild(posterImg);
+
+              var settledPoster = false;
+              var onPosterDecoded = function () {
+                if (settledPoster) return;
+                settledPoster = true;
+                clearTimeout(state.pendingMediaTimer);
+                state.pendingMediaTimer = 0;
+                if (destroyed || mountSeq !== state.mediaMountSeq) {
+                  disposeWrap(nextWrap);
+                  return;
+                }
+                if (typeof posterImg.naturalWidth === 'number' && !(posterImg.naturalWidth > 0)) {
+                  failMount();
+                  return;
+                }
+                if (!needsCrossfade) nextWrap.style.opacity = '';
+                commitMount();
+                if (shouldExtractAccent(item, state.cfg)) {
+                  extractAccent(posterImg, item.id).then(function (acc) {
+                    if (acc && !destroyed) {
+                      state.cfg.extractedAccent = acc;
+                      refreshSkinStyles();
+                    }
+                  });
+                }
+              };
+              var onPosterFailed = function () {
+                if (settledPoster) return;
+                settledPoster = true;
+                failMount();
+              };
+              var handlePosterLoad = function () {
+                var dec = typeof posterImg.decode === 'function' ? posterImg.decode() : null;
+                if (dec && typeof dec.then === 'function') {
+                  dec.then(onPosterDecoded, onPosterDecoded);
+                } else {
+                  onPosterDecoded();
+                }
+              };
+              posterImg.onload = handlePosterLoad;
+              if (typeof posterImg.addEventListener === 'function') {
+                posterImg.addEventListener('load', handlePosterLoad);
+              }
+              var posterWaitTicks = 0;
+              var armPosterGuard = function (delayMs) {
+                clearTimeout(state.pendingMediaTimer);
+                state.pendingMediaTimer = setTimeout(function () {
+                  state.pendingMediaTimer = 0;
+                  if (settledPoster) return;
+                  if (posterImg.__prismFetchingBlob && posterWaitTicks < 8) {
+                    posterWaitTicks += 1;
+                    armPosterGuard(3000);
+                  } else {
+                    onPosterFailed();
+                  }
+                }, delayMs);
+              };
+              armPosterGuard(6000);
+              attachLoopbackImageSrc(posterImg, String(item.thumbUrl), nextWrap, onPosterFailed);
+              return;
+            }
+            onVideoFailed();
+          },
+        });
+        syncMediaPlaybackState();
+        if (video.readyState >= 2 && video.videoWidth > 0) {
+          onVideoDecoded();
+        }
+      };
+
+      var useVideoStageIframe = Boolean(
+        videoStageBase &&
+        isCrossSchemeLoopbackUrl(mediaUrl) &&
+        isCrossSchemeLoopbackUrl(videoStageBase) &&
+        typeof W.addEventListener === 'function'
+      );
+
+      if (useVideoStageIframe) {
+        var stageSid = 'vs-' + mountSeq + '-' + Date.now();
+        var stageUrl = videoStageBase + (videoStageBase.indexOf('?') >= 0 ? '&' : '?') + 'sid=' + encodeURIComponent(stageSid);
+        var vframe = doc.createElement('iframe');
+        vframe.className = 'agy-prism-media-el';
+        vframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+        vframe.setAttribute('allow', 'autoplay');
+        vframe.setAttribute('frameborder', '0');
+        vframe.setAttribute('scrolling', 'no');
+        vframe.setAttribute('tabindex', '-1');
+        vframe.setAttribute('data-prism-video-stage', '1');
+        vframe.style.pointerEvents = 'none';
+        vframe.style.background = 'transparent';
+
+        if (prevWrap) pauseWrapMedia(prevWrap);
+
+        var needsStageCrossfade = Boolean(validPrevWrap && cfg.switchTransition !== 'cut' && !doc.hidden);
+        nextWrap.style.opacity = needsStageCrossfade ? '0' : '0.001';
+        nextWrap.appendChild(vframe);
+        state.activeVideoStageFrame = vframe;
+        state.activeVideoStageSid = stageSid;
+        state.activeVideoStageReady = false;
+        state.activeVideoStageUrl = stageUrl;
+        state.pendingWrap = nextWrap;
+
+        var settledStage = false;
+        var fellBackToDirectVideo = false;
+        var onStageReady = function () {
+          if (settledStage || fellBackToDirectVideo) return;
+          if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) {
+            settledStage = true;
+            disposeWrap(nextWrap);
+            return;
+          }
+          settledStage = true;
+          state.activeVideoStageReady = true;
+          clearTimeout(state.pendingMediaTimer);
+          state.pendingMediaTimer = 0;
+          if (!needsStageCrossfade) nextWrap.style.opacity = '';
+          commitMount();
+          sendVideoStageControl();
+          if (!state.cfg.muted && state.cfg.volume > 0.005) armGestureUnmute();
+          if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
+            extractAccent(item.thumbUrl, item.id).then(function (acc) {
+              if (acc && !destroyed) {
+                state.cfg.extractedAccent = acc;
+                refreshSkinStyles();
+              }
+            });
+          }
+        };
+        var fallbackToDirectVideo = function () {
+          if (fellBackToDirectVideo) return;
+          fellBackToDirectVideo = true;
+          settledStage = true;
+          clearTimeout(state.pendingMediaTimer);
+          state.pendingMediaTimer = 0;
+          clearVideoStageListener();
+          if (state.activeVideoStageFrame === vframe) {
+            state.activeVideoStageFrame = null;
+            state.activeVideoStageSid = '';
+            state.activeVideoStageReady = false;
+            state.activeVideoStageUrl = '';
+          }
+          try {
+            vframe.src = 'about:blank';
+          } catch (_) {}
+          if (vframe.parentNode) {
+            try {
+              vframe.parentNode.removeChild(vframe);
+            } catch (_) {}
+          }
+          if (destroyed || mountSeq !== state.mediaMountSeq) {
+            disposeWrap(nextWrap);
+            return;
+          }
+          if (state.activeWrap === nextWrap) {
+            prevWrap = null;
+            validPrevWrap = false;
+          }
+          mountDirectVideo();
+        };
+
+        var onStageMessage = function (ev) {
+          var m = ev && ev.data;
+          if (!m || typeof m !== 'object' || m.type !== 'prism-video-stage') return;
+          if (m.sid !== stageSid) return;
+          if (ev.source && vframe.contentWindow && ev.source !== vframe.contentWindow) return;
+          if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) return;
+          if (m.event === 'ready') {
+            onStageReady();
+          } else if (m.event === 'ended') {
+            if (state.cfg.rotationEnabled && state.cfg.rotationTrigger === 'videoEnd') {
+              callHostRpc('playlist.step', { direction: 1, reason: 'videoEnd' });
+            }
+          } else if (m.event === 'error') {
+            fallbackToDirectVideo();
+          }
+        };
+        W.addEventListener('message', onStageMessage);
+        state.videoStageMessageCleanup = function () {
+          W.removeEventListener('message', onStageMessage);
+        };
+
+        vframe.addEventListener('load', function () {
+          if (!destroyed && state.activeVideoStageFrame === vframe) {
+            sendVideoStageControl();
+          }
+        });
+        vframe.addEventListener('error', fallbackToDirectVideo, { once: true });
+
+        var pendingStageChecks = 0;
+        var armPendingStageGuard = function (delayMs) {
+          clearTimeout(state.pendingMediaTimer);
+          state.pendingMediaTimer = setTimeout(function () {
+            state.pendingMediaTimer = 0;
+            if (settledStage || fellBackToDirectVideo || destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) return;
+            pendingStageChecks += 1;
+            if (doc.hidden || pendingStageChecks <= 3) {
+              sendVideoStageControl();
+              armPendingStageGuard(2500);
+              return;
+            }
+            fallbackToDirectVideo();
+          }, delayMs);
+        };
+        armPendingStageGuard(8000);
+
+        if (nextWrap.parentNode !== stage) {
+          stage.insertBefore(nextWrap, scrimNode || null);
+        }
+        vframe.src = stageUrl;
+        return;
       }
+
+      mountDirectVideo();
       return;
     }
 
@@ -2925,16 +3859,22 @@
       'focusin',
       function (e) {
         var t = e && e.target;
-        if (t && t !== doc.body && (!state.activeIframe || t !== state.activeIframe)) {
+        if (
+          t &&
+          t !== doc.body &&
+          (!state.activeIframe || t !== state.activeIframe) &&
+          (!state.activeVideoStageFrame || t !== state.activeVideoStageFrame)
+        ) {
           state.lastHostFocus = t;
         }
       },
       true
     );
     listen(W, 'blur', function () {
-      if (!state.activeIframe) return;
+      var bgFrame = state.activeIframe || state.activeVideoStageFrame;
+      if (!bgFrame) return;
       setTimeout(function () {
-        if (doc.activeElement === state.activeIframe) {
+        if (doc.activeElement === state.activeIframe || doc.activeElement === state.activeVideoStageFrame) {
           try {
             if (state.lastHostFocus && state.lastHostFocus.isConnected && typeof state.lastHostFocus.focus === 'function') {
               state.lastHostFocus.focus({ preventScroll: true });
@@ -2987,16 +3927,19 @@
     if (destroyed || !state.skinEnabled || doc.hidden) {
       state.vidStallCount = 0;
       state.lastVidCheckTime = -1;
+      state.lastVidCheckAt = 0;
       return;
     }
     var vid = state.activeVideo;
     if (!vid || !vid.isConnected || vid.__prismPriming) {
       state.vidStallCount = 0;
       if (isWake && !doc.hidden) {
-        if (vid && vid.isConnected && vid.__prismPriming && !vid.error) {
+        if (state.activeVideoStageFrame && state.activeVideoStageFrame.isConnected) {
+          sendVideoStageControl();
+        } else if (vid && vid.isConnected && vid.__prismPriming && !vid.error) {
           if (vid.readyState >= 2 && vid.videoWidth > 0) {
             try { vid.dispatchEvent(new Event('loadeddata')); } catch (_) {}
-          } else {
+          } else if (!vid.__prismFetchingBlob) {
             try {
               vid.muted = true;
               vid.play().catch(function () {});
@@ -3015,20 +3958,24 @@
       }
       return;
     }
+    if (vid.__prismFetchingBlob) return;
     var cfg = state.cfg;
     var shouldPause = Boolean(cfg.paused || state.autoPaused || cfg.agentBusyPaused);
     if (shouldPause) {
       state.vidStallCount = 0;
       state.lastVidCheckTime = -1;
+      state.lastVidCheckAt = 0;
       return;
     }
     if (typeof vid.__prismArmRvfc === 'function') vid.__prismArmRvfc();
     if (vid.paused && !vid.ended) {
       syncMediaPlaybackState();
       state.lastVidCheckTime = Number(vid.currentTime || 0);
+      state.lastVidCheckAt = Date.now();
       return;
     }
 
+    var now = Date.now();
     var curT = Number(vid.currentTime || 0);
     var dur = Number(vid.duration);
     var q = typeof vid.getVideoPlaybackQuality === 'function' ? vid.getVideoPlaybackQuality() : null;
@@ -3042,14 +3989,20 @@
       state.vidStallCount = 0;
       state.lastVidCheckTime = curT;
       state.lastVidCheckFrames = curF;
+      state.lastVidCheckAt = now;
       return;
     }
+
+    if (state.lastVidCheckAt > 0 && (now - state.lastVidCheckAt) < 900) {
+      return;
+    }
+    state.lastVidCheckAt = now;
 
     if (vid.readyState >= 1 && !vid.seeking) {
       state.vidStallCount += 1;
 
       // Case 1: Frozen near EOF where video track ended earlier than container/audio mvhd duration!
-      if (Number.isFinite(dur) && dur > 1.2 && curT >= dur - 1.5) {
+      if (state.vidStallCount >= 2 && Number.isFinite(dur) && dur > 1.2 && curT >= dur - 0.75) {
         if (curT > 0.8 && (!vid.__prismEffectiveEnd || curT < vid.__prismEffectiveEnd)) {
           vid.__prismEffectiveEnd = Math.max(0.5, curT - 0.06);
         }
@@ -3067,18 +4020,15 @@
         return;
       }
 
-      // Case 2: Mid-stream freeze after fullscreen/focus/occlusion track re-enable -> soft keyframe nudge
-      if (state.vidStallCount === 2 || (isWake && vid.readyState <= 2)) {
+      // Case 3: Persistent D3D11 hardware decoder stall -> seamless reload preserving poster/blob floor
+      if (state.vidStallCount >= 5) {
         try {
-          var kickT = Number.isFinite(dur) && dur > 1.5 && curT < dur - 1.2 ? Math.max(0, curT - 0.035) : 0;
-          vid.currentTime = kickT;
-          vid.play().catch(function () {});
-        } catch (_) {}
-      } else if (state.vidStallCount >= 4) {
-        // Case 3: Persistent D3D11 hardware decoder stall -> seamless reload preserving poster floor
-        try {
-          var resumeT = Number.isFinite(dur) && dur > 2 && curT < dur - 1.5 ? curT : 0;
-          vid.load();
+          var resumeT = Number.isFinite(dur) && dur > 2 && curT < dur - 0.75 ? curT : 0;
+          if (vid.__prismBlobUrl) {
+            vid.src = vid.__prismBlobUrl;
+          } else {
+            vid.load();
+          }
           vid.muted = Boolean(cfg.muted || cfg.volume <= 0.005);
           if (resumeT > 0.05) vid.currentTime = resumeT;
           vid.play().catch(function () {
@@ -3087,6 +4037,13 @@
           });
         } catch (_) {}
         state.vidStallCount = 0;
+      } else if (state.vidStallCount >= 3) {
+        // Case 2: Mid-stream freeze (>= ~2.7s stalled) -> soft keyframe nudge
+        try {
+          var kickT = Number.isFinite(dur) && dur > 1.5 && curT < dur - 0.75 ? Math.max(0, curT - 0.035) : 0;
+          vid.currentTime = kickT;
+          vid.play().catch(function () {});
+        } catch (_) {}
       }
     }
 
@@ -3204,6 +4161,15 @@
   function stepParallax() {
     state.parallaxRaf = 0;
     if (destroyed || !state.skinEnabled || !state.cfg.parallaxEnabled || !state.activeWrap) return;
+    var now = Date.now();
+    if (state.cfg.fpsCap > 0) {
+      var minInterval = Math.floor(1000 / state.cfg.fpsCap) - 2;
+      if (minInterval > 0 && now - state.lastParallaxFrameAt < minInterval) {
+        state.parallaxRaf = W.requestAnimationFrame(stepParallax);
+        return;
+      }
+    }
+    state.lastParallaxFrameAt = now;
     var dx = state.parallaxTargetX - state.parallaxCurX;
     var dy = state.parallaxTargetY - state.parallaxCurY;
     state.parallaxCurX += dx * 0.12;
@@ -3228,20 +4194,34 @@
       c.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:43;';
       doc.body.appendChild(c);
     }
-    if (c && state.lastHoleClip && c.style.clipPath !== state.lastHoleClip) {
-      c.style.clipPath = state.lastHoleClip;
+    if (c) {
+      if (c.style) c.style.display = state.wallpaperReady ? '' : 'none';
+      if (state.lastHoleClip && c.style.clipPath !== state.lastHoleClip) {
+        c.style.clipPath = state.lastHoleClip;
+      }
+      var vw = Math.max(1, Math.round(Number(W.innerWidth) || 1));
+      var vh = Math.max(1, Math.round(Number(W.innerHeight) || 1));
+      if (c.width !== vw || c.height !== vh) {
+        c.width = vw;
+        c.height = vh;
+      }
     }
-    if (c && (c.width !== W.innerWidth || c.height !== W.innerHeight)) {
-      c.width = W.innerWidth;
-      c.height = W.innerHeight;
-    }
-    return c;
+    return state.wallpaperReady ? c : null;
   }
 
   function stepFx() {
     state.fxRaf = 0;
     var canvas = ensureFxCanvas();
     if (!canvas || !state.fxParticles.length) return;
+    var now = Date.now();
+    if (state.cfg.fpsCap > 0) {
+      var minInterval = Math.floor(1000 / state.cfg.fpsCap) - 2;
+      if (minInterval > 0 && now - state.lastFxFrameAt < minInterval) {
+        state.fxRaf = W.requestAnimationFrame(stepFx);
+        return;
+      }
+    }
+    state.lastFxFrameAt = now;
     var ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -3299,11 +4279,11 @@
           if (!state.parallaxRaf) state.parallaxRaf = W.requestAnimationFrame(stepParallax);
         }
 
-        if (state.cfg.fxEnabled) {
+        if (state.cfg.fxEnabled && state.wallpaperReady) {
           var now = Date.now();
           if (now - state.lastTrailAt > 28) {
             state.lastTrailAt = now;
-            var rgb = getComputedStyle(doc.documentElement).getPropertyValue('--prism-accent-rgb').trim() || '102, 157, 246';
+            var rgb = state.accentRgbStr || '102, 157, 246';
             state.fxParticles.push({
               x: e.clientX,
               y: e.clientY,
@@ -3338,8 +4318,8 @@
             );
           } catch (_) {}
         }
-        if (!state.cfg.fxEnabled) return;
-        var rgb = getComputedStyle(doc.documentElement).getPropertyValue('--prism-accent-rgb').trim() || '102, 157, 246';
+        if (!state.cfg.fxEnabled || !state.wallpaperReady) return;
+        var rgb = state.accentRgbStr || '102, 157, 246';
         state.fxParticles.push({
           x: e.clientX,
           y: e.clientY,
@@ -3397,6 +4377,7 @@
       function () {
         if (destroyed || !state.skinEnabled) return;
         syncBrowserHoleCutout();
+        syncWcoGlassPill();
       },
       { passive: true }
     );
@@ -3482,27 +4463,259 @@
     applyCaretStyle(state.cfg);
     ensureFxCanvas();
     syncBrowserHoleCutout();
+    installContextMeterOverlayGuard();
     syncWindowControlsOverlay(false, false);
+    scheduleWcoConfirmTimers();
+    syncWcoGlassPill();
     syncSidecarIframes(state.cfg);
+    if (state.activeVideoStageFrame) sendVideoStageControl();
+  }
+
+  function clearWcoConfirmTimers() {
+    clearTimeout(state.wcoConfirmTimer);
+    state.wcoConfirmTimer = 0;
+    clearTimeout(state.wcoConfirmTimer2);
+    state.wcoConfirmTimer2 = 0;
+  }
+
+  function scheduleWcoConfirmTimers() {
+    clearWcoConfirmTimers();
+    state.wcoHeightRepairCount = 0;
+    if (!destroyed && state.skinEnabled && state.cfg.transparentWindowControls !== false) {
+      state.wcoConfirmTimer = setTimeout(function () {
+        state.wcoConfirmTimer = 0;
+        if (!destroyed && state.skinEnabled && state.cfg.transparentWindowControls !== false) {
+          syncWindowControlsOverlay(false, true);
+        }
+      }, 45);
+      state.wcoConfirmTimer2 = setTimeout(function () {
+        state.wcoConfirmTimer2 = 0;
+        if (!destroyed && state.skinEnabled && state.cfg.transparentWindowControls !== false) {
+          syncWindowControlsOverlay(false, true);
+        }
+      }, 250);
+    }
+  }
+
+  function getPrismWcoColors(forceRestore) {
+    var isLight = (state.skinEnabled && !forceRestore ? state.effectiveTheme : detectHostTheme()) === 'light';
+    var wantTransparent = Boolean(!forceRestore && state.skinEnabled && state.cfg.transparentWindowControls !== false);
+    var color = wantTransparent ? '#00000000' : isLight ? '#FFFFFF' : '#131313';
+    var symbolColor = wantTransparent ? (isLight ? '#18181B' : '#F2F2F5') : isLight ? '#000000' : '#FAFAFA';
+    return {
+      isLight: isLight,
+      wantTransparent: wantTransparent,
+      color: color,
+      symbolColor: symbolColor,
+      height: TARGET_WCO_HEIGHT,
+    };
+  }
+
+  function uninstallContextMeterOverlayGuard() {
+    if (!state.origContextMeterSyncOverlay) return;
+    try {
+      if (state.replacedContextMeterApi && state.origContextMeterApiObj) {
+        Object.defineProperty(W, 'contextMeterAPI', {
+          value: state.origContextMeterApiObj,
+          configurable: true,
+          writable: true,
+          enumerable: true,
+        });
+      } else if (
+        state.wrappedContextMeterApi &&
+        state.wrappedContextMeterApi.syncOverlay === state.wrappedContextMeterFn
+      ) {
+        state.wrappedContextMeterApi.syncOverlay = state.origContextMeterSyncOverlay;
+      }
+    } catch (_) {}
+    state.origContextMeterSyncOverlay = null;
+    state.wrappedContextMeterApi = null;
+    state.wrappedContextMeterFn = null;
+    state.replacedContextMeterApi = false;
+    state.origContextMeterApiObj = null;
+  }
+
+  function installContextMeterOverlayGuard() {
+    var api = W.contextMeterAPI;
+    if (!api || typeof api.syncOverlay !== 'function') return;
+    if (api.syncOverlay === state.wrappedContextMeterFn) return;
+    if (state.wrappedContextMeterApi && state.origContextMeterSyncOverlay && state.wrappedContextMeterApi !== api) {
+      uninstallContextMeterOverlayGuard();
+    }
+    var origFn = api.syncOverlay;
+    var wrapped = function agyPrismSyncOverlayGuard(opts) {
+      if (!destroyed && state.skinEnabled && state.cfg.transparentWindowControls !== false) {
+        var wco = getPrismWcoColors(false);
+        var nextOpts = {};
+        if (opts && typeof opts === 'object') {
+          for (var k in opts) {
+            if (Object.prototype.hasOwnProperty.call(opts, k)) nextOpts[k] = opts[k];
+          }
+        }
+        nextOpts.color = wco.color;
+        nextOpts.symbolColor = wco.symbolColor;
+        nextOpts.height = wco.height;
+        if ('heightCssPx' in nextOpts) nextOpts.heightCssPx = wco.height;
+        return origFn.call(this, nextOpts);
+      }
+      return origFn.apply(this, arguments);
+    };
+    wrapped.__agyPrismWrapped = true;
+    var ok = false;
+    try {
+      api.syncOverlay = wrapped;
+      ok = api.syncOverlay === wrapped;
+    } catch (_) {}
+    if (!ok) {
+      try {
+        var desc = Object.getOwnPropertyDescriptor(W, 'contextMeterAPI');
+        if (!desc || desc.configurable || desc.writable) {
+          var clone = {};
+          var keys = Object.keys(api);
+          for (var i = 0; i < keys.length; i += 1) {
+            var key = keys[i];
+            clone[key] = key === 'syncOverlay' ? wrapped : api[key];
+          }
+          Object.defineProperty(W, 'contextMeterAPI', {
+            value: clone,
+            configurable: true,
+            writable: true,
+            enumerable: true,
+          });
+          ok = Boolean(W.contextMeterAPI && W.contextMeterAPI.syncOverlay === wrapped);
+          if (ok) {
+            state.replacedContextMeterApi = true;
+            state.origContextMeterApiObj = api;
+            api = clone;
+          }
+        }
+      } catch (_) {}
+    }
+    if (ok) {
+      state.origContextMeterSyncOverlay = origFn;
+      state.wrappedContextMeterApi = api;
+      state.wrappedContextMeterFn = wrapped;
+    }
+  }
+
+  function clearWcoGeometryListener() {
+    if (state.wcoGeometryCleanup) {
+      try {
+        state.wcoGeometryCleanup();
+      } catch (_) {}
+      state.wcoGeometryCleanup = null;
+    }
+    state.wcoOverlayTarget = null;
+  }
+
+  function removeWcoGlassPill() {
+    var pill = doc.getElementById(WCO_PILL_ID);
+    if (pill && pill.parentNode) pill.parentNode.removeChild(pill);
+    var root = doc.documentElement;
+    if (root && root.style) {
+      if (state.skinEnabled && !destroyed) root.style.setProperty('--prism-wco-inset-right', '0px');
+      else root.style.removeProperty('--prism-wco-inset-right');
+    }
+  }
+
+  function syncWcoGlassPill() {
+    var root = doc.documentElement;
+    if (!root || !doc.body || destroyed || !state.skinEnabled || state.cfg.transparentWindowControls === false) {
+      removeWcoGlassPill();
+      return;
+    }
+    var wco = W.navigator && W.navigator.windowControlsOverlay;
+    if (!wco || wco.visible !== true || typeof wco.getTitlebarAreaRect !== 'function') {
+      removeWcoGlassPill();
+      return;
+    }
+    if (typeof wco.addEventListener === 'function' && state.wcoOverlayTarget !== wco) {
+      clearWcoGeometryListener();
+      var onGeo = function () {
+        if (!destroyed && state.skinEnabled) {
+          syncWcoGlassPill();
+          if (state.cfg.transparentWindowControls !== false && state.wcoHeightRepairCount < 2) {
+            try {
+              var gr = wco.getTitlebarAreaRect();
+              var gh = gr ? Math.round(Number(gr.height) || 0) : 0;
+              if (gh > TARGET_WCO_HEIGHT + 1) {
+                state.wcoHeightRepairCount += 1;
+                syncWindowControlsOverlay(false, true);
+              }
+            } catch (_) {}
+          }
+        }
+      };
+      try {
+        wco.addEventListener('geometrychange', onGeo);
+        state.wcoOverlayTarget = wco;
+        state.wcoGeometryCleanup = function () {
+          try {
+            wco.removeEventListener('geometrychange', onGeo);
+          } catch (_) {}
+        };
+      } catch (_) {}
+    }
+    var rect = null;
+    try {
+      rect = wco.getTitlebarAreaRect();
+    } catch (_) {}
+    if (!rect) {
+      removeWcoGlassPill();
+      return;
+    }
+    var rectRight = Number.isFinite(Number(rect.right))
+      ? Number(rect.right)
+      : Number(rect.x || 0) + Number(rect.width || 0);
+    var vw = Math.max(1, Number(W.innerWidth) || root.clientWidth || 0);
+    var wcoW = Math.round(vw - rectRight);
+    if (!Number.isFinite(wcoW) || wcoW < 40) {
+      removeWcoGlassPill();
+      return;
+    }
+    var wcoH = Math.round(Number(rect.height) || TARGET_WCO_HEIGHT);
+    if (!Number.isFinite(wcoH) || wcoH < 20) wcoH = TARGET_WCO_HEIGHT;
+
+    var isIslands = state.cfg.layoutMode !== 'flush';
+    var insetPx = (isIslands ? wcoW + num(state.cfg.islandGap, 8) : wcoW) + 'px';
+    if (root.style) root.style.setProperty('--prism-wco-inset-right', insetPx);
+
+    var pill = doc.getElementById(WCO_PILL_ID);
+    if (!pill) {
+      pill = doc.createElement('div');
+      pill.id = WCO_PILL_ID;
+      pill.setAttribute('aria-hidden', 'true');
+      pill.setAttribute('data-agy-prism-layer', '1');
+      doc.body.appendChild(pill);
+    }
+    if (isIslands) {
+      var padRight = Math.min(4, Math.max(0, Math.round(num(state.cfg.workspacePad, 8))));
+      pill.style.top = '2px';
+      pill.style.right = padRight + 'px';
+      pill.style.width = Math.max(40, wcoW - padRight) + 'px';
+      pill.style.height = Math.max(28, wcoH - 2) + 'px';
+    } else {
+      pill.style.top = '0px';
+      pill.style.right = '0px';
+      pill.style.width = wcoW + 'px';
+      pill.style.height = wcoH + 'px';
+    }
   }
 
   function syncWindowControlsOverlay(forceRestore, forceSend) {
-    var isLight = (state.skinEnabled && !forceRestore ? state.effectiveTheme : detectHostTheme()) === 'light';
-    var wantTransparent = Boolean(!forceRestore && state.skinEnabled && state.cfg.transparentWindowControls !== false);
+    var wco = getPrismWcoColors(forceRestore);
     var root = doc.documentElement;
     if (root) {
-      if (wantTransparent) root.setAttribute(WCO_ATTR, 'transparent');
+      if (wco.wantTransparent) root.setAttribute(WCO_ATTR, 'transparent');
       else root.removeAttribute(WCO_ATTR);
     }
     var nav = W.electronNative;
     if (!nav || typeof nav.setTitleBarOverlay !== 'function') return false;
-    var color = wantTransparent ? '#00000000' : isLight ? '#FFFFFF' : '#131313';
-    var symbolColor = wantTransparent ? (isLight ? '#18181B' : '#F2F2F5') : isLight ? '#000000' : '#FAFAFA';
-    var sig = color + '|' + symbolColor;
+    var sig = wco.color + '|' + wco.symbolColor + '|' + wco.height;
     if (!forceSend && state.lastWcoSig === sig) return true;
     state.lastWcoSig = sig;
     try {
-      var res = nav.setTitleBarOverlay({ color: color, symbolColor: symbolColor });
+      var res = nav.setTitleBarOverlay({ color: wco.color, symbolColor: wco.symbolColor, height: wco.height });
       if (res && typeof res.catch === 'function') res.catch(function () {});
       return true;
     } catch (_) {
@@ -3520,6 +4733,12 @@
     state.pendingMediaTimer = 0;
     clearTimeout(state.transitionTimer);
     state.transitionTimer = 0;
+    clearWcoConfirmTimers();
+    state.wcoHeightRepairCount = 0;
+    clearTimeout(state.wcoThemeTimer);
+    state.wcoThemeTimer = 0;
+    uninstallContextMeterOverlayGuard();
+    clearWcoGeometryListener();
     if (state.pendingWrap) {
       disposeWrap(state.pendingWrap);
       state.pendingWrap = null;
@@ -3532,6 +4751,11 @@
     state.activeVideo = null;
     state.activeAudio = null;
     state.activeIframe = null;
+    clearVideoStageListener();
+    state.activeVideoStageFrame = null;
+    state.activeVideoStageSid = '';
+    state.activeVideoStageReady = false;
+    state.activeVideoStageUrl = '';
     state.activeMediaKey = '';
     state.wallpaperReady = false;
     state.slides = [];
@@ -3539,6 +4763,7 @@
     state.lastCaretSig = '';
     state.lastSidecarSig = '';
     clearFastCssVars();
+    removeWcoGlassPill();
     syncWindowControlsOverlay(true, true);
 
     var stage = doc.getElementById(STAGE_ID);
@@ -3666,6 +4891,7 @@
         sceneMode: p.source.sceneMode || '',
         sceneVideoUrl: p.source.sceneVideoUrl || '',
         sceneLiveUrl: p.source.sceneLiveUrl || '',
+        videoStageUrl: p.source.videoStageUrl || '',
         webUrl: p.source.webUrl || '',
         schemeColor: p.source.schemeColor || '',
       };
@@ -3678,7 +4904,8 @@
       state.slides = [];
     }
 
-    state.cfg = normalizeConfig(rawCfg, state.item);
+    state.rawCfg = rawCfg && typeof rawCfg === 'object' ? rawCfg : {};
+    state.cfg = normalizeConfig(state.rawCfg, state.item);
 
     var runMount = function () {
       if (destroyed || !state.skinEnabled) return;
@@ -3725,13 +4952,39 @@
   }
 
   function updateConfig(patch) {
-    var cur = (lastPayload && (lastPayload.config || lastPayload.prefs)) || state.cfg || {};
+    var cur = (state.rawCfg && typeof state.rawCfg === 'object' && Object.keys(state.rawCfg).length ? state.rawCfg : null) ||
+      (lastPayload && (lastPayload.config || lastPayload.prefs)) ||
+      state.cfg ||
+      {};
     var merged = {};
     var k;
     for (k in cur) if (Object.prototype.hasOwnProperty.call(cur, k)) merged[k] = cur[k];
     if (patch && typeof patch === 'object') {
-      for (k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) merged[k] = patch[k];
+      var wid = state.item && state.item.id ? String(state.item.id) : String(merged.wallpaperId || '');
+      var ovClone = null;
+      if (patch.perWallpaperOverrides === undefined && wid && merged.perWallpaperOverrides && typeof merged.perWallpaperOverrides === 'object' && merged.perWallpaperOverrides[wid]) {
+        var nextOvMap = {};
+        for (var ok in merged.perWallpaperOverrides) {
+          if (Object.prototype.hasOwnProperty.call(merged.perWallpaperOverrides, ok)) nextOvMap[ok] = merged.perWallpaperOverrides[ok];
+        }
+        ovClone = {};
+        for (var pk in merged.perWallpaperOverrides[wid]) {
+          if (Object.prototype.hasOwnProperty.call(merged.perWallpaperOverrides[wid], pk)) ovClone[pk] = merged.perWallpaperOverrides[wid][pk];
+        }
+        nextOvMap[wid] = ovClone;
+        merged.perWallpaperOverrides = nextOvMap;
+      }
+      for (k in patch) {
+        if (Object.prototype.hasOwnProperty.call(patch, k)) {
+          merged[k] = patch[k];
+          if (ovClone && Object.prototype.hasOwnProperty.call(ovClone, k)) {
+            if (patch[k] === null) delete ovClone[k];
+            else ovClone[k] = patch[k];
+          }
+        }
+      }
     }
+    state.rawCfg = merged;
     return applyPayload({
       skinEnabled: patch && typeof patch.skinEnabled === 'boolean' ? patch.skinEnabled : state.skinEnabled,
       config: merged,
@@ -3775,7 +5028,10 @@
         mountStageMedia(true);
       }
       attachWatchers();
+      installContextMeterOverlayGuard();
       syncWindowControlsOverlay(false, true);
+      scheduleWcoConfirmTimers();
+      syncWcoGlassPill();
     }
     return status();
   }
@@ -3809,10 +5065,27 @@
       paused: Boolean(state.cfg.paused || state.autoPaused),
       autoPaused: Boolean(state.autoPaused),
       pauseReason: state.pauseReason,
-      videoPaused: state.activeVideo ? Boolean(state.activeVideo.paused) : null,
-      videoMuted: state.activeVideo ? Boolean(state.activeVideo.muted) : null,
-      videoReadyState: state.activeVideo ? Number(state.activeVideo.readyState || 0) : 0,
-      videoSrc: state.activeVideo ? String(state.activeVideo.currentSrc || state.activeVideo.src || '') : '',
+      videoStageMode: state.activeVideoStageFrame ? 'iframe' : state.activeVideo ? 'video' : 'none',
+      videoPaused: state.activeVideo
+        ? Boolean(state.activeVideo.paused)
+        : state.activeVideoStageFrame
+          ? Boolean(state.cfg.paused || state.autoPaused || state.cfg.agentBusyPaused)
+          : null,
+      videoMuted: state.activeVideo
+        ? Boolean(state.activeVideo.muted)
+        : state.activeVideoStageFrame
+          ? Boolean(state.cfg.muted || state.cfg.volume <= 0.005)
+          : null,
+      videoReadyState: state.activeVideo
+        ? Number(state.activeVideo.readyState || 0)
+        : state.activeVideoStageFrame
+          ? state.activeVideoStageReady
+            ? 4
+            : 0
+          : 0,
+      videoSrc: state.activeVideo
+        ? String(state.activeVideo.currentSrc || state.activeVideo.src || '')
+        : state.activeVideoStageUrl || '',
       glassReady: Boolean(doc.documentElement && doc.documentElement.getAttribute(GLASS_ATTR) === 'ready'),
       wallpaperReady: Boolean(state.wallpaperReady),
       transparentWindowControls: Boolean(state.cfg.transparentWindowControls !== false),
@@ -3833,12 +5106,15 @@
     clearTimeout(state.hiddenTimer);
     clearTimeout(state.wakeNudgeTimer);
     clearTimeout(state.wcoThemeTimer);
+    clearWcoConfirmTimers();
     clearInterval(state.blurPollTimer);
     clearInterval(state.videoWatchTimer);
     clearTimeout(themeDebounce);
     if (state.parallaxRaf) W.cancelAnimationFrame(state.parallaxRaf);
     if (state.fxRaf) W.cancelAnimationFrame(state.fxRaf);
     if (state.unmuteGestureCleanup) state.unmuteGestureCleanup();
+    clearWcoGeometryListener();
+    uninstallContextMeterOverlayGuard();
     try {
       if (domObs) domObs.disconnect();
       if (holeAttrObs) holeAttrObs.disconnect();
@@ -3867,6 +5143,7 @@
   setupFocusHandbackGuard();
   setupLifecycleMonitors();
   setupPointerHooks();
+  installContextMeterOverlayGuard();
 
   var api = {
     version: VERSION,

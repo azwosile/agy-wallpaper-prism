@@ -3,14 +3,14 @@
 
 export const PLUGIN_ID = 'agy-wallpaper-prism';
 export const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-export const PLUGIN_VERSION = '2.0.5';
+export const PLUGIN_VERSION = '2.0.6';
 export const SIDECAR_ID = 'prism_studio';
 export const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 export const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 export const DEFAULT_DEBUG_PORT = 9339;
 
 export const PRISM_DOM = Object.freeze({
-  skinVersion: '2.0.5',
+  skinVersion: '2.0.6',
   skinAttr: 'data-agy-prism-skin',
   glassAttr: 'data-agy-prism-glass',
   wallpaperAttr: 'data-agy-prism-wallpaper',
@@ -404,6 +404,8 @@ export const SCENE_PRESETS = Object.freeze({
       glassSurfaces: true,
       glassOpacity: 0.64,
       glassBlur: 18,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 82,
       chatGlassFidelity: 78,
       scrimOpacity: 0.18,
@@ -428,6 +430,8 @@ export const SCENE_PRESETS = Object.freeze({
       glassSurfaces: true,
       glassOpacity: 0.76,
       glassBlur: 16,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 92,
       chatGlassFidelity: 90,
       scrimOpacity: 0.26,
@@ -452,6 +456,8 @@ export const SCENE_PRESETS = Object.freeze({
       glassSurfaces: true,
       glassOpacity: 0.88,
       glassBlur: 20,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 100,
       chatGlassFidelity: 100,
       scrimOpacity: 0.42,
@@ -476,6 +482,8 @@ export const SCENE_PRESETS = Object.freeze({
       glassSurfaces: false,
       glassOpacity: 0.94,
       glassBlur: 0,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 100,
       chatGlassFidelity: 100,
       scrimOpacity: 0.34,
@@ -512,6 +520,8 @@ export const FACTORY_PRESETS = Object.freeze([
       glassSurfaces: true,
       glassOpacity: 0.76,
       glassBlur: 16,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 92,
       chatGlassFidelity: 90,
       codeReadabilityMode: 'translucent',
@@ -539,6 +549,8 @@ export const FACTORY_PRESETS = Object.freeze([
       glassSurfaces: true,
       glassOpacity: 0.74,
       glassBlur: 18,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 94,
       chatGlassFidelity: 92,
       codeReadabilityMode: 'translucent',
@@ -566,6 +578,8 @@ export const FACTORY_PRESETS = Object.freeze([
       glassSurfaces: true,
       glassOpacity: 0.70,
       glassBlur: 14,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 88,
       chatGlassFidelity: 85,
       codeReadabilityMode: 'translucent',
@@ -593,6 +607,8 @@ export const FACTORY_PRESETS = Object.freeze([
       glassSurfaces: true,
       glassOpacity: 0.82,
       glassBlur: 28,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 96,
       chatGlassFidelity: 95,
       codeReadabilityMode: 'frosted',
@@ -620,6 +636,8 @@ export const FACTORY_PRESETS = Object.freeze([
       glassSurfaces: true,
       glassOpacity: 0.80,
       glassBlur: 20,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 95,
       chatGlassFidelity: 94,
       codeReadabilityMode: 'translucent',
@@ -647,6 +665,8 @@ export const FACTORY_PRESETS = Object.freeze([
       glassSurfaces: true,
       glassOpacity: 0.90,
       glassBlur: 22,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 100,
       chatGlassFidelity: 100,
       codeReadabilityMode: 'solid',
@@ -675,6 +695,8 @@ export const FACTORY_PRESETS = Object.freeze([
       glassSurfaces: true,
       glassOpacity: 0.68,
       glassBlur: 18,
+      sidebarOpacity: null,
+      sidebarBlur: null,
       glassFidelity: 88,
       chatGlassFidelity: 84,
       codeReadabilityMode: 'translucent',
@@ -722,6 +744,8 @@ export const DEFAULT_CONFIG = Object.freeze({
   glassSurfaces: true,
   glassOpacity: 0.76,
   glassBlur: 16,
+  sidebarOpacity: null,
+  sidebarBlur: null,
   glassFidelity: 92,
   chatGlassFidelity: 90,
   codeReadabilityMode: 'translucent',
@@ -737,7 +761,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   mediaBlur: 0,
   mediaBrightness: 100,
   mediaContrast: 100,
-  mediaSaturate: 105,
+  mediaSaturate: 100,
   grainAlpha: 0.022,
   filterPreset: 'none',
   fit: 'cover',
@@ -823,6 +847,8 @@ export const RESET_SCOPES = Object.freeze({
     'glassSurfaces',
     'glassOpacity',
     'glassBlur',
+    'sidebarOpacity',
+    'sidebarBlur',
     'glassFidelity',
     'chatGlassFidelity',
     'codeReadabilityMode',
@@ -888,6 +914,8 @@ export const PER_WALLPAPER_OVERRIDE_KEYS = Object.freeze([
   'customAccent',
   'glassOpacity',
   'glassBlur',
+  'sidebarOpacity',
+  'sidebarBlur',
   'scrimOpacity',
   'mediaOpacity',
   'mediaBlur',
@@ -913,6 +941,17 @@ function clamp(v, min, max) {
 function num(v, fallback, min, max, decimals = 4) {
   const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
   if (typeof n !== 'number' || !Number.isFinite(n)) return fallback;
+  const c = clamp(n, min, max);
+  const f = 10 ** decimals;
+  return Math.round(c * f) / f;
+}
+
+export function nullableNum(v, min, max, decimals = 4) {
+  if (v === null || v === undefined || v === '' || v === 'auto') return null;
+  const s = typeof v === 'string' ? v.trim() : null;
+  if (s === '' || s === 'auto') return null;
+  const n = s !== null ? Number(s) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
   const c = clamp(n, min, max);
   const f = 10 ** decimals;
   return Math.round(c * f) / f;
@@ -1141,6 +1180,8 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     glassSurfaces: bool(merged.glassSurfaces, DEFAULT_CONFIG.glassSurfaces),
     glassOpacity: num(merged.glassOpacity, DEFAULT_CONFIG.glassOpacity, 0.3, 0.98, 3),
     glassBlur: num(merged.glassBlur, DEFAULT_CONFIG.glassBlur, 0, 48, 0),
+    sidebarOpacity: nullableNum(merged.sidebarOpacity, 0.2, 0.98, 3),
+    sidebarBlur: nullableNum(merged.sidebarBlur, 0, 48, 0),
     glassFidelity: num(merged.glassFidelity, DEFAULT_CONFIG.glassFidelity, 0, 100, 0),
     chatGlassFidelity: num(merged.chatGlassFidelity, DEFAULT_CONFIG.chatGlassFidelity, 0, 100, 0),
     codeReadabilityMode: oneOf(merged.codeReadabilityMode, CODE_READABILITY_MODES, DEFAULT_CONFIG.codeReadabilityMode),
