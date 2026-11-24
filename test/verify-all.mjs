@@ -2594,6 +2594,9 @@ async function main() {
       if (u.includes('tok971-404') && method === 'HEAD') {
         return { ok: false, status: 404, headers: { get: () => null } };
       }
+      if (u.includes('tok-dead-plugin') && method === 'HEAD') {
+        throw new TypeError('Failed to fetch');
+      }
       if (u.includes('huge-971mb.mp4')) {
         return {
           ok: true,
@@ -2844,6 +2847,52 @@ async function main() {
         createdIframeSrcs,
         [],
         `Real MediaSource https: env must NOT mount plaintext http:// video-stage iframe (seen: ${createdIframeSrcs.join(', ')})`,
+      );
+
+      // 2D-bis) Dead `plugin://` origin probe failure is cached per-origin so subsequent switches skip HEAD at 0ms
+      const deadOrigin = 'plugin://agy-wallpaper-prism--prism_studio-59999';
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-dead-plugin-1',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-1.mp4',
+          pluginMediaUrl: `${deadOrigin}/media-proxy/media/tok-dead-plugin-1`,
+          thumbUrl: 'http://127.0.0.1:49152/preview/small-1/poster.png',
+        },
+      });
+      await sleep(60);
+      const stDead1 = prism.status();
+      assert.equal(stDead1.wallpaperReady, true, 'First video after dead plugin:// probe did not become ready via blob fallback');
+      assert.equal(stDead1.videoTransport, 'blob', `Expected videoTransport="blob" after dead plugin:// probe, got ${stDead1.videoTransport}`);
+      const deadHeadCountBefore = fetchCalls.filter(
+        (c) => c.method === 'HEAD' && c.url.startsWith(`${deadOrigin}/`),
+      ).length;
+      assert.equal(deadHeadCountBefore, 1, `Expected 1 initial HEAD probe to ${deadOrigin}, got ${deadHeadCountBefore}`);
+
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-dead-plugin-2',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-2.mp4',
+          pluginMediaUrl: `${deadOrigin}/media-proxy/media/tok-dead-plugin-2`,
+          thumbUrl: 'http://127.0.0.1:49152/preview/small-2/poster.png',
+        },
+      });
+      await sleep(60);
+      const stDead2 = prism.status();
+      assert.equal(stDead2.wallpaperReady, true, 'Second video with cached dead plugin:// origin did not become ready');
+      assert.equal(stDead2.videoTransport, 'blob', `Expected videoTransport="blob" on cached dead plugin:// origin, got ${stDead2.videoTransport}`);
+      const deadHeadCountAfter = fetchCalls.filter(
+        (c) => c.method === 'HEAD' && c.url.startsWith(`${deadOrigin}/`),
+      ).length;
+      assert.equal(
+        deadHeadCountAfter,
+        deadHeadCountBefore,
+        `Cached dead plugin:// origin triggered extra HEAD probe(s): ${deadHeadCountBefore} -> ${deadHeadCountAfter}`,
       );
 
       // 2E) Also verify `panel-inject.js` thumbnail grid (`bindSafeThumb`) uses 0ms fetch+blob under https://127.0.0.1

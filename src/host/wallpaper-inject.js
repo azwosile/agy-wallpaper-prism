@@ -577,6 +577,7 @@
     failedMediaKey: '',
     failedMediaRetries: 0,
     preferBlobMedia: false,
+    deadPluginOrigins: Object.create(null),
     transitionTimer: 0,
     lastHostFocus: null,
     lastSidecarSig: '',
@@ -4310,6 +4311,12 @@
       };
 
       // Priority 1: Electron `plugin://` secure 206 streaming proxy (zero-copy for 971 MB / 4 GB videos!)
+      var pluginOriginMatch = /^plugin:\/\/[^/?#]+/i.exec(pluginMediaUrl);
+      var pluginOriginKey = pluginOriginMatch ? pluginOriginMatch[0].toLowerCase() : '';
+      if (pluginOriginKey && state.deadPluginOrigins[pluginOriginKey]) {
+        continueAfterPluginProbe(true);
+        return;
+      }
       if (pluginMediaUrl && /^plugin:\/\//i.test(pluginMediaUrl) && typeof W.fetch === 'function') {
         var headAc = typeof W.AbortController === 'function' ? new W.AbortController() : null;
         if (headAc) {
@@ -4325,9 +4332,10 @@
           if (!probeSettled) {
             probeSettled = true;
             state.pendingMediaTimer = 0;
+            if (pluginOriginKey) state.deadPluginOrigins[pluginOriginKey] = true;
             continueAfterPluginProbe(true);
           }
-        }, 800);
+        }, 350);
         state.pendingMediaTimer = headTimer;
 
         W.fetch(pluginMediaUrl, headAc ? { method: 'HEAD', signal: headAc.signal } : { method: 'HEAD' })
@@ -4355,6 +4363,7 @@
             probeSettled = true;
             clearTimeout(headTimer);
             if (state.pendingMediaTimer === headTimer) state.pendingMediaTimer = 0;
+            if (pluginOriginKey) state.deadPluginOrigins[pluginOriginKey] = true;
             if (destroyed || mountSeq !== state.mediaMountSeq) {
               disposeWrap(nextWrap);
               return;

@@ -2024,7 +2024,14 @@ export function createPassiveCdpBridge({
     wake: async () => {
       sessionAwake = true;
       sessionForcedWake = true;
-      await runTick({ immediateWake: true });
+      const liveSseAttached =
+        activeTargets.size > 0 &&
+        sseClients.size > 0 &&
+        lastStatus.phase === 'attached' &&
+        canary.getStatus().state !== 'tripped';
+      if (!liveSseAttached) {
+        await runTick({ immediateWake: true });
+      }
       await broadcastState();
       return getStatus();
     },
