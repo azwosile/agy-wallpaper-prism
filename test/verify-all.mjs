@@ -3303,6 +3303,37 @@ async function main() {
         assert.equal(lazyBootCheck.hasLazyStubPill, true, 'Lazy stub #agy-prism-pill[data-prism-lazy-stub="1"] missing');
         assert.equal(lazyBootCheck.pillInFooter, true, '#agy-prism-pill not mounted inside .agy-composer-footer');
 
+        // Verify lazy stub `#agy-prism-pill` survives React footer unmount/remount WITHOUT loading `panel.js`
+        await hubPage.evaluate(`(() => {
+          const f = document.querySelector('.agy-composer-footer');
+          const parent = f.parentElement;
+          const next = f.nextSibling;
+          const clone = f.cloneNode(true);
+          const stalePill = clone.querySelector('#agy-prism-pill');
+          if (stalePill) stalePill.remove();
+          f.remove();
+          parent.insertBefore(clone, next);
+        })()`);
+        const stubHealDeadline = Date.now() + 3000;
+        let stubHealed = null;
+        while (Date.now() < stubHealDeadline) {
+          stubHealed = await hubPage.evaluate(`({
+            hasLazyStubPill: Boolean(document.querySelector('#agy-prism-pill[data-prism-lazy-stub="1"]')),
+            pillInFooter: Boolean(document.querySelector('.agy-composer-footer #agy-prism-pill')),
+            panelType: typeof window.__agyPrismPanel,
+          })`);
+          if (stubHealed.hasLazyStubPill && stubHealed.pillInFooter) break;
+          await sleep(100);
+        }
+        assert.equal(stubHealed?.hasLazyStubPill, true, 'Lazy stub #agy-prism-pill did not auto-heal after .agy-composer-footer remount');
+        assert.equal(stubHealed?.pillInFooter, true, 'Healed lazy stub #agy-prism-pill not re-mounted into .agy-composer-footer');
+        assert.equal(stubHealed?.panelType, 'undefined', 'Stub keepalive MUST NOT load panel.js');
+        assert.equal(
+          hubRequestedPaths.some((p) => p.includes('/panel.js')),
+          false,
+          `panel.js was unexpectedly fetched during stub keepalive: ${hubRequestedPaths.join(', ')}`,
+        );
+
         // -------------------------------------------------------------------
         // CHECK 2 — Fail-Open Media-Ready Gate & `z-index: -1` Inert Stage
         // -------------------------------------------------------------------
