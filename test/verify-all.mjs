@@ -989,16 +989,21 @@ async function main() {
     assert.equal(stageResp.status, 200, `Expected 200 for ${stagePath}, got ${stageResp.status}`);
     const stageHtml = stageResp.body.toString('utf8');
     assert.ok(stageHtml.includes('prism-video-stage') && stageHtml.includes('/media/'), 'video-stage HTML missing same-origin video or postMessage bridge');
+    assert.ok(stageHtml.includes('createMediaElementSource') && stageHtml.includes('audioClockFallback'), 'video-stage HTML missing OOPIF Web Audio routing or audio-clock stall fallback');
 
     const { buildClientSkinPayload: buildPayload } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'host', 'index.mjs')).href);
     const payload = buildPayload(await engine.getConfig(), vidItem, engine.getMediaOrigin(), { skinEnabled: true });
     assert.equal(payload.activeItem?.videoStageUrl, vidItem.videoStageUrl, 'buildClientSkinPayload dropped videoStageUrl');
 
-    // 2. Verify Studio /api/events SSE & /api/status config inclusion
+    // 2. Verify Studio /api/events SSE, concurrent SSE cap (prevent HTTP/1.1 6-socket starvation) & /api/status config inclusion
     const sseResp = await studio.inject({ method: 'GET', url: '/api/events' });
     assert.equal(sseResp.statusCode, 200, 'Studio /api/events did not return 200');
     assert.match(String(sseResp.headers['content-type'] || ''), /text\/event-stream/i);
     assert.ok(sseResp.text.includes('event: state') && sseResp.text.includes('"activeItem"'), 'Studio /api/events missing initial state snapshot');
+    const studioHtml = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'index.html'), 'utf8');
+    assert.ok(studioHtml.includes('installStudioVisibilityGuards') && studioHtml.includes('disconnectStudioEvents'), 'Studio index.html missing hidden-iframe SSE disconnect guards');
+    const mainCode = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'main.mjs'), 'utf8');
+    assert.ok(mainCode.includes('MAX_STUDIO_SSE'), 'main.mjs missing MAX_STUDIO_SSE socket pool cap');
 
     const statusResp = await studio.inject({ method: 'GET', url: '/api/status' });
     assert.equal(statusResp.statusCode, 200);

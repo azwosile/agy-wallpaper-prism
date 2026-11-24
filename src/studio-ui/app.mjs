@@ -5200,7 +5200,41 @@ function bootPrismStudioApp() {
     }
   }
 
+  function isStudioVisible() {
+    if (document.hidden) return false;
+    try {
+      const w = window.innerWidth || document.documentElement?.clientWidth || 0;
+      const h = window.innerHeight || document.documentElement?.clientHeight || 0;
+      return w > 20 && h > 20;
+    } catch {
+      return true;
+    }
+  }
+
+  function disconnectStudioEvents() {
+    if (studioEventSource) {
+      try { studioEventSource.close(); } catch {}
+      studioEventSource = null;
+    }
+  }
+
+  function syncStudioMediaForVisibility(visible) {
+    try {
+      for (const vid of document.querySelectorAll('video')) {
+        if (!visible) {
+          if (!vid.paused) vid.pause();
+        }
+      }
+    } catch {
+      // ignore media pause errors
+    }
+  }
+
   function connectStudioEvents() {
+    if (!isStudioVisible()) {
+      disconnectStudioEvents();
+      return;
+    }
     if (typeof window.EventSource !== 'function' || studioEventSource) return;
     try {
       const tok = new URLSearchParams(window.location.search).get('token') || window.__SIDECAR_BOOT__?.token || '';
@@ -5219,17 +5253,46 @@ function bootPrismStudioApp() {
       es.addEventListener('state', handleEvent);
       es.onmessage = handleEvent;
       es.onerror = () => {
-        // Keep EventSource auto-retry active while live sync poll serves as fallback
+        if (!isStudioVisible()) {
+          disconnectStudioEvents();
+        }
       };
     } catch {
       studioEventSource = null;
     }
   }
 
+  function installStudioVisibilityGuards() {
+    let wasVisible = isStudioVisible();
+    const reconcile = () => {
+      const visible = isStudioVisible();
+      if (visible === wasVisible) return;
+      wasVisible = visible;
+      if (!visible) {
+        disconnectStudioEvents();
+        syncStudioMediaForVisibility(false);
+      } else {
+        connectStudioEvents();
+        if (store.ready) void syncExternalStateNow();
+      }
+    };
+    document.addEventListener('visibilitychange', reconcile);
+    window.addEventListener('resize', reconcile, { passive: true });
+    window.addEventListener('pagehide', disconnectStudioEvents);
+    if (typeof window.ResizeObserver === 'function' && document.documentElement) {
+      try {
+        const ro = new window.ResizeObserver(reconcile);
+        ro.observe(document.documentElement);
+      } catch {
+        // ignore observer issues
+      }
+    }
+  }
+
   function ensureLiveSyncPoll() {
     if (studioSyncPollTimer) return;
     studioSyncPollTimer = setInterval(() => {
-      if (document.hidden || !store.ready) return;
+      if (!isStudioVisible() || !store.ready) return;
       const sseFresh =
         studioEventSource &&
         studioEventSource.readyState === 1 &&
@@ -5291,6 +5354,7 @@ function bootPrismStudioApp() {
       renderActiveSurface();
     }
 
+    installStudioVisibilityGuards();
     connectStudioEvents();
     ensureLiveSyncPoll();
     ensureStandbyStatusPoll();

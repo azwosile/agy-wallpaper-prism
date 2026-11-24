@@ -781,6 +781,15 @@ export async function createPrismStudioServer(options = {}) {
         res.end();
         return;
       }
+      // Cap concurrent Studio SSE sockets (Chromium HTTP/1.1 allows only 6 sockets/origin;
+      // Antigravity keeps hidden conversation side-pane iframes alive in the DOM).
+      const MAX_STUDIO_SSE = 2;
+      while (studioSseClients.size >= MAX_STUDIO_SSE) {
+        const oldest = studioSseClients.values().next().value;
+        if (!oldest) break;
+        studioSseClients.delete(oldest);
+        try { oldest.end(); } catch {}
+      }
       studioSseClients.add(res);
       res.write(initialFrame);
       const ka = setInterval(() => {
