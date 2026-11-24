@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.0.7
+ * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.0.8
  *
- * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.0.7 specifications across:
- *   Suite 1 — Manifest (v2.0.7), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
+ * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.0.8 specifications across:
+ *   Suite 1 — Manifest (v2.0.8), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
  *             Zero-PII Audit & SHA-256 Workspace <-> Global Plugin Sync
  *   Suite 2 — Backend Engine, DSH Parity, Co-Keyed Storage, Two-Phase `fsync` Boot Canary Circuit-Breaker
  *             (`canary.json` arming -> tripped, `/api/canary/reset`, `/api/skin/wake`), PR #6 Hardened `fetch+blob`,
- *             PR #7 `/video-stage/` Streaming Iframe + Studio `/api/events` SSE, Static CSS Mode &
- *             v2.0.7 HTTPS Zero-Stall Images/Accent/Thumbnails + `plugin://` 206 Proxy + 971 MB `MediaSource` `/mse-fmp4/`
+ *             PR #7 `/video-stage/` Streaming Iframe + v2.0.8 OOPIF Web Audio & Studio/Host SSE 6-Socket Cap,
+ *             Static CSS Mode & v2.0.7 HTTPS Zero-Stall Images/Accent/Thumbnails + `plugin://` 206 Proxy +
+ *             971 MB `MediaSource` `/mse-fmp4/`
  *   Suite 3 — Studio v2.0 UI (`Host & System` 3-way Startup Strategy + Canary + Panic Badge + 21:9 `.mini-aux` Parity) &
  *             Antigravity 2.34.0 Hub Headless Chrome E2E:
  *               1) Zero-Enable Ephemeral Micro-Bootstrap & Lazy `/host/<token>/panel.js` Load (0 KB boot)
@@ -31,8 +32,10 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import http, { IncomingMessage, ServerResponse } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { Duplex } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import zlib from 'node:zlib';
@@ -189,7 +192,7 @@ function decodePngRgba(pngBuf) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  console.log('=== agy-wallpaper-prism v2.0.7 Full Verification Harness ===');
+  console.log('=== agy-wallpaper-prism v2.0.8 Full Verification Harness ===');
   fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
   fs.mkdirSync(DEFAULT_ARTIFACT_DIR, { recursive: true });
   const fixturesDir = path.join(SCRATCH_ROOT, 'fixtures');
@@ -198,9 +201,9 @@ async function main() {
   // =========================================================================
   // SUITE 1: Manifest, Bundle, Zero-Enable CDP Audit, Zero-PII & Byte Sync
   // =========================================================================
-  console.log('\n--- Suite 1: Manifest (v2.0.7), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
+  console.log('\n--- Suite 1: Manifest (v2.0.8), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
 
-  await check('plugin.json, package.json & 7-point v2.0.7 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
+  await check('plugin.json, package.json & 7-point v2.0.8 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
     const pPath = path.join(REPO_ROOT, 'plugin.json');
     const pkgPath = path.join(REPO_ROOT, 'package.json');
     const readmePath = path.join(REPO_ROOT, 'README.md');
@@ -218,13 +221,13 @@ async function main() {
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.0.7', `Expected plugin.json version 2.0.7, got ${raw.version}`);
-    assert.equal(pkg.version, '2.0.7', `Expected package.json version 2.0.7, got ${pkg.version}`);
-    assert.match(readme, /\*\*Version\*\*:\s*`2\.0\.7`/, 'Expected README.md **Version**: `2.0.7`');
-    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.0\.7'/, 'Expected schema.mjs PLUGIN_VERSION = 2.0.7');
-    assert.match(schemaSrc, /skinVersion:\s*'2\.0\.7'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.0.7');
-    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.0\.7'/, 'Expected wallpaper-inject.js VERSION = 2.0.7');
-    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.0\.7'/, 'Expected panel-inject.js VERSION = 2.0.7');
+    assert.equal(raw.version, '2.0.8', `Expected plugin.json version 2.0.8, got ${raw.version}`);
+    assert.equal(pkg.version, '2.0.8', `Expected package.json version 2.0.8, got ${pkg.version}`);
+    assert.match(readme, /\*\*Version\*\*:\s*`2\.0\.8`/, 'Expected README.md **Version**: `2.0.8`');
+    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.0\.8'/, 'Expected schema.mjs PLUGIN_VERSION = 2.0.8');
+    assert.match(schemaSrc, /skinVersion:\s*'2\.0\.8'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.0.8');
+    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.0\.8'/, 'Expected wallpaper-inject.js VERSION = 2.0.8');
+    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.0\.8'/, 'Expected panel-inject.js VERSION = 2.0.8');
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -315,9 +318,9 @@ async function main() {
     assert.ok(/#app[\s\S]{0,220}height:\s*100(%|dvh|vh)/i.test(html), 'Missing #app 100% height lock in Studio CSS');
     assert.ok(html.includes('prism-startup-safety-card'), 'Bundled index.html missing v2.0 #prism-startup-safety-card');
     assert.ok(html.includes('prism-master-toggle-btn'), 'Bundled index.html missing v2.0.7 #prism-master-toggle-btn');
-    assert.ok(html.includes('2.0.7'), 'Bundled index.html missing inlined v2.0.7 version marker');
+    assert.ok(html.includes('2.0.8'), 'Bundled index.html missing inlined v2.0.8 version marker');
     assert.equal(html.includes('\r'), false, 'Bundled index.html must be pure LF (0 CR/CRLF)');
-    return `${Math.round(html.length / 1024)} KB inlined v2.0.7 pure-LF bundle`;
+    return `${Math.round(html.length / 1024)} KB inlined v2.0.8 pure-LF bundle`;
   });
 
   await check('Syntax check (`node --check`) across all JS/MJS entrypoints & test modules', '@resilience-designer', () => {
@@ -1541,6 +1544,7 @@ async function main() {
     assert.equal(String(stageResp.headers['cache-control'] || ''), 'no-store');
     const stageHtml = stageResp.text();
     assert.ok(stageHtml.includes('prism-video-stage') && stageHtml.includes('/media/'), 'video-stage HTML missing same-origin video or postMessage bridge');
+    assert.ok(stageHtml.includes('createMediaElementSource') && stageHtml.includes('audioClockFallback'), 'video-stage HTML missing OOPIF Web Audio routing or audio-clock stall fallback');
     assert.ok(stageHtml.includes('lastCheckAt') && stageHtml.includes('900'), 'video-stage HTML missing v2.0.6 900ms anti-jank watchdog gate');
     assert.ok(stageHtml.includes('dur-0.75') && stageHtml.includes('curT+0.04'), 'video-stage HTML missing v2.0.6 tightened stall recovery thresholds');
     assert.ok(!stageHtml.includes('-0.035'), 'video-stage HTML must NOT include forbidden -0.035 backward GOP seek');
@@ -1554,12 +1558,202 @@ async function main() {
     const payload = buildPayload(await engine.getConfig(), vidItem, engine.getMediaOrigin(), { skinEnabled: true });
     assert.equal(payload.activeItem?.videoStageUrl, vidItem.videoStageUrl, 'buildClientSkinPayload dropped videoStageUrl');
 
-    // 2. Verify Studio /api/events SSE & /api/status config inclusion
+    // 2. Verify Studio /api/events SSE, fa1f877 visibility/socket-cap guards, real concurrent SSE eviction & /api/status config inclusion
     const sseResp = await invokeServerInMemory(studio.server, { method: 'GET', url: '/api/events' });
     assert.equal(sseResp.status, 200, `Studio /api/events returned ${sseResp.status}`);
     assert.match(String(sseResp.headers['content-type'] || ''), /text\/event-stream/i);
     const sseText = sseResp.text();
     assert.ok(sseText.includes('event: state') && sseText.includes('"activeItem"'), 'Studio /api/events missing initial state snapshot');
+
+    const studioHtml = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'index.html'), 'utf8');
+    assert.ok(
+      studioHtml.includes('installStudioVisibilityGuards') && studioHtml.includes('disconnectStudioEvents'),
+      'Studio index.html missing hidden-iframe SSE disconnect guards',
+    );
+    const mainCode = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'main.mjs'), 'utf8');
+    assert.ok(mainCode.includes('MAX_STUDIO_SSE'), 'main.mjs missing MAX_STUDIO_SSE socket pool cap');
+    const cdpCode = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs'), 'utf8');
+    assert.ok(cdpCode.includes('MAX_HOST_SSE'), 'cdp-bridge.mjs missing MAX_HOST_SSE socket pool cap');
+
+    // 2B. Verify concurrent Studio `/api/events` SSE socket eviction (opening 3 streams actively closes stream #1, keeping <= 2 active)
+    const openPersistentStudioSse = () => {
+      const tryTcp = () =>
+        new Promise((resolve, reject) => {
+          let opened = false;
+          let closed = false;
+          let resolveClosed;
+          const closedPromise = new Promise((r) => {
+            resolveClosed = r;
+          });
+          const markClosed = () => {
+            if (closed) return;
+            closed = true;
+            resolveClosed();
+          };
+          const req = http.get(
+            `${studio.origin}/api/events`,
+            { agent: false, headers: { Accept: 'text/event-stream', Connection: 'keep-alive' } },
+            (res) => {
+              let buf = '';
+              res.on('end', markClosed);
+              res.on('close', markClosed);
+              res.on('error', markClosed);
+              res.on('data', (chunk) => {
+                buf += chunk.toString('utf8');
+                if (!opened && buf.includes('event: state') && buf.includes('\n\n')) {
+                  opened = true;
+                  resolve({
+                    transport: 'tcp',
+                    status: res.statusCode,
+                    headers: res.headers,
+                    isClosed: () => closed,
+                    closedPromise,
+                    close: () => {
+                      markClosed();
+                      try { req.destroy(); } catch {}
+                    },
+                  });
+                }
+              });
+            },
+          );
+          req.on('error', (err) => {
+            if (!opened) reject(err);
+            markClosed();
+          });
+        });
+
+      const openInProcPersistent = () =>
+        new Promise((resolve, reject) => {
+          const socket = new Duplex({
+            read() {},
+            write(_chunk, _enc, cb) {
+              cb();
+            },
+          });
+          socket.remoteAddress = '127.0.0.1';
+          socket.writable = true;
+          socket.readable = true;
+          socket.setNoDelay = () => socket; // exercises real persistent SSE + MAX_STUDIO_SSE eviction path
+
+          const req = new IncomingMessage(socket);
+          req.method = 'GET';
+          req.url = '/api/events';
+          req.httpVersion = '1.1';
+          req.httpVersionMajor = 1;
+          req.httpVersionMinor = 1;
+          req.headers = { accept: 'text/event-stream', connection: 'keep-alive' };
+
+          const res = new ServerResponse(req);
+          const origWriteHead = res.writeHead.bind(res);
+          let status = 200;
+          const explicitHeaders = {};
+          let buf = '';
+          let opened = false;
+          let closed = false;
+          let resolveClosed;
+          const closedPromise = new Promise((r) => {
+            resolveClosed = r;
+          });
+          const markClosed = () => {
+            if (closed) return;
+            closed = true;
+            resolveClosed();
+          };
+
+          res.writeHead = function patchedWriteHead(code, msgOrHeaders, maybeHeaders) {
+            status = Number(code) || 200;
+            const hdrs =
+              typeof msgOrHeaders === 'object' && msgOrHeaders !== null ? msgOrHeaders : maybeHeaders || {};
+            for (const [hk, hv] of Object.entries(hdrs)) explicitHeaders[hk.toLowerCase()] = hv;
+            return origWriteHead(code, msgOrHeaders, maybeHeaders);
+          };
+          res.write = function patchedWrite(chunk, encoding, cb) {
+            if (chunk) {
+              buf += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+            }
+            if (!opened && buf.includes('event: state') && buf.includes('\n\n')) {
+              opened = true;
+              resolve({
+                transport: 'inproc-persistent',
+                status,
+                headers: { ...res.getHeaders(), ...explicitHeaders },
+                isClosed: () => closed,
+                closedPromise,
+                close: () => {
+                  markClosed();
+                  req.emit('close');
+                  res.emit('close');
+                },
+              });
+            }
+            if (typeof encoding === 'function') encoding();
+            else if (typeof cb === 'function') cb();
+            return true;
+          };
+          res.end = function patchedEnd(chunk, encoding, cb) {
+            if (chunk && typeof chunk !== 'function') {
+              buf += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+            }
+            markClosed();
+            res.emit('finish');
+            res.emit('close');
+            if (typeof chunk === 'function') chunk();
+            else if (typeof encoding === 'function') encoding();
+            else if (typeof cb === 'function') cb();
+            return res;
+          };
+          res.on('error', (err) => {
+            if (!opened) reject(err);
+            markClosed();
+          });
+          studio.server.emit('request', req, res);
+          queueMicrotask(() => req.push(null));
+        });
+
+      return tryTcp().catch((err) => {
+        if (err?.code === 'EACCES' || err?.code === 'EPERM') {
+          return openInProcPersistent();
+        }
+        throw err;
+      });
+    };
+
+    const sseStreams = [];
+    let sseEvictionTransport = '';
+    try {
+      const s1 = await openPersistentStudioSse();
+      sseStreams.push(s1);
+      assert.equal(s1.status, 200, `SSE stream #1 returned ${s1.status}`);
+      assert.equal(s1.isClosed(), false, 'SSE stream #1 should remain open');
+
+      const s2 = await openPersistentStudioSse();
+      sseStreams.push(s2);
+      assert.equal(s2.status, 200, `SSE stream #2 returned ${s2.status}`);
+      assert.equal(s1.isClosed(), false, 'SSE stream #1 should stay open while total streams <= 2');
+      assert.equal(s2.isClosed(), false, 'SSE stream #2 should remain open');
+
+      const s3 = await openPersistentStudioSse();
+      sseStreams.push(s3);
+      assert.equal(s3.status, 200, `SSE stream #3 returned ${s3.status}`);
+
+      await Promise.race([
+        s1.closedPromise,
+        sleep(1500).then(() => {
+          throw new Error('Oldest SSE stream #1 was NOT actively evicted/closed when 3rd /api/events connection opened (MAX_STUDIO_SSE=2)');
+        }),
+      ]);
+      assert.equal(s1.isClosed(), true, 'Expected oldest SSE stream #1 to be closed upon 3rd connection');
+      assert.equal(s2.isClosed(), false, 'Expected SSE stream #2 to remain open');
+      assert.equal(s3.isClosed(), false, 'Expected SSE stream #3 to remain open');
+      const activeStreams = sseStreams.filter((s) => !s.isClosed()).length;
+      assert.ok(activeStreams <= 2, `Expected <= 2 active /api/events SSE streams, got ${activeStreams}`);
+      sseEvictionTransport = s3.transport;
+    } finally {
+      for (const s of sseStreams) {
+        try { s.close(); } catch {}
+      }
+    }
 
     const statusResp = await invokeServerInMemory(studio.server, { method: 'GET', url: '/api/status' });
     assert.equal(statusResp.status, 200, `Studio /api/status returned ${statusResp.status}`);
@@ -1923,7 +2117,7 @@ async function main() {
       assert.ok(String(stFb.videoSrc).startsWith('blob:'), `Expected blob: videoSrc after fallback, got ${stFb.videoSrc}`);
       assert.equal(stageEl.querySelectorAll('iframe').length, 0, 'Failed video-stage iframe was not cleaned up after fallback');
 
-      return `/video-stage/ 200+HEAD (900ms gate, 0 fetch) + ready/ended + error->0ms blob fallback (${fetchCalls[0].elapsedMs}ms) + Studio SSE & /api/status config verified`;
+      return `/video-stage/ 200+HEAD (900ms gate + OOPIF Web Audio/audioClockFallback, 0 fetch) + ready/ended + error->0ms blob fallback (${fetchCalls[0].elapsedMs}ms) + Studio SSE 3->2 eviction (${sseEvictionTransport}) & /api/status config verified`;
     } finally {
       mockWin.__agyPrism.destroy();
     }

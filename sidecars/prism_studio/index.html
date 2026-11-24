@@ -2510,10 +2510,10 @@ button, input, select, textarea {
   <script id="prism-studio-bundle">
 (() => {
   // agy-wallpaper-prism/src/shared/schema.mjs
-  var PLUGIN_VERSION = "2.0.7";
+  var PLUGIN_VERSION = "2.0.8";
   var DEFAULT_DEBUG_PORT = 9339;
   var PRISM_DOM = Object.freeze({
-    skinVersion: "2.0.7",
+    skinVersion: "2.0.8",
     skinAttr: "data-agy-prism-skin",
     glassAttr: "data-agy-prism-glass",
     wallpaperAttr: "data-agy-prism-wallpaper",
@@ -8881,7 +8881,7 @@ button, input, select, textarea {
       let lastPreviewVidT = -1;
       let previewStallTicks = 0;
       setInterval(() => {
-        if (document.hidden || getEffectiveConfig().paused) {
+        if (!isStudioVisible() || getEffectiveConfig().paused) {
           lastPreviewVidT = -1;
           previewStallTicks = 0;
           return;
@@ -8919,23 +8919,16 @@ button, input, select, textarea {
         lastPreviewVidT = curT;
       }, 1250);
       document.addEventListener("visibilitychange", () => {
-        const vid = document.getElementById("prism-preview-video");
-        if (vid instanceof HTMLVideoElement) {
-          if (document.hidden) {
-            if (!vid.paused) vid.pause();
-          } else if (!getEffectiveConfig().paused && vid.paused) {
-            vid.play().catch(() => {
-            });
-          }
-        }
-        if (!document.hidden) {
+        const visible = isStudioVisible();
+        syncStudioMediaForVisibility(visible);
+        if (visible) {
           void syncExternalStateNow();
           ensureLiveSyncPoll();
           if (!isHostAttached()) ensureStandbyStatusPoll();
         }
       });
       window.addEventListener("focus", () => {
-        if (!document.hidden) {
+        if (isStudioVisible()) {
           void syncExternalStateNow();
         }
       });
@@ -9044,7 +9037,48 @@ button, input, select, textarea {
         externalSyncInFlight = false;
       }
     }
+    function isStudioVisible() {
+      if (document.hidden) return false;
+      try {
+        const w = window.innerWidth || document.documentElement?.clientWidth || 0;
+        const h = window.innerHeight || document.documentElement?.clientHeight || 0;
+        return w > 20 && h > 20;
+      } catch {
+        return true;
+      }
+    }
+    function disconnectStudioEvents() {
+      if (studioEventSource) {
+        try {
+          studioEventSource.close();
+        } catch {
+        }
+        studioEventSource = null;
+      }
+    }
+    function syncStudioMediaForVisibility(visible) {
+      try {
+        if (!visible) {
+          for (const vid of document.querySelectorAll("video")) {
+            if (!vid.paused) vid.pause();
+          }
+          return;
+        }
+        if (!getEffectiveConfig().paused) {
+          const previewVid = document.getElementById("prism-preview-video");
+          if (previewVid instanceof HTMLVideoElement && previewVid.paused) {
+            previewVid.play().catch(() => {
+            });
+          }
+        }
+      } catch {
+      }
+    }
     function connectStudioEvents() {
+      if (!isStudioVisible()) {
+        disconnectStudioEvents();
+        return;
+      }
       if (typeof window.EventSource !== "function" || studioEventSource) return;
       try {
         const tok = new URLSearchParams(window.location.search).get("token") || window.__SIDECAR_BOOT__?.token || "";
@@ -9062,15 +9096,49 @@ button, input, select, textarea {
         es.addEventListener("state", handleEvent);
         es.onmessage = handleEvent;
         es.onerror = () => {
+          if (!isStudioVisible()) {
+            disconnectStudioEvents();
+          }
         };
       } catch {
         studioEventSource = null;
       }
     }
+    function installStudioVisibilityGuards() {
+      let wasVisible = isStudioVisible();
+      if (!wasVisible) {
+        syncStudioMediaForVisibility(false);
+      }
+      const reconcile = () => {
+        const visible = isStudioVisible();
+        if (visible === wasVisible) return;
+        wasVisible = visible;
+        if (!visible) {
+          disconnectStudioEvents();
+          syncStudioMediaForVisibility(false);
+        } else {
+          syncStudioMediaForVisibility(true);
+          connectStudioEvents();
+          if (store.ready) void syncExternalStateNow();
+          ensureLiveSyncPoll();
+          if (!isHostAttached()) ensureStandbyStatusPoll();
+        }
+      };
+      document.addEventListener("visibilitychange", reconcile);
+      window.addEventListener("resize", reconcile, { passive: true });
+      window.addEventListener("pagehide", disconnectStudioEvents);
+      if (typeof window.ResizeObserver === "function" && document.documentElement) {
+        try {
+          const ro = new window.ResizeObserver(reconcile);
+          ro.observe(document.documentElement);
+        } catch {
+        }
+      }
+    }
     function ensureLiveSyncPoll() {
       if (studioSyncPollTimer) return;
       studioSyncPollTimer = setInterval(() => {
-        if (document.hidden || !store.ready) return;
+        if (!isStudioVisible() || !store.ready) return;
         const sseFresh = studioEventSource && studioEventSource.readyState === 1 && studioLastSseAt > 0 && Date.now() - studioLastSseAt < 2e4;
         if (sseFresh) return;
         void syncExternalStateNow();
@@ -9080,7 +9148,7 @@ button, input, select, textarea {
       const needsCanaryWatch = () => store.canary?.state === "arming";
       if (statusPollTimer || isHostAttached() && !needsCanaryWatch()) return;
       statusPollTimer = setInterval(async () => {
-        if (document.hidden) return;
+        if (!isStudioVisible()) return;
         if (isHostAttached() && !needsCanaryWatch()) {
           clearInterval(statusPollTimer);
           statusPollTimer = null;
@@ -9118,6 +9186,7 @@ button, input, select, textarea {
         store.ready = true;
         renderActiveSurface();
       }
+      installStudioVisibilityGuards();
       connectStudioEvents();
       ensureLiveSyncPoll();
       ensureStandbyStatusPoll();

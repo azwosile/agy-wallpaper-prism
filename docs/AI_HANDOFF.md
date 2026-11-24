@@ -1,6 +1,6 @@
 # Wallpaper Prism (`agy-wallpaper-prism`) — 下一代 AI 维护者工程交接手册
 
-> **适用基线版本**：`v2.0.7`（GitHub: `https://github.com/azwosile/agy-wallpaper-prism`）  
+> **适用基线版本**：`v2.0.8`（GitHub: `https://github.com/azwosile/agy-wallpaper-prism`）  
 > **定位**：Google Antigravity 宿主整窗液态玻璃皮肤（Obsidian Prism 6 层光学体系）+ Steam Wallpaper Engine (`431960`) / 本地多媒体动态壁纸工作台插件。  
 > **核心工程信条**：**Zero Agent Tokens · Zero `app.asar` Modification · Zero-Enable Ephemeral CDP · Fail-Open First · Zero Session Disruption**
 
@@ -9,15 +9,15 @@
 ## 0. 当前工作区交接状态快照（下一位 AI 接手必读）
 
 ### 0.1 版本、运行态与全量验证基线
-- **当前代码版本**：`v2.0.7`（全仓 **7 处版本同步锚点**已全部对齐 `2.0.7`，详见 `§1.3`）。
+- **当前代码版本**：`v2.0.8`（全仓 **7 处版本同步锚点**已全部对齐 `2.0.8`，详见 `§1.3`）。
 - **本机安装同步状态**：`~/.gemini/config/plugins/agy-wallpaper-prism` 下全部 **23 个运行时核心文件**已通过 `node scripts/install-local.mjs` 真实文件拷贝同步（`SHA-256` 字节级一致）并在线热替换生效，无需重启宿主 `Antigravity.exe`。
-- **端到端验证基线**：`node test/verify-all.mjs` 全量 **27 / 27 PASS**（覆盖 Suite 1 清单/Zero-CDP/Zero-PII/SHA-256 同步、Suite 2 引擎/金丝雀/PR #6 加固跨协议 `fetch+blob`/PR #7 `/video-stage/` 同源流式舞台与 Studio `/api/events` SSE/`v2.0.7` `plugin://` 206 代理 + `971 MB` `MediaSource` `/mse-fmp4/` 流式播放 + 全链路 `0ms fetch+blob` 图片零挂起回归、Suite 3 Headless Chrome `1440×900` 像素级 E2E + 4 项毛玻璃 UI 架构断言 + `v2.0.7` 三端一键启用/禁用主开关与持久化 `#agy-prism-pill` E2E）。
+- **端到端验证基线**：`node test/verify-all.mjs` 全量 **27 / 27 PASS**（覆盖 Suite 1 清单/Zero-CDP/Zero-PII/SHA-256 同步、Suite 2 引擎/金丝雀/PR #6 加固跨协议 `fetch+blob`/PR #7 `/video-stage/` 同源流式舞台与 `v2.0.8` OOPIF Web Audio 路由 + 音频时钟降级 + Studio `0x0` 折叠 iframe SSE 断连与并发 `MAX_STUDIO_SSE = 2` / `MAX_HOST_SSE = 2` 驱逐验证/`v2.0.7` `plugin://` 206 代理 + `971 MB` `MediaSource` `/mse-fmp4/` 流式播放 + 全链路 `0ms fetch+blob` 图片零挂起回归、Suite 3 Headless Chrome `1440×900` 像素级 E2E + 4 项毛玻璃 UI 架构断言 + `v2.0.7` 三端一键启用/禁用主开关与持久化 `#agy-prism-pill` E2E）。
 
 ### 0.2 Git 提交基线与工作区状态（切勿执行破坏性回滚！）
 > [!CAUTION]
-> 当前 Git 分支为 `main`，`v2.0.6` 已合入 PR #6 & PR #7 提交至 `ba0b6de`（`release: Wallpaper Prism v2.0.6`）。`v2.0.7` 全部源码、测试断言升级、打包产物与交接文档同步位于当前工作树（提交前严禁执行 `git checkout -- .`、`git restore .`、`git reset --hard` 或 `git clean -fd`）。
+> 当前 Git 分支为 `main`，`v2.0.6` 已合入 PR #6 & PR #7 首发提交至 `ba0b6de`，`v2.0.7` 已发布至 `8e51651`。`v2.0.8` 无损融合 PR #7 追补提交 `fa1f8778dd3c3df031ed75fabb5bf12e1e7f58b0`（OOPIF Web Audio 路由与 Studio/Host SSE 6-socket 连接池上限防护），全部源码、测试断言升级、打包产物与交接文档同步位于当前工作树（提交前严禁执行 `git checkout -- .`、`git restore .`、`git reset --hard` 或 `git clean -fd`）。
 
-当前 `v2.0.7` 涉及的全部 **16 个更新文件**如下：
+当前 `v2.0.8` 涉及的全部 **13 个更新文件**如下：
 
 ```text
  M README.md
@@ -28,23 +28,20 @@
  M sidecars/prism_studio/index.html
  M sidecars/prism_studio/main.mjs
  M src/engine/media-server.mjs
- M src/host/index.mjs
  M src/host/panel-inject.js
  M src/host/wallpaper-inject.js
- M src/shared/i18n.mjs
  M src/shared/schema.mjs
  M src/studio-ui/app.mjs
- M src/studio-ui/styles.css
  M test/verify-all.mjs
 ```
 
 ### 0.3 社区 PR #6 & PR #7 双 PR 合入关联说明
-- **关联 PR #6**：`https://github.com/azwosile/agy-wallpaper-prism/pull/6`（标题：`fix(host): fall back to fetch+blob when HTTPS hub stalls HTTP loopback media`，Head Commit：`be354e792d99625c333f19e0c4f02263682ff2a7`）
-- **关联 PR #7**：`https://github.com/azwosile/agy-wallpaper-prism/pull/7`（标题：`fix(media,host,studio): stream cross-scheme videos via /video-stage/ iframe, sync Studio via SSE & tint header bar`，Head Commit：`0c67d36bf1d2f98c584b3a02aea5b480cd9fe55e`）
-- **贡献者信息**：`zmzwynzj <177476355+zmzwynzj@users.noreply.github.com>`（两个 PR 均基于 `v2.0.5` `7ec0686` 提交）
-- **合入策略**：工作区已完整吸收并加固 PR #6（`0ms` 直拉、`20s` 超时、`256 MiB` 封面降级、`<img>` 兜底、FX 画布门控）与 PR #7（`/video-stage/<token>` 同源流式 `<iframe>` + `900ms` 防顿挫看门狗 + 异常无感回退 `0ms fetch+blob`、Studio `/api/events` SSE 实时同步、主对话顶栏 `[data-main-content-header]` 染色对齐、纯 LF `esbuild` 打包）。正式提交 `v2.0.6` 时，使用 **`git merge -s ours <PR6_SHA> <PR7_SHA> --no-commit`** 将双 PR 头提交同时挂接为 Merge 父节点而不覆盖工作区加固代码，并在 Commit Message 末尾保留：
+- **关联 PR #6**：`https://github.com/azwosile/agy-wallpaper-prism/pull/6`（标题：`fix(host): fall back to fetch+blob when HTTPS hub stalls HTTP loopback media`，Head Commit：`be354e792d99625c333f19e0c4f02263682ff2a7`，已于 `v2.0.6` 自动标记为 Merged）
+- **关联 PR #7**：`https://github.com/azwosile/agy-wallpaper-prism/pull/7`（标题：`fix(media,host,studio): stream cross-scheme videos via /video-stage/ iframe, sync Studio via SSE & tint header bar`，首发提交 `0c67d36bf1d2f98c584b3a02aea5b480cd9fe55e` 已合入 `v2.0.6`；追补提交 `fa1f8778dd3c3df031ed75fabb5bf12e1e7f58b0` 及评论 `#7124694388` 已完整融合进 `v2.0.8`）
+- **贡献者信息**：`zmzwynzj <177476355+zmzwynzj@users.noreply.github.com>`
+- **合入策略**：`v2.0.8` 正式提交时使用 **`git merge -s ours --no-commit fa1f8778dd3c3df031ed75fabb5bf12e1e7f58b0`** 将 PR #7 最新头提交挂接为 Merge 父节点而不覆盖 `v2.0.6`/`v2.0.7` 加固代码，并在 Commit Message 末尾保留：
   `Co-authored-by: zmzwynzj <177476355+zmzwynzj@users.noreply.github.com>`
-  推送 `main` 后，GitHub 会自动将 PR #6 与 PR #7 均标记为紫色 **Merged** 并计入 Contributors（完整命令见 `§5.2`）。
+  推送 `main` 与 `v2.0.8` 后，GitHub 会自动将 PR #7 标记为紫色 **Merged** 并计入 Contributors（完整命令见 `§5.2`）。
 
 ---
 
@@ -103,19 +100,19 @@ agy-wallpaper-prism/
 | **Sidecar 权威数据目录** | `ANTIGRAVITY_EXECUTABLE_DATA_DIR` 或 `~/.gemini/antigravity/sidecar_data/agy-wallpaper-prism/prism_studio/data` | 由 `resolveDefaultPrismDataDir`（`src/engine/store.mjs:178-190`）统一解析。存放 `config.json`、`canary.json`、`server_info.json`、`shortcut-backup.json`、`presets/`、`uploads/`、`cache/inventory-index.json`、`cache/thumbs/`、`cache/scene-media/`。插件目录更新/重装不会丢失用户配置。 |
 | **v1 历史遗留目录** | `~/.agy-wallpaper-prism` | 仅当默认启动（未显式传入测试 `dataDir` 或 `AGY_PRISM_DATA_DIR`）且新目录尚无 `config.json` 与 `.migrated-from-legacy.json` 时，由 `migrateLegacyPrismDataIfNeeded`（`src/engine/store.mjs:197-254`）自动非破坏性迁移。 |
 
-### 1.3 版本号升级必改的 7 处同步锚点（当前 `v2.0.7` 精确行号）
+### 1.3 版本号升级必改的 7 处同步锚点（当前 `v2.0.8` 精确行号）
 
-每次升级版本号（如 `2.0.7 -> 2.0.8`），**必须同步修改以下全部 7 处锚点**（另建议同步更新 `src/host/index.mjs:276, 347` 的静态样式表头部注释），否则 `install-local.mjs` 热升级校验或 `test/verify-all.mjs` Suite 1 第一项断言会直接失败：
+每次升级版本号（如 `2.0.8 -> 2.0.9`），**必须同步修改以下全部 7 处锚点**（另建议同步更新 `src/host/index.mjs` 的静态样式表头部注释），否则 `install-local.mjs` 热升级校验或 `test/verify-all.mjs` Suite 1 第一项断言会直接失败：
 
-| 序号 | 文件路径 | 当前行号 | `v2.0.7` 精确锚点内容 |
+| 序号 | 文件路径 | 当前行号 | `v2.0.8` 精确锚点内容 |
 | :---: | :--- | :--- | :--- |
-| 1 | `plugin.json` | `L5` | `"version": "2.0.7",` |
-| 2 | `package.json` | `L3` | `"version": "2.0.7",` |
-| 3 | `README.md` | `L4`、`L55` | `> **Version**: \`2.0.7\`` 及架构树 `Official 10-key Antigravity plugin manifest (v2.0.7)` |
-| 4 | `src/shared/schema.mjs` | `L6`、`L13` | `export const PLUGIN_VERSION = '2.0.7';` 与 `PRISM_DOM.skinVersion: '2.0.7'` |
-| 5 | `src/host/wallpaper-inject.js` | `L1`、`L12` | 顶部注释与 `var VERSION = '2.0.7';` |
-| 6 | `src/host/panel-inject.js` | `L1`、`L12` | 顶部注释与 `var VERSION = '2.0.7';` |
-| 7 | `test/verify-all.mjs` | `L221-L227`（及顶部 `L3, L192, L201`） | Suite 1 版本一致性断言（`assert.equal(raw.version, '2.0.7', ...)` 等 7 项正则/相等校验） |
+| 1 | `plugin.json` | `L5` | `"version": "2.0.8",` |
+| 2 | `package.json` | `L3` | `"version": "2.0.8",` |
+| 3 | `README.md` | `L4`、`L55` | `> **Version**: \`2.0.8\`` 及架构树 `Official 10-key Antigravity plugin manifest (v2.0.8)` |
+| 4 | `src/shared/schema.mjs` | `L6`、`L13` | `export const PLUGIN_VERSION = '2.0.8';` 与 `PRISM_DOM.skinVersion: '2.0.8'` |
+| 5 | `src/host/wallpaper-inject.js` | `L1`、`L12` | 顶部注释与 `var VERSION = '2.0.8';` |
+| 6 | `src/host/panel-inject.js` | `L1`、`L12` | 顶部注释与 `var VERSION = '2.0.8';` |
+| 7 | `test/verify-all.mjs` | `L224-L230`（及顶部 `L3, L195, L204`） | Suite 1 版本一致性断言（`assert.equal(raw.version, '2.0.8', ...)` 等 7 项正则/相等校验） |
 
 ---
 
@@ -364,6 +361,27 @@ Antigravity `2.34.0` 的 `/customizations` 与 `/customizations/installed` 路�
 
 ---
 
+### 3.8 `v2.0.8` 专项融合（PR #7 追补 `fa1f877`）：OOPIF Web Audio 音频时钟路由与 Studio/Host SSE 6-Socket 防饥饿
+
+#### 1) 跨源 OOPIF `/video-stage/` 非静音视频音频时钟冻结修复（`src/engine/media-server.mjs`）
+- **根因**：在跨源 OOPIF `<iframe>`（`/video-stage/<token>`）内播放非静音 `<video>` 时，Chromium 原生 `AudioRenderer` 音频输出时钟可能因跨进程音频管线受阻而卡死在 `currentTime = 0`，拖死整个视频时钟推进。
+- **`v2.0.8` 融合机制**（完整保留 `v2.0.6`/`v2.0.7` 的 `../media/` 相对路径、DirectComposition `filter: none`、`lastCheckAt < 900ms` 防顿挫门限、`dur - 0.75` 尾帧循环、`+0.04` 正向微推与 `stallTicks >= 5` 重载）：
+  - **`Web Audio GainNode 音频路由`**：为 `<video>` 设置 `v.crossOrigin = 'anonymous'`，新增 `ensureWebAudioRoute()`（创建 `AudioContext -> createMediaElementSource(v) -> GainNode -> destination`）与 `syncWebAudioGain()`（暂停时挂起 `audioCtx`，取消静音时由 `GainNode` 控音量并保持 `v.volume = 1`），并在 `pagehide` 释放 `audioCtx.close()`；
+  - **`audioClockFallback` 快速静音回切**：看门狗在 `dur - 0.75` 尾帧分支之后、`stallTicks >= 5` 重载分支之前新增 `!v.muted && stallTicks >= 2 && v.readyState >= 2` 快速降级：立即置 `audioClockFallback = true`、静音 `<video>` 切回单调视频时钟并调用 `syncWebAudioGain()` 与 `post('audio-clock-fallback', { currentTime: curT })`（用户在宿主手动再次解除静音时由 `tryUnmute(true)` 复位 `audioClockFallback = false`）。
+
+#### 2) Studio `0x0` 折叠 iframe 防护与服务端 `MAX_STUDIO_SSE` / `MAX_HOST_SSE` 6-Socket 池防饥饿
+- **根因**：Antigravity 会将非活动对话的 Studio 侧栏 iframe 折叠为 `0×0` 继续保活（此时 `document.hidden` 仍为 `false`！）。当用户切换超过 6 个对话会话时，多个隐藏 Studio iframe 持续占用 `/api/events` SSE 长连接，彻底耗尽 Chromium HTTP/1.1 同源 `6-socket` 连接池，导致新打开的 Studio 面板 `/api/bootstrap` 等请求无限转圈挂起。
+- **双端协同防护（客户端断连 + 服务端硬上限驱逐）**：
+  - **服务端硬上限驱逐**：
+    - `sidecars/prism_studio/main.mjs`（`GET /api/events`）：引入 **`const MAX_STUDIO_SSE = 2;`**，新连接加入 `studioSseClients` 前按 FIFO 驱逐并 `.end()` 最旧连接，保证活跃 Studio SSE 永远 `<= 2`；
+    - `sidecars/prism_studio/cdp-bridge.mjs`（`registerSseClient`）：引入 **`const MAX_HOST_SSE = 2;`**，按 FIFO 驱逐并 `.end()` 最旧 Host SSE 连接，保证宿主 SSE 永远 `<= 2`；
+  - **前端 `0×0` 折叠 iframe 可见性守卫**（`src/studio-ui/app.mjs`）：
+    - 新增 `isStudioVisible()`（同时检测 `!document.hidden` 与 `w > 20 && h > 20`）、`disconnectStudioEvents()`、`syncStudioMediaForVisibility(visible)`（不可见时暂停全部 `<video>`；恢复可见且 `!getEffectiveConfig().paused` 时自动 `play().catch(() => {})` 恢复 `#prism-preview-video` 预览）、`installStudioVisibilityGuards()`（统一监听 `visibilitychange`、`resize`、`pagehide` 及 `ResizeObserver(document.documentElement)`）；
+    - 在 `connectStudioEvents()`（入口与 `es.onerror`）、`ensureLiveSyncPoll()`、`ensureStandbyStatusPoll()`、预览视频保活定时器与 `init()` 中全面使用 `!isStudioVisible()` 门控；
+  - **自动化回归验证**（`test/verify-all.mjs` PR #7 专项检查）：除静态断言 `createMediaElementSource` / `audioClockFallback`、`installStudioVisibilityGuards` / `disconnectStudioEvents`、`MAX_STUDIO_SSE`、`MAX_HOST_SSE` 外，新增 **3 路并发持久化 `/api/events` SSE 连接驱逐实测**（打开第 3 路时断言第 1 路最旧流被主动关闭、活跃流始终 `<= 2`）。
+
+---
+
 ## 4. 早期已攻克疑难归档（`v2.0.1`–`v2.0.5`，切勿在后续重构中回退）
 
 1. **动态壁纸全屏/切窗假死与后台冷启动误杀（`v2.0.1` + `v2.0.5`，`v2.0.6` 精化阈值）**
@@ -404,22 +422,25 @@ $env:PRISM_ALLOW_DIRTY_GIT='1'; node test/verify-all.mjs
 node test/verify-all.mjs
 ```
 
-### 5.2 发布 `v2.0.7` 标准流程（含 `v2.0.6` PR #6/#7 历史记录）
+### 5.2 发布 `v2.0.8` 标准流程（含 PR #7 追补 `fa1f877` 多父合并）
 
-`v2.0.6` 已通过 `git merge -s ours` 挂接 PR #6（`be354e7`）与 PR #7（`0c67d36`）提交至 `ba0b6de` 并附 `Co-authored-by: zmzwynzj <177476355+zmzwynzj@users.noreply.github.com>`。发布 `v2.0.7` 时执行：
+`v2.0.6` 已通过 `git merge -s ours` 挂接 PR #6（`be354e7`）与 PR #7 首发（`0c67d36`）提交至 `ba0b6de`，`v2.0.7` 发布于 `8e51651`。发布 `v2.0.8` 合并 PR #7 追补 `fa1f8778dd3c3df031ed75fabb5bf12e1e7f58b0` 时执行：
 
 ```powershell
-# 1. 提交 v2.0.7 全部变更
+# 1. 多父合并保留 PR #7 追补 commit fa1f877 完整谱系与作者归属（使 GitHub 自动标记 PR #7 为 Merged）
+git merge -s ours --no-commit fa1f8778dd3c3df031ed75fabb5bf12e1e7f58b0
 git add -A
-git commit -m "release: Wallpaper Prism v2.0.7 (1-click master toggle, plugin:// 206 proxy, MSE >256MB streaming & zero-stall HTTPS images)"
+git commit -m "release: Wallpaper Prism v2.0.8 (OOPIF Web Audio clock routing & Studio/Host SSE 6-socket cap)" -m "Merges #7 (fa1f877) onto v2.0.7.
+
+Co-authored-by: zmzwynzj <177476355+zmzwynzj@users.noreply.github.com>"
 
 # 2. 同步本机安装并运行严格无脏树全量验证（必须 27 / 27 PASS）
 node scripts/install-local.mjs
 node test/verify-all.mjs
 
-# 3. 打带注释的 v2.0.7 标签并推送远端
-git tag -a v2.0.7 -m "Wallpaper Prism v2.0.7"
-git push origin main v2.0.6 v2.0.7
+# 3. 打带注释的 v2.0.8 标签并推送远端
+git tag -a v2.0.8 -m "Wallpaper Prism v2.0.8"
+git push origin main v2.0.8
 ```
 
 ### 5.3 超大视频（`971 MB+` / `>256 MiB`）三级流式播放与兜底说明

@@ -1617,6 +1617,13 @@ export function createPassiveCdpBridge({
       res.end();
       return;
     }
+    const MAX_HOST_SSE = 2;
+    while (sseClients.size >= MAX_HOST_SSE) {
+      const oldest = sseClients.values().next().value;
+      if (!oldest) break;
+      sseClients.delete(oldest);
+      try { oldest.end(); } catch {}
+    }
     sseClients.add(res);
     res.write(`retry: 2500\ndata: ${JSON.stringify(initial)}\n\n`);
     const ka = setInterval(() => {
