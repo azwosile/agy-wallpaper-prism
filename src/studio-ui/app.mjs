@@ -263,10 +263,15 @@ function bootPrismStudioApp() {
 
   const accentMemCache = new Map();
   let configDebounceTimer = null;
+  let configFlushInFlight = false;
   let pendingConfigPatch = {};
   let currentStageMediaSig = '';
   let slideshowTimer = null;
   let statusPollTimer = null;
+  let studioEventSource = null;
+  let studioLastSseAt = 0;
+  let studioSyncPollTimer = null;
+  let externalSyncInFlight = false;
 
   function curLocale() {
     return resolveLocale(store.config.language);
@@ -1025,6 +1030,7 @@ function bootPrismStudioApp() {
     const patch = pendingConfigPatch;
     pendingConfigPatch = {};
     if (!patch || Object.keys(patch).length === 0) return;
+    configFlushInFlight = true;
     try {
       const res = await apiJson('/api/config', { method: 'POST', body: { patch } });
       ingestServerState(res);
@@ -1032,6 +1038,8 @@ function bootPrismStudioApp() {
       updateTopStatusIndicators();
     } catch (err) {
       showToast(err.message || 'Failed to save config', 'danger');
+    } finally {
+      configFlushInFlight = false;
     }
   }
 
@@ -5095,8 +5103,16 @@ function bootPrismStudioApp() {
           vid.play().catch(() => {});
         }
       }
-      if (!document.hidden && !isHostAttached()) {
-        ensureStandbyStatusPoll();
+      if (!document.hidden) {
+        void syncExternalStateNow();
+        ensureLiveSyncPoll();
+        if (!isHostAttached()) ensureStandbyStatusPoll();
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      if (!document.hidden) {
+        void syncExternalStateNow();
       }
     });
 
@@ -5106,6 +5122,122 @@ function bootPrismStudioApp() {
         if (gridHost) gridHost.innerHTML = renderLibraryGridHtml();
       }
     });
+  }
+
+  function externalStateSignature() {
+    const c = store.config || {};
+    return JSON.stringify([
+      getActiveId(),
+      store.activeItem?.mediaUrl || '',
+      store.activeItem?.sceneVideoUrl || '',
+      store.skinEnabled,
+      c.paused,
+      c.muted,
+      c.volume,
+      c.rotationEnabled,
+      c.rotationGroupId,
+      c.rotationOrder,
+      c.rotationTrigger,
+      c.rotationInterval,
+      c.preset,
+      c.layoutMode,
+      c.colorScheme,
+      c.accentMode,
+      c.glassOpacity,
+      c.glassBlur,
+      c.scrimOpacity,
+    ]);
+  }
+
+  function applyExternalStateSnapshot(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    if (configDebounceTimer || configFlushInFlight || Object.keys(pendingConfigPatch).length > 0) {
+      return;
+    }
+    const wasAttached = isHostAttached();
+    const prevCanaryState = store.canary?.state || 'idle';
+    const prevActiveId = getActiveId();
+    const prevSig = externalStateSignature();
+
+    ingestServerState(payload);
+
+    const nextActiveId = getActiveId();
+    const nextSig = externalStateSignature();
+    const canaryChanged = (store.canary?.state || 'idle') !== prevCanaryState;
+    const activeChanged = nextActiveId !== prevActiveId;
+    const stateChanged = nextSig !== prevSig;
+
+    updateTopStatusIndicators();
+
+    if (activeChanged || stateChanged) {
+      patchActiveCardsInPlace(nextActiveId);
+      syncMiniPreviewMedia();
+      syncOpticalCssVars();
+      const activeEl = document.activeElement;
+      const isDraggingRange = activeEl instanceof HTMLInputElement && activeEl.type === 'range';
+      if (!isDraggingRange) {
+        updateLeftRailPanels();
+      }
+    }
+
+    if ((!wasAttached && isHostAttached()) || canaryChanged) {
+      if (store.activeTab === 'system' || store.canary?.state === 'tripped') {
+        renderActiveSurface();
+      }
+    }
+  }
+
+  async function syncExternalStateNow() {
+    if (externalSyncInFlight || !store.ready) return;
+    externalSyncInFlight = true;
+    try {
+      const st = await apiJson('/api/status');
+      applyExternalStateSnapshot(st);
+    } catch {
+      // silent background sync
+    } finally {
+      externalSyncInFlight = false;
+    }
+  }
+
+  function connectStudioEvents() {
+    if (typeof window.EventSource !== 'function' || studioEventSource) return;
+    try {
+      const tok = new URLSearchParams(window.location.search).get('token') || window.__SIDECAR_BOOT__?.token || '';
+      const url = tok ? `/api/events?token=${encodeURIComponent(tok)}` : '/api/events';
+      const es = new window.EventSource(url);
+      studioEventSource = es;
+      const handleEvent = (ev) => {
+        studioLastSseAt = Date.now();
+        try {
+          const parsed = JSON.parse(ev.data);
+          applyExternalStateSnapshot(parsed);
+        } catch {
+          // ignore malformed event payload
+        }
+      };
+      es.addEventListener('state', handleEvent);
+      es.onmessage = handleEvent;
+      es.onerror = () => {
+        // Keep EventSource auto-retry active while live sync poll serves as fallback
+      };
+    } catch {
+      studioEventSource = null;
+    }
+  }
+
+  function ensureLiveSyncPoll() {
+    if (studioSyncPollTimer) return;
+    studioSyncPollTimer = setInterval(() => {
+      if (document.hidden || !store.ready) return;
+      const sseFresh =
+        studioEventSource &&
+        studioEventSource.readyState === 1 &&
+        studioLastSseAt > 0 &&
+        Date.now() - studioLastSseAt < 20_000;
+      if (sseFresh) return;
+      void syncExternalStateNow();
+    }, 2500);
   }
 
   function ensureStandbyStatusPoll() {
@@ -5119,17 +5251,8 @@ function bootPrismStudioApp() {
         return;
       }
       try {
-        const wasAttached = isHostAttached();
-        const prevCanaryState = store.canary?.state || 'idle';
         const st = await apiJson('/api/status');
-        ingestServerState(st);
-        updateTopStatusIndicators();
-        const canaryChanged = (store.canary?.state || 'idle') !== prevCanaryState;
-        if ((!wasAttached && isHostAttached()) || canaryChanged) {
-          if (store.activeTab === 'system' || store.canary?.state === 'tripped') {
-            renderActiveSurface();
-          }
-        }
+        applyExternalStateSnapshot(st);
         if (isHostAttached() && !needsCanaryWatch()) {
           clearInterval(statusPollTimer);
           statusPollTimer = null;
@@ -5168,6 +5291,8 @@ function bootPrismStudioApp() {
       renderActiveSurface();
     }
 
+    connectStudioEvents();
+    ensureLiveSyncPoll();
     ensureStandbyStatusPoll();
   }
 

@@ -65,6 +65,7 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
     const thumbUrl = resolveMediaUrl(activeItem.thumbUrl, mediaOrigin);
     const sceneVideoUrl = resolveMediaUrl(activeItem.sceneVideoUrl, mediaOrigin);
     const sceneLiveUrl = resolveMediaUrl(activeItem.sceneLiveUrl, mediaOrigin);
+    const videoStageUrl = resolveMediaUrl(activeItem.videoStageUrl, mediaOrigin);
     const webUrl = resolveMediaUrl(activeItem.webUrl, mediaOrigin);
     let mediaUrl = resolveMediaUrl(activeItem.mediaUrl, mediaOrigin);
     if (kind === 'scene' && (sceneMode === 'video' || sceneMode === 'scene-video') && sceneVideoUrl) {
@@ -80,6 +81,7 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
       schemeColor: String(activeItem.schemeColor || ''),
       thumbUrl,
       mediaUrl,
+      videoStageUrl,
       sceneVideoUrl,
       sceneLiveUrl,
       webUrl,

@@ -28,6 +28,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import zlib from 'node:zlib';
 
 import { launchHeadlessBrowser, readPngDimensions } from './cdp-browser.mjs';
@@ -974,6 +975,211 @@ async function main() {
     assert.equal(disRes.status, 200);
     assert.equal(disRes.json().autostart.normalShortcutEnabled, false);
     return `playlist + presets + cold-init=${initMs}ms + 2 .lnk losslessly restored`;
+  });
+
+  await check('Cross-scheme /video-stage/ iframe streaming, Studio /api/events SSE & [data-main-content-header] tint', '@resilience-designer', async () => {
+    // 1. Verify /video-stage/<token> route in media-server + videoStageUrl in buildClientSkinPayload
+    const libRes = await engine.listLibrary({ refresh: false });
+    const vidItem = libRes.items.find((x) => x.kind === 'video' && x.videoStageUrl);
+    assert.ok(vidItem, 'Expected scanned video item to expose videoStageUrl');
+    assert.match(vidItem.videoStageUrl, /\/video-stage\//, `Unexpected videoStageUrl: ${vidItem.videoStageUrl}`);
+
+    const stagePath = new URL(vidItem.videoStageUrl).pathname + '?sid=test-sid-1';
+    const stageResp = await engine.mediaServer.inject({ method: 'GET', url: stagePath });
+    assert.equal(stageResp.status, 200, `Expected 200 for ${stagePath}, got ${stageResp.status}`);
+    const stageHtml = stageResp.body.toString('utf8');
+    assert.ok(stageHtml.includes('prism-video-stage') && stageHtml.includes('/media/'), 'video-stage HTML missing same-origin video or postMessage bridge');
+
+    const { buildClientSkinPayload: buildPayload } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'host', 'index.mjs')).href);
+    const payload = buildPayload(await engine.getConfig(), vidItem, engine.getMediaOrigin(), { skinEnabled: true });
+    assert.equal(payload.activeItem?.videoStageUrl, vidItem.videoStageUrl, 'buildClientSkinPayload dropped videoStageUrl');
+
+    // 2. Verify Studio /api/events SSE & /api/status config inclusion
+    const sseResp = await studio.inject({ method: 'GET', url: '/api/events' });
+    assert.equal(sseResp.statusCode, 200, 'Studio /api/events did not return 200');
+    assert.match(String(sseResp.headers['content-type'] || ''), /text\/event-stream/i);
+    assert.ok(sseResp.text.includes('event: state') && sseResp.text.includes('"activeItem"'), 'Studio /api/events missing initial state snapshot');
+
+    const statusResp = await studio.inject({ method: 'GET', url: '/api/status' });
+    assert.equal(statusResp.statusCode, 200);
+    const statusJson = statusResp.json();
+    assert.ok(statusJson.config && typeof statusJson.config === 'object', 'Studio /api/status missing config payload for live sync');
+
+    // 3. Verify wallpaper-inject.js mounts <iframe data-prism-video-stage="1"> (0 fetch() blob copies), handles ready/ended/error, and tints [data-main-content-header]
+    const injectCode = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+    const fetchCalls = [];
+    const postedToFrame = [];
+    const rpcCalls = [];
+    const winListeners = new Map();
+
+    const makeEl = (tag) => {
+      const attrs = new Map();
+      const listeners = new Map();
+      const children = [];
+      let _src = '';
+      const el = {
+        tagName: String(tag).toUpperCase(),
+        style: { setProperty() {}, removeProperty() {} },
+        className: '',
+        id: '',
+        textContent: '',
+        parentNode: null,
+        isConnected: true,
+        children,
+        contentWindow: tag === 'iframe' ? { postMessage(msg) { postedToFrame.push(msg); } } : null,
+        get childNodes() { return children; },
+        get classList() { return { add() {}, remove() {}, contains() { return false; } }; },
+        setAttribute(k, v) { attrs.set(String(k), String(v)); if (k === 'id') el.id = String(v); },
+        getAttribute(k) { return attrs.has(String(k)) ? attrs.get(String(k)) : null; },
+        removeAttribute(k) { attrs.delete(String(k)); if (k === 'src') _src = ''; },
+        hasAttribute(k) { return attrs.has(String(k)); },
+        appendChild(c) { c.parentNode = el; children.push(c); return c; },
+        insertBefore(c) { c.parentNode = el; children.push(c); return c; },
+        removeChild(c) { const idx = children.indexOf(c); if (idx >= 0) children.splice(idx, 1); c.parentNode = null; return c; },
+        contains(c) { return children.includes(c) || children.some((x) => x.contains && x.contains(c)); },
+        querySelector(sel) {
+          if (sel === '.agy-prism-scrim') return children.find((x) => x.className === 'agy-prism-scrim') || null;
+          return null;
+        },
+        querySelectorAll(sel) {
+          const wantIframe = sel.includes('iframe');
+          const wantMedia = sel.includes('video') || sel.includes('audio');
+          return children.flatMap((c) => {
+            const hit = (wantIframe && c.tagName === 'IFRAME') || (wantMedia && (c.tagName === 'VIDEO' || c.tagName === 'AUDIO'));
+            return (hit ? [c] : []).concat(c.querySelectorAll(sel));
+          });
+        },
+        addEventListener(type, fn) {
+          if (!listeners.has(type)) listeners.set(type, new Set());
+          listeners.get(type).add(fn);
+        },
+        removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
+        dispatchEvent(ev) { for (const fn of [...(listeners.get(ev.type) || [])]) fn(ev); return true; },
+        getBoundingClientRect() { return { left: 0, top: 0, width: 1440, height: 900 }; },
+        get src() { return _src; },
+        set src(v) { _src = String(v || ''); attrs.set('src', _src); },
+      };
+      return el;
+    };
+
+    const htmlEl = makeEl('html');
+    const headEl = makeEl('head');
+    const bodyEl = makeEl('body');
+    const rootEl = makeEl('div');
+    rootEl.id = 'root';
+    bodyEl.appendChild(rootEl);
+
+    const mockDoc = {
+      documentElement: htmlEl,
+      head: headEl,
+      body: bodyEl,
+      hidden: false,
+      visibilityState: 'visible',
+      createElement: (t) => makeEl(t),
+      getElementById: (id) => {
+        if (id === 'root') return rootEl;
+        const all = [htmlEl, headEl, bodyEl, ...headEl.children, ...bodyEl.children];
+        return all.find((n) => n.id === id) || null;
+      },
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      addEventListener() {},
+      removeEventListener() {},
+      hasFocus: () => true,
+    };
+
+    const mockWin = {
+      document: mockDoc,
+      location: { protocol: 'https:', origin: 'https://127.0.0.1:50734' },
+      innerWidth: 1440,
+      innerHeight: 900,
+      top: null,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: (fn) => setTimeout(() => fn(Date.now()), 16),
+      cancelAnimationFrame: clearTimeout,
+      getComputedStyle: () => ({ backgroundColor: 'rgb(7, 7, 8)', getPropertyValue: () => '' }),
+      addEventListener(type, fn) {
+        if (!winListeners.has(type)) winListeners.set(type, new Set());
+        winListeners.get(type).add(fn);
+      },
+      removeEventListener(type, fn) { winListeners.get(type)?.delete(fn); },
+      dispatchMessage(data, source) {
+        for (const fn of [...(winListeners.get('message') || [])]) fn({ data, source });
+      },
+      __agyPrismCall(arg, params) {
+        const parsed = typeof arg === 'string' && arg.startsWith('{') ? JSON.parse(arg) : { method: arg, params };
+        rpcCalls.push(parsed);
+        return Promise.resolve({ ok: true });
+      },
+      AbortController,
+      Event: class Event { constructor(t) { this.type = t; } },
+      URL: { createObjectURL: () => 'blob:mock', revokeObjectURL() {} },
+      fetch(u) { fetchCalls.push(u); return Promise.reject(new Error('Should not full-fetch when videoStageUrl is available')); },
+    };
+    mockWin.window = mockWin;
+    mockWin.top = mockWin;
+    mockWin.self = mockWin;
+
+    vm.runInNewContext(injectCode, {
+      window: mockWin,
+      document: mockDoc,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      Blob,
+      AbortController,
+      Event: mockWin.Event,
+      Promise,
+      Math,
+      JSON,
+      Object,
+      Array,
+      String,
+      Number,
+      Boolean,
+      RegExp,
+      Error,
+    });
+
+    mockWin.__agyPrism.applyPayload({
+      skinEnabled: true,
+      config: { skinEnabled: true, layoutMode: 'flush', paused: false, muted: true, rotationEnabled: true, rotationTrigger: 'videoEnd' },
+      activeItem: {
+        id: 'loc-huge',
+        title: 'Huge 4GB Local Video',
+        kind: 'video',
+        mediaUrl: 'http://127.0.0.1:52075/media/loc-huge',
+        videoStageUrl: 'http://127.0.0.1:52075/video-stage/loc-huge',
+      },
+    });
+
+    const stageEl = mockDoc.getElementById('agy-prism-stage');
+    const iframes = stageEl.querySelectorAll('iframe');
+    assert.equal(iframes.length, 1, 'Expected cross-scheme video with videoStageUrl to mount streaming iframe');
+    assert.equal(iframes[0].getAttribute('data-prism-video-stage'), '1');
+    assert.equal(fetchCalls.length, 0, 'Cross-scheme video-stage iframe must NOT trigger full-file fetch+blob');
+
+    const sid = new URL(iframes[0].src).searchParams.get('sid');
+    assert.ok(sid, 'Expected sid query param on video-stage iframe src');
+
+    mockWin.dispatchMessage({ type: 'prism-video-stage', event: 'ready', sid, videoWidth: 1920, videoHeight: 1080 }, iframes[0].contentWindow);
+    assert.equal(htmlEl.getAttribute('data-agy-prism-wallpaper'), 'ready', 'video-stage ready message did not mark wallpaper ready');
+    assert.equal(mockWin.__agyPrism.status().videoStageMode, 'iframe');
+    assert.equal(mockWin.__agyPrism.status().videoReadyState, 4);
+    assert.ok(postedToFrame.some((m) => m && m.type === 'prism-video-ctl' && m.sid === sid), 'Host did not send prism-video-ctl to video-stage iframe');
+
+    mockWin.dispatchMessage({ type: 'prism-video-stage', event: 'ended', sid }, iframes[0].contentWindow);
+    assert.ok(rpcCalls.some((c) => c.method === 'playlist.step' && c.params?.reason === 'videoEnd'), 'video-stage ended event did not trigger playlist.step');
+
+    const styleEl = mockDoc.getElementById('agy-prism-css');
+    assert.ok(styleEl && styleEl.textContent.includes('[data-main-content-header]') && styleEl.textContent.includes('var(--prism-surface-chat)'), 'Missing [data-main-content-header] chat surface tint rule');
+
+    mockWin.__agyPrism.destroy();
+    return `/video-stage/ iframe (0 blob fetches) + Studio SSE/status sync + [data-main-content-header] tint verified`;
   });
 
   // =========================================================================

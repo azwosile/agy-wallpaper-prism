@@ -400,8 +400,33 @@ export async function createPrismStudioServer(options = {}) {
     };
   };
 
+  const studioSseClients = new Set();
+  const studioSseKeepalives = new Set();
+  let studioBroadcastScheduled = false;
+
+  const broadcastStudioState = async () => {
+    if (studioSseClients.size === 0 || studioBroadcastScheduled) return;
+    studioBroadcastScheduled = true;
+    try {
+      const st = await buildCanonicalState();
+      const serialized = `event: state\ndata: ${JSON.stringify(st)}\n\n`;
+      for (const clientRes of [...studioSseClients]) {
+        try {
+          clientRes.write(serialized);
+        } catch {
+          studioSseClients.delete(clientRes);
+        }
+      }
+    } catch {
+      /* best-effort studio sync */
+    } finally {
+      studioBroadcastScheduled = false;
+    }
+  };
+
   let pushScheduled = false;
   const pushToHost = async () => {
+    void broadcastStudioState();
     if (!cdpBridge || pushScheduled) return;
     pushScheduled = true;
     try {
@@ -741,6 +766,44 @@ export async function createPrismStudioServer(options = {}) {
     }
 
     // ---- GET APIs ----
+    if (req.method === 'GET' && pathname === '/api/events') {
+      const isInMemory = typeof req.socket?.setNoDelay !== 'function';
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        Connection: isInMemory ? 'close' : 'keep-alive',
+      });
+      const initial = await buildCanonicalState();
+      const initialFrame = `retry: 2500\nevent: state\ndata: ${JSON.stringify(initial)}\n\n`;
+      if (isInMemory) {
+        res.write(initialFrame);
+        res.end();
+        return;
+      }
+      studioSseClients.add(res);
+      res.write(initialFrame);
+      const ka = setInterval(() => {
+        try {
+          res.write(': keepalive\n\n');
+        } catch {
+          clearInterval(ka);
+          studioSseKeepalives.delete(ka);
+          studioSseClients.delete(res);
+        }
+      }, 15_000);
+      ka.unref?.();
+      studioSseKeepalives.add(ka);
+      const cleanup = () => {
+        clearInterval(ka);
+        studioSseKeepalives.delete(ka);
+        studioSseClients.delete(res);
+      };
+      req.on('close', cleanup);
+      res.on('close', cleanup);
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/bootstrap') {
       sendJson(res, 200, await buildCanonicalState());
       return;
@@ -761,6 +824,7 @@ export async function createPrismStudioServer(options = {}) {
       const st = await buildCanonicalState();
       sendJson(res, 200, {
         ok: true,
+        config: st.config,
         hostStatus: st.hostStatus,
         autostart: st.autostart,
         normalShortcutEnabled: st.normalShortcutEnabled,
@@ -1056,6 +1120,12 @@ export async function createPrismStudioServer(options = {}) {
   }
 
   const close = async () => {
+    for (const ka of studioSseKeepalives) clearInterval(ka);
+    studioSseKeepalives.clear();
+    for (const clientRes of studioSseClients) {
+      try { clientRes.end(); } catch { /* ignore */ }
+    }
+    studioSseClients.clear();
     if (cdpBridge) {
       await cdpBridge.stop({ removeSkin: true, removePanel: true }).catch(() => {});
       cdpBridge = null;

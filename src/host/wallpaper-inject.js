@@ -330,7 +330,6 @@
     '.agy-sheet[data-sheet-inset] [data-main-content-body]',
     '.agy-inset-shell [data-side-panel-body]',
     '.agy-inset-shell .agy-sheet[data-sheet-inset] [data-side-panel-strip]',
-    '.agy-inset-shell .agy-sheet[data-sheet-inset] [data-main-content-header]',
     '[data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane]',
     '[data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane] > [data-pane-id]',
     '.agy-inset-shell > [data-split-root] > [data-split-sash]',
@@ -552,6 +551,11 @@
     activeVideo: null,
     activeAudio: null,
     activeIframe: null,
+    activeVideoStageFrame: null,
+    activeVideoStageSid: '',
+    activeVideoStageReady: false,
+    activeVideoStageUrl: '',
+    videoStageMessageCleanup: null,
     activeMediaKey: '',
     failedMediaKey: '',
     failedMediaRetries: 0,
@@ -1521,7 +1525,8 @@
     );
 
     out.push(
-      GW + ' [data-testid="conversation-view"] {\n' +
+      GW + ' [data-testid="conversation-view"],\n' +
+      GW + ' [data-main-content-header]' + NOT_HOLE + ' {\n' +
       '  background-color: var(--prism-surface-chat) !important;\n' +
       '  backdrop-filter: none !important;\n' +
       '}\n' +
@@ -2129,6 +2134,22 @@
         vids[i].pause();
       } catch (_) {}
     }
+    var frames = wrap.querySelectorAll('iframe');
+    for (var j = 0; j < frames.length; j += 1) {
+      try {
+        if (frames[j].contentWindow) {
+          frames[j].contentWindow.postMessage({ type: 'prism-video-ctl', paused: true }, '*');
+        }
+      } catch (_) {}
+    }
+  }
+
+  function isCrossSchemeLoopbackMediaUrl(url) {
+    return Boolean(
+      W.location &&
+      W.location.protocol === 'https:' &&
+      /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\//i.test(String(url || '').trim())
+    );
   }
 
   function disposeWrap(wrap) {
@@ -2278,6 +2299,41 @@
     }
   }
 
+  function clearVideoStageListener() {
+    if (state.videoStageMessageCleanup) {
+      try { state.videoStageMessageCleanup(); } catch (_) {}
+      state.videoStageMessageCleanup = null;
+    }
+  }
+
+  function sendVideoStageControl(extra) {
+    var frame = state.activeVideoStageFrame;
+    if (!frame || !frame.contentWindow) return;
+    var cfg = state.cfg;
+    var shouldPause = Boolean(cfg.paused || state.autoPaused || cfg.agentBusyPaused);
+    var wantLoop = !(cfg.rotationEnabled && cfg.rotationTrigger === 'videoEnd');
+    var fitCss = cfg.fit === 'center' ? 'none' : String(cfg.fit || 'cover');
+    var msg = {
+      type: 'prism-video-ctl',
+      sid: state.activeVideoStageSid,
+      paused: shouldPause,
+      muted: Boolean(cfg.muted || cfg.volume <= 0.005),
+      volume: clamp(cfg.volume, 0, 1),
+      playbackRate: cfg.playbackRate,
+      loop: wantLoop,
+      fit: fitCss,
+      pos: cfg.posX + '% ' + cfg.posY + '%',
+    };
+    if (extra && typeof extra === 'object') {
+      for (var k in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, k)) msg[k] = extra[k];
+      }
+    }
+    try {
+      frame.contentWindow.postMessage(msg, '*');
+    } catch (_) {}
+  }
+
   function syncMediaPlaybackState() {
     var cfg = state.cfg;
     var shouldPause = Boolean(cfg.paused || state.autoPaused || cfg.agentBusyPaused);
@@ -2333,6 +2389,9 @@
         else state.activeAudio.play().catch(function () {});
       } catch (_) {}
     }
+    if (state.activeVideoStageFrame) {
+      sendVideoStageControl();
+    }
     if (state.activeIframe && state.activeIframe.contentWindow) {
       try {
         state.activeIframe.contentWindow.postMessage(
@@ -2361,6 +2420,9 @@
           state.activeVideo.volume = clamp(state.cfg.volume, 0, 1);
           if (!state.cfg.paused && !state.autoPaused) state.activeVideo.play().catch(function () {});
         } catch (_) {}
+      }
+      if (state.activeVideoStageFrame && !state.cfg.muted && state.cfg.volume > 0) {
+        sendVideoStageControl({ unmute: true, muted: false });
       }
     };
     doc.addEventListener('pointerdown', handler, { once: true, capture: true });
@@ -2438,6 +2500,11 @@
     state.activeVideo = null;
     state.activeAudio = null;
     state.activeIframe = null;
+    clearVideoStageListener();
+    state.activeVideoStageFrame = null;
+    state.activeVideoStageSid = '';
+    state.activeVideoStageReady = false;
+    state.activeVideoStageUrl = '';
 
     var nextWrap = doc.createElement('div');
     nextWrap.className = 'agy-prism-media-wrap';
@@ -2476,6 +2543,13 @@
       if (state.activeVideo && nextWrap.contains(state.activeVideo)) state.activeVideo = null;
       if (state.activeAudio && nextWrap.contains(state.activeAudio)) state.activeAudio = null;
       if (state.activeIframe && nextWrap.contains(state.activeIframe)) state.activeIframe = null;
+      if (state.activeVideoStageFrame && nextWrap.contains(state.activeVideoStageFrame)) {
+        clearVideoStageListener();
+        state.activeVideoStageFrame = null;
+        state.activeVideoStageSid = '';
+        state.activeVideoStageReady = false;
+        state.activeVideoStageUrl = '';
+      }
       disposeWrap(nextWrap);
       flushOutgoingWraps();
       if (prevWrap) disposeWrap(prevWrap);
@@ -2658,6 +2732,120 @@
     }
 
     if (effKind === 'video') {
+      var videoStageBase = String((item && item.videoStageUrl) || '').trim();
+      var useVideoStageIframe = Boolean(
+        videoStageBase &&
+        isCrossSchemeLoopbackMediaUrl(mediaUrl) &&
+        isCrossSchemeLoopbackMediaUrl(videoStageBase) &&
+        typeof W.addEventListener === 'function'
+      );
+
+      if (useVideoStageIframe) {
+        var stageSid = 'vs-' + mountSeq + '-' + Date.now();
+        var stageUrl = videoStageBase + (videoStageBase.indexOf('?') >= 0 ? '&' : '?') + 'sid=' + encodeURIComponent(stageSid);
+        var vframe = doc.createElement('iframe');
+        vframe.className = 'agy-prism-media-el';
+        vframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+        vframe.setAttribute('allow', 'autoplay');
+        vframe.setAttribute('frameborder', '0');
+        vframe.setAttribute('scrolling', 'no');
+        vframe.setAttribute('tabindex', '-1');
+        vframe.setAttribute('data-prism-video-stage', '1');
+        vframe.style.pointerEvents = 'none';
+        vframe.style.background = 'transparent';
+
+        if (prevWrap) pauseWrapMedia(prevWrap);
+
+        var needsStageCrossfade = Boolean(validPrevWrap && cfg.switchTransition !== 'cut' && !doc.hidden);
+        nextWrap.style.opacity = needsStageCrossfade ? '0' : '0.001';
+        nextWrap.appendChild(vframe);
+        state.activeVideoStageFrame = vframe;
+        state.activeVideoStageSid = stageSid;
+        state.activeVideoStageReady = false;
+        state.activeVideoStageUrl = stageUrl;
+        state.pendingWrap = nextWrap;
+
+        var settledStage = false;
+        var onStageReady = function () {
+          if (settledStage) return;
+          if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) {
+            settledStage = true;
+            disposeWrap(nextWrap);
+            return;
+          }
+          settledStage = true;
+          state.activeVideoStageReady = true;
+          clearTimeout(state.pendingMediaTimer);
+          state.pendingMediaTimer = 0;
+          if (!needsStageCrossfade) nextWrap.style.opacity = '';
+          commitMount();
+          sendVideoStageControl();
+          if (!state.cfg.muted && state.cfg.volume > 0.005) armGestureUnmute();
+          if (shouldExtractAccent(item, state.cfg) && item && item.thumbUrl) {
+            extractAccent(item.thumbUrl, item.id).then(function (acc) {
+              if (acc && !destroyed) {
+                state.cfg.extractedAccent = acc;
+                refreshSkinStyles();
+              }
+            });
+          }
+        };
+        var onStageFailed = function () {
+          if (settledStage) return;
+          settledStage = true;
+          failMount();
+        };
+
+        var onStageMessage = function (ev) {
+          var m = ev && ev.data;
+          if (!m || typeof m !== 'object' || m.type !== 'prism-video-stage') return;
+          if (m.sid !== stageSid) return;
+          if (ev.source && vframe.contentWindow && ev.source !== vframe.contentWindow) return;
+          if (destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) return;
+          if (m.event === 'ready') {
+            onStageReady();
+          } else if (m.event === 'ended') {
+            if (state.cfg.rotationEnabled && state.cfg.rotationTrigger === 'videoEnd') {
+              callHostRpc('playlist.step', { direction: 1, reason: 'videoEnd' });
+            }
+          } else if (m.event === 'error') {
+            onStageFailed();
+          }
+        };
+        W.addEventListener('message', onStageMessage);
+        state.videoStageMessageCleanup = function () {
+          W.removeEventListener('message', onStageMessage);
+        };
+
+        vframe.addEventListener('load', function () {
+          if (!destroyed && state.activeVideoStageFrame === vframe) {
+            sendVideoStageControl();
+          }
+        });
+        vframe.addEventListener('error', onStageFailed, { once: true });
+
+        var pendingStageChecks = 0;
+        var armPendingStageGuard = function (delayMs) {
+          clearTimeout(state.pendingMediaTimer);
+          state.pendingMediaTimer = setTimeout(function () {
+            state.pendingMediaTimer = 0;
+            if (settledStage || destroyed || mountSeq !== state.mediaMountSeq || state.activeVideoStageFrame !== vframe) return;
+            pendingStageChecks += 1;
+            if (doc.hidden || pendingStageChecks <= 3) {
+              sendVideoStageControl();
+              armPendingStageGuard(2500);
+              return;
+            }
+            onStageFailed();
+          }, delayMs);
+        };
+        armPendingStageGuard(8000);
+
+        stage.insertBefore(nextWrap, scrimNode || null);
+        vframe.src = stageUrl;
+        return;
+      }
+
       var video = doc.createElement('video');
       video.className = 'agy-prism-media-el';
       // Always start muted & connected in DOM BEFORE setting video.src so Chromium autoplay never blocks (#31/#32).
@@ -2833,6 +3021,10 @@
           if (settledVid || destroyed || mountSeq !== state.mediaMountSeq || state.activeVideo !== video) return;
           if (video.readyState >= 2 && video.videoWidth > 0) {
             onVideoDecoded();
+            return;
+          }
+          if (video.__prismFetchingBlob) {
+            armPendingVideoGuard(1500);
             return;
           }
           // Broken URL / 404 / unsupported codec -> fail-open immediately!
@@ -3484,6 +3676,7 @@
     syncBrowserHoleCutout();
     syncWindowControlsOverlay(false, false);
     syncSidecarIframes(state.cfg);
+    if (state.activeVideoStageFrame) sendVideoStageControl();
   }
 
   function syncWindowControlsOverlay(forceRestore, forceSend) {
@@ -3532,6 +3725,11 @@
     state.activeVideo = null;
     state.activeAudio = null;
     state.activeIframe = null;
+    clearVideoStageListener();
+    state.activeVideoStageFrame = null;
+    state.activeVideoStageSid = '';
+    state.activeVideoStageReady = false;
+    state.activeVideoStageUrl = '';
     state.activeMediaKey = '';
     state.wallpaperReady = false;
     state.slides = [];
@@ -3809,10 +4007,27 @@
       paused: Boolean(state.cfg.paused || state.autoPaused),
       autoPaused: Boolean(state.autoPaused),
       pauseReason: state.pauseReason,
-      videoPaused: state.activeVideo ? Boolean(state.activeVideo.paused) : null,
-      videoMuted: state.activeVideo ? Boolean(state.activeVideo.muted) : null,
-      videoReadyState: state.activeVideo ? Number(state.activeVideo.readyState || 0) : 0,
-      videoSrc: state.activeVideo ? String(state.activeVideo.currentSrc || state.activeVideo.src || '') : '',
+      videoStageMode: state.activeVideoStageFrame ? 'iframe' : state.activeVideo ? 'video' : 'none',
+      videoPaused: state.activeVideo
+        ? Boolean(state.activeVideo.paused)
+        : state.activeVideoStageFrame
+          ? Boolean(state.cfg.paused || state.autoPaused || state.cfg.agentBusyPaused)
+          : null,
+      videoMuted: state.activeVideo
+        ? Boolean(state.activeVideo.muted)
+        : state.activeVideoStageFrame
+          ? Boolean(state.cfg.muted || state.cfg.volume <= 0.005)
+          : null,
+      videoReadyState: state.activeVideo
+        ? Number(state.activeVideo.readyState || 0)
+        : state.activeVideoStageFrame
+          ? state.activeVideoStageReady
+            ? 4
+            : 0
+          : 0,
+      videoSrc: state.activeVideo
+        ? String(state.activeVideo.currentSrc || state.activeVideo.src || '')
+        : state.activeVideoStageUrl || '',
       glassReady: Boolean(doc.documentElement && doc.documentElement.getAttribute(GLASS_ATTR) === 'ready'),
       wallpaperReady: Boolean(state.wallpaperReady),
       transparentWindowControls: Boolean(state.cfg.transparentWindowControls !== false),
