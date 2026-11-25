@@ -3,7 +3,7 @@
 // Serves Sidecar Studio UI (0 Agent Tokens) + all /api/* routes + Passive CDP Host Controller.
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
@@ -317,7 +317,52 @@ export async function createPrismStudioServer(options = {}) {
   const startedAt = new Date().toISOString();
   const resolvedPluginRoot = options.pluginRoot ? resolve(options.pluginRoot) : PLUGIN_ROOT;
   const updaterEnv = options.env || process.env;
+  const instanceId = String(options.instanceId || randomBytes(12).toString('hex'));
+  const serverInfoPath = join(dataDir, 'server_info.json');
+  let actualPort = listenPort;
   let closed = false;
+
+  const writeServerInfoAtomic = (payload) => {
+    const body = `${JSON.stringify(payload, null, 2)}\n`;
+    const tmpPath = `${serverInfoPath}.tmp.${process.pid}.${instanceId}`;
+    try {
+      writeFileSync(tmpPath, body, { encoding: 'utf8', mode: 0o600 });
+      renameSync(tmpPath, serverInfoPath);
+    } catch {
+      try {
+        rmSync(tmpPath, { force: true });
+      } catch {
+        /* ignore */
+      }
+      try {
+        writeFileSync(serverInfoPath, body, { encoding: 'utf8', mode: 0o600 });
+      } catch {
+        /* non-fatal */
+      }
+    }
+  };
+
+  const isServerInfoOwnedBySelf = (info) => {
+    if (!info || typeof info !== 'object') return true;
+    if (info.plugin && info.plugin !== PLUGIN_ID) return true;
+    if (typeof info.instanceId === 'string' && info.instanceId) {
+      return info.instanceId === instanceId;
+    }
+    return info.pid === process.pid && (!Number.isInteger(info.port) || info.port === actualPort);
+  };
+
+  const isAuthoritativeOwner = () => {
+    if (closed) return false;
+    try {
+      if (!existsSync(serverInfoPath)) return true;
+      const raw = readFileSync(serverInfoPath, 'utf8');
+      if (!raw || !raw.trim()) return true;
+      const info = JSON.parse(raw);
+      return isServerInfoOwnedBySelf(info);
+    } catch {
+      return true;
+    }
+  };
 
   const engine =
     options.engine ||
@@ -886,6 +931,19 @@ export async function createPrismStudioServer(options = {}) {
       pollMs: options.cdpPollMs ?? 3000,
       configPath: options.hostConfigPath || '',
       profileDir: options.profileDir || '',
+      isAuthoritativeOwner,
+      onOwnershipLost: (reason) => {
+        if (closed) return;
+        void close({ preserveHostDom: true })
+          .catch(() => {})
+          .finally(() => {
+            try {
+              options.onSuperseded?.(reason);
+            } catch {
+              /* ignore */
+            }
+          });
+      },
       log: options.log || (() => {}),
     });
   }
@@ -1725,9 +1783,18 @@ export async function createPrismStudioServer(options = {}) {
   });
 
   const addr = server.address();
-  const actualPort = addr && typeof addr === 'object' ? addr.port : listenPort;
+  actualPort = addr && typeof addr === 'object' ? addr.port : listenPort;
   const origin = `http://127.0.0.1:${actualPort}`;
   boundOrigin = origin;
+
+  writeServerInfoAtomic({
+    plugin: PLUGIN_ID,
+    pid: process.pid,
+    port: actualPort,
+    token: effectiveAuthToken,
+    instanceId,
+    startedAt,
+  });
 
   if (cdpBridge) {
     await cdpBridge.start().catch(() => {});
@@ -1790,56 +1857,50 @@ export async function createPrismStudioServer(options = {}) {
     bootUpdateTimer.unref?.();
   }
 
-  const serverInfoPath = join(dataDir, 'server_info.json');
-  try {
-    writeFileSync(
-      serverInfoPath,
-      `${JSON.stringify({ plugin: PLUGIN_ID, pid: process.pid, port: actualPort, token: effectiveAuthToken, startedAt }, null, 2)}\n`,
-      { encoding: 'utf8', mode: 0o600 },
-    );
-  } catch {
-    /* non-fatal */
-  }
-
+  let closePromise = null;
   close = async ({ preserveHostDom = false } = {}) => {
-    closed = true;
-    if (bootUpdateTimer) {
-      clearTimeout(bootUpdateTimer);
-      bootUpdateTimer = null;
-    }
-    if (retiredSweepTimer) {
-      clearTimeout(retiredSweepTimer);
-      retiredSweepTimer = null;
-    }
-    for (const ka of studioSseKeepalives) clearInterval(ka);
-    studioSseKeepalives.clear();
-    for (const clientRes of studioSseClients) {
-      try { clientRes.end(); } catch { /* ignore */ }
-    }
-    studioSseClients.clear();
-    if (cdpBridge) {
-      await cdpBridge
-        .stop({
-          removeSkin: !preserveHostDom,
-          removePanel: !preserveHostDom,
-          preserveHostDom: Boolean(preserveHostDom),
-        })
-        .catch(() => {});
-      cdpBridge = null;
-    }
-    if (typeof engine.close === 'function') {
-      await engine.close().catch(() => {});
-    }
-    try {
-      if (existsSync(serverInfoPath)) {
-        const info = JSON.parse(readFileSync(serverInfoPath, 'utf8'));
-        if (info?.pid === process.pid) rmSync(serverInfoPath, { force: true });
+    if (closePromise) return closePromise;
+    closePromise = (async () => {
+      closed = true;
+      if (bootUpdateTimer) {
+        clearTimeout(bootUpdateTimer);
+        bootUpdateTimer = null;
       }
-    } catch {
-      /* ignore */
-    }
-    server.closeAllConnections?.();
-    await new Promise((r) => server.close(() => r()));
+      if (retiredSweepTimer) {
+        clearTimeout(retiredSweepTimer);
+        retiredSweepTimer = null;
+      }
+      for (const ka of studioSseKeepalives) clearInterval(ka);
+      studioSseKeepalives.clear();
+      for (const clientRes of studioSseClients) {
+        try { clientRes.end(); } catch { /* ignore */ }
+      }
+      studioSseClients.clear();
+      if (cdpBridge) {
+        await cdpBridge
+          .stop({
+            removeSkin: !preserveHostDom,
+            removePanel: !preserveHostDom,
+            preserveHostDom: Boolean(preserveHostDom),
+          })
+          .catch(() => {});
+        cdpBridge = null;
+      }
+      if (typeof engine.close === 'function') {
+        await engine.close().catch(() => {});
+      }
+      try {
+        if (existsSync(serverInfoPath)) {
+          const info = JSON.parse(readFileSync(serverInfoPath, 'utf8'));
+          if (isServerInfoOwnedBySelf(info)) rmSync(serverInfoPath, { force: true });
+        }
+      } catch {
+        /* ignore */
+      }
+      server.closeAllConnections?.();
+      await new Promise((r) => server.close(() => r()));
+    })();
+    return closePromise;
   };
 
   /** In-process HTTP request injector for sandboxed tests where outbound TCP loopback is blocked. */
@@ -1925,6 +1986,7 @@ export async function createPrismStudioServer(options = {}) {
     token: effectiveAuthToken,
     hostCapToken,
     hostBaseUrl: `${origin}/host/${hostCapToken}`,
+    instanceId,
     startedAt,
     canary: canaryController,
     engine,
@@ -1943,6 +2005,16 @@ function isMainEntry() {
     return Boolean(process.argv[1]) && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
   } catch {
     return false;
+  }
+}
+
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err?.code !== 'ESRCH';
   }
 }
 
@@ -1965,13 +2037,32 @@ if (isMainEntry()) {
   refreshWatchedMtimes();
 
   let watchTimer = null;
+  let parentWatchTimer = null;
   let instance = null;
+  let shuttingDown = false;
 
   const pauseWatchTimer = () => {
     if (watchTimer) {
       clearInterval(watchTimer);
       watchTimer = null;
     }
+  };
+
+  const stopParentWatchTimer = () => {
+    if (parentWatchTimer) {
+      clearInterval(parentWatchTimer);
+      parentWatchTimer = null;
+    }
+  };
+
+  const shutdown = ({ preserveHostDom = false } = {}) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    pauseWatchTimer();
+    stopParentWatchTimer();
+    Promise.resolve(instance?.close?.({ preserveHostDom }))
+      .catch(() => {})
+      .finally(() => process.exit(0));
   };
 
   const startWatchTimer = () => {
@@ -2002,6 +2093,14 @@ if (isMainEntry()) {
   instance = await createPrismStudioServer({
     onBeforeSync: pauseWatchTimer,
     onRollback: startWatchTimer,
+    onSuperseded: (reason) => {
+      console.log(`[prism_studio] superseded (${reason || 'owner_changed'}); exiting cleanly`);
+      if (shuttingDown) return;
+      shuttingDown = true;
+      pauseWatchTimer();
+      stopParentWatchTimer();
+      process.exit(0);
+    },
   });
   console.log(
     `[prism_studio] listening on ${instance.origin} (media=${instance.engine.getMediaOrigin?.() || 'n/a'}, pid=${process.pid})`,
@@ -2009,13 +2108,18 @@ if (isMainEntry()) {
 
   startWatchTimer();
 
-  let shuttingDown = false;
-  const shutdown = () => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    pauseWatchTimer();
-    instance.close().finally(() => process.exit(0));
-  };
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
+  const initialPpid = Number(process.ppid);
+  if (instance.isManagedSidecar?.() && Number.isInteger(initialPpid) && initialPpid > 1 && isPidAlive(initialPpid)) {
+    parentWatchTimer = setInterval(() => {
+      if (shuttingDown) return;
+      if (process.ppid !== initialPpid || !isPidAlive(initialPpid)) {
+        console.log(`[prism_studio] parent pid ${initialPpid} exited; shutting down orphaned sidecar`);
+        shutdown({ preserveHostDom: true });
+      }
+    }, 5000);
+    parentWatchTimer.unref?.();
+  }
+
+  process.once('SIGINT', () => shutdown());
+  process.once('SIGTERM', () => shutdown());
 }

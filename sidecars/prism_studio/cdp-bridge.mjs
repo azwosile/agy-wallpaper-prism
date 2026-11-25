@@ -1569,6 +1569,8 @@ export function createPassiveCdpBridge({
   pollMs = 3000,
   configPath = '',
   profileDir = '',
+  isAuthoritativeOwner = () => true,
+  onOwnershipLost = null,
   log = () => {},
 } = {}) {
   const canary =
@@ -1587,6 +1589,7 @@ export function createPassiveCdpBridge({
   let sessionAwake = false;
   let sessionForcedWake = false;
   let bootCanaryChecked = false;
+  let ownershipLostNotified = false;
   let timer = null;
   let stopped = false;
   let tickInFlight = null;
@@ -1643,6 +1646,47 @@ export function createPassiveCdpBridge({
   const clearSettleTimers = () => {
     for (const t of settleTimers.values()) clearTimeout(t);
     settleTimers.clear();
+  };
+
+  const yieldOwnership = (reason = 'owner_changed') => {
+    if (stopped) return;
+    stopped = true;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    clearSettleTimers();
+    closeAllSseClients();
+    activeTargets.clear();
+    firstReadyAt.clear();
+    lastStatus = {
+      ...lastStatus,
+      phase: 'superseded',
+      cdpReachable: false,
+      sessionAwake: false,
+      attachedTargets: [],
+      lastCheckAt: new Date().toISOString(),
+    };
+    log(`CDP bridge yielded ownership (${reason})`);
+    if (!ownershipLostNotified && typeof onOwnershipLost === 'function') {
+      ownershipLostNotified = true;
+      Promise.resolve(onOwnershipLost(reason)).catch(() => {});
+    }
+  };
+
+  const checkOwnership = (reason = 'owner_changed') => {
+    if (stopped) return false;
+    let owned = true;
+    try {
+      owned = isAuthoritativeOwner() !== false;
+    } catch {
+      owned = true;
+    }
+    if (!owned) {
+      yieldOwnership(reason);
+      return false;
+    }
+    return true;
   };
 
   const buildEnvelopePayload = async () => {
@@ -1714,6 +1758,7 @@ export function createPassiveCdpBridge({
       const hadClients = sseClients.delete(res);
       // When Hub reloads (Ctrl+R), EventSource closes -> re-verify & gently re-mount after settle!
       if (!skipRecovery && hadClients && !stopped) {
+        if (!checkOwnership('owner_changed_on_sse_close')) return;
         const aliveCount = countLiveSseClients();
         if (aliveCount === 0) {
           activeTargets.clear();
@@ -1814,6 +1859,8 @@ export function createPassiveCdpBridge({
         return false;
       }
 
+      if (!checkOwnership('owner_changed_before_inject')) return false;
+
       if (skinEnabled && !needsBridgeRebind) {
         canary.arm(browserSessionId, target.id);
       }
@@ -1868,6 +1915,7 @@ export function createPassiveCdpBridge({
   };
 
   const broadcastState = async () => {
+    if (!checkOwnership('owner_changed_on_broadcast')) return { sseDeliveredCount: 0 };
     const envelope = await buildEnvelopePayload();
     const serialized = `data: ${JSON.stringify(envelope)}\n\n`;
     let sseDeliveredCount = 0;
@@ -1917,6 +1965,7 @@ export function createPassiveCdpBridge({
 
   const runTick = async ({ immediateWake = false } = {}) => {
     if (stopped) return getStatus();
+    if (!checkOwnership('owner_changed_on_tick')) return getStatus();
 
     if (!bootCanaryChecked) {
       bootCanaryChecked = true;
@@ -2097,6 +2146,7 @@ export function createPassiveCdpBridge({
 
   const scheduleNext = () => {
     if (stopped || pollMs <= 0) return;
+    if (!checkOwnership('owner_changed_on_schedule')) return;
     let delayMs = Math.max(pollMs, 5000);
     if (activeTargets.size === 0 && lastStatus.cdpReachable && lastStatus.phase !== 'tripped' && lastStatus.phase !== 'manual-standby') {
       delayMs = Math.min(1200, pollMs);
@@ -2193,13 +2243,15 @@ export function createPassiveCdpBridge({
       } else {
         await cleanupTargetsEphemeral({ removeSkin, removePanel });
       }
-      lastStatus = {
-        ...lastStatus,
-        phase: 'stopped',
-        cdpReachable: false,
-        attachedTargets: [],
-        lastCheckAt: new Date().toISOString(),
-      };
+      if (lastStatus.phase !== 'superseded') {
+        lastStatus = {
+          ...lastStatus,
+          phase: 'stopped',
+          cdpReachable: false,
+          attachedTargets: [],
+          lastCheckAt: new Date().toISOString(),
+        };
+      }
       return getStatus();
     },
   };
