@@ -7,6 +7,9 @@
 > 2. **[`damiankorcz/Prism-Theme`](https://github.com/damiankorcz/Prism-Theme)** (*Obsidian Prism Theme* — Modular SCSS `Pt / Tint / Shade` HSL surface derivation, Flush vs. Floating Island pane framing, paired Light/Dark community color presets, and calm Style-Settings control ergonomics).
 > 3. **`dsh-plugin-wallpaper-engine`** (*DeepSeek Harness Liquid Glass Wallpaper Engine* — Full-viewport media stage, Steam `431960` Workshop / Video / Web / Scene playback, rotation playlists, power-saving lifecycle, and per-wallpaper optical profiles).
 
+> [!WARNING]
+> **Historical v1.0 Design Specification (Archived — Superseded by `v2.1.0`)** — Preserved for Obsidian Prism optical design lineage only; historical prose below is intentionally unmodified. For authoritative `v2.1.0` runtime architecture, DOM/CSS contracts, Zero-Enable CDP redlines, 7-component `surfaceTints`, and current schema defaults, ALWAYS consult [`docs/AI_HANDOFF.md`](./AI_HANDOFF.md) and `src/shared/schema.mjs`. Specifically do **NOT** copy from this document: `#prism-ws-stage` (`z-index: 0`) / `#agy-prism-ws-css` / `__agyPrismSkin` (now `#agy-prism-stage` at `z-index: -1` + `.agy-prism-blur-veil`, `#agy-prism-css`, `__agyPrism`), `[class*="bg-background"]` (banned since `v2.0.4`), `Page.addScriptToEvaluateOnNewDocument` (zero-tolerance banned by `test/verify-all.mjs`), `prefs.json` / `/api/prefs` / `/api/host/apply` (replaced by `ANTIGRAVITY_EXECUTABLE_DATA_DIR/config.json`, `/api/config`, `/api/skin/wake`), or v1.0 preset/sidebar/schema defaults (`mediaSaturate`, `g * 0.72` sidebar formula, `1.04` blur scale, `16:9` header).
+
 ---
 
 ## 1. Design Philosophy & Post-Mortem of Legacy `wallpaper-studio`

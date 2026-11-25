@@ -148,6 +148,7 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
             var staleOrigin = Boolean(expectedPrefix) && (!hostBase || hostBase.indexOf(expectedPrefix) !== 0);
 
             var hadPanel = Boolean(window.__agyPrismPanel);
+            if (window.__agyPrismKt) { clearInterval(window.__agyPrismKt); window.__agyPrismKt = 0; }
             if (window.__agyPrismPanel) {
               try {
                 if (typeof window.__agyPrismPanel.destroy === 'function') window.__agyPrismPanel.destroy();
@@ -164,14 +165,15 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
             if (hadPanel && triggerMode !== 'shortcut-only' && typeof window.__agyPrismSummonPanel === 'function' && !document.getElementById('agy-prism-pill') && document.body) {
               var b = document.createElement('button');
               b.id = 'agy-prism-pill';
+              b.className = 'agy-prism-pill';
               b.type = 'button';
               b.setAttribute('translate', 'no');
               b.dataset.noTranslate = 'true';
               b.dataset.agNoI18n = '1';
               b.dataset.prismLazyStub = '1';
               b.textContent = '\\u25C6 Prism';
-              b.style.cssText = 'all:initial;cursor:pointer;font:500 11px/18px system-ui,sans-serif;padding:2px 8px;border-radius:999px;color:#cbd5e1;background:rgba(20,20,26,.72);border:1px solid rgba(255,255,255,.14);z-index:44;';
-              var f = document.querySelector('.agy-composer-footer,[data-testid="agent-input-box"] footer');
+              b.style.cssText = 'all:initial;display:inline-flex;align-items:center;white-space:nowrap;flex-shrink:0;cursor:pointer;font:500 11px/18px system-ui,sans-serif;padding:2px 8px;border-radius:999px;color:#cbd5e1;background:rgba(20,20,26,.72);border:1px solid rgba(255,255,255,.14);z-index:44;';
+              var f = document.querySelector('.agy-composer-footer,.composer-bar,[data-testid="agent-input-box"] footer');
               if (f) f.appendChild(b);
               else { b.style.position = 'fixed'; b.style.right = '14px'; b.style.bottom = '10px'; document.body.appendChild(b); }
               b.onclick = function(ev) { ev.preventDefault(); ev.stopPropagation(); window.__agyPrismSummonPanel(); };

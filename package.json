@@ -1,6 +1,6 @@
 {
   "name": "agy-wallpaper-prism",
-  "version": "2.0.8",
+  "version": "2.1.0",
   "description": "Obsidian Prism glass skin & Wallpaper Engine studio for Google Antigravity — Steam Workshop 431960, MP4 faststart, PKGV/LZ4 Scene extraction, Floating Island layouts, and adaptive Light/Dark glass.",
   "type": "module",
   "license": "MIT",
@@ -14,6 +14,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "pack:release": "node scripts/pack-release.mjs",
     "install:local": "node scripts/install-local.mjs",
     "test": "node test/verify-all.mjs",
     "status": "node host/cli.mjs status",

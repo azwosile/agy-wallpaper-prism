@@ -1,16 +1,19 @@
 /**
- * Realistic Mock Antigravity 2.34.0 Hub + IDE Workbench HTML Generator (`test/mock-hub-template.mjs`)
+ * Realistic Mock Antigravity 2.34.0 / 2.35.1 Hub + IDE Workbench HTML Generator (`test/mock-hub-template.mjs`)
  *
- * Mirrors verified Antigravity 2.34.0 Hub DOM & CSS specificity (`body.dark` / `body.light` at `0,1,1`,
+ * Mirrors verified Antigravity 2.34.0 & 2.35.1 Hub DOM & CSS specificity (`body.dark` / `body.light` at `0,1,1`,
  * inner `#root .dark` token reset, `.browser-hole-opaque` non-browser pane shields, 3-layer Electron
  * `WebContentsView` `[data-browser-hole]` + `data-has-browser-hole="true"` ancestor chain up to `<html>` & `<body>`,
- * `.settings-modal-container` + inner `.dark` & `hover:bg-background` tabs, `[role="menu"]` popovers,
- * `.monaco-workbench` IDE fallback elements, and sibling plugin overlays
- * (`#ag-usage-monitor-capsule`, `#ag-context-meter`, `#gemini-neko-pet-root`)).
+ * 2.35.1 `<div class="shrink-0 bg-sidebar">` wrapper around `[data-testid="title-menu-bar"]` + `P$c` dropdown
+ * `[data-browser-occluder="true"]` + dynamic WCO height simulation, 5 empty/active conversation modes
+ * (`chat` | `empty-en` | `empty-zh` | `empty-mask` | `empty-pseudo`) with `<button><p>...</p></button>` starter cards,
+ * Chinese localization fixtures & upstream `dom-translator.js` simulation, `.settings-modal-container` + inner
+ * `.dark` & `hover:bg-background` tabs, `[role="menu"]` popovers, `.monaco-workbench` IDE fallback elements, and
+ * sibling plugin overlays (`#ag-usage-monitor-capsule`, `#ag-context-meter`, `#gemini-neko-pet-root`)).
  */
 export function buildMockAntigravityHubHtml({
   initialTheme = 'dark',
-  title = 'Antigravity 2.34.0 — agy-wallpaper-prism',
+  title = 'Antigravity 2.35.1 — agy-wallpaper-prism',
   browserHoleActive = false,
 } = {}) {
   const holeAncAttr = browserHoleActive ? ' data-has-browser-hole="true"' : '';
@@ -38,7 +41,7 @@ export function buildMockAntigravityHubHtml({
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Specificity (0,1,1) — exact Antigravity 2.0/2.34.0 Hub cascade */
+    /* Specificity (0,1,1) — exact Antigravity 2.0/2.34.0/2.35.1 Hub cascade */
     body.dark {
       --background: #070708;
       --body-background: #070708;
@@ -85,7 +88,7 @@ export function buildMockAntigravityHubHtml({
       background-color: var(--background);
     }
 
-    /* Antigravity 2.34.0 layout & inner .dark/.light variable reset + .browser-hole-opaque + --shell-canvas */
+    /* Antigravity 2.34.0+ layout & inner .dark/.light variable reset + .browser-hole-opaque + --shell-canvas */
     #root .dark {
       --background: #070708;
       --color-background: #070708;
@@ -120,7 +123,7 @@ export function buildMockAntigravityHubHtml({
       background-color: var(--background);
     }
 
-    /* Antigravity 2.34.0 3-Layer WCV native hole punch-through */
+    /* Antigravity 2.34.0+ 3-Layer WCV native hole punch-through */
     html[data-has-browser-hole="true"],
     body[data-has-browser-hole="true"] {
       --body-background: transparent;
@@ -161,20 +164,37 @@ export function buildMockAntigravityHubHtml({
       background-color: var(--shell);
     }
 
+    /* Antigravity 2.35.1 wrapper <div class="shrink-0 bg-sidebar"> around [data-testid="title-menu-bar"] */
+    #v235-topbar-wrapper {
+      height: 35px;
+      flex-shrink: 0;
+      width: 100%;
+      background-color: var(--sidebar);
+    }
+
     [data-testid="title-menu-bar"] {
-      height: 36px;
+      position: relative;
+      height: 100%;
+      width: 100%;
       flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 14px;
+      padding: 0 10px;
       background-color: var(--sidebar);
       border-bottom: 1px solid var(--border);
       font-size: 12px;
       user-select: none;
     }
 
-    .hub-title-left { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: 0.01em; }
+    .hub-title-left { display: flex; align-items: center; gap: 6px; font-weight: 600; letter-spacing: 0.01em; }
+    .hub-title-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 0.82;
+      margin-right: max(0px, calc(var(--prism-wco-inset-right, 0px) - var(--prism-workspace-pad, 0px)));
+    }
     .hub-badge {
       padding: 2px 8px;
       border-radius: 999px;
@@ -183,6 +203,15 @@ export function buildMockAntigravityHubHtml({
       background: rgba(102, 157, 246, 0.16);
       color: #8ab4f8;
       border: 1px solid rgba(102, 157, 246, 0.32);
+    }
+    .hub-menu-btn {
+      background: transparent;
+      border: none;
+      color: inherit;
+      padding: 2px 7px;
+      font: inherit;
+      font-weight: 500;
+      cursor: pointer;
     }
 
     [data-testid="sidebar-split"] {
@@ -233,6 +262,77 @@ export function buildMockAntigravityHubHtml({
       display: flex;
       flex-direction: column;
       gap: 14px;
+    }
+    [data-testid="conversation-view"][data-mock-mode^="empty-"] {
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    /* Req #1 Empty New-Conversation Greeting, Starter Cards & Pseudo Watermark Fixtures */
+    .mock-empty-hero {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      max-width: 560px;
+      padding: 18px 12px;
+    }
+    .mock-welcome-heading {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.3;
+      text-align: center;
+    }
+    .mock-welcome-pseudo-watermark {
+      position: relative;
+      width: 480px;
+      padding-top: 72px;
+      text-align: center;
+    }
+    .mock-welcome-pseudo-watermark::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.24;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpath d='M48 10L82 84H64L48 48L32 84H14Z' fill='%23ffffff'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: center top;
+      background-size: 96px 96px;
+    }
+    .mock-starter-grid {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 560px;
+    }
+    .mock-starter-card {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      width: 170px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      background: var(--card);
+      color: inherit;
+      font: inherit;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .mock-starter-card p {
+      margin: 0;
+      line-height: 1.35;
     }
 
     .nav-section-label {
@@ -410,21 +510,25 @@ export function buildMockAntigravityHubHtml({
     <div id="v234-root-theme-wrap" class="h-full w-full ${initialTheme}"${holeAncAttr}>
       <div${holeAncAttr}>
         <div class="agy-shell bg-background"${holeAncAttr}>
-          <header data-testid="title-menu-bar">
-            <div class="hub-title-left">
-              <span>◆ Antigravity 2.34.0</span>
-              <span style="opacity:0.45">/</span>
-              <span>agy-wallpaper-prism</span>
-              <span class="hub-badge">Gentle Fail-Open v2.0</span>
-              <button id="hub-title-menu-btn" type="button" data-testid="title-menu-bar-item" style="background:transparent;border:none;color:inherit;padding:2px 8px;font:inherit;cursor:pointer">Workspace</button>
-            </div>
-            <div id="hub-title-menu-dropdown" data-browser-occluder="true" class="surface-opaque bg-sidebar" style="position:absolute;top:100%;left:14px;z-index:8000;width:180px;padding:6px 10px;pointer-events:none;visibility:hidden">Title Menu Dropdown</div>
-            <div id="titlebar-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px;pointer-events:none;opacity:0"></div>
-            <div style="display:flex;align-items:center;gap:12px;opacity:0.75">
-              <span>Swarm · v2.0 Verified</span>
-              <span>Ephemeral Zero-Enable CDP</span>
-            </div>
-          </header>
+          <div id="v235-topbar-wrapper" class="shrink-0 bg-sidebar">
+            <header data-testid="title-menu-bar">
+              <div class="hub-title-left">
+                <span id="hub-brand-label">Antigravity</span>
+                <button id="hub-title-menu-btn" type="button" class="hub-menu-btn" data-testid="title-menu-bar-item">Workspace</button>
+                <button id="hub-title-view-btn" type="button" class="hub-menu-btn" data-testid="title-menu-bar-item">View</button>
+                <button id="hub-title-window-btn" type="button" class="hub-menu-btn" data-testid="title-menu-bar-item">Window</button>
+                <span class="hub-badge">v2.1.0</span>
+              </div>
+              <div id="hub-title-menu-dropdown" data-browser-occluder="true" class="surface-opaque bg-sidebar" style="position:absolute;top:100%;left:14px;z-index:8000;width:200px;padding:6px 8px;pointer-events:none;visibility:hidden">
+                <div id="hub-dropdown-inner-card" style="background-color:rgba(30,32,42,0.96);padding:5px 8px;border-radius:6px">Open Workspace</div>
+              </div>
+              <div id="titlebar-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px;pointer-events:none;opacity:0"></div>
+              <div class="hub-title-right">
+                <span>Swarm · v2.1</span>
+                <span>Zero-Enable CDP</span>
+              </div>
+            </header>
+          </div>
 
           <div data-testid="sidebar-split"${holeAncAttr}>
             <aside class="agy-sidebar bg-sidebar">
@@ -446,7 +550,7 @@ export function buildMockAntigravityHubHtml({
                 <div class="nav-item"><span>antigravity-observer</span></div>
               </div>
               <div>
-                <div class="nav-section-label">Swarm v2.0 Roster</div>
+                <div class="nav-section-label">Swarm v2.1 Roster</div>
                 <div class="nav-item"><span>@coordinator</span><span class="dot-online"></span></div>
                 <div class="nav-item"><span>@resilience-designer</span><span class="dot-online"></span></div>
                 <div class="nav-item"><span>@gentle-skin-architect</span><span class="dot-online"></span></div>
@@ -455,7 +559,7 @@ export function buildMockAntigravityHubHtml({
               </div>
               <div style="margin-top:auto">
                 <div class="nav-section-label">Enabled Plugins</div>
-                <div class="nav-item active"><span>◆ Wallpaper Prism</span><span style="font-size:10.5px;opacity:0.7">v2.0.0</span></div>
+                <div class="nav-item active"><span>◆ Wallpaper Prism</span><span style="font-size:10.5px;opacity:0.7">v2.1.0</span></div>
                 <div class="nav-item"><span>🐾 Gemini Neko</span><span style="font-size:10.5px;opacity:0.7">HUD</span></div>
               </div>
             </aside>
@@ -465,9 +569,9 @@ export function buildMockAntigravityHubHtml({
             <div style="display:flex;flex:1;min-width:0;min-height:0"${holeAncAttr}>
               <div data-testid="aux-pane-split"${holeAncAttr}>
                 <main id="hub-main-pane" class="hub-main-pane browser-hole-opaque">
-                  <section data-testid="conversation-view">
+                  <section data-testid="conversation-view" data-mock-mode="chat">
                     <div class="msg-user bg-card">
-                      Verify <strong>Gentle Fail-Open v2.0</strong> on Antigravity <code>2.34.0</code>: zero-enable CDP, first-frame media gate, and synchronous <code>[data-browser-hole]</code> rounded GPU cutout.
+                      Verify <strong>Gentle Fail-Open v2.1</strong> on Antigravity <code>2.35.1</code>: zero-enable CDP, first-frame media gate, and synchronous <code>[data-browser-hole]</code> rounded GPU cutout.
                     </div>
 
                     <div class="msg-agent">
@@ -475,7 +579,11 @@ export function buildMockAntigravityHubHtml({
                         Active <code>data-agy-prism-wallpaper="ready"</code> with <code>z-index: -1</code> inert stage and synchronous <code>clip-path: path(...)</code> over Built-in Browser <code>clipView (z=0)</code>:
                       </div>
 
-                      <pre class="md-code-block"><code><span class="tok-cm">// Gentle Fail-Open v2.0: decode Frame 1 first, then punch rounded [data-browser-hole]</span>
+                      <svg id="chat-inline-svg" width="64" height="64" viewBox="0 0 64 64" style="display:block;margin:0 auto;opacity:0.4">
+                        <circle cx="32" cy="32" r="24" fill="none" stroke="currentColor" stroke-width="3" />
+                      </svg>
+
+                      <pre class="md-code-block"><code><span class="tok-cm">// Gentle Fail-Open v2.1: decode Frame 1 first, then punch rounded [data-browser-hole]</span>
 <span class="tok-kw">export async function</span> <span class="tok-fn">mountGentlePrismStage</span>(engine, wallpaperId) {
   <span class="tok-kw">const</span> state = <span class="tok-kw">await</span> engine.<span class="tok-fn">applyWallpaper</span>(wallpaperId, {
     startupMode: <span class="tok-str">'gentle-auto'</span>,
@@ -507,7 +615,7 @@ export function buildMockAntigravityHubHtml({
                         <textarea id="hub-composer-input" placeholder="Ask Antigravity or press Ctrl+Alt+W to summon Quick Prism…"></textarea>
                         <div class="agy-composer-footer">
                           <span class="footer-chip">Claude Opus 4.6</span>
-                          <span class="footer-chip">2.34.0 WCV</span>
+                          <span class="footer-chip">2.35.1 WCV</span>
                           <button id="hub-interactive-btn" type="button" class="hub-send-btn" onclick="window.__hubInteractiveClicks=(window.__hubInteractiveClicks||0)+1">Send</button>
                           <span id="hub-voice-live-pill" data-testid="voice-live-pill" class="bg-foreground text-background" title="Start Voice mode" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px">
                             <svg width="12" height="12" viewBox="0 0 12 12"><path fill="currentColor" d="M5 1h2v10H5zM2 4h2v4H2zM8 3h2v6H8z"/></svg>
@@ -522,7 +630,7 @@ export function buildMockAntigravityHubHtml({
                 <div class="split-gutter" title="Resize Aux Pane"></div>
 
                 <div id="hub-aux-pane" class="hub-aux-pane browser-hole-ancestor" data-pane-id="aux-browser-pane" data-testid="sidecar-iframe-slot"${holeAncAttr}>
-                  <!-- Antigravity 2.34.0 3-Layer Built-in Browser Island -->
+                  <!-- Antigravity 2.34.0/2.35.1 3-Layer Built-in Browser Island -->
                   <div id="hub-browser-sheet" class="agy-sheet" data-sheet-inset style="border-radius:12px;overflow:hidden;border:1px solid var(--card-border)"${holeAncAttr}>
                     <div data-testid="builtin-browser-pane"${holeAncAttr}>
                       <div class="browser-toolbar" style="height:40px">
@@ -535,7 +643,7 @@ export function buildMockAntigravityHubHtml({
                   </div>
 
                   <div id="hub-aux-telemetry-card" class="aux-card" style="margin-top:2px">
-                    <div style="font-weight:600">Prism v2.0 Optical Telemetry</div>
+                    <div style="font-weight:600">Prism v2.1 Optical Telemetry</div>
                     <div style="opacity:0.78">Stage: z-index -1 · inert · fail-open</div>
                     <div style="opacity:0.78">Browser Cutout: GPU clip-path (12px arc)</div>
                     <div style="opacity:0.78">Code &amp; Modal Floor: WCAG Locked</div>
@@ -548,7 +656,7 @@ export function buildMockAntigravityHubHtml({
       </div>
     </div>
 
-    <!-- Antigravity 2.34.0 off-screen probes inside #root: inner .dark + [data-side-panel-body] + .browser-hole-opaque + Customizations + aux-pane-split + settings modal + menu -->
+    <!-- Antigravity 2.34.0+ off-screen probes inside #root: inner .dark + [data-side-panel-body] + .browser-hole-opaque + Customizations + aux-pane-split + settings modal + menu -->
     <div id="v234-inner-dark-probe" class="h-full w-full dark" style="position:fixed;left:-9999px;top:0;width:400px;height:300px;pointer-events:none">
       <div class="agy-inset-shell">
         <aside id="v234-side-panel-probe" data-side-panel-body="true" class="bg-sidebar" style="width:220px;height:260px"><div id="v234-side-panel-inner-bg" class="bg-sidebar" style="height:28px">Group</div><div id="v234-drop-sticky-probe" class="bg-sidebar" data-sidebar-section-drop-id="main-section-header" style="height:24px">Projects</div><div id="v234-sidebar-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px"></div></aside>
@@ -583,7 +691,7 @@ export function buildMockAntigravityHubHtml({
       <div id="hub-heat-hint-probe" class="ag-cs-home-heat-hint" style="padding:4px 8px">Heatmap Hint</div>
     </div>
 
-    <!-- Antigravity 2.34.0 Image Preview Lightbox Portal inside #root > div (Issue #4 Bug 3) -->
+    <!-- Antigravity 2.34.0+ Image Preview Lightbox Portal inside #root > div (Issue #4 Bug 3) -->
     <div id="v234-lightbox-portal" style="display:none;position:fixed;inset:0;z-index:5000">
       <div id="v234-modal-backdrop-probe" data-testid="modal-backdrop" class="bg-black/45" style="position:absolute;inset:0;background-color:rgba(0, 0, 0, 0.45)"></div>
       <div id="v234-media-modal-probe" role="dialog" data-testid="media-modal" style="position:absolute;inset:0;display:flex;flex-direction:column;color:#ffffff">
@@ -636,28 +744,285 @@ export function buildMockAntigravityHubHtml({
   <div id="gemini-neko-pet-root" style="position:fixed;right:18px;bottom:16px;z-index:2147482800;padding:6px 10px;border-radius:999px;background:rgba(24,24,34,0.88);border:1px solid rgba(255,255,255,0.14);color:#f5d0fe;font-size:11.5px;pointer-events:none">🐾 Neko HUD</div>
 
   <script>
-    // Mirrors Antigravity 2.34.0 Bqb(doc) ancestor propagation for [data-browser-hole]
-    window.__setMockBrowserHole = function setMockBrowserHole(active) {
-      var hole = document.querySelector('[data-testid="builtin-browser-placeholder"]');
-      if (!hole) return false;
-      var on = Boolean(active);
-      hole.setAttribute('data-browser-hole', on ? 'true' : 'false');
-      document.querySelectorAll('[data-has-browser-hole]').forEach(function (n) {
-        n.removeAttribute('data-has-browser-hole');
-      });
-      document.body.removeAttribute('data-has-three-layer-browser-hole');
-      if (on) {
-        var cur = hole.parentElement;
-        while (cur) {
-          cur.setAttribute('data-has-browser-hole', 'true');
-          cur = cur.parentElement;
-        }
-        document.documentElement.setAttribute('data-has-browser-hole', 'true');
-        document.body.setAttribute('data-has-browser-hole', 'true');
-        document.body.setAttribute('data-has-three-layer-browser-hole', 'true');
+    (function () {
+      var convEl = document.querySelector('#hub-main-pane [data-testid="conversation-view"]');
+      var originalChatHtml = convEl ? convEl.innerHTML : '';
+
+      function buildStarterCardsHtml(zh) {
+        var cards = zh
+          ? [
+              ['重构侧栏毛玻璃', '支持独立组件不透明度与色深微调'],
+              ['检查更新管线', '校验 SHA-256 与安全回滚机制'],
+              ['运行回归测试', '覆盖空对话与多窗口场景'],
+            ]
+          : [
+              ['Refine frosted glass', 'Tune per-component opacity and tone'],
+              ['Verify auto-updater', 'Validate SHA-256 and atomic rollback'],
+              ['Run E2E regressions', 'Cover empty state and localization'],
+            ];
+        return (
+          '<div class="mock-starter-grid">' +
+          cards
+            .map(function (c, idx) {
+              return (
+                '<button id="mock-starter-btn-' + idx + '" type="button" class="mock-starter-card">' +
+                '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="currentColor" opacity="0.55"/></svg>' +
+                '<p style="font-weight:600">' + c[0] + '</p>' +
+                '<p style="opacity:0.72">' + c[1] + '</p>' +
+                '</button>'
+              );
+            })
+            .join('') +
+          '</div>'
+        );
       }
-      return on;
-    };
+
+      // Req #1: 5 Conversation Mode Fixtures ('chat' | 'empty-en' | 'empty-zh' | 'empty-mask' | 'empty-pseudo')
+      window.__setMockConversationMode = function setMockConversationMode(mode) {
+        var conv = document.querySelector('#hub-main-pane [data-testid="conversation-view"]');
+        if (!conv) return '';
+        var next = String(mode || 'chat');
+        conv.setAttribute('data-mock-mode', next);
+        if (next === 'chat') {
+          conv.innerHTML = originalChatHtml;
+          return next;
+        }
+        if (next === 'empty-en') {
+          conv.innerHTML =
+            '<div class="mock-empty-hero">' +
+              '<svg id="mock-welcome-logo-svg" aria-hidden="true" width="96" height="96" viewBox="0 0 96 96" style="pointer-events:none;opacity:0.22;margin-bottom:-22px">' +
+                '<path d="M48 10L82 84H64L48 48L32 84H14Z" fill="currentColor"/>' +
+              '</svg>' +
+              '<h1 id="mock-welcome-heading" class="mock-welcome-heading">Hey bai, what should we build today?</h1>' +
+              buildStarterCardsHtml(false) +
+            '</div>';
+          return next;
+        }
+        if (next === 'empty-zh') {
+          conv.innerHTML =
+            '<div class="mock-empty-hero">' +
+              '<svg id="mock-welcome-logo-svg-zh" aria-hidden="true" width="96" height="96" viewBox="0 0 96 96" style="pointer-events:none;opacity:0.22;margin-bottom:-22px">' +
+                '<path d="M48 10L82 84H64L48 48L32 84H14Z" fill="currentColor"/>' +
+              '</svg>' +
+              '<h1 id="mock-welcome-heading-zh" class="mock-welcome-heading">嘿，白，今天想构建点什么？</h1>' +
+              buildStarterCardsHtml(true) +
+            '</div>';
+          return next;
+        }
+        if (next === 'empty-mask') {
+          var maskUrl = "url(\\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpath d='M48 10L82 84H64L48 48L32 84H14Z' fill='%23000'/%3E%3C/svg%3E\\")";
+          conv.innerHTML =
+            '<div class="mock-empty-hero">' +
+              '<div id="mock-welcome-logo-mask" aria-hidden="true" style="width:104px;height:104px;pointer-events:none;opacity:0.25;background-color:currentColor;-webkit-mask-image:' + maskUrl + ';mask-image:' + maskUrl + ';-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;margin-bottom:-20px"></div>' +
+              '<h1 id="mock-welcome-heading-mask" class="mock-welcome-heading">Welcome back. Where should we pick up?</h1>' +
+              buildStarterCardsHtml(false) +
+            '</div>';
+          return next;
+        }
+        if (next === 'empty-pseudo') {
+          conv.innerHTML =
+            '<div class="mock-empty-hero">' +
+              '<div id="mock-welcome-pseudo-wrap" class="mock-welcome-pseudo-watermark">' +
+                '<h1 id="mock-welcome-heading-pseudo" class="mock-welcome-heading">Good to see you. What&#39;s next?</h1>' +
+              '</div>' +
+              buildStarterCardsHtml(false) +
+            '</div>';
+          return next;
+        }
+        return next;
+      };
+
+      // Req #2: Open/Close P$c topbar dropdown menu ([data-browser-occluder="true"])
+      window.__setMockTopbarDropdownOpen = function setMockTopbarDropdownOpen(open) {
+        var dd = document.getElementById('hub-title-menu-dropdown');
+        if (!dd) return false;
+        var on = Boolean(open);
+        dd.style.visibility = on ? 'visible' : 'hidden';
+        dd.style.pointerEvents = on ? 'auto' : 'none';
+        return on;
+      };
+
+      // Req #2: Dynamic WCO height/rect simulation (wcoH=30/35/40 + geometrychange dispatch)
+      var mockWcoState = { visible: true, x: 0, y: 0, width: 1300, height: 35 };
+      var mockWcoListeners = new Set();
+      window.__setMockWco = function setMockWco(opts) {
+        if (opts && typeof opts === 'object') {
+          if (typeof opts.visible === 'boolean') mockWcoState.visible = opts.visible;
+          if (Number.isFinite(Number(opts.x))) mockWcoState.x = Number(opts.x);
+          if (Number.isFinite(Number(opts.y))) mockWcoState.y = Number(opts.y);
+          if (Number.isFinite(Number(opts.width))) mockWcoState.width = Number(opts.width);
+          if (Number.isFinite(Number(opts.height))) mockWcoState.height = Number(opts.height);
+        }
+        if (!navigator.windowControlsOverlay || !navigator.windowControlsOverlay.__isMockMutable) {
+          Object.defineProperty(navigator, 'windowControlsOverlay', {
+            configurable: true,
+            value: {
+              __isMockMutable: true,
+              get visible() {
+                return mockWcoState.visible;
+              },
+              getTitlebarAreaRect: function () {
+                return {
+                  x: mockWcoState.x,
+                  y: mockWcoState.y,
+                  width: mockWcoState.width,
+                  height: mockWcoState.height,
+                  left: mockWcoState.x,
+                  top: mockWcoState.y,
+                  right: mockWcoState.x + mockWcoState.width,
+                  bottom: mockWcoState.y + mockWcoState.height,
+                };
+              },
+              addEventListener: function (type, fn) {
+                if (type === 'geometrychange' && typeof fn === 'function') mockWcoListeners.add(fn);
+              },
+              removeEventListener: function (type, fn) {
+                if (type === 'geometrychange') mockWcoListeners.delete(fn);
+              },
+            },
+          });
+        }
+        mockWcoListeners.forEach(function (fn) {
+          try {
+            fn({ type: 'geometrychange' });
+          } catch (_) {}
+        });
+        return {
+          visible: mockWcoState.visible,
+          x: mockWcoState.x,
+          width: mockWcoState.width,
+          height: mockWcoState.height,
+        };
+      };
+      // Pre-install mutable WCO shim before wallpaper-inject.js binds geometrychange
+      window.__setMockWco(mockWcoState);
+
+      // Req #6: Toggle bilingual topbar/sidebar labels (Antigravity / 工作区 / 视图 / 窗口)
+      window.__setMockLocale = function setMockLocale(locale) {
+        var zh = String(locale || '').toLowerCase().indexOf('zh') === 0;
+        var ws = document.getElementById('hub-title-menu-btn');
+        var vw = document.getElementById('hub-title-view-btn');
+        var wn = document.getElementById('hub-title-window-btn');
+        var proj = document.getElementById('hub-sidebar-sticky-inner');
+        var input = document.getElementById('hub-composer-input');
+        if (ws) ws.textContent = zh ? '工作区' : 'Workspace';
+        if (vw) vw.textContent = zh ? '视图' : 'View';
+        if (wn) wn.textContent = zh ? '窗口' : 'Window';
+        if (proj) proj.textContent = zh ? '项目' : 'Projects';
+        if (input) {
+          input.setAttribute(
+            'placeholder',
+            zh
+              ? '输入任何问题，输入 @ 提及，/ 触发操作'
+              : 'Ask Antigravity or press Ctrl+Alt+W to summon Quick Prism…'
+          );
+        }
+        return zh ? 'zh' : 'en';
+      };
+
+      // Req #6: Faithful upstream Antigravity-Chinese-Localization dom-translator.js simulation:
+      //   1) Short-circuits immediately when window.__agyDomTranslatorInitialized === true
+      //   2) Uses exact upstream codeClassPattern + while (cur && cur !== document.body) loop
+      //      (intentionally ignores body.className, translate="no", data-no-translate, data-ag-no-i18n)
+      window.__runMockDomTranslator = function runMockDomTranslator(opts) {
+        var ignoreInitGuard = Boolean(opts && opts.ignoreInitGuard);
+        if (!ignoreInitGuard && window.__agyDomTranslatorInitialized) {
+          return { skippedInit: true, translatedCount: 0, touchedPrismIds: [] };
+        }
+        var codeClassPattern =
+          /(?:^|[\\s_-])(monaco-editor|editor-instance|hljs|shiki|prism|codemirror|line-content|gutter|codeblock|code-block|code-line|view-line|xterm|xterm-rows|xterm-screen|xterm-accessibility)(?:$|[\\s_-])/i;
+        var dict = {
+          Workspace: '工作区',
+          View: '视图',
+          Window: '窗口',
+          Projects: '项目',
+          Previous: '上一步',
+          Pause: '暂停',
+          Next: '下一步',
+          Status: '状态',
+          Disabled: '已禁用',
+          Cancel: '取消',
+          Connected: '已连接',
+          'Close (Esc)': '关闭 (Esc)',
+          LAYOUT: '布局',
+          Active: '活跃',
+          Local: '本地',
+          All: '全部',
+          None: '无',
+          'Start Voice mode': '开启语音模式',
+          'Hey bai, what should we build today?': '嘿，bai，今天想构建点什么？',
+        };
+        function shouldSkipNode(node) {
+          var cur = node && node.nodeType === 1 ? node : node && node.parentElement;
+          while (cur && cur !== document.body) {
+            if (codeClassPattern.test(String(cur.className || ''))) return true;
+            cur = cur.parentElement;
+          }
+          return false;
+        }
+        var translatedCount = 0;
+        var touchedPrismIds = [];
+        var markTouched = function (el) {
+          if (!el || !el.closest) return;
+          var pNode = el.closest('[id^="agy-prism-"], #app');
+          if (pNode && pNode.id && touchedPrismIds.indexOf(pNode.id) < 0) {
+            touchedPrismIds.push(pNode.id);
+          }
+        };
+        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+        var curNode;
+        while ((curNode = walker.nextNode())) {
+          if (shouldSkipNode(curNode)) continue;
+          if (curNode.nodeType === 3) {
+            var raw = String(curNode.nodeValue || '');
+            var trimmed = raw.trim();
+            if (trimmed && Object.prototype.hasOwnProperty.call(dict, trimmed)) {
+              curNode.nodeValue = raw.replace(trimmed, dict[trimmed]);
+              translatedCount += 1;
+              markTouched(curNode.parentElement);
+            }
+          } else if (curNode.nodeType === 1) {
+            ['title', 'placeholder', 'aria-label'].forEach(function (attr) {
+              var val = curNode.getAttribute(attr);
+              if (!val) return;
+              if (Object.prototype.hasOwnProperty.call(dict, val.trim())) {
+                curNode.setAttribute(attr, dict[val.trim()]);
+                translatedCount += 1;
+                markTouched(curNode);
+              } else if (curNode.id && curNode.id.indexOf('agy-prism-') === 0 && /Panel|Enable|Disable|Status/i.test(val)) {
+                curNode.setAttribute(attr, val.replace(/Panel/gi, '面板'));
+                translatedCount += 1;
+                markTouched(curNode);
+              }
+            });
+          }
+        }
+        return { skippedInit: false, translatedCount: translatedCount, touchedPrismIds: touchedPrismIds };
+      };
+
+      // Mirrors Antigravity 2.34.0+ Bqb(doc) ancestor propagation for [data-browser-hole]
+      window.__setMockBrowserHole = function setMockBrowserHole(active) {
+        var hole = document.querySelector('[data-testid="builtin-browser-placeholder"]');
+        if (!hole) return false;
+        var on = Boolean(active);
+        hole.setAttribute('data-browser-hole', on ? 'true' : 'false');
+        document.querySelectorAll('[data-has-browser-hole]').forEach(function (n) {
+          n.removeAttribute('data-has-browser-hole');
+        });
+        document.body.removeAttribute('data-has-three-layer-browser-hole');
+        if (on) {
+          var cur = hole.parentElement;
+          while (cur) {
+            cur.setAttribute('data-has-browser-hole', 'true');
+            cur = cur.parentElement;
+          }
+          document.documentElement.setAttribute('data-has-browser-hole', 'true');
+          document.body.setAttribute('data-has-browser-hole', 'true');
+          document.body.setAttribute('data-has-three-layer-browser-hole', 'true');
+        }
+        return on;
+      };
+    })();
   </script>
 </body>
 </html>`;

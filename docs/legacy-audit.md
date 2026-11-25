@@ -5,6 +5,9 @@
 > **Date**: 2026-11-22  
 > **Scope**: Runtime cleanup audit of `agy-plugin-wallpaper-engine`, Language Server plugin collision check, official Antigravity plugin/sidecar/hook/MCP contracts, Hub/Workbench DOM & CSS realities, comparative host-injection analysis (`agy-plugin-wallpaper-engine` vs. `antigravity-observer`), and recommended target architecture.
 
+> [!NOTE]
+> **Historical Pre-v2.0 Audit Snapshot (`2026-11-22`, Archived — Superseded by `v2.1.0`)** — Preserved as pre-v2.0 forensic history of legacy `agy-plugin-wallpaper-engine` retirement and Antigravity 2.0 host discovery; historical forensics below are intentionally unmodified. Several recommendations in `§3.2` / `§3.4` / `§5` were **superseded by `v2.0`–`v2.1.0` engineering redlines** (see [`docs/AI_HANDOFF.md`](./AI_HANDOFF.md)): current `v2.1.0` enforces `restart_policy: "on-failure"` (not `"always"`), Zero-Enable Ephemeral CDP (banning `Runtime.addBinding` and `Page.addScriptToEvaluateOnNewDocument`), `#agy-prism-stage` at `z-index: -1` & `#agy-prism-popover` (not `#agy-prism-layer` / `#agy-prism-panel` or banned `[class*="bg-background"]`), `ANTIGRAVITY_EXECUTABLE_DATA_DIR/config.json` (no `prefs.json`), and Zero Session Disruption (no `"Relaunch Antigravity with CDP Now"` action).
+
 ---
 
 ## 1. Legacy Runtime State & Cleanup Audit

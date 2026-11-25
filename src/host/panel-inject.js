@@ -1,4 +1,4 @@
-// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.0.7).
+// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.1.0).
 //
 // Self-contained ES2020 browser IIFE injected over CDP alongside `wallpaper-inject.js`.
 // Strictly isolated inside `#agy-prism-popover` (`all: initial; position: fixed; z-index: 45`)
@@ -9,7 +9,7 @@
 (function agyPrismPanelMain() {
   'use strict';
 
-  var VERSION = '2.0.8';
+  var VERSION = '2.1.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   try {
@@ -57,6 +57,8 @@
     borders: 'on',
     shadows: true,
     transparentWindowControls: true,
+    topbarStyle: 'pills',
+    hideWelcomeLogo: false,
     themeMode: 'auto',
     colorScheme: 'prism-default',
     accentMode: 'dynamic',
@@ -66,14 +68,23 @@
     glassBlur: 16,
     sidebarOpacity: null,
     sidebarBlur: null,
+    surfaceTints: null,
+    glassFidelity: 92,
+    chatGlassFidelity: 90,
+    contrastFloor: true,
+    floaterSolidBase: true,
     scrimOpacity: 0.26,
     vignette: true,
+    grainAlpha: 0.022,
     codeReadabilityMode: 'translucent',
     mediaBlur: 0,
     paused: false,
     muted: true,
     audioEnabled: false,
     volume: 0.5,
+    fpsCap: 0,
+    fxEnabled: false,
+    parallaxEnabled: false,
     rotationEnabled: false,
     pauseOnHidden: true,
     pauseOnBlur: false,
@@ -81,58 +92,122 @@
     language: 'zh',
   };
 
+  var SURFACE_TINT_COMPONENTS = ['topbar', 'sidebar', 'workspace', 'rightPane', 'composer', 'card', 'popover'];
+  var SURFACE_TINT_BOUNDS = {
+    topbar: { min: 0, max: 0.98 },
+    sidebar: { min: 0, max: 0.98 },
+    workspace: { min: 0, max: 0.98 },
+    rightPane: { min: 0, max: 0.98 },
+    composer: { min: 0, max: 0.98 },
+    card: { min: 0, max: 0.98 },
+    popover: { min: 0.5, max: 0.99 },
+  };
+  var PER_WALLPAPER_OVERRIDE_KEY_MAP = {
+    layoutMode: 1,
+    colorScheme: 1,
+    accentMode: 1,
+    customAccent: 1,
+    glassOpacity: 1,
+    glassBlur: 1,
+    sidebarOpacity: 1,
+    sidebarBlur: 1,
+    surfaceTints: 1,
+    scrimOpacity: 1,
+    mediaOpacity: 1,
+    mediaBlur: 1,
+    mediaBrightness: 1,
+    mediaContrast: 1,
+    mediaSaturate: 1,
+    grainAlpha: 1,
+    vignette: 1,
+    fit: 1,
+    flip: 1,
+    layerPosX: 1,
+    layerPosY: 1,
+    layerScale: 1,
+    playbackRate: 1,
+    volume: 1,
+    muted: 1,
+  };
+
   var SCENE_PRESETS = {
     crystal: {
-      layoutMode: 'islands',
-      islandGap: 8,
+      preset: 'crystal',
+      borders: 'on',
+      shadows: true,
       glassSurfaces: true,
       glassOpacity: 0.64,
       glassBlur: 18,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
+      glassFidelity: 82,
+      chatGlassFidelity: 78,
       scrimOpacity: 0.18,
       mediaBlur: 0,
       vignette: true,
+      grainAlpha: 0.018,
       paused: false,
+      fpsCap: 60,
     },
     islands: {
-      layoutMode: 'islands',
-      islandGap: 8,
+      preset: 'islands',
+      borders: 'on',
+      shadows: true,
       glassSurfaces: true,
       glassOpacity: 0.76,
       glassBlur: 16,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
+      glassFidelity: 92,
+      chatGlassFidelity: 90,
       scrimOpacity: 0.26,
       mediaBlur: 0,
       vignette: true,
+      grainAlpha: 0.022,
       paused: false,
+      fpsCap: 60,
     },
     focus: {
-      layoutMode: 'flush',
-      islandGap: 0,
+      preset: 'focus',
+      borders: 'subtle',
+      shadows: false,
       glassSurfaces: true,
       glassOpacity: 0.88,
       glassBlur: 20,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
+      glassFidelity: 100,
+      chatGlassFidelity: 100,
       scrimOpacity: 0.42,
       mediaBlur: 8,
       vignette: true,
+      grainAlpha: 0.012,
       paused: false,
+      fpsCap: 60,
     },
     eco: {
-      layoutMode: 'flush',
-      islandGap: 0,
+      preset: 'eco',
+      borders: 'subtle',
+      shadows: false,
       glassSurfaces: false,
       glassOpacity: 0.94,
       glassBlur: 0,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
+      glassFidelity: 100,
+      chatGlassFidelity: 100,
       scrimOpacity: 0.34,
       mediaBlur: 0,
       vignette: false,
+      grainAlpha: 0,
       paused: true,
+      fxEnabled: false,
+      parallaxEnabled: false,
+      fpsCap: 30,
     },
   };
 
@@ -216,8 +291,21 @@
       resetTip: '重置为默认值',
       sw_glass: '毛玻璃磨砂界面',
       sw_wco: '右上角窗口按钮透明',
+      sw_hideWelcomeLogo: '隐藏新对话中央图标',
       sw_vignette: '中央阅读暗角保护',
       sw_pauseBlur: '窗口失焦时自动暂停',
+      topbarLabel: '顶栏毛玻璃形态',
+      topbar_pills: '文字胶囊 Pills',
+      topbar_bar: '整条通栏 Bar',
+      compTitle: '各组件玻璃深浅精调',
+      compResetAll: '重置全部组件',
+      comp_topbar: '顶部标题栏与胶囊',
+      comp_sidebar: '左侧边栏与项目导航',
+      comp_workspace: '主对话与工作区',
+      comp_rightPane: '右侧辅助面板',
+      comp_composer: '底部对话输入框',
+      comp_card: '消息气泡与卡片',
+      comp_popover: '浮窗菜单与快捷面板',
       codeLabel: '代码/终端底板',
       code_translucent: '通透',
       code_frosted: '磨砂',
@@ -229,6 +317,10 @@
       st_none: '未选择',
       st_theme: '当前明暗 / 配色',
       st_rpc: '宿主桥接通道',
+      st_version: '版本',
+      st_updateAvail: '有更新',
+      updateTip: '发现新版本 v{v}，点击打开完整工作台一键更新',
+      updateToast: '发现新版本 v{v}，请打开完整 Prism 工作台一键更新',
       btnRefresh: '刷新状态',
       btnResetSkin: '重置外观参数',
       btnReapply: '重新启用棱镜皮肤',
@@ -293,8 +385,21 @@
       resetTip: 'Reset to default',
       sw_glass: 'Frosted Glass Surfaces',
       sw_wco: 'Transparent Window Buttons',
+      sw_hideWelcomeLogo: 'Hide New-Chat Watermark Logo',
       sw_vignette: 'Central Reading Vignette',
       sw_pauseBlur: 'Auto-Pause When Unfocused',
+      topbarLabel: 'Topbar Glass Style',
+      topbar_pills: 'Text Pills',
+      topbar_bar: 'Full Bar',
+      compTitle: 'Component Glass Depth',
+      compResetAll: 'Reset All Components',
+      comp_topbar: 'Topbar & WCO Pills',
+      comp_sidebar: 'Left Sidebar & Projects',
+      comp_workspace: 'Chat & Main Workspace',
+      comp_rightPane: 'Right Side / Aux Pane',
+      comp_composer: 'Input Composer Box',
+      comp_card: 'Message Bubbles & Cards',
+      comp_popover: 'Popovers & Quick Prism',
       codeLabel: 'Code & Terminal Backing',
       code_translucent: 'Tint',
       code_frosted: 'Frost',
@@ -306,6 +411,10 @@
       st_none: 'None',
       st_theme: 'Polarity / Scheme',
       st_rpc: 'CDP Host Bridge',
+      st_version: 'Version',
+      st_updateAvail: 'Update',
+      updateTip: 'Update v{v} available — open Full Studio to update',
+      updateToast: 'Update v{v} available — open Full Prism Studio to update in one click',
       btnRefresh: 'Refresh',
       btnResetSkin: 'Reset Optics',
       btnReapply: 'Re-enable Prism Skin',
@@ -365,6 +474,7 @@
     items: [],
     connected: false,
     theme: 'dark',
+    updateStatus: null,
   };
 
   if (carry && typeof carry === 'object') {
@@ -376,6 +486,7 @@
       if (carry.store.activeItem) store.activeItem = carry.store.activeItem;
       if (Array.isArray(carry.store.items)) store.items = carry.store.items;
       if (typeof carry.store.skinEnabled === 'boolean') store.skinEnabled = carry.store.skinEnabled;
+      if (carry.store.updateStatus && typeof carry.store.updateStatus === 'object') store.updateStatus = carry.store.updateStatus;
     }
   }
 
@@ -385,6 +496,8 @@
   var restoreTimer = 0;
   var patchQueue = {};
   var patchTimer = 0;
+  var lastPatchFlushAt = 0;
+  var patchFlushSeq = 0;
   var searchTimer = 0;
   var toastTimer = 0;
   var lastFocus = null;
@@ -392,6 +505,7 @@
   var rpcPending = {};
   var els = {};
   var sliderRefs = {};
+  var compSliderRefs = {};
   var cleanups = [];
   var domObserver = null;
   var themeObserver = null;
@@ -399,6 +513,26 @@
 
   function clamp(v, lo, hi) {
     return Math.min(hi, Math.max(lo, v));
+  }
+  function clearLazyKeepAlive() {
+    try {
+      if (W.__agyPrismKt) {
+        clearInterval(W.__agyPrismKt);
+        W.__agyPrismKt = 0;
+      }
+    } catch (_) {}
+  }
+  function normalizeUpdateInfo(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var hasUpd = Boolean(raw.updateAvailable || raw.hasUpdate);
+    var latest = String(raw.latestVersion || raw.latest || '').replace(/^v/i, '').trim();
+    var releaseUrl = typeof raw.releaseUrl === 'string' && /^https:\/\//i.test(raw.releaseUrl) ? raw.releaseUrl : '';
+    return {
+      updateAvailable: hasUpd,
+      hasUpdate: hasUpd,
+      latestVersion: latest,
+      releaseUrl: releaseUrl,
+    };
   }
   function hasBinding() {
     return typeof W[BINDING_KEY] === 'function';
@@ -414,10 +548,162 @@
     var lang = getLang();
     return (COPY[lang] && COPY[lang][key]) || COPY.zh[key] || key;
   }
+  function getActiveWallpaperId() {
+    var fromItem = store.activeItem && store.activeItem.id ? String(store.activeItem.id) : '';
+    if (fromItem) return fromItem;
+    if (store.config && typeof store.config === 'object') {
+      var fromCfg = String(store.config.activeWallpaperId || store.config.wallpaperId || '');
+      if (fromCfg) return fromCfg;
+    }
+    return '';
+  }
+  function getActiveOverride() {
+    var wid = getActiveWallpaperId();
+    var map = store.config && store.config.perWallpaperOverrides;
+    if (!wid || !map || typeof map !== 'object' || Array.isArray(map)) return null;
+    var ov = map[wid];
+    return ov && typeof ov === 'object' && !Array.isArray(ov) ? ov : null;
+  }
+  function parseNullableOp(v) {
+    if (v === null || v === undefined || v === '' || v === 'auto') return null;
+    var n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    if (n >= 2) n = n / 100;
+    return n;
+  }
+  function resolveCompOpFromLayer(layer, compId) {
+    if (!layer || typeof layer !== 'object') return { found: false, value: null };
+    var hasSt = Object.prototype.hasOwnProperty.call(layer, 'surfaceTints');
+    var st = hasSt ? layer.surfaceTints : undefined;
+    var hasSb = compId === 'sidebar' && Object.prototype.hasOwnProperty.call(layer, 'sidebarOpacity');
+    var sbVal = hasSb ? parseNullableOp(layer.sidebarOpacity) : null;
+
+    var stResetAll = hasSt && st === null;
+    var stHasComp =
+      hasSt &&
+      st &&
+      typeof st === 'object' &&
+      !Array.isArray(st) &&
+      Object.prototype.hasOwnProperty.call(st, compId);
+    var stCompVal = stHasComp ? st[compId] : undefined;
+    var stTouchedComp =
+      stResetAll ||
+      (stHasComp && stCompVal === null) ||
+      (stHasComp && stCompVal && typeof stCompVal === 'object' && Object.prototype.hasOwnProperty.call(stCompVal, 'opacity'));
+    var stOp =
+      stResetAll || (stHasComp && stCompVal === null)
+        ? null
+        : stHasComp && stCompVal && typeof stCompVal === 'object'
+          ? parseNullableOp(stCompVal.opacity)
+          : null;
+
+    if (compId !== 'sidebar') {
+      return stTouchedComp ? { found: true, value: stOp } : { found: false, value: null };
+    }
+    if (stTouchedComp && !hasSb) return { found: true, value: stOp };
+    if (hasSb && !stTouchedComp) return { found: true, value: sbVal };
+    if (stTouchedComp && hasSb) {
+      if (stResetAll && sbVal !== null) return { found: true, value: sbVal };
+      return { found: true, value: stOp };
+    }
+    return { found: false, value: null };
+  }
   function cfgVal(key) {
+    if (key === 'sidebarOpacity') return readComponentOpacity('sidebar');
     if (Object.prototype.hasOwnProperty.call(patchQueue, key)) return patchQueue[key];
+    if (PER_WALLPAPER_OVERRIDE_KEY_MAP[key]) {
+      var ov = getActiveOverride();
+      if (ov && Object.prototype.hasOwnProperty.call(ov, key) && ov[key] !== undefined) {
+        return ov[key];
+      }
+    }
     if (store.config && store.config[key] !== undefined) return store.config[key];
     return DEFAULTS[key];
+  }
+  function mergeSurfaceTintsObj(baseObj, incoming) {
+    if (incoming === null) return null;
+    var out = {};
+    if (baseObj && typeof baseObj === 'object' && !Array.isArray(baseObj)) {
+      for (var bk in baseObj) {
+        if (!Object.prototype.hasOwnProperty.call(baseObj, bk)) continue;
+        var bv = baseObj[bk];
+        out[bk] = bv && typeof bv === 'object' ? Object.assign({}, bv) : bv;
+      }
+    }
+    if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+      for (var ik in incoming) {
+        if (!Object.prototype.hasOwnProperty.call(incoming, ik)) continue;
+        var iv = incoming[ik];
+        if (iv === null) {
+          out[ik] = { opacity: null, tone: 0, tint: '' };
+        } else if (iv && typeof iv === 'object') {
+          out[ik] = Object.assign({}, out[ik] && typeof out[ik] === 'object' ? out[ik] : {}, iv);
+        }
+      }
+    }
+    return out;
+  }
+  function readComponentOpacity(compId) {
+    var r1 = resolveCompOpFromLayer(patchQueue, compId);
+    if (r1.found) return r1.value;
+    var r2 = resolveCompOpFromLayer(getActiveOverride(), compId);
+    if (r2.found) return r2.value;
+    var r3 = resolveCompOpFromLayer(store.config, compId);
+    if (r3.found) return r3.value;
+    return null;
+  }
+  function resolveComponentDefaultAlpha(comp, cfg, isLight) {
+    var c = cfg && typeof cfg === 'object' ? cfg : {};
+    var light = typeof isLight === 'string' ? isLight === 'light' : Boolean(isLight);
+    if (comp === 'popover') {
+      return c.floaterSolidBase !== false ? (light ? 0.97 : 0.96) : 0.94;
+    }
+    if (c.glassSurfaces === false) return 1;
+    var gRaw = Number(c.glassOpacity !== undefined ? c.glassOpacity : DEFAULTS.glassOpacity);
+    var g = clamp(Number.isFinite(gRaw) ? gRaw : DEFAULTS.glassOpacity, 0.15, 0.98);
+    var gfRaw = Number(c.glassFidelity !== undefined ? c.glassFidelity : DEFAULTS.glassFidelity);
+    var gf = clamp(Number.isFinite(gfRaw) ? (gfRaw > 0 && gfRaw < 1 ? gfRaw : gfRaw / 100) : 0.92, 0, 1);
+    var cgfRaw = Number(c.chatGlassFidelity !== undefined ? c.chatGlassFidelity : DEFAULTS.chatGlassFidelity);
+    var cgf = clamp(Number.isFinite(cgfRaw) ? (cgfRaw > 0 && cgfRaw < 1 ? cgfRaw : cgfRaw / 100) : 0.90, 0, 1);
+    var contrastFloor = c.contrastFloor !== false;
+    var layoutMode = c.layoutMode === 'flush' ? 'flush' : 'islands';
+
+    var alpha;
+    if (comp === 'topbar' || comp === 'sidebar') {
+      var minSbFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
+      alpha = Math.max(g, minSbFloor * gf);
+    } else if (comp === 'workspace' || comp === 'rightPane') {
+      var rawChatA =
+        layoutMode === 'flush' && !light
+          ? clamp(g * 0.24, 0, 0.82)
+          : light
+            ? clamp(g * 0.62, 0.28, 0.92)
+            : clamp(g * 0.42, 0.08, 0.88);
+      var minChatFloor = light ? 0.42 : 0.16;
+      alpha = Math.max(rawChatA, minChatFloor * cgf);
+    } else if (comp === 'composer') {
+      var rawCompA = light ? clamp(g * 0.94, 0.65, 0.99) : clamp(g * 0.92, 0.48, 0.98);
+      var minCompFloor = light ? 0.72 : 0.58;
+      alpha = Math.max(rawCompA, minCompFloor * gf);
+    } else if (comp === 'card') {
+      var rawCardA = light ? clamp(g * 0.86, 0.5, 0.98) : clamp(g * 0.78, 0.32, 0.96);
+      var minCardFloor = light ? 0.62 : 0.48;
+      alpha = Math.max(rawCardA, minCardFloor * gf);
+    } else {
+      alpha = g;
+    }
+    return Math.round(clamp(alpha, 0, 0.99) * 1000) / 1000;
+  }
+  function effectiveOpticsCfg() {
+    return {
+      glassOpacity: cfgVal('glassOpacity'),
+      glassSurfaces: cfgVal('glassSurfaces'),
+      layoutMode: cfgVal('layoutMode'),
+      glassFidelity: cfgVal('glassFidelity'),
+      chatGlassFidelity: cfgVal('chatGlassFidelity'),
+      contrastFloor: cfgVal('contrastFloor'),
+      floaterSolidBase: cfgVal('floaterSolidBase'),
+    };
   }
 
   function h(tag, props, children) {
@@ -462,12 +748,12 @@
     "--pp-font:'Google Sans Flex','Google Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC','PingFang SC','Microsoft YaHei UI',sans-serif;",
     "--pp-mono:'Google Sans Code','JetBrains Mono','Cascadia Code',Consolas,ui-monospace,monospace;",
     '--pp-accent:#669DF6;--pp-accent-fg:#FFFFFF;--pp-r-sheet:14px;--pp-r-card:10px;--pp-r-ctl:7px;--pp-ease:cubic-bezier(.22,1,.36,1);',
-    '--pp-bg:rgba(20,20,26,.84);--pp-bg-solid:rgba(20,20,26,.97);--pp-fg:#F2F2F5;--pp-fg2:#C4C4CE;--pp-muted:#8A8A98;--pp-faint:#626270;',
+    '--pp-bg:var(--prism-surface-quick-panel, rgba(20,20,26,.72));--pp-bg-solid:var(--prism-surface-popover, rgba(20,20,26,.97));--pp-fg:#F2F2F5;--pp-fg2:#C4C4CE;--pp-muted:#8A8A98;--pp-faint:#626270;',
     '--pp-border:rgba(255,255,255,.09);--pp-border2:rgba(255,255,255,.15);--pp-fill:rgba(255,255,255,.045);--pp-fill2:rgba(255,255,255,.085);',
     '--pp-hover:rgba(255,255,255,.07);--pp-track:rgba(255,255,255,.14);--pp-spec:rgba(255,255,255,.08);',
     '--pp-sheen:linear-gradient(172deg,rgba(255,255,255,.045) 0%,rgba(255,255,255,0) 38%);',
     '--pp-shadow:0 28px 64px -14px rgba(0,0,0,.64),0 2px 8px rgba(0,0,0,.30);--pp-ok:#50A37B;--pp-warn:#F2B84B;--pp-danger:#E5534B;}',
-    '#R[data-theme="light"]{--pp-accent:#2563EB;--pp-bg:rgba(250,251,254,.88);--pp-bg-solid:rgba(252,253,255,.98);--pp-fg:#0F172A;--pp-fg2:#334155;--pp-muted:#5B6B82;--pp-faint:#94A3B8;',
+    '#R[data-theme="light"]{--pp-accent:#2563EB;--pp-bg:var(--prism-surface-quick-panel, rgba(250,251,254,.78));--pp-bg-solid:var(--prism-surface-popover, rgba(252,253,255,.98));--pp-fg:#0F172A;--pp-fg2:#334155;--pp-muted:#5B6B82;--pp-faint:#94A3B8;',
     '--pp-border:rgba(15,23,42,.10);--pp-border2:rgba(15,23,42,.16);--pp-fill:rgba(15,23,42,.038);--pp-fill2:rgba(15,23,42,.072);',
     '--pp-hover:rgba(15,23,42,.06);--pp-track:rgba(15,23,42,.14);--pp-spec:rgba(255,255,255,.92);',
     '--pp-sheen:linear-gradient(172deg,rgba(255,255,255,.72) 0%,rgba(255,255,255,0) 40%);',
@@ -479,7 +765,7 @@
     // Corner Glass Orb
     '#R .prism-corner-orb{position:fixed;left:12px;bottom:12px;width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;pointer-events:auto;cursor:pointer;',
     'border-radius:999px;border:1px solid var(--pp-border2);color:var(--pp-fg2);background-color:var(--pp-bg);background-image:var(--pp-sheen);',
-    'backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);box-shadow:inset 0 1px 0 var(--pp-spec),0 6px 18px -6px rgba(0,0,0,.45);',
+    'backdrop-filter:var(--prism-chrome-chip-backdrop, blur(10px) saturate(110%));-webkit-backdrop-filter:var(--prism-chrome-chip-backdrop, blur(10px) saturate(110%));box-shadow:inset 0 1px 0 var(--pp-spec),0 6px 18px -6px rgba(0,0,0,.45);',
     'opacity:.48;transition:opacity .16s ease,transform .16s var(--pp-ease),color .16s ease;}',
     '#R .prism-corner-orb:hover,#R[data-open="true"] .prism-corner-orb{opacity:1;color:var(--pp-accent);transform:translateY(-1px);}',
     '#R .prism-corner-orb i{position:absolute;right:0;top:0;width:7px;height:7px;border-radius:50%;background:var(--pp-faint);box-shadow:0 0 0 2px var(--pp-bg-solid);transition:background .15s ease,border-color .15s ease;}',
@@ -488,7 +774,7 @@
     // Main Floating Sheet (384 x max 560px)
     '#R .prism-sheet{position:fixed;left:12px;bottom:48px;width:384px;max-width:calc(100vw - 16px);max-height:560px;display:flex;flex-direction:column;pointer-events:auto;',
     'color:var(--pp-fg);font-size:12.5px;line-height:1.45;-webkit-font-smoothing:antialiased;border-radius:var(--pp-r-sheet);border:1px solid var(--pp-border2);',
-    'background-color:var(--pp-bg) !important;background-image:var(--pp-sheen);backdrop-filter:blur(26px) saturate(155%) !important;-webkit-backdrop-filter:blur(26px) saturate(155%) !important;',
+    'background-color:var(--pp-bg) !important;background-image:var(--pp-sheen);backdrop-filter:var(--prism-popover-backdrop, blur(22px) saturate(145%)) !important;-webkit-backdrop-filter:var(--prism-popover-backdrop, blur(22px) saturate(145%)) !important;',
     'box-shadow:inset 0 1px 0 var(--pp-spec),var(--pp-shadow);overflow:hidden;opacity:0;visibility:hidden;transform:translateY(8px) scale(.985);',
     'transition:opacity .16s ease,transform .18s var(--pp-ease),visibility 0s linear .18s;}',
     '#R[data-open="true"] .prism-sheet{opacity:1;visibility:visible;transform:none;transition:opacity .16s ease,transform .18s var(--pp-ease),visibility 0s;}',
@@ -508,8 +794,11 @@
     '#R .pp-power-btn[aria-checked="true"]:hover{background:color-mix(in srgb,var(--pp-ok) 24%,transparent);border-color:var(--pp-ok);}',
     '#R .pp-power-btn[aria-checked="true"] i{background:var(--pp-ok);border-color:var(--pp-ok);box-shadow:0 0 6px var(--pp-ok);}',
     '#R .pp-grow{flex:1;min-width:2px;}',
-    '#R .pp-ibtn{width:23px;height:23px;padding:0;border:none;border-radius:6px;background:transparent;color:var(--pp-fg2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .12s,color .12s;}',
+    '#R .pp-ibtn{position:relative;width:23px;height:23px;padding:0;border:none;border-radius:6px;background:transparent;color:var(--pp-fg2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .12s,color .12s;}',
     '#R .pp-ibtn:hover{background:var(--pp-hover);color:var(--pp-fg);}',
+    '#R .pp-upd-dot{position:absolute;right:2px;top:2px;width:6px;height:6px;border-radius:50%;background:var(--pp-warn);box-shadow:0 0 0 1.5px var(--pp-bg-solid),0 0 8px var(--pp-warn);pointer-events:none;}',
+    '#R .pp-ver-link{color:var(--pp-accent);text-decoration:none;font-weight:600;}',
+    '#R .pp-ver-link:hover{text-decoration:underline;}',
     '#R .pp-lang{height:21px;padding:0 6px;border-radius:5px;border:1px solid var(--pp-border);background:var(--pp-fill);color:var(--pp-fg2);font-family:var(--pp-mono);font-size:10px;font-weight:600;cursor:pointer;}',
     '#R .pp-lang:hover{color:var(--pp-fg);border-color:var(--pp-border2);}',
     // Topdeck (Scene Presets + Flush/Islands Toggle)
@@ -571,6 +860,16 @@
     '#R .pp-range{grid-column:1 / -1;-webkit-appearance:none;appearance:none;width:100%;height:15px;background:transparent;cursor:pointer;outline:none;}',
     '#R .pp-range::-webkit-slider-runnable-track{height:4px;border-radius:99px;background:linear-gradient(to right,var(--pp-accent) 0,var(--pp-accent) var(--pct,50%),var(--pp-track) var(--pct,50%),var(--pp-track) 100%);}',
     '#R .pp-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;margin-top:-4.5px;border-radius:50%;background:#fff;border:1px solid rgba(0,0,0,.2);box-shadow:0 1px 3px rgba(0,0,0,.35);}',
+    // Component Glass Depth Accordion
+    '#R .pp-comp-sec{padding:0;gap:0;overflow:hidden;}',
+    '#R .pp-comp-sum{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:7px 9px;cursor:pointer;list-style:none;user-select:none;font-size:11px;font-weight:600;color:var(--pp-fg2);}',
+    '#R .pp-comp-sum::-webkit-details-marker{display:none;}',
+    '#R .pp-comp-sum::after{content:"";width:6px;height:6px;border-right:1.5px solid var(--pp-muted);border-bottom:1.5px solid var(--pp-muted);transform:rotate(-45deg);transition:transform .15s ease;flex-shrink:0;margin-left:auto;}',
+    '#R .pp-comp-sec[open] .pp-comp-sum::after{transform:rotate(45deg);}',
+    '#R .pp-comp-sum-left{display:inline-flex;align-items:center;gap:6px;min-width:0;}',
+    '#R .pp-comp-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 5px;border-radius:999px;font-family:var(--pp-mono);font-size:9.5px;font-weight:600;background:color-mix(in srgb,var(--pp-accent) 18%,transparent);color:var(--pp-accent);}',
+    '#R .pp-comp-body{padding:0 9px 8px;border-top:1px solid var(--pp-border);display:flex;flex-direction:column;gap:2px;}',
+    '#R .pp-comp-reset{width:100%;height:24px;margin-top:6px;font-size:11px;}',
     // Switch Row
     '#R .pp-trow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--pp-border);font-size:12px;}',
     '#R .pp-sw{position:relative;width:34px;height:19px;padding:0;border-radius:99px;border:1px solid var(--pp-border2);background:var(--pp-fill2);cursor:pointer;flex-shrink:0;transition:background .15s,border-color .15s;}',
@@ -779,10 +1078,68 @@
   }
 
   function pushConfigPatch(patch, immediate) {
+    if (!patch || typeof patch !== 'object') return;
+    if (!store.config || typeof store.config !== 'object') store.config = {};
+    var activeOv = getActiveOverride();
+    var hasSt = Object.prototype.hasOwnProperty.call(patch, 'surfaceTints');
+    var hasSb = Object.prototype.hasOwnProperty.call(patch, 'sidebarOpacity');
+
     for (var k in patch) {
-      if (Object.prototype.hasOwnProperty.call(patch, k)) {
+      if (!Object.prototype.hasOwnProperty.call(patch, k)) continue;
+      var target = activeOv && PER_WALLPAPER_OVERRIDE_KEY_MAP[k] ? activeOv : store.config;
+      if (k === 'surfaceTints') {
+        if (patch.surfaceTints === null) {
+          patchQueue.surfaceTints = null;
+          target.surfaceTints = null;
+          if (!hasSb) {
+            if (target === store.config || Object.prototype.hasOwnProperty.call(target, 'sidebarOpacity')) {
+              target.sidebarOpacity = null;
+            }
+            if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarOpacity')) patchQueue.sidebarOpacity = null;
+          }
+        } else if (patch.surfaceTints && typeof patch.surfaceTints === 'object') {
+          patchQueue.surfaceTints = mergeSurfaceTintsObj(
+            patchQueue.surfaceTints === null ? null : patchQueue.surfaceTints,
+            patch.surfaceTints
+          );
+          target.surfaceTints = mergeSurfaceTintsObj(
+            target.surfaceTints === null ? null : target.surfaceTints,
+            patch.surfaceTints
+          );
+          if (
+            !hasSb &&
+            patch.surfaceTints.sidebar &&
+            typeof patch.surfaceTints.sidebar === 'object' &&
+            Object.prototype.hasOwnProperty.call(patch.surfaceTints.sidebar, 'opacity')
+          ) {
+            if (target === store.config || Object.prototype.hasOwnProperty.call(target, 'sidebarOpacity')) {
+              target.sidebarOpacity = patch.surfaceTints.sidebar.opacity;
+            }
+            if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarOpacity')) {
+              patchQueue.sidebarOpacity = patch.surfaceTints.sidebar.opacity;
+            }
+          }
+        }
+      } else {
         patchQueue[k] = patch[k];
-        store.config[k] = patch[k];
+        target[k] = patch[k];
+        if (k === 'sidebarOpacity' && !hasSt) {
+          if (
+            target === store.config ||
+            (target.surfaceTints &&
+              typeof target.surfaceTints === 'object' &&
+              Object.prototype.hasOwnProperty.call(target.surfaceTints, 'sidebar'))
+          ) {
+            target.surfaceTints = mergeSurfaceTintsObj(target.surfaceTints, {
+              sidebar: { opacity: patch.sidebarOpacity },
+            });
+          }
+          if (patchQueue.surfaceTints && typeof patchQueue.surfaceTints === 'object') {
+            patchQueue.surfaceTints = mergeSurfaceTintsObj(patchQueue.surfaceTints, {
+              sidebar: { opacity: patch.sidebarOpacity },
+            });
+          }
+        }
       }
     }
     // Instant <16ms optimistic skin update on host!
@@ -793,7 +1150,6 @@
     }
     renderAll();
 
-    clearTimeout(patchTimer);
     var flush = function () {
       var send = {};
       var hasKeys = false;
@@ -805,12 +1161,33 @@
       }
       patchQueue = {};
       if (!hasKeys) return;
+      patchFlushSeq += 1;
+      var mySeq = patchFlushSeq;
       callRpc('config.set', { patch: send }).then(function (res) {
+        if (mySeq !== patchFlushSeq) return;
         if (res && typeof res === 'object') ingestState(res.state || res);
       });
     };
-    if (immediate) flush();
-    else patchTimer = setTimeout(flush, 150);
+    if (immediate) {
+      clearTimeout(patchTimer);
+      patchTimer = 0;
+      lastPatchFlushAt = Date.now();
+      flush();
+    } else {
+      var elapsed = Date.now() - lastPatchFlushAt;
+      if (elapsed >= 80) {
+        clearTimeout(patchTimer);
+        patchTimer = 0;
+        lastPatchFlushAt = Date.now();
+        flush();
+      } else if (!patchTimer) {
+        patchTimer = setTimeout(function () {
+          patchTimer = 0;
+          lastPatchFlushAt = Date.now();
+          flush();
+        }, Math.max(16, 80 - elapsed));
+      }
+    }
   }
 
   function ingestState(data) {
@@ -825,6 +1202,15 @@
     else if (data.source && typeof data.source === 'object') store.activeItem = data.source;
 
     if (Array.isArray(data.items)) store.items = data.items;
+    if (data.updateStatus && typeof data.updateStatus === 'object') {
+      store.updateStatus = normalizeUpdateInfo(data.updateStatus);
+    } else if (data.updateSummary && typeof data.updateSummary === 'object') {
+      store.updateStatus = normalizeUpdateInfo(data.updateSummary);
+    } else if (data.update && typeof data.update === 'object') {
+      store.updateStatus = normalizeUpdateInfo(data.update);
+    } else if (data.updateStatus === null || data.updateSummary === null) {
+      store.updateStatus = null;
+    }
     store.connected = hasBinding() || Boolean(data.connected);
     syncHostTheme();
     mountInlinePill();
@@ -919,11 +1305,17 @@
     var pill = pillEl || doc.getElementById(PILL_ID);
     if (!pill) return;
     var on = Boolean(store.skinEnabled);
-    pill.setAttribute('data-skin-enabled', on ? 'true' : 'false');
-    pill.title = tr('pillTip');
+    var nextOn = on ? 'true' : 'false';
+    if (pill.getAttribute('data-skin-enabled') !== nextOn) pill.setAttribute('data-skin-enabled', nextOn);
+    if (pill.className !== undefined && String(pill.className).indexOf('agy-prism-pill') < 0) {
+      pill.className = pill.className ? pill.className + ' agy-prism-pill' : 'agy-prism-pill';
+    }
+    var nextTip = tr('pillTip');
+    if (pill.title !== nextTip) pill.title = nextTip;
     var labelSpan = pill.querySelector ? pill.querySelector('span') : null;
-    if (labelSpan) {
-      labelSpan.textContent = on ? 'Prism' : tr('pillOff');
+    var nextLabel = on ? 'Prism' : tr('pillOff');
+    if (labelSpan && labelSpan.textContent !== nextLabel) {
+      labelSpan.textContent = nextLabel;
     }
   }
 
@@ -949,6 +1341,7 @@
 
     var hostSlot =
       doc.querySelector('.agy-composer-footer') ||
+      doc.querySelector('[data-testid="agent-input-box"] footer') ||
       doc.querySelector('.composer-bar') ||
       doc.querySelector('.monaco-workbench .part.statusbar .right-items') ||
       doc.querySelector('.monaco-workbench .part.statusbar');
@@ -968,6 +1361,7 @@
         'button',
         {
           id: PILL_ID,
+          class: 'agy-prism-pill',
           type: 'button',
           title: tr('pillTip'),
           translate: 'no',
@@ -1126,6 +1520,68 @@
     return row;
   }
 
+  function buildComponentOpacityRow(compId) {
+    var bounds = SURFACE_TINT_BOUNDS[compId] || { min: 0, max: 0.98 };
+    var sliderKey = 'surfaceTints.' + compId + '.opacity';
+    var valSpan = h('span', { class: 'pp-sval' });
+    var labelSpan = h('span', { class: 'pp-slabel' });
+    var rstBtn = h('button', {
+      type: 'button',
+      class: 'pp-rst',
+      'data-reset-key': sliderKey,
+      'data-comp': compId,
+      html: ICONS.reset,
+      onclick: function () {
+        var stPatch = {};
+        stPatch[compId] = { opacity: null };
+        var p = { preset: 'custom', surfaceTints: stPatch };
+        if (compId === 'sidebar') p.sidebarOpacity = null;
+        pushConfigPatch(p, true);
+      },
+    });
+    var range = h('input', {
+      type: 'range',
+      class: 'pp-range',
+      'data-slider-key': sliderKey,
+      'data-comp': compId,
+      'data-dirty': 'false',
+      min: bounds.min,
+      max: bounds.max,
+      step: 0.01,
+      oninput: function () {
+        var v = Number(range.value);
+        var stPatch = {};
+        stPatch[compId] = { opacity: v };
+        var p = { preset: 'custom', surfaceTints: stPatch };
+        if (compId === 'sidebar') p.sidebarOpacity = v;
+        pushConfigPatch(p, false);
+      },
+      onchange: function () {
+        var v = Number(range.value);
+        var stPatch = {};
+        stPatch[compId] = { opacity: v };
+        var p = { preset: 'custom', surfaceTints: stPatch };
+        if (compId === 'sidebar') p.sidebarOpacity = v;
+        pushConfigPatch(p, true);
+      },
+    });
+    var row = h('div', { class: 'pp-srow', 'data-dirty': 'false', 'data-comp': compId }, [labelSpan, valSpan, rstBtn, range]);
+    compSliderRefs[compId] = {
+      compId: compId,
+      row: row,
+      label: labelSpan,
+      val: valSpan,
+      rst: rstBtn,
+      range: range,
+      min: bounds.min,
+      max: bounds.max,
+      fmt: function (v) {
+        return Math.round(v * 100) + '%';
+      },
+    };
+    return row;
+  }
+
   function buildDom() {
     els.orb = h(
       'button',
@@ -1208,17 +1664,30 @@
         pushConfigPatch({ language: next }, true);
       },
     });
-    els.studioBtn = h('button', {
-      type: 'button',
-      class: 'pp-ibtn',
-      'data-testid': 'prism-open-studio',
-      html: ICONS.ext,
-      onclick: function () {
-        callRpc('studio.open', {}).then(function (res) {
-          if (!res || !res.opened) showToast(tr('studioToast'));
-        });
+    els.updateDot = h('i', { class: 'pp-upd-dot', 'data-testid': 'prism-update-dot', hidden: true });
+    els.studioBtn = h(
+      'button',
+      {
+        type: 'button',
+        class: 'pp-ibtn',
+        'data-testid': 'prism-open-studio',
+        'data-has-update': 'false',
+        html: ICONS.ext,
+        onclick: function () {
+          callRpc('studio.open', {}).then(function (res) {
+            if (!res || !res.opened) {
+              var upd = store.updateStatus;
+              if (upd && upd.updateAvailable && upd.latestVersion) {
+                showToast(tr('updateToast').replace('{v}', upd.latestVersion));
+              } else {
+                showToast(tr('studioToast'));
+              }
+            }
+          });
+        },
       },
-    });
+      [els.updateDot]
+    );
     els.closeBtn = h('button', {
       type: 'button',
       class: 'pp-ibtn',
@@ -1254,9 +1723,21 @@
         onclick: function () {
           var patch = { preset: pid };
           var sp = SCENE_PRESETS[pid];
-          for (var k in sp) patch[k] = sp[k];
-          for (var qk in patch) store.config[qk] = patch[qk];
-          if (W[SKIN_KEY] && typeof W[SKIN_KEY].updateConfig === 'function') W[SKIN_KEY].updateConfig(patch);
+          for (var k in sp) {
+            if (Object.prototype.hasOwnProperty.call(sp, k)) patch[k] = sp[k];
+          }
+          if (!store.config || typeof store.config !== 'object') store.config = {};
+          for (var qk in patch) {
+            if (Object.prototype.hasOwnProperty.call(patch, qk)) {
+              store.config[qk] = patch[qk];
+              if (Object.prototype.hasOwnProperty.call(patchQueue, qk)) delete patchQueue[qk];
+            }
+          }
+          if (W[SKIN_KEY] && typeof W[SKIN_KEY].updateConfig === 'function') {
+            try {
+              W[SKIN_KEY].updateConfig(patch);
+            } catch (_) {}
+          }
           renderAll();
           callRpc('preset.apply', { presetId: pid }).then(function (r) {
             if (r) ingestState(r.state || r);
@@ -1471,14 +1952,35 @@
     accRow.appendChild(els.customColorInp);
 
     var slidersSec = h('div', { class: 'pp-sec' }, [
-      buildSliderRow('glassOpacity', 0.3, 0.98, 0.01, function (v) { return Math.round(v * 100) + '%'; }),
-      buildSliderRow('glassBlur', 0, 48, 1, function (v) { return Math.round(v) + ' px'; }),
-      buildSliderRow('sidebarOpacity', 0.2, 0.98, 0.01, function (v) { return Math.round(v * 100) + '%'; }, 'glassOpacity'),
-      buildSliderRow('sidebarBlur', 0, 48, 1, function (v) { return Math.round(v) + ' px'; }, 'glassBlur'),
+      buildSliderRow('glassOpacity', 0.15, 0.98, 0.01, function (v) { return Math.round(v * 100) + '%'; }),
+      buildSliderRow('glassBlur', 0, 64, 1, function (v) { return Math.round(v) + ' px'; }),
+      buildSliderRow('sidebarOpacity', 0, 0.98, 0.01, function (v) { return Math.round(v * 100) + '%'; }, 'glassOpacity'),
+      buildSliderRow('sidebarBlur', 0, 64, 1, function (v) { return Math.round(v) + ' px'; }, 'glassBlur'),
       buildSliderRow('islandGap', 0, 20, 1, function (v) { return Math.round(v) + ' px'; }),
       buildSliderRow('scrimOpacity', 0, 0.92, 0.01, function (v) { return Math.round(v * 100) + '%'; }),
       buildSliderRow('mediaBlur', 0, 64, 1, function (v) { return Math.round(v) + ' px'; }),
       buildSliderRow('volume', 0, 1, 0.05, function (v) { return Math.round(v * 100) + '%'; }),
+    ]);
+
+    els.compSummaryTitle = h('span');
+    els.compBadge = h('span', { class: 'pp-comp-badge', hidden: true });
+    els.compResetAllBtn = h('button', {
+      type: 'button',
+      class: 'pp-btn pp-comp-reset',
+      'data-testid': 'prism-pop-reset-tints',
+      onclick: function () {
+        pushConfigPatch({ preset: 'custom', surfaceTints: null, sidebarOpacity: null }, true);
+      },
+    });
+    var compRows = SURFACE_TINT_COMPONENTS.map(function (cid) {
+      return buildComponentOpacityRow(cid);
+    });
+    compRows.push(els.compResetAllBtn);
+    els.compAccordion = h('details', { class: 'pp-sec pp-comp-sec', 'data-testid': 'prism-comp-accordion' }, [
+      h('summary', { class: 'pp-comp-sum', 'data-testid': 'prism-comp-accordion-summary' }, [
+        h('span', { class: 'pp-comp-sum-left' }, [els.compSummaryTitle, els.compBadge]),
+      ]),
+      h('div', { class: 'pp-comp-body' }, compRows),
     ]);
 
     els.swGlassLbl = h('span');
@@ -1495,6 +1997,14 @@
       role: 'switch',
       onclick: function () { pushConfigPatch({ transparentWindowControls: !cfgVal('transparentWindowControls') }, true); },
     });
+    els.swHideLogoLbl = h('span');
+    els.swHideLogo = h('button', {
+      type: 'button',
+      class: 'pp-sw',
+      role: 'switch',
+      'data-testid': 'prism-hide-welcome-logo-toggle',
+      onclick: function () { pushConfigPatch({ hideWelcomeLogo: !cfgVal('hideWelcomeLogo') }, true); },
+    });
     els.swVigLbl = h('span');
     els.swVig = h('button', {
       type: 'button',
@@ -1509,6 +2019,21 @@
       role: 'switch',
       onclick: function () { pushConfigPatch({ pauseOnBlur: !cfgVal('pauseOnBlur') }, true); },
     });
+    els.topbarLbl = h('span', { class: 'pp-sec-title' });
+    els.topbarBtns = {};
+    var topbarSeg = h(
+      'div',
+      { class: 'pp-seg', role: 'radiogroup', 'data-testid': 'prism-topbar-style-seg' },
+      ['pills', 'bar'].map(function (ts) {
+        var b = h('button', {
+          type: 'button',
+          'data-topbar-style': ts,
+          onclick: function () { pushConfigPatch({ topbarStyle: ts }, true); },
+        });
+        els.topbarBtns[ts] = b;
+        return b;
+      })
+    );
     els.codeLbl = h('span', { class: 'pp-sec-title' });
     els.codeBtns = {};
     var codeSeg = h(
@@ -1527,8 +2052,11 @@
     var togglesSec = h('div', { class: 'pp-sec' }, [
       h('div', { class: 'pp-trow', style: 'border-top:none;' }, [els.swGlassLbl, els.swGlass]),
       h('div', { class: 'pp-trow' }, [els.swWcoLbl, els.swWco]),
+      h('div', { class: 'pp-trow' }, [els.swHideLogoLbl, els.swHideLogo]),
       h('div', { class: 'pp-trow' }, [els.swVigLbl, els.swVig]),
       h('div', { class: 'pp-trow' }, [els.swBlurLbl, els.swBlur]),
+      els.topbarLbl,
+      topbarSeg,
       els.codeLbl,
       codeSeg,
     ]);
@@ -1536,6 +2064,7 @@
     els.paneOptics = h('div', { class: 'pp-pane' }, [
       h('div', { class: 'pp-sec' }, [els.schemeTitle, swatchGrid, els.accentTitle, accRow]),
       slidersSec,
+      els.compAccordion,
       togglesSec,
     ]);
 
@@ -1613,9 +2142,11 @@
       'div',
       {
         id: ROOT_ID,
+        class: 'agy-prism-popover',
         'data-open': 'false',
         'data-conn': 'off',
         'data-skin-enabled': store.skinEnabled ? 'true' : 'false',
+        'data-has-update': 'false',
         'data-theme': 'dark',
         translate: 'no',
         'data-no-translate': 'true',
@@ -1838,7 +2369,14 @@
     els.muteBtn.title = tr('mute');
     els.muteBtn.innerHTML = cfgVal('muted') ? ICONS.volOff : ICONS.volOn;
     els.langBtn.textContent = lang === 'zh' ? 'EN' : '中';
-    els.studioBtn.title = tr('openStudio');
+    var upd = store.updateStatus;
+    var hasUpd = Boolean(upd && upd.updateAvailable);
+    els.root.setAttribute('data-has-update', hasUpd ? 'true' : 'false');
+    if (els.studioBtn) {
+      els.studioBtn.setAttribute('data-has-update', hasUpd ? 'true' : 'false');
+      els.studioBtn.title = hasUpd && upd.latestVersion ? tr('updateTip').replace('{v}', upd.latestVersion) : tr('openStudio');
+    }
+    if (els.updateDot) els.updateDot.hidden = !hasUpd;
     els.closeBtn.title = tr('close');
 
     // Topdeck
@@ -1908,6 +2446,7 @@
       var sr = sliderRefs[sk];
       var rawVal = cfgVal(sk);
       var hasExplicitNum = rawVal !== null && rawVal !== undefined && rawVal !== '' && Number.isFinite(Number(rawVal));
+      var isDragging = doc.activeElement === sr.range;
       sr.label.textContent = tr('s_' + sk);
       sr.rst.title = tr('resetTip');
       if (sr.fallbackKey) {
@@ -1916,7 +2455,7 @@
           var effVal = fbRaw !== null && fbRaw !== undefined && fbRaw !== '' && Number.isFinite(Number(fbRaw)) ? Number(fbRaw) : DEFAULTS[sr.fallbackKey];
           var fbPct = ((clamp(effVal, sr.min, sr.max) - sr.min) / (sr.max - sr.min)) * 100;
           sr.val.textContent = tr('autoFollowPrefix') + sr.fmt(effVal);
-          sr.range.value = String(clamp(effVal, sr.min, sr.max));
+          if (!isDragging) sr.range.value = String(clamp(effVal, sr.min, sr.max));
           sr.range.style.setProperty('--pct', fbPct.toFixed(1) + '%');
           sr.row.setAttribute('data-dirty', 'false');
           sr.range.setAttribute('data-dirty', 'false');
@@ -1924,7 +2463,7 @@
           var cVal = Number(rawVal);
           var cPct = ((clamp(cVal, sr.min, sr.max) - sr.min) / (sr.max - sr.min)) * 100;
           sr.val.textContent = sr.fmt(cVal);
-          sr.range.value = String(cVal);
+          if (!isDragging) sr.range.value = String(cVal);
           sr.range.style.setProperty('--pct', cPct.toFixed(1) + '%');
           sr.row.setAttribute('data-dirty', 'true');
           sr.range.setAttribute('data-dirty', 'true');
@@ -1933,7 +2472,7 @@
         var val = hasExplicitNum ? Number(rawVal) : DEFAULTS[sk];
         var pct = ((clamp(val, sr.min, sr.max) - sr.min) / (sr.max - sr.min)) * 100;
         sr.val.textContent = sr.fmt(val);
-        sr.range.value = String(val);
+        if (!isDragging) sr.range.value = String(val);
         sr.range.style.setProperty('--pct', pct.toFixed(1) + '%');
         var dirty = Math.abs(val - DEFAULTS[sk]) > (sr.max <= 1 ? 0.004 : 0.4);
         var dirtyStr = dirty ? 'true' : 'false';
@@ -1942,14 +2481,61 @@
       }
     }
 
+    // Per-Component Glass Depth Accordion (7 components with true resolveComponentDefaultAlpha Auto-follow)
+    var effOptics = effectiveOpticsCfg();
+    var isLightTheme = store.theme === 'light';
+    var customCompCount = 0;
+    if (els.compSummaryTitle) els.compSummaryTitle.textContent = tr('compTitle');
+    if (els.compResetAllBtn) els.compResetAllBtn.textContent = tr('compResetAll');
+    for (var ci = 0; ci < SURFACE_TINT_COMPONENTS.length; ci += 1) {
+      var cid = SURFACE_TINT_COMPONENTS[ci];
+      var cr = compSliderRefs[cid];
+      if (!cr) continue;
+      cr.label.textContent = tr('comp_' + cid);
+      cr.rst.title = tr('resetTip');
+      var compRaw = readComponentOpacity(cid);
+      var compDragging = doc.activeElement === cr.range;
+      if (compRaw === null) {
+        var defAlpha = resolveComponentDefaultAlpha(cid, effOptics, isLightTheme);
+        var clampedDef = clamp(defAlpha, cr.min, cr.max);
+        var defPct = ((clampedDef - cr.min) / (cr.max - cr.min)) * 100;
+        cr.val.textContent = tr('autoFollowPrefix') + cr.fmt(defAlpha);
+        if (!compDragging) cr.range.value = String(clampedDef);
+        cr.range.style.setProperty('--pct', defPct.toFixed(1) + '%');
+        cr.row.setAttribute('data-dirty', 'false');
+        cr.range.setAttribute('data-dirty', 'false');
+      } else {
+        customCompCount += 1;
+        var clampedVal = clamp(compRaw, cr.min, cr.max);
+        var compPct = ((clampedVal - cr.min) / (cr.max - cr.min)) * 100;
+        cr.val.textContent = cr.fmt(clampedVal);
+        if (!compDragging) cr.range.value = String(clampedVal);
+        cr.range.style.setProperty('--pct', compPct.toFixed(1) + '%');
+        cr.row.setAttribute('data-dirty', 'true');
+        cr.range.setAttribute('data-dirty', 'true');
+      }
+    }
+    if (els.compBadge) {
+      els.compBadge.hidden = customCompCount === 0;
+      els.compBadge.textContent = String(customCompCount);
+    }
+
     els.swGlassLbl.textContent = tr('sw_glass');
     els.swGlass.setAttribute('aria-checked', cfgVal('glassSurfaces') ? 'true' : 'false');
     els.swWcoLbl.textContent = tr('sw_wco');
     els.swWco.setAttribute('aria-checked', cfgVal('transparentWindowControls') !== false ? 'true' : 'false');
+    els.swHideLogoLbl.textContent = tr('sw_hideWelcomeLogo');
+    els.swHideLogo.setAttribute('aria-checked', cfgVal('hideWelcomeLogo') ? 'true' : 'false');
     els.swVigLbl.textContent = tr('sw_vignette');
     els.swVig.setAttribute('aria-checked', cfgVal('vignette') ? 'true' : 'false');
     els.swBlurLbl.textContent = tr('sw_pauseBlur');
     els.swBlur.setAttribute('aria-checked', cfgVal('pauseOnBlur') ? 'true' : 'false');
+    els.topbarLbl.textContent = tr('topbarLabel');
+    var curTopbar = cfgVal('topbarStyle') === 'bar' ? 'bar' : 'pills';
+    ['pills', 'bar'].forEach(function (ts) {
+      els.topbarBtns[ts].textContent = tr('topbar_' + ts);
+      els.topbarBtns[ts].setAttribute('aria-checked', curTopbar === ts ? 'true' : 'false');
+    });
     els.codeLbl.textContent = tr('codeLabel');
     var curCode = String(cfgVal('codeReadabilityMode') || 'translucent');
     if (curCode === 'native') curCode = 'solid';
@@ -1971,6 +2557,24 @@
       els.kvList.appendChild(h('dt', { text: pair[0] }));
       els.kvList.appendChild(h('dd', { text: pair[1] }));
     });
+    els.kvList.appendChild(h('dt', { text: tr('st_version') }));
+    if (hasUpd && upd.latestVersion) {
+      var verLabel = 'v' + VERSION + ' → v' + upd.latestVersion + ' (' + tr('st_updateAvail') + ')';
+      var verDd = h('dd', {}, [
+        upd.releaseUrl
+          ? h('a', {
+              class: 'pp-ver-link',
+              href: upd.releaseUrl,
+              target: '_blank',
+              rel: 'noopener noreferrer',
+              text: verLabel,
+            })
+          : verLabel,
+      ]);
+      els.kvList.appendChild(verDd);
+    } else {
+      els.kvList.appendChild(h('dd', { text: 'v' + VERSION }));
+    }
     els.refreshBtn.textContent = tr('btnRefresh');
     els.resetSkinBtn.textContent = tr('btnResetSkin');
     if (!store.skinEnabled) {
@@ -2137,6 +2741,7 @@
 
   function mount() {
     if (mounted || destroyed || !doc.body) return;
+    clearLazyKeepAlive();
     ensureStyles();
     buildDom();
     doc.body.appendChild(els.root);
@@ -2160,7 +2765,10 @@
       } catch (_) {}
 
       themeObserver = new MutationObserver(function () {
-        if (!destroyed) syncHostTheme();
+        if (destroyed) return;
+        var prevTheme = store.theme;
+        syncHostTheme();
+        if (ui.open && store.theme !== prevTheme) renderAll();
       });
       try {
         themeObserver.observe(doc.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'data-prism-theme'] });
@@ -2194,6 +2802,8 @@
   }
 
   function status() {
+    var upd = store.updateStatus;
+    var hasUpd = Boolean(upd && upd.updateAvailable);
     return {
       installed: !destroyed,
       version: VERSION,
@@ -2206,12 +2816,15 @@
       theme: store.theme,
       connected: hasBinding() || store.connected,
       pillPresent: Boolean(doc.getElementById(PILL_ID)),
+      hasUpdate: hasUpd,
+      updateAvailable: hasUpd,
     };
   }
 
   function destroy() {
     if (destroyed) return { installed: false };
     destroyed = true;
+    clearLazyKeepAlive();
     clearThumbBlobCache();
     clearTimeout(restoreTimer);
     clearTimeout(patchTimer);

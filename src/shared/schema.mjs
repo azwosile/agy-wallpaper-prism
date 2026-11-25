@@ -3,18 +3,22 @@
 
 export const PLUGIN_ID = 'agy-wallpaper-prism';
 export const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-export const PLUGIN_VERSION = '2.0.8';
+export const PLUGIN_VERSION = '2.1.0';
 export const SIDECAR_ID = 'prism_studio';
 export const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 export const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 export const DEFAULT_DEBUG_PORT = 9339;
 
 export const PRISM_DOM = Object.freeze({
-  skinVersion: '2.0.8',
+  skinVersion: '2.1.0',
   skinAttr: 'data-agy-prism-skin',
   glassAttr: 'data-agy-prism-glass',
   wallpaperAttr: 'data-agy-prism-wallpaper',
   wcoAttr: 'data-agy-prism-wco',
+  wcoActiveAttr: 'data-agy-prism-wco-active',
+  welcomeLogoAttr: 'data-prism-welcome-logo',
+  topbarStyleAttr: 'data-prism-topbar-style',
+  topbarPillsId: 'agy-prism-topbar-pills',
   staticStyleId: 'agy-prism-static-css',
   themeAttr: 'data-prism-theme',
   schemeAttr: 'data-prism-scheme',
@@ -41,6 +45,7 @@ export const WALLPAPER_KINDS = Object.freeze(['image', 'video', 'slideshow', 'we
 export const LIBRARY_KINDS = Object.freeze(['image', 'video', 'slideshow', 'web', 'scene']);
 export const CONTENT_RATINGS = Object.freeze(['everyone', 'pg13', 'mature', 'unrated']);
 export const LAYOUT_MODES = Object.freeze(['islands', 'flush']);
+export const TOPBAR_STYLES = Object.freeze(['pills', 'bar']);
 export const CORNER_STYLES = Object.freeze(['sharp', 'balanced', 'soft']);
 export const BORDER_MODES = Object.freeze(['on', 'subtle', 'off']);
 export const THEME_MODES = Object.freeze(['auto', 'dark', 'light']);
@@ -387,7 +392,54 @@ export const ACCENT_PRESETS = Object.freeze({
   mono: Object.freeze({ dark: '#D4D7E0', darkFg: '#0E0F14', light: '#334155', lightFg: '#FFFFFF' }),
 });
 
-/** 4 Quick Optical Scene Presets (Crystal | Islands | Focus | Eco). */
+/** 7 Independent Frosted-Glass Component Surface IDs (Req #4). */
+export const SURFACE_TINT_COMPONENTS = Object.freeze([
+  'topbar',
+  'sidebar',
+  'workspace',
+  'rightPane',
+  'composer',
+  'card',
+  'popover',
+]);
+
+export const GLASS_COMPONENT_IDS = SURFACE_TINT_COMPONENTS;
+
+export const SURFACE_TINT_BOUNDS = Object.freeze({
+  topbar: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  sidebar: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  workspace: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  rightPane: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  composer: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  card: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  popover: Object.freeze({ minOpacity: 0.5, maxOpacity: 0.99 }),
+});
+
+export const DEFAULT_SURFACE_TINT_ENTRY = Object.freeze({
+  opacity: null,
+  tone: 0,
+  tint: '',
+});
+
+export const DEFAULT_SURFACE_TINTS = Object.freeze({
+  topbar: DEFAULT_SURFACE_TINT_ENTRY,
+  sidebar: DEFAULT_SURFACE_TINT_ENTRY,
+  workspace: DEFAULT_SURFACE_TINT_ENTRY,
+  rightPane: DEFAULT_SURFACE_TINT_ENTRY,
+  composer: DEFAULT_SURFACE_TINT_ENTRY,
+  card: DEFAULT_SURFACE_TINT_ENTRY,
+  popover: DEFAULT_SURFACE_TINT_ENTRY,
+});
+
+export function createDefaultSurfaceTints() {
+  const out = {};
+  for (const id of SURFACE_TINT_COMPONENTS) {
+    out[id] = { opacity: null, tone: 0, tint: '' };
+  }
+  return out;
+}
+
+/** 4 Quick Optical Scene Presets (Crystal | Islands | Focus | Eco — strictly optical-only, zero layout keys). */
 export const SCENE_PRESETS = Object.freeze({
   crystal: Object.freeze({
     id: 'crystal',
@@ -395,10 +447,6 @@ export const SCENE_PRESETS = Object.freeze({
     nameEn: 'Crystal',
     patch: Object.freeze({
       preset: 'crystal',
-      layoutMode: 'islands',
-      islandGap: 8,
-      workspacePad: 8,
-      cornerStyle: 'balanced',
       borders: 'on',
       shadows: true,
       glassSurfaces: true,
@@ -406,6 +454,7 @@ export const SCENE_PRESETS = Object.freeze({
       glassBlur: 18,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 82,
       chatGlassFidelity: 78,
       scrimOpacity: 0.18,
@@ -413,6 +462,7 @@ export const SCENE_PRESETS = Object.freeze({
       vignette: true,
       grainAlpha: 0.018,
       paused: false,
+      fpsCap: 60,
     }),
   }),
   islands: Object.freeze({
@@ -421,10 +471,6 @@ export const SCENE_PRESETS = Object.freeze({
     nameEn: 'Islands',
     patch: Object.freeze({
       preset: 'islands',
-      layoutMode: 'islands',
-      islandGap: 8,
-      workspacePad: 8,
-      cornerStyle: 'balanced',
       borders: 'on',
       shadows: true,
       glassSurfaces: true,
@@ -432,6 +478,7 @@ export const SCENE_PRESETS = Object.freeze({
       glassBlur: 16,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 92,
       chatGlassFidelity: 90,
       scrimOpacity: 0.26,
@@ -439,6 +486,7 @@ export const SCENE_PRESETS = Object.freeze({
       vignette: true,
       grainAlpha: 0.022,
       paused: false,
+      fpsCap: 60,
     }),
   }),
   focus: Object.freeze({
@@ -447,10 +495,6 @@ export const SCENE_PRESETS = Object.freeze({
     nameEn: 'Focus',
     patch: Object.freeze({
       preset: 'focus',
-      layoutMode: 'flush',
-      islandGap: 0,
-      workspacePad: 0,
-      cornerStyle: 'balanced',
       borders: 'subtle',
       shadows: false,
       glassSurfaces: true,
@@ -458,6 +502,7 @@ export const SCENE_PRESETS = Object.freeze({
       glassBlur: 20,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 100,
       chatGlassFidelity: 100,
       scrimOpacity: 0.42,
@@ -465,6 +510,7 @@ export const SCENE_PRESETS = Object.freeze({
       vignette: true,
       grainAlpha: 0.012,
       paused: false,
+      fpsCap: 60,
     }),
   }),
   eco: Object.freeze({
@@ -473,10 +519,6 @@ export const SCENE_PRESETS = Object.freeze({
     nameEn: 'Eco',
     patch: Object.freeze({
       preset: 'eco',
-      layoutMode: 'flush',
-      islandGap: 0,
-      workspacePad: 0,
-      cornerStyle: 'sharp',
       borders: 'subtle',
       shadows: false,
       glassSurfaces: false,
@@ -484,6 +526,7 @@ export const SCENE_PRESETS = Object.freeze({
       glassBlur: 0,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 100,
       chatGlassFidelity: 100,
       scrimOpacity: 0.34,
@@ -522,6 +565,7 @@ export const FACTORY_PRESETS = Object.freeze([
       glassBlur: 16,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 92,
       chatGlassFidelity: 90,
       codeReadabilityMode: 'translucent',
@@ -551,6 +595,7 @@ export const FACTORY_PRESETS = Object.freeze([
       glassBlur: 18,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 94,
       chatGlassFidelity: 92,
       codeReadabilityMode: 'translucent',
@@ -580,6 +625,7 @@ export const FACTORY_PRESETS = Object.freeze([
       glassBlur: 14,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 88,
       chatGlassFidelity: 85,
       codeReadabilityMode: 'translucent',
@@ -609,6 +655,7 @@ export const FACTORY_PRESETS = Object.freeze([
       glassBlur: 28,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 96,
       chatGlassFidelity: 95,
       codeReadabilityMode: 'frosted',
@@ -638,6 +685,7 @@ export const FACTORY_PRESETS = Object.freeze([
       glassBlur: 20,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 95,
       chatGlassFidelity: 94,
       codeReadabilityMode: 'translucent',
@@ -667,6 +715,7 @@ export const FACTORY_PRESETS = Object.freeze([
       glassBlur: 22,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 100,
       chatGlassFidelity: 100,
       codeReadabilityMode: 'solid',
@@ -697,6 +746,7 @@ export const FACTORY_PRESETS = Object.freeze([
       glassBlur: 18,
       sidebarOpacity: null,
       sidebarBlur: null,
+      surfaceTints: null,
       glassFidelity: 88,
       chatGlassFidelity: 84,
       codeReadabilityMode: 'translucent',
@@ -729,6 +779,8 @@ export const DEFAULT_CONFIG = Object.freeze({
   borders: 'on',
   shadows: true,
   transparentWindowControls: true,
+  hideWelcomeLogo: false,
+  topbarStyle: 'pills',
 
   // Adaptive Theme, Color Scheme & Dynamic Accent
   themeMode: 'auto',
@@ -746,6 +798,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   glassBlur: 16,
   sidebarOpacity: null,
   sidebarBlur: null,
+  surfaceTints: DEFAULT_SURFACE_TINTS,
   glassFidelity: 92,
   chatGlassFidelity: 90,
   codeReadabilityMode: 'translucent',
@@ -838,6 +891,8 @@ export const RESET_SCOPES = Object.freeze({
     'borders',
     'shadows',
     'transparentWindowControls',
+    'hideWelcomeLogo',
+    'topbarStyle',
     'themeMode',
     'themeFollow',
     'colorScheme',
@@ -849,6 +904,7 @@ export const RESET_SCOPES = Object.freeze({
     'glassBlur',
     'sidebarOpacity',
     'sidebarBlur',
+    'surfaceTints',
     'glassFidelity',
     'chatGlassFidelity',
     'codeReadabilityMode',
@@ -916,6 +972,7 @@ export const PER_WALLPAPER_OVERRIDE_KEYS = Object.freeze([
   'glassBlur',
   'sidebarOpacity',
   'sidebarBlur',
+  'surfaceTints',
   'scrimOpacity',
   'mediaOpacity',
   'mediaBlur',
@@ -1103,6 +1160,107 @@ function sanitizeRotationGroups(raw) {
   return out;
 }
 
+function cleanTintHex(v) {
+  if (typeof v !== 'string') return '';
+  const s = v.trim();
+  if (!s || s.toLowerCase() === 'auto') return '';
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s);
+  if (!m) return '';
+  let h = m[1];
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  return `#${h.toUpperCase()}`;
+}
+
+function nullableUnitOpacity(v, min, max) {
+  if (v === null || v === undefined || v === '' || v === 'auto') return null;
+  const s = typeof v === 'string' ? v.trim() : null;
+  if (s === '' || s === 'auto') return null;
+  let n = s !== null ? Number(s) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  // Accept both unit 0..1.99 (clamped to max) and percentage 2..100 notations seamlessly
+  if (n >= 2) n = n / 100;
+  return Math.round(clamp(n, min, max) * 1000) / 1000;
+}
+
+export function sanitizeSurfaceTints(raw, baseTints = null) {
+  // Explicit `null` resets ALL 7 components back to Auto defaults (used by presets & "Reset All Components")
+  if (raw === null) return createDefaultSurfaceTints();
+  const baseMap = baseTints && typeof baseTints === 'object' && !Array.isArray(baseTints) ? baseTints : {};
+  const srcMap = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const out = {};
+  for (const id of SURFACE_TINT_COMPONENTS) {
+    const bounds = SURFACE_TINT_BOUNDS[id];
+    const bEnt = baseMap[id] && typeof baseMap[id] === 'object' ? baseMap[id] : DEFAULT_SURFACE_TINT_ENTRY;
+    const hasSrc = Object.prototype.hasOwnProperty.call(srcMap, id);
+    const sRaw = hasSrc ? srcMap[id] : undefined;
+    // Explicit `surfaceTints[id] = null` resets that single component cleanly
+    if (hasSrc && sRaw === null) {
+      out[id] = { opacity: null, tone: 0, tint: '' };
+      continue;
+    }
+    const sEnt = sRaw && typeof sRaw === 'object' ? sRaw : {};
+    const rawOp = Object.prototype.hasOwnProperty.call(sEnt, 'opacity') ? sEnt.opacity : bEnt.opacity;
+    const rawTone = Object.prototype.hasOwnProperty.call(sEnt, 'tone') ? sEnt.tone : bEnt.tone;
+    const rawTint = Object.prototype.hasOwnProperty.call(sEnt, 'tint') ? sEnt.tint : bEnt.tint;
+    out[id] = {
+      opacity: nullableUnitOpacity(rawOp, bounds.minOpacity, bounds.maxOpacity),
+      tone: num(rawTone, 0, -100, 100, 0),
+      tint: cleanTintHex(rawTint),
+    };
+  }
+  return out;
+}
+
+function normFidelity(raw, fallback) {
+  const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return fallback / 100;
+  return clamp(n > 0 && n < 1 ? n : n / 100, 0, 1);
+}
+
+/**
+ * Compute the true rendered default alpha for a glass component when its override `opacity` is `null`.
+ * Mirrors `wallpaper-inject.js` (`computeSkinTokens`) so Auto-follow UI readouts match actual rendered glass.
+ */
+export function resolveComponentDefaultAlpha(comp, cfg = DEFAULT_CONFIG, isLight = false) {
+  const c = cfg && typeof cfg === 'object' ? cfg : DEFAULT_CONFIG;
+  const light = typeof isLight === 'string' ? isLight === 'light' : Boolean(isLight);
+  if (comp === 'popover') {
+    return c.floaterSolidBase !== false ? (light ? 0.97 : 0.96) : 0.94;
+  }
+  if (c.glassSurfaces === false) return 1;
+  const g = num(c.glassOpacity, DEFAULT_CONFIG.glassOpacity, 0.15, 0.98, 3);
+  const glassFid = normFidelity(c.glassFidelity, DEFAULT_CONFIG.glassFidelity);
+  const chatFid = normFidelity(c.chatGlassFidelity, DEFAULT_CONFIG.chatGlassFidelity);
+  const contrastFloor = c.contrastFloor !== false;
+  const layoutMode = c.layoutMode === 'flush' ? 'flush' : 'islands';
+
+  let alpha;
+  if (comp === 'topbar' || comp === 'sidebar') {
+    const minSbFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
+    alpha = Math.max(g, minSbFloor * glassFid);
+  } else if (comp === 'workspace' || comp === 'rightPane') {
+    const rawChatA =
+      layoutMode === 'flush' && !light
+        ? clamp(g * 0.24, 0, 0.82)
+        : light
+          ? clamp(g * 0.62, 0.28, 0.92)
+          : clamp(g * 0.42, 0.08, 0.88);
+    const minChatFloor = light ? 0.42 : 0.16;
+    alpha = Math.max(rawChatA, minChatFloor * chatFid);
+  } else if (comp === 'composer') {
+    const rawCompA = light ? clamp(g * 0.94, 0.65, 0.99) : clamp(g * 0.92, 0.48, 0.98);
+    const minCompFloor = light ? 0.72 : 0.58;
+    alpha = Math.max(rawCompA, minCompFloor * glassFid);
+  } else if (comp === 'card') {
+    const rawCardA = light ? clamp(g * 0.86, 0.5, 0.98) : clamp(g * 0.78, 0.32, 0.96);
+    const minCardFloor = light ? 0.62 : 0.48;
+    alpha = Math.max(rawCardA, minCardFloor * glassFid);
+  } else {
+    alpha = g;
+  }
+  return Math.round(clamp(alpha, 0, 0.99) * 1000) / 1000;
+}
+
 /** Sanitize and merge a full or partial config object against `base`. */
 export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
   const src = input && typeof input === 'object' ? input : {};
@@ -1124,6 +1282,46 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     audioEnabled = !muted;
   } else if ('audioEnabled' in src && !('muted' in src)) {
     muted = !audioEnabled;
+  }
+
+  // Bidirectional 4-branch sync: legacy `sidebarOpacity` <-> `surfaceTints.sidebar.opacity`
+  const hasSrcTints = Object.prototype.hasOwnProperty.call(src, 'surfaceTints');
+  const srcResetAllTints = hasSrcTints && src.surfaceTints === null;
+  const srcTouchedSidebarOp =
+    srcResetAllTints ||
+    (hasSrcTints &&
+      src.surfaceTints &&
+      typeof src.surfaceTints === 'object' &&
+      !Array.isArray(src.surfaceTints) &&
+      (src.surfaceTints.sidebar === null ||
+        (src.surfaceTints.sidebar &&
+          typeof src.surfaceTints.sidebar === 'object' &&
+          Object.prototype.hasOwnProperty.call(src.surfaceTints.sidebar, 'opacity'))));
+  const srcTouchedLegacySb = Object.prototype.hasOwnProperty.call(src, 'sidebarOpacity');
+
+  const surfaceTints = sanitizeSurfaceTints(hasSrcTints ? src.surfaceTints : undefined, b.surfaceTints);
+  let sidebarOpacity = nullableNum(merged.sidebarOpacity, 0, 0.98, 3);
+
+  if (srcTouchedSidebarOp && !srcTouchedLegacySb) {
+    sidebarOpacity = surfaceTints.sidebar.opacity;
+  } else if (srcTouchedLegacySb && !srcTouchedSidebarOp) {
+    surfaceTints.sidebar.opacity = sidebarOpacity;
+  } else if (srcTouchedSidebarOp && srcTouchedLegacySb) {
+    // Both present in src: if `surfaceTints: null` reset all tints alongside an explicit legacy
+    // `sidebarOpacity` override (e.g. `{ ...SCENE_PRESETS.crystal.patch, sidebarOpacity: 0.50 }`),
+    // honor the explicit sidebarOpacity; otherwise canonical `surfaceTints.sidebar.opacity` wins.
+    if (srcResetAllTints && sidebarOpacity !== null) {
+      surfaceTints.sidebar.opacity = sidebarOpacity;
+    } else {
+      sidebarOpacity = surfaceTints.sidebar.opacity;
+    }
+  } else {
+    // Neither explicitly touched in src (legacy config.json hydration or neutral merge)
+    if (surfaceTints.sidebar.opacity === null && sidebarOpacity !== null) {
+      surfaceTints.sidebar.opacity = sidebarOpacity;
+    } else {
+      sidebarOpacity = surfaceTints.sidebar.opacity;
+    }
   }
 
   // Legacy/DSH field aliases
@@ -1165,6 +1363,8 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     borders: oneOf(merged.borders, BORDER_MODES, DEFAULT_CONFIG.borders),
     shadows: bool(merged.shadows, DEFAULT_CONFIG.shadows),
     transparentWindowControls: bool(merged.transparentWindowControls, DEFAULT_CONFIG.transparentWindowControls),
+    hideWelcomeLogo: bool(merged.hideWelcomeLogo, DEFAULT_CONFIG.hideWelcomeLogo),
+    topbarStyle: oneOf(merged.topbarStyle, TOPBAR_STYLES, DEFAULT_CONFIG.topbarStyle),
 
     themeMode: oneOf(merged.themeMode, THEME_MODES, DEFAULT_CONFIG.themeMode),
     themeFollow: bool(merged.themeFollow, DEFAULT_CONFIG.themeFollow),
@@ -1178,10 +1378,11 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     wallTintMix: num(merged.wallTintMix, DEFAULT_CONFIG.wallTintMix, 0, 0.18, 3),
 
     glassSurfaces: bool(merged.glassSurfaces, DEFAULT_CONFIG.glassSurfaces),
-    glassOpacity: num(merged.glassOpacity, DEFAULT_CONFIG.glassOpacity, 0.3, 0.98, 3),
-    glassBlur: num(merged.glassBlur, DEFAULT_CONFIG.glassBlur, 0, 48, 0),
-    sidebarOpacity: nullableNum(merged.sidebarOpacity, 0.2, 0.98, 3),
-    sidebarBlur: nullableNum(merged.sidebarBlur, 0, 48, 0),
+    glassOpacity: num(merged.glassOpacity, DEFAULT_CONFIG.glassOpacity, 0.15, 0.98, 3),
+    glassBlur: num(merged.glassBlur, DEFAULT_CONFIG.glassBlur, 0, 64, 0),
+    sidebarOpacity,
+    sidebarBlur: nullableNum(merged.sidebarBlur, 0, 64, 0),
+    surfaceTints,
     glassFidelity: num(merged.glassFidelity, DEFAULT_CONFIG.glassFidelity, 0, 100, 0),
     chatGlassFidelity: num(merged.chatGlassFidelity, DEFAULT_CONFIG.chatGlassFidelity, 0, 100, 0),
     codeReadabilityMode: oneOf(merged.codeReadabilityMode, CODE_READABILITY_MODES, DEFAULT_CONFIG.codeReadabilityMode),

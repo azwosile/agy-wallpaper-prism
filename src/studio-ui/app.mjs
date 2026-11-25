@@ -8,6 +8,7 @@ import {
   CANARY_STATES,
   LIBRARY_KINDS,
   CONTENT_RATINGS,
+  TOPBAR_STYLES,
   CORNER_STYLES,
   BORDER_MODES,
   THEME_MODES,
@@ -22,6 +23,10 @@ import {
   COLOR_SCHEME_IDS,
   ACCENT_MODES,
   ACCENT_PRESETS,
+  SURFACE_TINT_COMPONENTS,
+  SURFACE_TINT_BOUNDS,
+  DEFAULT_SURFACE_TINT_ENTRY,
+  DEFAULT_SURFACE_TINTS,
   SCENE_PRESETS,
   SCENE_PRESET_IDS,
   FACTORY_PRESETS,
@@ -31,6 +36,7 @@ import {
   sanitizeConfig,
   resolveEffectiveConfig,
   resolveSchemeTokens,
+  resolveComponentDefaultAlpha,
   hexToRgbTriplet,
 } from '../shared/schema.mjs';
 
@@ -43,18 +49,27 @@ function bootPrismStudioApp() {
   const rawSidecarFetch = (url, init) =>
     window.sidecar?.fetch ? window.sidecar.fetch(url, init) : window.fetch(url, init);
 
-  async function apiFetch(url, init = {}) {
-    if (window.sidecar && typeof window.sidecar.fetch === 'function') {
-      return window.sidecar.fetch(url, init);
-    }
-    const headers = new Headers(init.headers || {});
+  function getSidecarAuthToken() {
     try {
-      const tok = new URLSearchParams(window.location.search).get('token');
-      if (tok && !headers.has('X-Sidecar-Token')) {
+      return new URLSearchParams(window.location.search).get('token') || window.__SIDECAR_BOOT__?.token || '';
+    } catch {
+      return '';
+    }
+  }
+
+  async function apiFetch(url, init = {}) {
+    const tok = getSidecarAuthToken();
+    if (window.sidecar && typeof window.sidecar.fetch === 'function') {
+      if (!tok) return window.sidecar.fetch(url, init);
+      const headers = new Headers(init.headers || {});
+      if (!headers.has('X-Sidecar-Token')) {
         headers.set('X-Sidecar-Token', tok);
       }
-    } catch {
-      // ignore URL parse issues
+      return window.sidecar.fetch(url, { ...init, headers });
+    }
+    const headers = new Headers(init.headers || {});
+    if (tok && !headers.has('X-Sidecar-Token')) {
+      headers.set('X-Sidecar-Token', tok);
     }
     return rawSidecarFetch(url, { ...init, headers });
   }
@@ -81,7 +96,11 @@ function bootPrismStudioApp() {
     }
     if (!res.ok) {
       const msg = data?.error || data?.message || `HTTP ${res.status}`;
-      throw new Error(msg);
+      const err = new Error(msg);
+      err.status = res.status;
+      err.code = data?.code || '';
+      err.data = data;
+      throw err;
     }
     return data;
   }
@@ -264,11 +283,58 @@ function bootPrismStudioApp() {
     // 2-step inline confirmation (never window.confirm / alert)
     armedConfirm: null, // { key, timer }
     toasts: [],
+
+    // Progressive-disclosure per-component tint drawer state (at most 1 open)
+    expandedTintComp: '',
+
+    // Auto-update status, banner & post-update reconnect overlay state
+    update: {
+      checking: false,
+      applying: false,
+      checked: false,
+      hasUpdate: false,
+      currentVersion: PLUGIN_VERSION,
+      latestVersion: null,
+      latestTag: null,
+      releaseUrl: 'https://github.com/azwosile/agy-wallpaper-prism/releases',
+      publishedAt: null,
+      changelog: '',
+      changelogSummary: '',
+      offline: false,
+      rateLimited: false,
+      checkedAt: null,
+      canSelfUpdate: true,
+      isGitCheckout: false,
+      isSymlink: false,
+      disabledReason: '',
+      notesOpen: false,
+      error: '',
+      standaloneRestartNeeded: false,
+      dismissedVersion: (() => {
+        try {
+          return window.localStorage?.getItem('prism.dismissedUpdateVersion') || '';
+        } catch {
+          return '';
+        }
+      })(),
+      reconnect: {
+        active: false,
+        timedOut: false,
+        targetVersion: '',
+        attempts: 0,
+        maxAttempts: 24,
+        sawDown: false,
+        prevPid: 0,
+      },
+    },
   };
 
+  const CONFIG_THROTTLE_MS = 60;
   const accentMemCache = new Map();
   let configDebounceTimer = null;
   let configFlushInFlight = false;
+  let configFlushPending = false;
+  let lastConfigFlushAt = 0;
   let pendingConfigPatch = {};
   let currentStageMediaSig = '';
   let slideshowTimer = null;
@@ -277,6 +343,8 @@ function bootPrismStudioApp() {
   let studioLastSseAt = 0;
   let studioSyncPollTimer = null;
   let externalSyncInFlight = false;
+  let updateReconnectTimer = null;
+  let updateBootCheckTimer = null;
 
   function curLocale() {
     return resolveLocale(store.config.language);
@@ -410,9 +478,165 @@ function bootPrismStudioApp() {
   // ==========================================================================
   // < 16ms Zero-Reflow CSS Custom Property & Mini-Preview Sync
   // ==========================================================================
+  function clampNum(v, min, max) {
+    return Math.min(max, Math.max(min, v));
+  }
+
+  function parseRgbTriplet(trip, fallback = [14, 14, 17]) {
+    const parts = String(trip || '').split(',').map((s) => Number(s.trim()));
+    if (parts.length >= 3 && parts.slice(0, 3).every((n) => Number.isFinite(n))) {
+      return [
+        clampNum(Math.round(parts[0]), 0, 255),
+        clampNum(Math.round(parts[1]), 0, 255),
+        clampNum(Math.round(parts[2]), 0, 255),
+      ];
+    }
+    return fallback;
+  }
+
+  function mixRgbArr(a, b, w) {
+    const tW = clampNum(Number(w) || 0, 0, 1);
+    return [
+      Math.round(a[0] + (b[0] - a[0]) * tW),
+      Math.round(a[1] + (b[1] - a[1]) * tW),
+      Math.round(a[2] + (b[2] - a[2]) * tW),
+    ];
+  }
+
+  function relLumRgb(rgb) {
+    const lin = (c) => {
+      const n = clampNum(c, 0, 255) / 255;
+      return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+  }
+
+  function contrastRatioRgb(rgbA, rgbB) {
+    const l1 = relLumRgb(rgbA);
+    const l2 = relLumRgb(rgbB);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  }
+
+  function enforceContrastFloorRgb(rgb, fgRgb, isLight, minRatio = 4.5) {
+    if (contrastRatioRgb(rgb, fgRgb) >= minRatio) return rgb;
+    const anchor = isLight ? [255, 255, 255] : [0, 0, 0];
+    let lo = 0;
+    let hi = 1;
+    let best = anchor;
+    for (let step = 0; step < 12; step++) {
+      const mid = (lo + hi) * 0.5;
+      const cand = mixRgbArr(rgb, anchor, mid);
+      if (contrastRatioRgb(cand, fgRgb) >= minRatio) {
+        best = cand;
+        hi = mid;
+      } else {
+        lo = mid;
+      }
+    }
+    return best;
+  }
+
+  function adaptCustomTintRgb(hexStr, isLight, contrastFloor) {
+    const rgb = parseRgbTriplet(hexToRgbTriplet(hexStr, '14, 14, 17'));
+    if (!contrastFloor) return rgb;
+    const [h, s, l] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
+    if (!isLight && l > 0.24) {
+      return hslToRgb(h, Math.min(s, 0.65), clampNum(0.06 + (1 - l) * 0.18, 0.04, 0.24));
+    }
+    if (isLight && l < 0.74) {
+      return hslToRgb(h, Math.min(s, 0.45), clampNum(0.96 - l * 0.22, 0.74, 0.96));
+    }
+    return rgb;
+  }
+
+  function applyToneShiftRgb(rgb, tone, isLight) {
+    const n = clampNum(Number(tone) || 0, -100, 100);
+    if (n === 0) return rgb;
+    if (!isLight) {
+      return n < 0
+        ? mixRgbArr(rgb, [0, 0, 0], Math.abs(n) / 100)
+        : mixRgbArr(rgb, [92, 98, 114], (n / 100) * 0.85);
+    }
+    return n < 0
+      ? mixRgbArr(rgb, [176, 186, 202], (Math.abs(n) / 100) * 0.85)
+      : mixRgbArr(rgb, [255, 255, 255], n / 100);
+  }
+
+  function buildSimBackdrop(px, isLight, isNested = false) {
+    const r = Math.round(clampNum(Number(px) || 0, 0, 64));
+    if (r <= 0) return 'none';
+    const sat = isNested
+      ? Math.round(100 + Math.min(15, r * 0.25))
+      : isLight
+        ? Math.round(125 + Math.min(65, r * 1.45))
+        : Math.round(115 + Math.min(65, r * 1.35));
+    return `blur(${r}px) saturate(${sat}%)`;
+  }
+
+  function resolveSimComponentSurface(comp, eff, tokens, isLight) {
+    const baseRgb = parseRgbTriplet(tokens.baseRgb, [14, 14, 17]);
+    const shadeRgb = parseRgbTriplet(tokens.shadeRgb, [9, 9, 11]);
+    const tint1Rgb = parseRgbTriplet(tokens.tint1Rgb, [20, 20, 24]);
+    const popRgb = parseRgbTriplet(tokens.popoverRgb, [22, 22, 28]);
+    const wallTintRgb = parseRgbTriplet(tokens.wallTintRgb, [102, 157, 246]);
+    const fgRgb = parseRgbTriplet(hexToRgbTriplet(tokens.fg, isLight ? '15, 23, 42' : '242, 242, 245'));
+    const sbBaseRgb =
+      !isLight && (shadeRgb[0] + shadeRgb[1] + shadeRgb[2] > baseRgb[0] + baseRgb[1] + baseRgb[2])
+        ? baseRgb
+        : shadeRgb;
+
+    const entry = eff.surfaceTints?.[comp] || DEFAULT_SURFACE_TINT_ENTRY;
+    const bounds = SURFACE_TINT_BOUNDS[comp] || { minOpacity: 0, maxOpacity: 0.98 };
+    const wallMix = Number(eff.wallTintMix || 0);
+    const defaultRgb =
+      comp === 'topbar' || comp === 'sidebar'
+        ? sbBaseRgb
+        : comp === 'workspace' || comp === 'rightPane'
+          ? baseRgb
+          : comp === 'popover'
+            ? popRgb
+            : tint1Rgb;
+    const wallWeight =
+      comp === 'popover'
+        ? wallMix * 0.4
+        : comp === 'composer' || comp === 'card'
+          ? wallMix
+          : wallMix * 0.75;
+
+    const contrastOn = eff.contrastFloor !== false;
+    const hasTint = Boolean(entry.tint);
+    const toneVal = Number(entry.tone) || 0;
+    const hasToneOrTint = hasTint || toneVal !== 0;
+
+    let rgb = hasTint ? adaptCustomTintRgb(entry.tint, isLight, contrastOn) : defaultRgb;
+    rgb = applyToneShiftRgb(rgb, toneVal, isLight);
+    const preMixRgb = hasToneOrTint && contrastOn ? enforceContrastFloorRgb(rgb, fgRgb, isLight, 4.5) : rgb;
+    let finalRgb = hasTint ? preMixRgb : mixRgbArr(preMixRgb, wallTintRgb, wallWeight);
+    if (hasToneOrTint && contrastOn) {
+      finalRgb = enforceContrastFloorRgb(finalRgb, fgRgb, isLight, 4.5);
+    }
+
+    const solidChrome = eff.glassSurfaces === false;
+    let alpha;
+    if (solidChrome && comp !== 'popover') {
+      alpha = 1;
+    } else if (entry.opacity !== null && entry.opacity !== undefined) {
+      alpha = clampNum(Number(entry.opacity), bounds.minOpacity, bounds.maxOpacity);
+    } else {
+      alpha = resolveComponentDefaultAlpha(comp, eff, isLight);
+    }
+
+    return {
+      rgb: finalRgb,
+      alpha,
+      rgba: `rgba(${finalRgb[0]}, ${finalRgb[1]}, ${finalRgb[2]}, ${alpha.toFixed(3)})`,
+    };
+  }
+
   function syncOpticalCssVars() {
     const eff = getEffectiveConfig();
     const polarity = getResolvedPolarity(eff);
+    const isLight = polarity === 'light';
     const tokens = resolveSchemeTokens(eff, polarity);
     const root = document.documentElement;
 
@@ -427,20 +651,29 @@ function bootPrismStudioApp() {
     root.style.setProperty('--prism-wall-tint-rgb', tokens.wallTintRgb);
     root.style.setProperty('--prism-wall-tint-mix', `${Math.round((eff.wallTintMix || 0) * 1000) / 10}%`);
 
+    // Resolve all 7 glass component surfaces once so both swatches & 21:9 preview stay 1:1 live
+    const compSurfaces = {};
+    for (const comp of SURFACE_TINT_COMPONENTS) {
+      compSurfaces[comp] = resolveSimComponentSurface(comp, eff, tokens, isLight);
+      root.style.setProperty(`--sim-${comp}-bg`, compSurfaces[comp].rgba);
+    }
+
     const stage = document.getElementById('prism-mini-stage');
     const hub = document.getElementById('prism-mini-hub');
     if (!stage || !hub) return;
 
     const fitCss = eff.fit === 'center' ? 'none' : eff.fit;
-    const totalScale = ((eff.layerScale || 100) / 100) * (eff.mediaBlur > 0 ? 1.04 : 1);
+    // Issue #10: Zero blur overscale jitter (1.0x constant scale; edge-clamped .mini-blur-veil handles mediaBlur!)
+    const totalScale = (eff.layerScale || 100) / 100;
+    const mediaBlurSimPx = Math.round((eff.mediaBlur || 0) * 0.45 * 10) / 10;
     const scrimCol = eff.scrimColor && eff.scrimColor !== 'auto' ? eff.scrimColor : `rgb(${tokens.shadeRgb})`;
-    const scrimAlpha = polarity === 'light' && (!eff.scrimColor || eff.scrimColor === 'auto') && eff.scrimOpacity > 0
+    const scrimAlpha = isLight && (!eff.scrimColor || eff.scrimColor === 'auto') && eff.scrimOpacity > 0
       ? Math.min(0.94, 0.16 + eff.scrimOpacity * 0.78)
       : eff.scrimOpacity;
 
-    const vigBg = polarity === 'light'
-      ? 'radial-gradient(ellipse 58% 66% at 50% 48%, rgba(255,255,255,0.40) 0%, rgba(244,247,251,0.22) 60%, rgba(232,238,246,0.52) 100%)'
-      : 'radial-gradient(ellipse 58% 66% at 50% 48%, rgba(9,9,11,0.06) 0%, rgba(9,9,11,0.30) 60%, rgba(9,9,11,0.64) 100%)';
+    const vigBg = isLight
+      ? 'radial-gradient(ellipse 58% 66% at 50% 48%, rgba(255,255,255,0.28) 0%, rgba(244,247,251,0.14) 62%, rgba(232,238,246,0.32) 100%)'
+      : 'radial-gradient(ellipse 58% 66% at 50% 48%, rgba(9,9,11,0.04) 0%, rgba(9,9,11,0.16) 62%, rgba(9,9,11,0.34) 100%)';
 
     let extraFilter = '';
     if (eff.filterPreset === 'grayscale') extraFilter = ' grayscale(100%)';
@@ -455,7 +688,9 @@ function bootPrismStudioApp() {
     stage.style.setProperty('--sim-fit', fitCss);
     stage.style.setProperty('--sim-pos', `${eff.layerPosX}% ${eff.layerPosY}%`);
     stage.style.setProperty('--sim-media-opacity', String(eff.mediaOpacity));
-    stage.style.setProperty('--sim-media-blur', `${Math.round(eff.mediaBlur * 0.45 * 10) / 10}px`);
+    stage.style.setProperty('--sim-media-blur', `${mediaBlurSimPx}px`);
+    stage.style.setProperty('--sim-media-blur-filter', mediaBlurSimPx > 0 ? `blur(${mediaBlurSimPx}px)` : 'none');
+    stage.style.setProperty('--sim-media-blur-display', mediaBlurSimPx > 0 ? 'block' : 'none');
     stage.style.setProperty('--sim-media-brightness', `${eff.mediaBrightness}%`);
     stage.style.setProperty('--sim-media-contrast', `${eff.mediaContrast}%`);
     stage.style.setProperty('--sim-media-saturate', `${eff.mediaSaturate}%`);
@@ -464,12 +699,12 @@ function bootPrismStudioApp() {
     stage.style.setProperty('--sim-scrim-color', scrimCol);
     stage.style.setProperty('--sim-scrim-opacity', scrimAlpha.toFixed(3));
     stage.style.setProperty('--sim-vignette-bg', vigBg);
-    stage.style.setProperty('--sim-vignette-opacity', eff.vignette ? (polarity === 'light' ? '0.36' : '0.44') : '0');
+    stage.style.setProperty('--sim-vignette-opacity', eff.vignette ? (isLight ? '0.36' : '0.44') : '0');
     stage.style.setProperty('--sim-grain-alpha', String(eff.grainAlpha));
 
     const mediaEl = stage.querySelector('.mini-media-el');
     if (mediaEl) {
-      mediaEl.style.filter = `blur(var(--sim-media-blur, 0px)) brightness(var(--sim-media-brightness, 100%)) contrast(var(--sim-media-contrast, 100%)) saturate(var(--sim-media-saturate, 105%))${extraFilter}`;
+      mediaEl.style.filter = `brightness(var(--sim-media-brightness, 100%)) contrast(var(--sim-media-contrast, 100%)) saturate(var(--sim-media-saturate, 105%))${extraFilter}`;
       if (mediaEl.tagName === 'VIDEO') {
         if (Math.abs(mediaEl.playbackRate - (eff.playbackRate || 1)) > 0.02) {
           mediaEl.playbackRate = eff.playbackRate || 1;
@@ -482,9 +717,10 @@ function bootPrismStudioApp() {
       }
     }
 
-    // Simulated Workbench Islands Geometry & Glass Hierarchy
+    // Simulated Workbench Islands Geometry & Two-Tier Glass Hierarchy (Req #2, #3, #4)
     const isIslands = eff.layoutMode === 'islands';
     hub.dataset.layout = eff.layoutMode;
+    hub.dataset.topbarStyle = eff.topbarStyle || 'pills';
     const baseR = eff.cornerStyle === 'sharp' ? 4 : eff.cornerStyle === 'soft' ? 12 : 8;
     const mapSidebarR = (raw) => {
       if (!isIslands) return '0px';
@@ -494,33 +730,30 @@ function bootPrismStudioApp() {
     };
 
     const g = eff.glassSurfaces ? eff.glassOpacity : 0.96;
-    const blurPx = eff.glassSurfaces ? Math.round(eff.glassBlur * 0.6) : 0;
-    const fidBoost = (eff.glassFidelity / 100) * 0.14;
-    const chatBoost = (eff.chatGlassFidelity / 100) * 0.14;
+    const blurPx = eff.glassSurfaces ? Math.round((eff.glassBlur || 0) * 0.85) : 0;
+    const rawSbBlur = eff.sidebarBlur !== null && eff.sidebarBlur !== undefined ? eff.sidebarBlur : eff.glassBlur;
+    const sbBlurPx = eff.glassSurfaces ? Math.round((rawSbBlur || 0) * 0.85) : 0;
+    const compBlurPx = eff.glassSurfaces && eff.glassBlur > 0
+      ? Math.min(58, Math.round((eff.glassBlur + 4) * 0.85))
+      : 0;
+    const codeBlurPx = eff.glassSurfaces && eff.codeReadabilityMode === 'frosted' && blurPx > 0
+      ? Math.max(4, Math.round(blurPx * 0.85))
+      : 0;
 
-    const rgbSum = (trip) =>
-      String(trip || '0, 0, 0')
-        .split(',')
-        .reduce((acc, s) => acc + (Number(s.trim()) || 0), 0);
-    const sbBaseRgb =
-      polarity !== 'light' && rgbSum(tokens.shadeRgb) > rgbSum(tokens.baseRgb)
-        ? tokens.baseRgb
-        : tokens.shadeRgb;
-    const rawSbOp = eff.sidebarOpacity !== null && eff.sidebarOpacity !== undefined ? eff.sidebarOpacity : eff.glassOpacity;
-    const sidebarAlpha = eff.glassSurfaces ? Math.min(0.98, Math.max(0.20, rawSbOp)) : 0.96;
-    const sbBlurPx = eff.glassSurfaces ? Math.round(((eff.sidebarBlur !== null && eff.sidebarBlur !== undefined ? eff.sidebarBlur : eff.glassBlur)) * 0.6) : 0;
-    const chatAlpha = Math.min(0.95, g * (polarity === 'light' ? 0.60 : 0.38) + chatBoost);
-    const composerAlpha = Math.min(0.99, g * 0.92 + fidBoost * 0.3);
-
-    const floorAlpha = eff.contrastFloor ? (polarity === 'light' ? 0.84 : 0.72) : 0.44;
+    const floorAlpha = eff.contrastFloor ? (isLight ? 0.84 : 0.72) : 0.44;
     let editorBg = `rgba(${tokens.tint1Rgb}, ${Math.max(floorAlpha, g * 0.78).toFixed(3)})`;
-    let codeBlur = 'none';
+    let codeBackdrop = 'none';
     if (eff.codeReadabilityMode === 'solid') {
       editorBg = `rgb(${tokens.tint1Rgb})`;
     } else if (eff.codeReadabilityMode === 'frosted') {
       editorBg = `rgba(${tokens.tint1Rgb}, ${Math.max(floorAlpha, g * 0.85).toFixed(3)})`;
-      codeBlur = `blur(${Math.max(4, blurPx)}px)`;
+      codeBackdrop = buildSimBackdrop(codeBlurPx, isLight, true);
     }
+
+    const chatBackdrop = buildSimBackdrop(blurPx, isLight, false);
+    const topbarBackdrop = buildSimBackdrop(blurPx, isLight, false);
+    const sidebarBackdrop = buildSimBackdrop(sbBlurPx, isLight, false);
+    const composerBackdrop = buildSimBackdrop(compBlurPx, isLight, true);
 
     const borderCss = eff.borders === 'off'
       ? '1px solid transparent'
@@ -529,23 +762,33 @@ function bootPrismStudioApp() {
         : `1px solid rgba(${tokens.ptRgb}, 0.14)`;
 
     const shadowCss = isIslands && eff.shadows
-      ? `inset 0 1px 0 ${polarity === 'light' ? 'rgba(255,255,255,0.86)' : 'rgba(255,255,255,0.09)'}, 0 6px 16px rgba(0,0,0,${polarity === 'light' ? '0.12' : '0.38'})`
+      ? `inset 0 1px 0 ${isLight ? 'rgba(255,255,255,0.86)' : 'rgba(255,255,255,0.09)'}, 0 6px 16px rgba(0,0,0,${isLight ? '0.12' : '0.38'})`
       : 'none';
 
     hub.style.setProperty('--sim-pad', isIslands ? `${Math.max(2, Math.round(eff.workspacePad * 0.75))}px` : '0px');
     hub.style.setProperty('--sim-gap', isIslands ? `${Math.max(0, Math.round(eff.islandGap * 0.75))}px` : '0px');
     hub.style.setProperty('--sim-r-island', isIslands ? `${baseR}px` : '0px');
+    hub.style.setProperty('--sim-r-topbar', isIslands ? `${Math.max(4, baseR - 2)}px` : '0px');
     hub.style.setProperty('--sim-r-left', mapSidebarR(eff.leftSidebarRadius));
     hub.style.setProperty('--sim-r-right', mapSidebarR(eff.rightSidebarRadius));
     hub.style.setProperty('--sim-r-card', `${Math.max(3, baseR - 3)}px`);
-    hub.style.setProperty('--sim-sidebar-bg', `rgba(${sbBaseRgb}, ${sidebarAlpha.toFixed(3)})`);
+    hub.style.setProperty('--sim-topbar-bg', compSurfaces.topbar.rgba);
+    hub.style.setProperty('--sim-sidebar-bg', compSurfaces.sidebar.rgba);
+    hub.style.setProperty('--sim-chat-bg', compSurfaces.workspace.rgba);
+    hub.style.setProperty('--sim-right-pane-bg', compSurfaces.rightPane.rgba);
+    hub.style.setProperty('--sim-composer-bg', compSurfaces.composer.rgba);
+    hub.style.setProperty('--sim-card-bg', compSurfaces.card.rgba);
+    hub.style.setProperty('--sim-popover-bg', compSurfaces.popover.rgba);
+    hub.style.setProperty('--sim-topbar-backdrop', topbarBackdrop);
+    hub.style.setProperty('--sim-sidebar-backdrop', sidebarBackdrop);
+    hub.style.setProperty('--sim-chat-backdrop', chatBackdrop);
+    hub.style.setProperty('--sim-composer-backdrop', composerBackdrop);
+    hub.style.setProperty('--sim-code-backdrop', codeBackdrop);
     hub.style.setProperty('--sim-sidebar-blur', `${sbBlurPx}px`);
-    hub.style.setProperty('--sim-chat-bg', `rgba(${tokens.baseRgb}, ${chatAlpha.toFixed(3)})`);
     hub.style.setProperty('--sim-editor-bg', editorBg);
-    hub.style.setProperty('--sim-code-blur', codeBlur);
-    hub.style.setProperty('--sim-composer-bg', `rgba(${tokens.tint1Rgb}, ${composerAlpha.toFixed(3)})`);
+    hub.style.setProperty('--sim-code-blur', codeBackdrop);
     hub.style.setProperty('--sim-blur', `${blurPx}px`);
-    hub.style.setProperty('--sim-blur-lg', `${Math.round(blurPx * 1.25)}px`);
+    hub.style.setProperty('--sim-blur-lg', `${compBlurPx}px`);
     hub.style.setProperty('--sim-border', borderCss);
     hub.style.setProperty('--sim-shadow', shadowCss);
     hub.style.setProperty('--sim-caret', eff.caretColor || tokens.accent);
@@ -1013,7 +1256,138 @@ function bootPrismStudioApp() {
     }
     if (typeof s.mediaOrigin === 'string') store.mediaOrigin = s.mediaOrigin;
     if (typeof s.pid === 'number') store.pid = s.pid;
-    if (typeof s.version === 'string') store.version = s.version;
+    if (typeof s.version === 'string') {
+      store.version = s.version;
+      store.update.currentVersion = s.version;
+    }
+    const updSrc =
+      (s.updateStatus && typeof s.updateStatus === 'object' ? s.updateStatus : null) ||
+      (s.updateSummary && typeof s.updateSummary === 'object' ? s.updateSummary : null) ||
+      (s.update && typeof s.update === 'object' ? s.update : null);
+    if (updSrc) {
+      ingestUpdateStatus(updSrc, { fromBootstrap: true });
+    }
+  }
+
+  function sanitizeExternalReleaseUrl(rawUrl) {
+    const fallback = 'https://github.com/azwosile/agy-wallpaper-prism/releases';
+    const str = String(rawUrl || '').trim();
+    if (!str) return fallback;
+    try {
+      const u = new URL(str);
+      if (u.protocol === 'https:') return u.toString();
+    } catch {
+      // ignore invalid URL
+    }
+    return fallback;
+  }
+
+  function ingestUpdateStatus(data, { fromBootstrap = false } = {}) {
+    if (!data || typeof data !== 'object') return;
+    const u = store.update;
+    if (typeof data.currentVersion === 'string' && data.currentVersion) {
+      u.currentVersion = data.currentVersion;
+    }
+    if ('latestVersion' in data) u.latestVersion = data.latestVersion || null;
+    if ('latestTag' in data) u.latestTag = data.latestTag || null;
+    if (typeof data.hasUpdate === 'boolean') u.hasUpdate = data.hasUpdate;
+    else if (typeof data.updateAvailable === 'boolean') u.hasUpdate = data.updateAvailable;
+    if (typeof data.releaseUrl === 'string' && data.releaseUrl) {
+      u.releaseUrl = sanitizeExternalReleaseUrl(data.releaseUrl);
+    }
+    if ('publishedAt' in data) u.publishedAt = data.publishedAt || null;
+    if (typeof data.changelog === 'string') u.changelog = data.changelog;
+    else if (typeof data.releaseNotes === 'string') u.changelog = data.releaseNotes;
+    if (typeof data.changelogSummary === 'string') u.changelogSummary = data.changelogSummary;
+    else if (!u.changelogSummary && typeof data.releaseNotes === 'string') u.changelogSummary = data.releaseNotes.split('\n')[0] || '';
+    if (typeof data.offline === 'boolean') u.offline = data.offline;
+    if (typeof data.rateLimited === 'boolean') u.rateLimited = data.rateLimited;
+    if ('checkedAt' in data && data.checkedAt) u.checkedAt = data.checkedAt;
+    const envObj = data.installEnv && typeof data.installEnv === 'object' ? data.installEnv : null;
+    if (typeof data.canSelfUpdate === 'boolean') u.canSelfUpdate = data.canSelfUpdate;
+    else if (typeof data.canAutoUpdate === 'boolean') u.canSelfUpdate = data.canAutoUpdate;
+    else if (envObj && typeof envObj.canSelfUpdate === 'boolean') u.canSelfUpdate = envObj.canSelfUpdate;
+    else if (envObj && typeof envObj.canAutoUpdate === 'boolean') u.canSelfUpdate = envObj.canAutoUpdate;
+    if (envObj && typeof envObj.isGitCheckout === 'boolean') u.isGitCheckout = envObj.isGitCheckout;
+    if (envObj && typeof envObj.isSymlink === 'boolean') u.isSymlink = envObj.isSymlink;
+    const reason = data.disabledReason || data.blockReason || envObj?.disabledReason || envObj?.blockReason || '';
+    if (reason || envObj) u.disabledReason = String(reason);
+    if (!fromBootstrap || data.checkedAt || data.latestVersion) {
+      u.checked = true;
+    }
+  }
+
+  function mergeSurfaceTintsPatch(baseTints, incomingTints) {
+    if (incomingTints === null) return null;
+    if (!incomingTints || typeof incomingTints !== 'object' || Array.isArray(incomingTints)) {
+      return baseTints;
+    }
+    const out = baseTints && typeof baseTints === 'object' && !Array.isArray(baseTints) ? { ...baseTints } : {};
+    for (const [comp, val] of Object.entries(incomingTints)) {
+      if (val === null) {
+        out[comp] = null;
+      } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+        const prev = out[comp] && typeof out[comp] === 'object' ? out[comp] : {};
+        out[comp] = { ...prev, ...val };
+      }
+    }
+    return out;
+  }
+
+  function mergeConfigPatches(prevPatch, nextPatch) {
+    const merged = { ...(prevPatch || {}), ...(nextPatch || {}) };
+    if (prevPatch && nextPatch && 'surfaceTints' in prevPatch && 'surfaceTints' in nextPatch) {
+      merged.surfaceTints = mergeSurfaceTintsPatch(prevPatch.surfaceTints, nextPatch.surfaceTints);
+    }
+    if (nextPatch && 'sidebarOpacity' in nextPatch && nextPatch.surfaceTints !== null) {
+      const nextSbHasOp = Boolean(
+        nextPatch.surfaceTints &&
+        typeof nextPatch.surfaceTints === 'object' &&
+        (nextPatch.surfaceTints.sidebar === null ||
+          (nextPatch.surfaceTints.sidebar &&
+            typeof nextPatch.surfaceTints.sidebar === 'object' &&
+            'opacity' in nextPatch.surfaceTints.sidebar)),
+      );
+      if (!nextSbHasOp && 'surfaceTints' in merged && merged.surfaceTints !== null) {
+        merged.surfaceTints = mergeSurfaceTintsPatch(merged.surfaceTints, { sidebar: { opacity: nextPatch.sidebarOpacity } });
+      }
+    }
+    if (
+      prevPatch &&
+      nextPatch &&
+      prevPatch.perWallpaperOverrides &&
+      nextPatch.perWallpaperOverrides &&
+      typeof prevPatch.perWallpaperOverrides === 'object' &&
+      typeof nextPatch.perWallpaperOverrides === 'object'
+    ) {
+      const ovs = { ...prevPatch.perWallpaperOverrides };
+      for (const [wid, ov] of Object.entries(nextPatch.perWallpaperOverrides)) {
+        if (ov && typeof ov === 'object' && ovs[wid] && typeof ovs[wid] === 'object') {
+          const nextOv = { ...ovs[wid], ...ov };
+          if ('surfaceTints' in ovs[wid] && 'surfaceTints' in ov) {
+            nextOv.surfaceTints = mergeSurfaceTintsPatch(ovs[wid].surfaceTints, ov.surfaceTints);
+          }
+          if ('sidebarOpacity' in ov && ov.surfaceTints !== null) {
+            const ovSbHasOp = Boolean(
+              ov.surfaceTints &&
+              typeof ov.surfaceTints === 'object' &&
+              (ov.surfaceTints.sidebar === null ||
+                (ov.surfaceTints.sidebar &&
+                  typeof ov.surfaceTints.sidebar === 'object' &&
+                  'opacity' in ov.surfaceTints.sidebar)),
+            );
+            if (!ovSbHasOp && 'surfaceTints' in nextOv && nextOv.surfaceTints !== null) {
+              nextOv.surfaceTints = mergeSurfaceTintsPatch(nextOv.surfaceTints, { sidebar: { opacity: ov.sidebarOpacity } });
+            }
+          }
+          ovs[wid] = nextOv;
+        } else {
+          ovs[wid] = ov;
+        }
+      }
+      merged.perWallpaperOverrides = ovs;
+    }
+    return merged;
   }
 
   function buildConfigPatchForKey(patch) {
@@ -1023,10 +1397,27 @@ function bootPrismStudioApp() {
     }
     const globalPart = {};
     const ovPart = { ...(store.config.perWallpaperOverrides?.[activeId] || {}) };
+    const clearingAllTints = patch.surfaceTints === null;
     let touchedOv = false;
     for (const [k, v] of Object.entries(patch)) {
       if (PER_WALLPAPER_OVERRIDE_KEYS.includes(k)) {
-        ovPart[k] = v;
+        if (k === 'surfaceTints') {
+          ovPart.surfaceTints = mergeSurfaceTintsPatch(ovPart.surfaceTints, v);
+          if (v === null) {
+            ovPart.sidebarOpacity = null;
+          } else if (v && typeof v === 'object') {
+            if (v.sidebar === null) {
+              ovPart.sidebarOpacity = null;
+            } else if (v.sidebar && typeof v.sidebar === 'object' && 'opacity' in v.sidebar) {
+              ovPart.sidebarOpacity = v.sidebar.opacity;
+            }
+          }
+        } else {
+          ovPart[k] = v;
+          if (k === 'sidebarOpacity' && !clearingAllTints && !(ovPart.surfaceTints === null && v === null)) {
+            ovPart.surfaceTints = mergeSurfaceTintsPatch(ovPart.surfaceTints, { sidebar: { opacity: v } });
+          }
+        }
         touchedOv = true;
       } else {
         globalPart[k] = v;
@@ -1052,15 +1443,30 @@ function bootPrismStudioApp() {
 
   function queueConfigPatch(rawPatch, immediate = false, routeThroughPin = true) {
     const patch = applyLocalPatch(rawPatch, routeThroughPin);
-    pendingConfigPatch = { ...pendingConfigPatch, ...patch };
-    if (configDebounceTimer) {
-      clearTimeout(configDebounceTimer);
-      configDebounceTimer = null;
-    }
+    pendingConfigPatch = mergeConfigPatches(pendingConfigPatch, patch);
     if (immediate) {
-      flushConfigPatch();
-    } else {
-      configDebounceTimer = setTimeout(flushConfigPatch, 140);
+      if (configDebounceTimer) {
+        clearTimeout(configDebounceTimer);
+        configDebounceTimer = null;
+      }
+      void flushConfigPatch();
+      return;
+    }
+    const elapsed = Date.now() - lastConfigFlushAt;
+    if (!configFlushInFlight && elapsed >= CONFIG_THROTTLE_MS) {
+      if (configDebounceTimer) {
+        clearTimeout(configDebounceTimer);
+        configDebounceTimer = null;
+      }
+      void flushConfigPatch();
+      return;
+    }
+    if (!configDebounceTimer) {
+      const delay = Math.max(16, CONFIG_THROTTLE_MS - Math.max(0, elapsed));
+      configDebounceTimer = setTimeout(() => {
+        configDebounceTimer = null;
+        void flushConfigPatch();
+      }, delay);
     }
   }
 
@@ -1069,19 +1475,35 @@ function bootPrismStudioApp() {
       clearTimeout(configDebounceTimer);
       configDebounceTimer = null;
     }
-    const patch = pendingConfigPatch;
-    pendingConfigPatch = {};
-    if (!patch || Object.keys(patch).length === 0) return;
+    if (configFlushInFlight) {
+      configFlushPending = true;
+      return;
+    }
+    if (!pendingConfigPatch || Object.keys(pendingConfigPatch).length === 0) return;
+
     configFlushInFlight = true;
     try {
-      const res = await apiJson('/api/config', { method: 'POST', body: { patch } });
-      ingestServerState(res);
-      syncOpticalCssVars();
-      updateTopStatusIndicators();
+      while (pendingConfigPatch && Object.keys(pendingConfigPatch).length > 0) {
+        configFlushPending = false;
+        const patch = pendingConfigPatch;
+        pendingConfigPatch = {};
+        lastConfigFlushAt = Date.now();
+        const res = await apiJson('/api/config', { method: 'POST', body: { patch } });
+        if (Object.keys(pendingConfigPatch).length === 0 && !configFlushPending) {
+          ingestServerState(res);
+          syncOpticalCssVars();
+          syncSurfaceTintsHeaderInDom();
+          updateTopStatusIndicators();
+        }
+      }
     } catch (err) {
       showToast(err.message || 'Failed to save config', 'danger');
     } finally {
       configFlushInFlight = false;
+      if (Object.keys(pendingConfigPatch).length > 0 || configFlushPending) {
+        configFlushPending = false;
+        void flushConfigPatch();
+      }
     }
   }
 
@@ -1357,28 +1779,37 @@ function bootPrismStudioApp() {
     decimals = 0,
     suffix = '',
     dblResetFraming = false,
+    nullable = false,
     nullableFallbackKey = '',
     fallbackValue = null,
+    comp = '',
+    resetAction = 'reset-key',
   }) {
     const uiMin = min * scale;
     const uiMax = max * scale;
     const uiStep = step * scale;
-    if (nullableFallbackKey) {
+    if (nullable || nullableFallbackKey) {
       const isAuto = value === null || value === undefined;
       const resolvedVal = isAuto ? Number(fallbackValue) : Number(value);
       const uiVal = resolvedVal * scale;
-      const isDirty = isAuto ? false : true;
+      const isDirty = !isAuto;
       const { pct, display: rawDisplay } = sliderMeta(uiVal, uiMin, uiMax, decimals, suffix);
       const display = isAuto ? tr('glass.followMainFmt', { val: rawDisplay }) : rawDisplay;
+      const fallbackAttr = nullableFallbackKey ? ` data-fallback-key="${esc(nullableFallbackKey)}"` : '';
+      const compAttr = comp ? ` data-comp="${esc(comp)}"` : '';
+      const resetAttrs =
+        resetAction === 'reset-surface-comp' && comp
+          ? `data-action="reset-surface-comp" data-comp="${esc(comp)}"`
+          : `data-action="reset-key" data-key="${esc(key)}"`;
 
       return `
       <div class="prism-slider-row" data-slider-key="${esc(key)}" data-dirty="${isDirty ? 'true' : 'false'}"
-           data-nullable="true" data-fallback-key="${esc(nullableFallbackKey)}"
+           data-nullable="true"${fallbackAttr}${compAttr}
            data-scale="${scale}" data-min="${uiMin}" data-max="${uiMax}" data-step="${uiStep}"
            data-decimals="${decimals}" data-suffix="${esc(suffix)}" data-default="${Number(defaultValue)}">
         <span class="prism-slider-label" ${dblResetFraming ? `data-dblreset="true" title="${esc(tx('dblClickFramingHint'))}"` : ''}>${esc(label)}</span>
         <span class="prism-slider-val" data-action="edit-slider-val" title="Click to enter exact value">${esc(display)}</span>
-        <button type="button" class="prism-reset-btn" data-action="reset-key" data-key="${esc(key)}" title="${esc(tr('common.reset'))}">↺</button>
+        <button type="button" class="prism-reset-btn" ${resetAttrs} title="${esc(tr('common.reset'))}">↺</button>
         <input type="range" class="prism-range" data-config-slider="${esc(key)}"
                min="${uiMin}" max="${uiMax}" step="${uiStep}" value="${uiVal}"
                style="--prism-pct:${pct}%" />
@@ -1466,8 +1897,8 @@ function bootPrismStudioApp() {
 
   function renderScenePresetsHtml(eff) {
     const icons = { crystal: '✦', islands: '❖', focus: '◐', eco: '🍃' };
-    const subsZh = { crystal: '64% 高透光感', islands: '8px 圆角浮岛', focus: '柔焦护眼阅读', eco: '静帧零模糊' };
-    const subsEn = { crystal: '64% airy acrylic', islands: '8px glass islands', focus: 'Soft reading veil', eco: 'Paused 0-blur' };
+    const subsZh = { crystal: '64% 高透光感', islands: '76% 均衡磨砂', focus: '柔焦护眼阅读', eco: '静帧零模糊' };
+    const subsEn = { crystal: '64% airy acrylic', islands: '76% balanced glass', focus: 'Soft reading veil', eco: 'Paused 0-blur' };
     const isZh = curLocale() === 'zh';
 
     return `
@@ -1790,7 +2221,7 @@ function bootPrismStudioApp() {
               <span>${esc(tr('layout.title'))}</span>
             </div>
             <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="layoutMode,islandGap,workspacePad,cornerStyle,leftSidebarRadius,rightSidebarRadius,borders,shadows,transparentWindowControls">↺</button>
+                    data-action="reset-module" data-keys="layoutMode,islandGap,workspacePad,cornerStyle,leftSidebarRadius,rightSidebarRadius,borders,shadows,topbarStyle,transparentWindowControls,hideWelcomeLogo">↺</button>
           </summary>
           <div class="prism-section-body">
             ${renderSegRow({
@@ -1851,11 +2282,23 @@ function bootPrismStudioApp() {
               label: tr('layout.shadows'),
               checked: eff.shadows,
             })}
+            ${renderSegRow({
+              key: 'topbarStyle',
+              label: tr('layout.topbarStyle'),
+              value: eff.topbarStyle || DEFAULT_CONFIG.topbarStyle || 'pills',
+              options: TOPBAR_STYLES.map((s) => ({ value: s, label: tr(`layout.topbarStyle.${s}`) })),
+            })}
             ${renderSwitchRow({
               key: 'transparentWindowControls',
               label: tr('layout.transparentWindowControls'),
               hint: tr('layout.transparentWindowControlsHint'),
               checked: eff.transparentWindowControls !== false,
+            })}
+            ${renderSwitchRow({
+              key: 'hideWelcomeLogo',
+              label: tr('layout.hideWelcomeLogo'),
+              hint: tr('layout.hideWelcomeLogoHint'),
+              checked: Boolean(eff.hideWelcomeLogo),
             })}
           </div>
         </details>
@@ -1962,7 +2405,7 @@ function bootPrismStudioApp() {
               <span>${esc(tr('glass.title'))}</span>
             </div>
             <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="glassSurfaces,glassOpacity,glassBlur,sidebarOpacity,sidebarBlur,glassFidelity,chatGlassFidelity,codeReadabilityMode,contrastFloor,caretColor">↺</button>
+                    data-action="reset-module" data-keys="glassSurfaces,glassOpacity,glassBlur,sidebarOpacity,sidebarBlur,surfaceTints,glassFidelity,chatGlassFidelity,codeReadabilityMode,contrastFloor,caretColor">↺</button>
           </summary>
           <div class="prism-section-body">
             ${renderSwitchRow({
@@ -1975,7 +2418,7 @@ function bootPrismStudioApp() {
               label: tr('glass.opacity'),
               value: eff.glassOpacity,
               defaultValue: DEFAULT_CONFIG.glassOpacity,
-              min: 0.30,
+              min: 0.15,
               max: 0.98,
               step: 0.01,
               scale: 100,
@@ -1988,36 +2431,160 @@ function bootPrismStudioApp() {
               value: eff.glassBlur,
               defaultValue: DEFAULT_CONFIG.glassBlur,
               min: 0,
-              max: 48,
+              max: 64,
               step: 1,
               suffix: ' px',
             })}
-            ${renderSliderRow({
-              key: 'sidebarOpacity',
-              label: tr('glass.sidebarOpacity'),
-              value: eff.sidebarOpacity,
-              defaultValue: DEFAULT_CONFIG.glassOpacity,
-              min: 0.20,
-              max: 0.98,
-              step: 0.01,
-              scale: 100,
-              decimals: 0,
-              suffix: ' %',
-              nullableFallbackKey: 'glassOpacity',
-              fallbackValue: eff.glassOpacity,
-            })}
+            <div class="prism-ctl-hint" style="margin-top:-2px">${esc(tr('glass.blurHint'))}</div>
+            <div class="prism-blur-stops" role="group" aria-label="${esc(tr('glass.blur'))}">
+              ${[0, 8, 18, 36, 56]
+                .map((px) => {
+                  const isAct = Math.round(Number(eff.glassBlur ?? DEFAULT_CONFIG.glassBlur)) === px;
+                  return `<button type="button" class="prism-blur-stop-chip ${isAct ? 'is-active' : ''}" data-action="set-num" data-key="glassBlur" data-val="${px}">${esc(tr(`glass.blurStop.${px}`))}</button>`;
+                })
+                .join('')}
+            </div>
             ${renderSliderRow({
               key: 'sidebarBlur',
               label: tr('glass.sidebarBlur'),
               value: eff.sidebarBlur,
               defaultValue: DEFAULT_CONFIG.glassBlur,
               min: 0,
-              max: 48,
+              max: 64,
               step: 1,
               suffix: ' px',
+              nullable: true,
               nullableFallbackKey: 'glassBlur',
               fallbackValue: eff.glassBlur,
             })}
+            ${(() => {
+              const isLight = polarity === 'light';
+              const curatedSwatches = [
+                { hex: '#0E0E11', key: 'glass.comp.swatchObsidian' },
+                { hex: '#141B2D', key: 'glass.comp.swatchMidnight' },
+                { hex: '#1C1917', key: 'glass.comp.swatchCarbon' },
+                { hex: '#231C35', key: 'glass.comp.swatchIris' },
+                { hex: '#2B3445', key: 'glass.comp.swatchSlate' },
+              ];
+              const tintsMap = eff.surfaceTints && typeof eff.surfaceTints === 'object' ? eff.surfaceTints : DEFAULT_SURFACE_TINTS;
+              const isCompCustomized = (cId) => {
+                const ent = tintsMap[cId] || DEFAULT_SURFACE_TINT_ENTRY;
+                const op = cId === 'sidebar' ? (eff.sidebarOpacity ?? ent.opacity ?? null) : (ent.opacity ?? null);
+                const tone = Number(ent.tone || 0);
+                const tint = typeof ent.tint === 'string' ? ent.tint.trim() : '';
+                return op !== null || tone !== 0 || tint !== '';
+              };
+              const customCount = SURFACE_TINT_COMPONENTS.filter(isCompCustomized).length;
+              return `
+                <div class="prism-surface-tints-box" data-testid="prism-surface-tints-box">
+                  <div class="prism-surface-tints-head">
+                    <div class="prism-surface-tints-title-wrap">
+                      <span class="prism-surface-tints-title">${esc(tr('glass.comp.title'))}</span>
+                      <span class="prism-surface-tints-badge ${customCount > 0 ? 'is-custom' : ''}">${esc(customCount > 0 ? tr('glass.comp.customCount', { n: customCount }) : tr('glass.comp.allAuto'))}</span>
+                    </div>
+                    <button type="button" class="prism-btn prism-btn-sm" data-action="reset-all-surface-tints" ${customCount === 0 ? 'disabled' : ''}>
+                      ↺ ${esc(tr('glass.comp.resetAll'))}
+                    </button>
+                  </div>
+                  <div class="prism-ctl-hint">${esc(tr('glass.comp.hint'))}</div>
+                  <div class="prism-comp-list">
+                    ${SURFACE_TINT_COMPONENTS.map((comp) => {
+                      const bounds = SURFACE_TINT_BOUNDS[comp] || { minOpacity: 0, maxOpacity: 0.98 };
+                      const ent = tintsMap[comp] || DEFAULT_SURFACE_TINT_ENTRY;
+                      const isSidebar = comp === 'sidebar';
+                      const compOp = isSidebar
+                        ? (eff.sidebarOpacity !== null && eff.sidebarOpacity !== undefined ? eff.sidebarOpacity : (ent.opacity ?? null))
+                        : (ent.opacity ?? null);
+                      const compTone = Math.max(-100, Math.min(100, Math.round(Number(ent.tone || 0))));
+                      const compTint = typeof ent.tint === 'string' && /^#[0-9a-f]{6}$/i.test(ent.tint) ? ent.tint.toUpperCase() : '';
+                      const hasTintOrTone = compTone !== 0 || compTint !== '';
+                      const isOpen = store.expandedTintComp === comp;
+                      const defAlpha = resolveComponentDefaultAlpha(comp, eff, isLight);
+                      const tonePct = ((compTone + 100) / 200) * 100;
+                      const sliderHtml = renderSliderRow({
+                        key: isSidebar ? 'sidebarOpacity' : `surfaceTints.${comp}.opacity`,
+                        label: tr(`glass.comp.${comp}`),
+                        value: compOp,
+                        defaultValue: defAlpha,
+                        min: bounds.minOpacity,
+                        max: bounds.maxOpacity,
+                        step: 0.01,
+                        scale: 100,
+                        decimals: 0,
+                        suffix: ' %',
+                        nullable: true,
+                        nullableFallbackKey: comp === 'popover' ? '' : 'glassOpacity',
+                        comp,
+                        fallbackValue: defAlpha,
+                        resetAction: isSidebar ? 'reset-key' : 'reset-surface-comp',
+                      });
+                      return `
+                        <div class="prism-comp-item ${isOpen ? 'is-open' : ''}" data-comp-row="${esc(comp)}">
+                          <div class="prism-comp-main">
+                            <button type="button" class="prism-comp-swatch-btn ${isOpen ? 'is-open' : ''}"
+                                    aria-expanded="${isOpen ? 'true' : 'false'}"
+                                    data-action="toggle-comp-tint-drawer" data-comp="${esc(comp)}"
+                                    title="${esc(tr('glass.comp.swatchTip'))}">
+                              <span class="prism-comp-swatch-fill" style="background:var(--sim-${esc(comp)}-bg)"></span>
+                              ${hasTintOrTone ? '<span class="prism-comp-swatch-dot" aria-hidden="true"></span>' : ''}
+                            </button>
+                            <div class="prism-comp-slider-wrap">${sliderHtml}</div>
+                          </div>
+                          ${
+                            isOpen
+                              ? `
+                            <div class="prism-comp-drawer" data-comp-drawer="${esc(comp)}">
+                              <div class="prism-tint-tone-row">
+                                <div class="prism-tint-tone-head">
+                                  <span class="prism-tint-sub-label">${esc(tr('glass.comp.tone'))}</span>
+                                  <div class="prism-tint-tone-right">
+                                    <span class="prism-tint-tone-val">${compTone > 0 ? `+${compTone}` : compTone}</span>
+                                    <button type="button" class="prism-reset-btn" data-action="reset-surface-tone" data-comp="${esc(comp)}"
+                                            data-tone-dirty="${compTone !== 0 ? 'true' : 'false'}" title="${esc(tr('common.reset'))}">↺</button>
+                                  </div>
+                                </div>
+                                <input type="range" class="prism-range" data-surface-tone="${esc(comp)}"
+                                       min="-100" max="100" step="1" value="${compTone}"
+                                       style="--prism-pct:${tonePct.toFixed(1)}%" />
+                                <div class="prism-tint-tone-ticks">
+                                  <span>${esc(tr('glass.comp.toneDeeper'))}</span>
+                                  <span>${esc(tr('glass.comp.toneNeutral'))}</span>
+                                  <span>${esc(tr('glass.comp.toneLighter'))}</span>
+                                </div>
+                              </div>
+                              <div class="prism-tint-color-row">
+                                <span class="prism-tint-sub-label">${esc(tr('glass.comp.tint'))}</span>
+                                <div class="prism-tint-color-ctls">
+                                  <input type="color" class="prism-color-input" data-action="set-surface-tint" data-comp="${esc(comp)}"
+                                         value="${esc(compTint || '#1E2430')}" />
+                                  ${curatedSwatches
+                                    .map(
+                                      (sw) => `
+                                    <button type="button" class="prism-tint-quick-swatch ${compTint === sw.hex ? 'is-active' : ''}"
+                                            style="background:${sw.hex}"
+                                            data-action="pick-surface-tint" data-comp="${esc(comp)}" data-hex="${sw.hex}"
+                                            title="${esc(tr(sw.key))} (${sw.hex})"></button>
+                                  `,
+                                    )
+                                    .join('')}
+                                  <button type="button" class="prism-btn prism-btn-sm ${!compTint ? 'prism-btn-primary' : ''}"
+                                          data-action="clear-surface-tint" data-comp="${esc(comp)}">
+                                    ${esc(tr('glass.comp.tintAuto'))}
+                                  </button>
+                                </div>
+                              </div>
+                              <div class="prism-ctl-hint">${esc(tr('glass.comp.tintGuardHint'))}</div>
+                            </div>
+                          `
+                              : ''
+                          }
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              `;
+            })()}
             ${renderSliderRow({
               key: 'glassFidelity',
               label: tr('glass.fidelity'),
@@ -2583,6 +3150,92 @@ function bootPrismStudioApp() {
           </div>
         </div>
       </div>
+
+      <!-- v2.1.0 Software Update & One-Click Self-Update Card -->
+      ${(() => {
+        const u = store.update;
+        const curVer = u.currentVersion || store.version || '2.1.0';
+        const updDotColor = u.error
+          ? 'var(--prism-danger)'
+          : u.hasUpdate
+            ? 'var(--prism-accent)'
+            : u.offline
+              ? 'var(--prism-warn)'
+              : u.checked
+                ? 'var(--prism-ok)'
+                : 'var(--prism-fg-faint)';
+        const hasNotes = Boolean(u.changelog || u.changelogSummary);
+        return `
+          <div id="prism-update-card" class="prism-card" style="display:flex;flex-direction:column;gap:10px;${u.hasUpdate ? 'border-color:rgba(var(--prism-accent-rgb),0.45)' : ''}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="prism-status-dot" style="background:${updDotColor}"></span>
+                <strong style="font-size:13px">${esc(tr('update.cardTitle'))}</strong>
+              </div>
+              <span class="prism-kind-badge">v${esc(curVer)}</span>
+            </div>
+
+            <div class="prism-kv-grid">
+              <div class="prism-kv-box">
+                <span class="prism-kv-k">${esc(tr('update.currentVersion'))}</span>
+                <span class="prism-kv-v">v${esc(curVer)}</span>
+              </div>
+              <div class="prism-kv-box">
+                <span class="prism-kv-k">${esc(tr('update.latestVersion'))}</span>
+                <span class="prism-kv-v">${esc(u.latestVersion ? `v${u.latestVersion}` : (u.offline ? tr('update.offline') : '—'))}</span>
+              </div>
+              <div class="prism-kv-box">
+                <span class="prism-kv-k">${esc(tr('update.lastChecked'))}</span>
+                <span class="prism-kv-v">${esc(formatUpdateTimestamp(u.checkedAt))}</span>
+              </div>
+              <div class="prism-kv-box">
+                <span class="prism-kv-k">${esc(curLocale() === 'zh' ? '安装模式' : 'Install Mode')}</span>
+                <span class="prism-kv-v">${esc(u.canSelfUpdate ? tr('update.installModePlugin') : tr('update.installModeGit'))}</span>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+              <button id="prism-update-check-btn" type="button" class="prism-btn prism-btn-sm"
+                      data-action="check-update" ${u.checking || u.applying ? 'disabled' : ''}>
+                ${u.checking ? `<span class="prism-spinner" aria-hidden="true"></span> ${esc(tr('update.checking'))}` : `↻ ${esc(tr('update.checkBtn'))}`}
+              </button>
+              ${
+                u.hasUpdate && u.latestVersion
+                  ? u.canSelfUpdate
+                    ? `<button type="button" class="prism-btn prism-btn-sm prism-btn-primary"
+                               data-action="apply-update" ${u.applying ? 'disabled' : ''}>
+                         ${u.applying ? `<span class="prism-spinner" aria-hidden="true"></span> ${esc(tr('update.applying'))}` : `⬆ ${esc(tr('update.applyBtn'))}`}
+                       </button>`
+                    : `<span class="prism-update-dev-badge">${esc(tr('update.gitDevHint'))}</span>`
+                  : ''
+              }
+              ${
+                hasNotes
+                  ? `<button type="button" class="prism-link-btn" data-action="toggle-update-notes">
+                       ${esc(tr('update.notesToggle'))} ${u.notesOpen ? '▴' : '▾'}
+                     </button>`
+                  : ''
+              }
+              <a class="prism-link-btn" href="${esc(sanitizeExternalReleaseUrl(u.releaseUrl))}" target="_blank" rel="noopener noreferrer">
+                ${esc(tr('update.viewRelease'))}
+              </a>
+            </div>
+
+            ${
+              u.error
+                ? `<div class="prism-update-error-line"><span>${esc(tr('update.failedPrefix'))}: ${esc(u.error)}</span>${u.canSelfUpdate && u.hasUpdate ? `<button type="button" class="prism-btn prism-btn-sm" data-action="apply-update">${esc(tr('update.retryBtn'))}</button>` : ''}</div>`
+                : u.standaloneRestartNeeded
+                  ? `<div class="prism-update-info-line">${esc(tr('update.standaloneRestartHint'))}</div>`
+                  : u.checked && !u.hasUpdate && !u.offline && !u.checking
+                    ? `<div class="prism-autorestore-strip"><span style="color:var(--prism-ok);font-weight:700">✓</span><span>${esc(tr('update.upToDate', { version: curVer }))}</span></div>`
+                    : u.offline && !u.checking
+                      ? `<div class="prism-ctl-hint">◌ ${esc(tr('update.offline'))}</div>`
+                      : ''
+            }
+            ${u.notesOpen && hasNotes ? `<pre class="prism-update-notes">${esc(u.changelog || u.changelogSummary)}</pre>` : ''}
+          </div>
+        `;
+      })()}
 
       <!-- Normal Shortcut Auto-Load & Cold-Boot Auto-Restore Card -->
       <div id="prism-autostart-card" class="prism-card" style="display:flex;flex-direction:column;gap:10px;border-color:${normalReady ? 'rgba(var(--prism-ok-rgb),0.45)' : 'rgba(var(--prism-warn-rgb),0.45)'}">
@@ -3261,8 +3914,285 @@ function bootPrismStudioApp() {
       .join('');
   }
 
+  function formatUpdateTimestamp(ts) {
+    if (!ts) return '—';
+    try {
+      const d = new Date(ts);
+      if (Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return '—';
+    }
+  }
+
+  function renderUpdateBannerHtml() {
+    const u = store.update;
+    const curVer = u.currentVersion || store.version || '2.1.0';
+    const hasFreshUpdate = Boolean(u.hasUpdate && u.latestVersion && u.dismissedVersion !== u.latestVersion);
+    const shouldShow = hasFreshUpdate || u.applying || Boolean(u.error) || u.standaloneRestartNeeded;
+    if (!shouldShow) return '';
+
+    const hasNotes = Boolean(u.changelog || u.changelogSummary);
+    const deltaLabel = u.latestVersion
+      ? tr('update.versionDelta', { from: curVer, to: u.latestVersion })
+      : `v${curVer}`;
+
+    return `
+      <div id="prism-update-banner" class="prism-update-banner" data-tone="${u.error ? 'update-error' : 'update'}" role="status">
+        <div class="prism-update-banner-row">
+          <div class="prism-update-banner-main">
+            <span class="prism-status-dot" style="background:${u.error ? 'var(--prism-danger)' : 'var(--prism-accent)'};flex-shrink:0"></span>
+            <strong class="prism-update-title">${esc(tr('update.bannerTitle', { version: u.latestVersion || curVer }))}</strong>
+            <span class="prism-update-delta">${esc(deltaLabel)}</span>
+            ${
+              u.changelogSummary && !u.notesOpen
+                ? `<span class="prism-update-summary" title="${esc(u.changelogSummary)}">${esc(u.changelogSummary)}</span>`
+                : ''
+            }
+          </div>
+          <div class="prism-update-actions">
+            ${
+              u.hasUpdate && u.latestVersion
+                ? u.canSelfUpdate
+                  ? `<button id="prism-update-apply-btn" type="button" class="prism-btn prism-btn-sm prism-btn-primary"
+                             data-action="apply-update" ${u.applying ? 'disabled' : ''}>
+                       ${u.applying ? `<span class="prism-spinner" aria-hidden="true"></span> ${esc(tr('update.applying'))}` : `⬆ ${esc(tr('update.applyBtn'))}`}
+                     </button>`
+                  : `<span class="prism-update-dev-badge">${esc(tr('update.gitDevHint'))}</span>`
+                : ''
+            }
+            ${
+              hasNotes
+                ? `<button type="button" class="prism-link-btn" data-action="toggle-update-notes">
+                     ${esc(tr('update.notesToggle'))} ${u.notesOpen ? '▴' : '▾'}
+                   </button>`
+                : ''
+            }
+            <a class="prism-link-btn" href="${esc(sanitizeExternalReleaseUrl(u.releaseUrl))}" target="_blank" rel="noopener noreferrer">
+              ${esc(tr('update.viewRelease'))}
+            </a>
+            ${
+              !u.applying
+                ? `<button type="button" class="prism-icon-btn" style="width:22px;height:22px"
+                           data-action="dismiss-update-banner" title="${esc(tr('update.dismiss'))}">✕</button>`
+                : ''
+            }
+          </div>
+        </div>
+        ${
+          u.error
+            ? `<div class="prism-update-error-line">
+                 <span>${esc(tr('update.failedPrefix'))}: ${esc(u.error)}</span>
+                 ${u.canSelfUpdate && u.hasUpdate ? `<button type="button" class="prism-btn prism-btn-sm" data-action="apply-update">${esc(tr('update.retryBtn'))}</button>` : ''}
+               </div>`
+            : ''
+        }
+        ${
+          u.standaloneRestartNeeded
+            ? `<div class="prism-update-info-line">${esc(tr('update.standaloneRestartHint'))}</div>`
+            : ''
+        }
+        ${u.notesOpen && hasNotes ? `<pre class="prism-update-notes">${esc(u.changelog || u.changelogSummary)}</pre>` : ''}
+      </div>
+    `;
+  }
+
+  function renderUpdateReconnectOverlay() {
+    const host = document.getElementById('prism-update-reconnect-host');
+    if (!host) return;
+    const rec = store.update.reconnect;
+    if (!rec.active) {
+      host.innerHTML = '';
+      return;
+    }
+    const targetVer = rec.targetVersion || store.update.latestVersion || store.version || PLUGIN_VERSION;
+    const phase = rec.timedOut ? 'timeout' : 'polling';
+    host.innerHTML = `
+      <div id="prism-update-reconnect-modal" class="prism-update-reconnect-backdrop agy-prism-reconnect-overlay"
+           role="dialog" aria-modal="true" translate="no" data-no-translate="true" data-ag-no-i18n="1">
+        <div class="prism-update-reconnect-card agy-prism-dialog" data-phase="${phase}">
+          ${
+            !rec.timedOut
+              ? `
+            <div class="prism-update-reconnect-icon">
+              <span class="prism-spinner prism-spinner-lg" aria-hidden="true"></span>
+            </div>
+            <strong class="prism-update-reconnect-title">${esc(tr('update.restartingTitle', { version: targetVer }))}</strong>
+            <p id="prism-update-reconnect-desc" class="prism-update-reconnect-desc">${esc(tr('update.restartingDesc', { attempts: Math.max(1, rec.attempts) }))}</p>
+            <span id="prism-update-reconnect-progress" class="prism-chip" style="cursor:default">${rec.attempts} / ${rec.maxAttempts}</span>
+          `
+              : `
+            <div class="prism-update-reconnect-icon">✓</div>
+            <strong class="prism-update-reconnect-title">${esc(tr('update.reconnectTimeoutTitle', { version: targetVer }))}</strong>
+            <p class="prism-update-reconnect-desc">${esc(tr('update.reconnectTimeoutDesc'))}</p>
+            <div class="prism-update-reconnect-actions">
+              <button type="button" class="prism-btn prism-btn-primary" data-action="reload-studio-pane">
+                ↻ ${esc(tr('update.reloadPaneBtn'))}
+              </button>
+              <button type="button" class="prism-btn" data-action="retry-update-reconnect">
+                ${esc(tr('update.retryReconnectBtn'))}
+              </button>
+              <button type="button" class="prism-btn" data-action="close-update-reconnect">
+                ${esc(tr('common.close'))}
+              </button>
+            </div>
+          `
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  async function fetchUpdateStatus(force = false) {
+    if (store.update.checking) return;
+    store.update.checking = true;
+    if (force) {
+      store.update.error = '';
+    }
+    updateTopStatusIndicators();
+    if (store.activeTab === 'system') renderActiveSurface();
+
+    try {
+      const url = force ? '/api/update/status?force=1' : '/api/update/status';
+      const data = await apiJson(url);
+      ingestUpdateStatus(data, { fromBootstrap: false });
+      if (force && store.update.hasUpdate && store.update.latestVersion && store.update.dismissedVersion === store.update.latestVersion) {
+        store.update.dismissedVersion = '';
+        try {
+          window.localStorage?.removeItem('prism.dismissedUpdateVersion');
+        } catch {
+          // ignore storage restrictions
+        }
+      }
+      if (force && !store.update.hasUpdate && !store.update.offline) {
+        showToast(tr('update.upToDate', { version: store.update.currentVersion || store.version || PLUGIN_VERSION }), 'ok', 3200);
+      }
+    } catch (err) {
+      store.update.offline = true;
+      store.update.checked = true;
+      if (force) {
+        showToast(err?.message || tr('update.offline'), 'warn', 3800);
+      }
+    } finally {
+      store.update.checking = false;
+      updateTopStatusIndicators();
+      if (store.activeTab === 'system') renderActiveSurface();
+    }
+  }
+
+  function startUpdateReconnectPolling(targetVersion = '') {
+    if (updateReconnectTimer) {
+      clearTimeout(updateReconnectTimer);
+      updateReconnectTimer = null;
+    }
+    disconnectStudioEvents();
+    const rec = store.update.reconnect;
+    rec.active = true;
+    rec.targetVersion = targetVersion || store.update.latestVersion || '';
+    rec.attempts = 0;
+    rec.maxAttempts = 24;
+    rec.sawDown = false;
+    rec.timedOut = false;
+    const prevPid = store.pid || 0;
+    renderUpdateReconnectOverlay();
+
+    const probeOnce = async () => {
+      if (!store.update.reconnect.active) return;
+      rec.attempts += 1;
+      const progEl = document.getElementById('prism-update-reconnect-progress');
+      if (progEl) progEl.textContent = `${rec.attempts} / ${rec.maxAttempts}`;
+      const descEl = document.getElementById('prism-update-reconnect-desc');
+      if (descEl) descEl.textContent = tr('update.restartingDesc', { attempts: Math.max(1, rec.attempts) });
+
+      try {
+        const res = await apiFetch('/api/healthz', { cache: 'no-store' });
+        if (!res.ok) {
+          rec.sawDown = true;
+        } else {
+          const data = await res.json().catch(() => null);
+          const versionMatched = Boolean(rec.targetVersion && data?.version === rec.targetVersion);
+          const pidChanged = Boolean(prevPid && data?.pid && data.pid !== prevPid);
+          const recoveredAfterDrop = Boolean(data?.ok && rec.sawDown && rec.attempts >= 2);
+          if (data?.ok && (versionMatched || pidChanged || recoveredAfterDrop)) {
+            updateReconnectTimer = null;
+            window.location.reload();
+            return;
+          }
+        }
+      } catch {
+        rec.sawDown = true;
+      }
+
+      if (rec.attempts >= rec.maxAttempts) {
+        updateReconnectTimer = null;
+        rec.timedOut = true;
+        renderUpdateReconnectOverlay();
+        return;
+      }
+      updateReconnectTimer = setTimeout(() => {
+        void probeOnce();
+      }, 900);
+    };
+
+    updateReconnectTimer = setTimeout(() => {
+      void probeOnce();
+    }, 900);
+  }
+
+  async function executeApplyUpdate() {
+    const u = store.update;
+    if (u.applying || !u.canSelfUpdate) return;
+    u.applying = true;
+    u.error = '';
+    u.standaloneRestartNeeded = false;
+    updateTopStatusIndicators();
+    if (store.activeTab === 'system') renderActiveSurface();
+
+    try {
+      const payload = {};
+      if (u.latestTag) payload.targetTag = u.latestTag;
+      if (u.latestVersion) payload.expectedVersion = u.latestVersion;
+      const res = await apiJson('/api/update/apply', {
+        method: 'POST',
+        body: payload,
+      });
+      u.applying = false;
+      const toVer = res.updatedTo || res.toVersion || u.latestVersion || '';
+      if (res.alreadyUpToDate) {
+        u.hasUpdate = false;
+        showToast(tr('update.upToDate', { version: u.currentVersion || store.version || PLUGIN_VERSION }), 'ok', 3400);
+        updateTopStatusIndicators();
+        if (store.activeTab === 'system') renderActiveSurface();
+        return;
+      }
+      if (res.willRestart) {
+        startUpdateReconnectPolling(toVer);
+        return;
+      }
+      u.hasUpdate = false;
+      u.standaloneRestartNeeded = true;
+      showToast(tr('update.standaloneRestartHint'), 'ok', 5600);
+      updateTopStatusIndicators();
+      if (store.activeTab === 'system') renderActiveSurface();
+    } catch (err) {
+      u.applying = false;
+      if (err?.code === 'ERR_GIT_DEV_CHECKOUT' || err?.code === 'ERR_SYMLINK_PLUGIN_ROOT') {
+        u.canSelfUpdate = false;
+        if (err.code === 'ERR_GIT_DEV_CHECKOUT') u.isGitCheckout = true;
+        if (err.code === 'ERR_SYMLINK_PLUGIN_ROOT') u.isSymlink = true;
+        u.error = err.code === 'ERR_GIT_DEV_CHECKOUT' ? tr('update.gitDevHint') : (err?.message || tr('update.gitDevHint'));
+      } else {
+        u.error = err?.message || String(err);
+      }
+      updateTopStatusIndicators();
+      if (store.activeTab === 'system') renderActiveSurface();
+    }
+  }
+
   function renderAutostartBannerHtml() {
     const out = [];
+    const updateBanner = renderUpdateBannerHtml();
+    if (updateBanner) out.push(updateBanner);
     const canaryTripped = store.canary?.state === 'tripped';
     const isManualSleeping = !canaryTripped && store.config.startupMode === 'manual' && !store.sessionAwake;
 
@@ -3512,10 +4442,10 @@ function bootPrismStudioApp() {
 
         ${renderSliderRow({
           key: 'glassOpacity',
-          label: isZh ? '界面透光度' : 'Glass Opacity',
+          label: tr('glass.opacity'),
           value: eff.glassOpacity,
           defaultValue: DEFAULT_CONFIG.glassOpacity,
-          min: 0.30,
+          min: 0.15,
           max: 0.98,
           step: 0.01,
           scale: 100,
@@ -3523,18 +4453,30 @@ function bootPrismStudioApp() {
           suffix: ' %',
         })}
         ${renderSliderRow({
+          key: 'glassBlur',
+          label: tr('glass.blur'),
+          value: eff.glassBlur,
+          defaultValue: DEFAULT_CONFIG.glassBlur,
+          min: 0,
+          max: 64,
+          step: 1,
+          suffix: ' px',
+        })}
+        ${renderSliderRow({
           key: 'sidebarOpacity',
-          label: isZh ? '侧栏玻璃不透明度' : 'Sidebar Opacity',
+          label: tr('glass.sidebarOpacity'),
           value: eff.sidebarOpacity,
-          defaultValue: DEFAULT_CONFIG.glassOpacity,
-          min: 0.20,
+          defaultValue: resolveComponentDefaultAlpha('sidebar', eff, getResolvedPolarity(eff) === 'light'),
+          min: 0,
           max: 0.98,
           step: 0.01,
           scale: 100,
           decimals: 0,
           suffix: ' %',
+          nullable: true,
           nullableFallbackKey: 'glassOpacity',
-          fallbackValue: eff.glassOpacity,
+          comp: 'sidebar',
+          fallbackValue: resolveComponentDefaultAlpha('sidebar', eff, getResolvedPolarity(eff) === 'light'),
         })}
         ${renderSliderRow({
           key: 'scrimOpacity',
@@ -3701,14 +4643,21 @@ function bootPrismStudioApp() {
       .querySelectorAll(`.prism-slider-row[data-nullable="true"][data-fallback-key="${fallbackKey}"]`)
       .forEach((fRow) => {
         if (!(fRow instanceof HTMLElement) || fRow.dataset.dirty === 'true') return;
+        const comp = fRow.dataset.comp || '';
+        if (comp === 'popover') return;
         const fInput = fRow.querySelector('input.prism-range');
         if (!(fInput instanceof HTMLInputElement)) return;
+        let targetRaw = fallbackRawVal;
+        if (fallbackKey === 'glassOpacity' && comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
+          const effNext = { ...getEffectiveConfig(), glassOpacity: fallbackRawVal };
+          targetRaw = resolveComponentDefaultAlpha(comp, effNext, getResolvedPolarity(effNext) === 'light');
+        }
         const fScale = Number(fRow.dataset.scale || 1);
         const fDecimals = Number(fRow.dataset.decimals || 0);
         const fSuffix = fRow.dataset.suffix || '';
         const fMin = Number(fInput.min);
         const fMax = Number(fInput.max);
-        const fUiVal = Math.max(fMin, Math.min(fMax, fallbackRawVal * fScale));
+        const fUiVal = Math.max(fMin, Math.min(fMax, targetRaw * fScale));
         const { pct: fPct, display: rawDisp } = sliderMeta(fUiVal, fMin, fMax, fDecimals, fSuffix);
         fInput.value = String(fUiVal);
         fInput.style.setProperty('--prism-pct', `${fPct}%`);
@@ -3717,6 +4666,45 @@ function bootPrismStudioApp() {
           fValSpan.textContent = tr('glass.followMainFmt', { val: rawDisp });
         }
       });
+  }
+
+  function syncSurfaceTintsHeaderInDom() {
+    const box = document.querySelector('.prism-surface-tints-box');
+    if (!box) return;
+    const eff = getEffectiveConfig();
+    const tintsMap = eff.surfaceTints && typeof eff.surfaceTints === 'object' ? eff.surfaceTints : DEFAULT_SURFACE_TINTS;
+    let customCount = 0;
+    for (const comp of SURFACE_TINT_COMPONENTS) {
+      const ent = tintsMap[comp] || DEFAULT_SURFACE_TINT_ENTRY;
+      const op = comp === 'sidebar' ? (eff.sidebarOpacity ?? ent.opacity ?? null) : (ent.opacity ?? null);
+      const tone = Number(ent.tone || 0);
+      const tint = typeof ent.tint === 'string' ? ent.tint.trim() : '';
+      if (op !== null || tone !== 0 || tint !== '') customCount += 1;
+
+      const rowItem = box.querySelector(`.prism-comp-item[data-comp-row="${comp}"]`);
+      const swatchBtn = rowItem?.querySelector('.prism-comp-swatch-btn');
+      if (swatchBtn) {
+        const hasTintOrTone = tone !== 0 || tint !== '';
+        const existingDot = swatchBtn.querySelector('.prism-comp-swatch-dot');
+        if (hasTintOrTone && !existingDot) {
+          const dot = document.createElement('span');
+          dot.className = 'prism-comp-swatch-dot';
+          dot.setAttribute('aria-hidden', 'true');
+          swatchBtn.appendChild(dot);
+        } else if (!hasTintOrTone && existingDot) {
+          existingDot.remove();
+        }
+      }
+    }
+    const badge = box.querySelector('.prism-surface-tints-badge');
+    if (badge) {
+      badge.textContent = customCount > 0 ? tr('glass.comp.customCount', { n: customCount }) : tr('glass.comp.allAuto');
+      badge.classList.toggle('is-custom', customCount > 0);
+    }
+    const resetAllBtn = box.querySelector('[data-action="reset-all-surface-tints"]');
+    if (resetAllBtn instanceof HTMLButtonElement) {
+      resetAllBtn.disabled = customCount === 0;
+    }
   }
 
   function renderActiveTabContentHtml() {
@@ -3792,6 +4780,7 @@ function bootPrismStudioApp() {
     const drawerHost = document.getElementById('prism-drawer-host');
     if (drawerHost) drawerHost.innerHTML = renderDrawerHtml();
 
+    renderUpdateReconnectOverlay();
     syncMiniPreviewMedia();
     syncOpticalCssVars();
   }
@@ -3836,12 +4825,21 @@ function bootPrismStudioApp() {
           <div class="prism-preview-card">
             <div id="prism-mini-stage" class="prism-mini-stage prism-preview-stage">
               <div id="mini-media-layer" class="mini-media-layer"></div>
+              <div class="mini-blur-veil"></div>
               <div class="mini-scrim"></div>
               <div class="mini-vignette"></div>
               <div class="mini-grain"></div>
 
               <!-- Simulated Antigravity 2.0 Hub Islands -->
-              <div id="prism-mini-hub" class="mini-hub-shell" data-layout="islands">
+              <div id="prism-mini-hub" class="mini-hub-shell" data-layout="islands" data-topbar-style="pills">
+                <div class="mini-topbar">
+                  <div class="mini-topbar-pill">
+                    <span class="mini-bar" style="width:45%"></span>
+                    <span class="mini-bar" style="width:28%"></span>
+                  </div>
+                  <div class="mini-wco-pill"><span></span><span></span><span></span></div>
+                </div>
+
                 <div class="mini-island mini-sidebar">
                   <div class="mini-dots"><span></span><span></span><span></span></div>
                   <div class="mini-nav-row is-active"><span class="mini-bar" style="width:70%"></span></div>
@@ -3851,7 +4849,7 @@ function bootPrismStudioApp() {
 
                 <div class="mini-island mini-center">
                   <div style="display:flex;flex-direction:column;gap:3px">
-                    <div class="mini-bar" style="width:38%;opacity:0.65"></div>
+                    <div class="mini-bubble"><span class="mini-bubble-line"></span></div>
                     <div class="mini-code-card">
                       <span class="mini-code-kw">const</span> prism = <span class="mini-code-fn">glassSkin</span>({ mode: <span class="mini-code-str">'islands'</span> });
                     </div>
@@ -3894,9 +4892,10 @@ function bootPrismStudioApp() {
         </main>
       </div>
 
-      <div id="prism-drawer-host"></div>
-      <div id="prism-drop-host"></div>
-      <div id="prism-toast-host" class="prism-toast-stack"></div>
+      <div id="prism-drawer-host" class="agy-prism-drawer-host"></div>
+      <div id="prism-update-reconnect-host" class="agy-prism-reconnect-host"></div>
+      <div id="prism-drop-host" class="agy-prism-drop-host"></div>
+      <div id="prism-toast-host" class="prism-toast-stack agy-prism-toast-stack"></div>
 
       <input id="prism-upload-input" type="file" hidden multiple
              accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.mp4,.webm,.mkv,.avi,.mov" />
@@ -4188,20 +5187,50 @@ function bootPrismStudioApp() {
         }
 
         syncPairedSlidersInDom(sliderKey, rawVal, tEl);
-        const extraPatch = sliderKey === 'volume' && rawVal > 0 && getEffectiveConfig().muted
-          ? { volume: rawVal, muted: false, audioEnabled: true }
-          : { [sliderKey]: rawVal };
+        if (sliderKey.startsWith('surfaceTints.')) {
+          const comp = sliderKey.split('.')[1];
+          if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
+            queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { opacity: rawVal } } }, false, true);
+            syncSurfaceTintsHeaderInDom();
+          }
+          return;
+        }
+        const extraPatch =
+          sliderKey === 'volume' && rawVal > 0 && getEffectiveConfig().muted
+            ? { volume: rawVal, muted: false, audioEnabled: true }
+            : sliderKey === 'sidebarOpacity'
+              ? { sidebarOpacity: rawVal, surfaceTints: { sidebar: { opacity: rawVal } } }
+              : { [sliderKey]: rawVal };
         queueConfigPatch(extraPatch, false, sliderKey !== 'liveBootDelay');
+        if (sliderKey === 'sidebarOpacity') {
+          syncSurfaceTintsHeaderInDom();
+        }
         if (sliderKey === 'glassOpacity' || sliderKey === 'glassBlur') {
-          const effNow = getEffectiveConfig();
-          const depAuto =
-            sliderKey === 'glassOpacity'
-              ? effNow.sidebarOpacity === null || effNow.sidebarOpacity === undefined
-              : effNow.sidebarBlur === null || effNow.sidebarBlur === undefined;
-          if (depAuto) {
-            syncNullableFollowersInDom(sliderKey, rawVal);
+          syncNullableFollowersInDom(sliderKey, rawVal);
+          if (sliderKey === 'glassBlur') {
+            const roundedPx = Math.round(rawVal);
+            document.querySelectorAll('.prism-blur-stop-chip').forEach((chip) => {
+              if (chip instanceof HTMLElement) {
+                chip.classList.toggle('is-active', Number(chip.dataset.val) === roundedPx);
+              }
+            });
           }
         }
+        return;
+      }
+
+      const toneComp = tEl.dataset.surfaceTone;
+      if (toneComp && SURFACE_TINT_COMPONENTS.includes(toneComp) && tEl instanceof HTMLInputElement) {
+        const tone = Math.max(-100, Math.min(100, Math.round(Number(tEl.value) || 0)));
+        const pct = ((tone + 100) / 200) * 100;
+        tEl.style.setProperty('--prism-pct', `${pct.toFixed(1)}%`);
+        const toneRow = tEl.closest('.prism-tint-tone-row');
+        const valSpan = toneRow?.querySelector('.prism-tint-tone-val');
+        if (valSpan) valSpan.textContent = tone > 0 ? `+${tone}` : String(tone);
+        const resetBtn = toneRow?.querySelector('[data-action="reset-surface-tone"]');
+        if (resetBtn instanceof HTMLElement) resetBtn.dataset.toneDirty = tone !== 0 ? 'true' : 'false';
+        queueConfigPatch({ preset: 'custom', surfaceTints: { [toneComp]: { tone } } }, false, true);
+        syncSurfaceTintsHeaderInDom();
         return;
       }
 
@@ -4223,8 +5252,8 @@ function bootPrismStudioApp() {
       const tEl = e.target;
       if (!(tEl instanceof HTMLElement)) return;
 
-      if (tEl.dataset.configSlider) {
-        flushConfigPatch();
+      if (tEl.dataset.configSlider || tEl.dataset.surfaceTone) {
+        void flushConfigPatch();
         return;
       }
 
@@ -4256,6 +5285,15 @@ function bootPrismStudioApp() {
         const key = tEl.dataset.key;
         if (key) {
           queueConfigPatch({ [key]: tEl.value }, true);
+          renderActiveSurface();
+        }
+        return;
+      }
+
+      if (tEl.dataset.action === 'set-surface-tint' && tEl instanceof HTMLInputElement) {
+        const comp = tEl.dataset.comp;
+        if (comp && SURFACE_TINT_COMPONENTS.includes(comp) && /^#[0-9a-f]{6}$/i.test(tEl.value)) {
+          queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { tint: tEl.value.toUpperCase() } } }, true, true);
           renderActiveSurface();
         }
         return;
@@ -4385,14 +5423,32 @@ function bootPrismStudioApp() {
               const key = row.dataset.sliderKey;
               const rawTxt = numIn.value.trim();
               if (row.dataset.nullable === 'true' && (rawTxt === '' || rawTxt.toLowerCase() === 'auto')) {
-                if (key) queueConfigPatch({ [key]: null }, true);
+                if (key && key.startsWith('surfaceTints.')) {
+                  const comp = key.split('.')[1];
+                  if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
+                    queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { opacity: null } } }, true, true);
+                  }
+                } else if (key === 'sidebarOpacity') {
+                  queueConfigPatch({ sidebarOpacity: null, surfaceTints: { sidebar: { opacity: null } } }, true);
+                } else if (key) {
+                  queueConfigPatch({ [key]: null }, true);
+                }
               } else {
                 const numStr = rawTxt.replace(/[^0-9.-]/g, '');
                 const parsed = numStr === '' ? NaN : Number(numStr);
                 if (Number.isFinite(parsed)) {
                   const clampedUi = Math.max(min, Math.min(max, parsed));
                   const rawVal = clampedUi / scale;
-                  if (key) queueConfigPatch({ [key]: rawVal }, true);
+                  if (key && key.startsWith('surfaceTints.')) {
+                    const comp = key.split('.')[1];
+                    if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
+                      queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { opacity: rawVal } } }, true, true);
+                    }
+                  } else if (key === 'sidebarOpacity') {
+                    queueConfigPatch({ sidebarOpacity: rawVal, surfaceTints: { sidebar: { opacity: rawVal } } }, true);
+                  } else if (key) {
+                    queueConfigPatch({ [key]: rawVal }, true);
+                  }
                 }
               }
             }
@@ -4413,7 +5469,10 @@ function bootPrismStudioApp() {
         }
         case 'reset-key': {
           const key = actEl.dataset.key;
-          if (key === 'sidebarOpacity' || key === 'sidebarBlur') {
+          if (key === 'sidebarOpacity') {
+            queueConfigPatch({ sidebarOpacity: null, surfaceTints: { sidebar: { opacity: null } } }, true);
+            renderActiveSurface();
+          } else if (key === 'sidebarBlur') {
             queueConfigPatch({ [key]: null }, true);
             renderActiveSurface();
           } else if (key && key in DEFAULT_CONFIG) {
@@ -4429,6 +5488,9 @@ function bootPrismStudioApp() {
           for (const k of keys) {
             if (k === 'sidebarOpacity' || k === 'sidebarBlur') {
               patch[k] = null;
+            } else if (k === 'surfaceTints') {
+              patch.surfaceTints = null;
+              store.expandedTintComp = null;
             } else if (k in DEFAULT_CONFIG) {
               patch[k] = DEFAULT_CONFIG[k];
             }
@@ -4446,7 +5508,7 @@ function bootPrismStudioApp() {
           queueConfigPatch(
             { [key]: !eff[key] },
             true,
-            key !== 'rotationEnabled' && key !== 'themeFollow' && key !== 'transparentWindowControls',
+            key !== 'rotationEnabled' && key !== 'themeFollow' && key !== 'transparentWindowControls' && key !== 'hideWelcomeLogo',
           );
           renderActiveSurface();
           break;
@@ -4460,7 +5522,7 @@ function bootPrismStudioApp() {
           queueConfigPatch(
             patch,
             true,
-            key !== 'triggerMode' && key !== 'rotationOrder' && key !== 'rotationTrigger' && key !== 'startupMode',
+            key !== 'triggerMode' && key !== 'rotationOrder' && key !== 'rotationTrigger' && key !== 'startupMode' && key !== 'topbarStyle',
           );
           renderActiveSurface();
           break;
@@ -4478,9 +5540,74 @@ function bootPrismStudioApp() {
           const pid = actEl.dataset.preset;
           const sp = SCENE_PRESETS[pid];
           if (sp) {
-            queueConfigPatch({ ...sp.patch, skinEnabled: true }, true);
+            const activeId = getActiveId();
+            if (!hasPerWallpaperPin(activeId)) {
+              applyLocalPatch({ ...sp.patch, skinEnabled: true }, false);
+              renderActiveSurface();
+              try {
+                const res = await apiJson('/api/preset/apply', { method: 'POST', body: { presetId: pid } });
+                ingestServerState(res);
+                syncMiniPreviewMedia();
+                renderActiveSurface();
+              } catch {
+                queueConfigPatch({ ...sp.patch, skinEnabled: true }, true);
+                renderActiveSurface();
+              }
+            } else {
+              queueConfigPatch({ ...sp.patch, skinEnabled: true }, true);
+              renderActiveSurface();
+            }
+          }
+          break;
+        }
+        case 'toggle-comp-tint-drawer': {
+          const comp = actEl.dataset.comp;
+          if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
+            store.expandedTintComp = store.expandedTintComp === comp ? null : comp;
             renderActiveSurface();
           }
+          break;
+        }
+        case 'reset-surface-comp': {
+          const comp = actEl.dataset.comp;
+          if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
+            const patch = comp === 'sidebar'
+              ? { preset: 'custom', sidebarOpacity: null, surfaceTints: { sidebar: { opacity: null } } }
+              : { preset: 'custom', surfaceTints: { [comp]: { opacity: null } } };
+            queueConfigPatch(patch, true, true);
+            renderActiveSurface();
+          }
+          break;
+        }
+        case 'reset-surface-tone': {
+          const comp = actEl.dataset.comp;
+          if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
+            queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { tone: 0 } } }, true, true);
+            renderActiveSurface();
+          }
+          break;
+        }
+        case 'pick-surface-tint': {
+          const comp = actEl.dataset.comp;
+          const hex = actEl.dataset.hex;
+          if (comp && SURFACE_TINT_COMPONENTS.includes(comp) && hex && /^#[0-9a-f]{6}$/i.test(hex)) {
+            queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { tint: hex.toUpperCase() } } }, true, true);
+            renderActiveSurface();
+          }
+          break;
+        }
+        case 'clear-surface-tint': {
+          const comp = actEl.dataset.comp;
+          if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
+            queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { tint: '' } } }, true, true);
+            renderActiveSurface();
+          }
+          break;
+        }
+        case 'reset-all-surface-tints': {
+          store.expandedTintComp = null;
+          queueConfigPatch({ surfaceTints: null, sidebarOpacity: null }, true, true);
+          renderActiveSurface();
           break;
         }
         case 'toggle-pin-override':
@@ -5139,6 +6266,52 @@ function bootPrismStudioApp() {
           }
           break;
         }
+        case 'check-update': {
+          await fetchUpdateStatus(true);
+          break;
+        }
+        case 'apply-update': {
+          await executeApplyUpdate();
+          break;
+        }
+        case 'toggle-update-notes': {
+          store.update.notesOpen = !store.update.notesOpen;
+          updateTopStatusIndicators();
+          if (store.activeTab === 'system') renderActiveSurface();
+          break;
+        }
+        case 'dismiss-update-banner': {
+          store.update.dismissedVersion = store.update.latestVersion || 'dismissed';
+          store.update.error = '';
+          store.update.standaloneRestartNeeded = false;
+          try {
+            if (store.update.latestVersion) {
+              window.localStorage?.setItem('prism.dismissedUpdateVersion', store.update.latestVersion);
+            }
+          } catch {
+            // ignore storage restrictions
+          }
+          updateTopStatusIndicators();
+          break;
+        }
+        case 'reload-studio-pane': {
+          window.location.reload();
+          break;
+        }
+        case 'retry-update-reconnect': {
+          startUpdateReconnectPolling(store.update.reconnect.targetVersion || store.update.latestVersion || '');
+          break;
+        }
+        case 'close-update-reconnect': {
+          if (updateReconnectTimer) {
+            clearTimeout(updateReconnectTimer);
+            updateReconnectTimer = null;
+          }
+          store.update.reconnect.active = false;
+          renderUpdateReconnectOverlay();
+          connectStudioEvents();
+          break;
+        }
         default:
           break;
       }
@@ -5373,6 +6546,9 @@ function bootPrismStudioApp() {
       c.glassBlur,
       c.sidebarOpacity,
       c.sidebarBlur,
+      c.surfaceTints,
+      c.topbarStyle,
+      c.hideWelcomeLogo,
       c.transparentWindowControls,
       c.cornerStyle,
       c.leftSidebarRadius,
@@ -5390,6 +6566,23 @@ function bootPrismStudioApp() {
     ]);
   }
 
+  function updateStatusSignature() {
+    const u = store.update;
+    return JSON.stringify([
+      u.checked,
+      u.hasUpdate,
+      u.currentVersion,
+      u.latestVersion,
+      u.latestTag,
+      u.offline,
+      u.checkedAt,
+      u.canSelfUpdate,
+      u.isGitCheckout,
+      u.isSymlink,
+      u.error,
+    ]);
+  }
+
   function applyExternalStateSnapshot(payload) {
     if (!payload || typeof payload !== 'object') return;
     if (store.masterToggleBusy || configDebounceTimer || configFlushInFlight || Object.keys(pendingConfigPatch).length > 0) {
@@ -5400,15 +6593,18 @@ function bootPrismStudioApp() {
     const prevSkinEnabled = store.skinEnabled;
     const prevActiveId = getActiveId();
     const prevSig = externalStateSignature();
+    const prevUpdSig = updateStatusSignature();
 
     ingestServerState(payload);
 
     const nextActiveId = getActiveId();
     const nextSig = externalStateSignature();
+    const nextUpdSig = updateStatusSignature();
     const canaryChanged = (store.canary?.state || 'idle') !== prevCanaryState;
     const skinChanged = store.skinEnabled !== prevSkinEnabled;
     const activeChanged = nextActiveId !== prevActiveId;
     const stateChanged = nextSig !== prevSig;
+    const updateChanged = nextUpdSig !== prevUpdSig;
 
     updateTopStatusIndicators();
 
@@ -5435,7 +6631,7 @@ function bootPrismStudioApp() {
       }
     }
 
-    if ((!wasAttached && isHostAttached()) || canaryChanged || skinChanged) {
+    if ((!wasAttached && isHostAttached()) || canaryChanged || skinChanged || updateChanged) {
       if (store.activeTab === 'system' || store.canary?.state === 'tripped') {
         renderActiveSurface();
       }
@@ -5626,6 +6822,14 @@ function bootPrismStudioApp() {
     connectStudioEvents();
     ensureLiveSyncPoll();
     ensureStandbyStatusPoll();
+
+    if (updateBootCheckTimer) clearTimeout(updateBootCheckTimer);
+    updateBootCheckTimer = setTimeout(() => {
+      updateBootCheckTimer = null;
+      if (!store.update.checked && !store.update.checking) {
+        void fetchUpdateStatus(false);
+      }
+    }, 800);
   }
 
   if (document.readyState === 'loading') {

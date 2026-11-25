@@ -34,6 +34,7 @@ function escapeHtmlAttr(str) {
  */
 export function buildFocusGuardScript() {
   return `(function () {
+  try { window.__agyDomTranslatorInitialized = true; } catch (_) {}
   if (window.__weFocusGuard) return;
   var stats = { blocked: 0, elBlocked: 0, gestureIgnored: 0, lastGestureAt: -1e9 };
   Object.defineProperty(window, '__weFocusGuard', {
@@ -341,6 +342,9 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
     margin: 0; padding: 0; width: 100%; height: 100%;
     overflow: hidden; background: #090a0f; user-select: none;
   }
+  .agy-prism-scene-stage {
+    position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden;
+  }
   #stage-bg, #stage-video, #stage-canvas {
     position: fixed; inset: 0; width: 100%; height: 100%;
     pointer-events: none;
@@ -356,11 +360,13 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
   #stage-video.ready { opacity: 1; }
 </style>
 </head>
-<body>
+<body translate="no" data-no-translate="true" data-ag-no-i18n="1">
+<div class="agy-prism-scene-stage" translate="no" data-no-translate="true" data-ag-no-i18n="1">
 <img id="stage-bg" alt="" decoding="async" />
 <video id="stage-video" playsinline loop preload="auto"></video>
 <canvas id="stage-canvas"></canvas>
 <audio id="stage-audio" loop preload="auto"></audio>
+</div>
 <script>
 (function () {
   var cfg = ${payloadJson};

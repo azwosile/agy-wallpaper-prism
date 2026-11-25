@@ -278,7 +278,7 @@ export function parseByteRange(rangeHeader, totalSize) {
   return { valid: true, start, end };
 }
 
-function buildVideoStageHtml({ mediaSrc, audioSrc = '', posterSrc = '', sid = '', cfg = {} } = {}) {
+export function buildVideoStageHtml({ mediaSrc, audioSrc = '', posterSrc = '', sid = '', cfg = {} } = {}) {
   const fitCss = cfg.fit === 'center' ? 'none' : String(cfg.fit || 'cover');
   const posX = Number.isFinite(Number(cfg.layerPosX)) ? Number(cfg.layerPosX) : 50;
   const posY = Number.isFinite(Number(cfg.layerPosY)) ? Number(cfg.layerPosY) : 50;
@@ -308,9 +308,10 @@ function buildVideoStageHtml({ mediaSrc, audioSrc = '', posterSrc = '', sid = ''
   video{position:fixed;inset:0;width:100%;height:100%;display:block;object-fit:${fitCss};object-position:${posX}% ${posY}%;filter: none; will-change: auto; background: transparent;}
 </style>
 </head>
-<body>
-<video id="v" autoplay muted playsinline preload="auto" disablepictureinpicture></video>
+<body translate="no" data-no-translate="true" data-ag-no-i18n="1">
+<video id="v" class="agy-prism-video-el" translate="no" data-no-translate="true" data-ag-no-i18n="1" autoplay muted playsinline preload="auto" disablepictureinpicture></video>
 <script>
+try { window.__agyDomTranslatorInitialized = true; } catch (_) {}
 (function(){
   var S=${safeInit};
   var v=document.getElementById('v');

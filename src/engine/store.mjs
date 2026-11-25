@@ -81,6 +81,7 @@ const PROFILE_PRESET_KEYS = Object.freeze([
   'glassBlur',
   'sidebarOpacity',
   'sidebarBlur',
+  'surfaceTints',
   'glassFidelity',
   'chatGlassFidelity',
   'codeReadabilityMode',

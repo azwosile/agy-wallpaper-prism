@@ -529,7 +529,7 @@ export async function inspectNormalShortcuts({ searchDirs = null, dataDir = '', 
     const meta = metaByPath.get(c.path.toLowerCase());
     if (!meta) continue;
     const target = String(meta.targetPath || '');
-    const isAgyTarget = /antigravity\.exe$/i.test(target) || (/antigravity/i.test(c.name) && Boolean(target));
+    const isAgyTarget = /antigravity\.exe$/i.test(target) || (/antigravity|反重力/i.test(c.name) && Boolean(target));
     if (!isAgyTarget) continue;
     const isSeparatePrismLnk = /antigravity\s*\(prism\s*glass\)\.lnk$/i.test(c.name);
     const args = String(meta.arguments || '');
@@ -802,8 +802,15 @@ export function selectHubTargets(targets = []) {
       else if (/^http:\/\/127\.0\.0\.1:\d+\//i.test(url) && !url.includes('/prism_studio')) score += 40;
       if (/monaco-workbench|workbench\.html/i.test(url)) score += 120;
       if (/^vscode-file:\/\//i.test(url)) score += 40;
-      if (/antigravity/i.test(title)) score += 50;
-      if (/curtain|splash|loading/i.test(title)) score -= 100;
+      const trimmedTitle = title.trim();
+      if (/antigravity|反重力/i.test(title)) score += 50;
+      if (
+        /(?:^|\b)(?:curtain|splash)(?:\b|$)/i.test(trimmedTitle) ||
+        /^(?:loading\b|restarting|reconnecting|disconnected|welcome to antigravity)/i.test(trimmedTitle) ||
+        /^(?:正在加载|启动中|正在配置|正在重启|正在重新连接|已断开|欢迎使用\s*(?:antigravity|反重力))/i.test(trimmedTitle)
+      ) {
+        score -= 100;
+      }
       return { t, score };
     })
     .sort((a, b) => b.score - a.score);
@@ -1338,8 +1345,14 @@ function safeJsonLiteral(value) {
 export const REMOVE_SKIN_EXPR = `(function(){
   try { if (window.${PRISM_DOM.skinGlobal} && typeof window.${PRISM_DOM.skinGlobal}.destroy === 'function') window.${PRISM_DOM.skinGlobal}.destroy(); } catch (_) {}
   try {
-    ['agy-prism-css', 'agy-prism-static-css', 'agy-prism-caret-css', 'agy-prism-stage', 'agy-prism-fx-canvas', 'agy-prism-wco-pill', 'agy-prism-stage-loader'].forEach(function(id){
+    ['agy-prism-css', 'agy-prism-static-css', 'agy-prism-caret-css', 'agy-prism-stage', 'agy-prism-fx-canvas', 'agy-prism-wco-pill', 'agy-prism-topbar-pills', 'agy-prism-stage-loader'].forEach(function(id){
       var n = document.getElementById(id); if (n) n.remove();
+    });
+    document.querySelectorAll('[data-agy-prism-topbar-anc],[data-agy-prism-topbar-host],[data-agy-prism-welcome-logo],[data-agy-prism-welcome-logo-pseudo]').forEach(function(el){
+      el.removeAttribute('data-agy-prism-topbar-anc');
+      el.removeAttribute('data-agy-prism-topbar-host');
+      el.removeAttribute('data-agy-prism-welcome-logo');
+      el.removeAttribute('data-agy-prism-welcome-logo-pseudo');
     });
     var r = document.documentElement;
     [
@@ -1347,6 +1360,9 @@ export const REMOVE_SKIN_EXPR = `(function(){
       ${JSON.stringify(PRISM_DOM.glassAttr)},
       ${JSON.stringify(PRISM_DOM.wallpaperAttr)},
       ${JSON.stringify(PRISM_DOM.wcoAttr)},
+      ${JSON.stringify(PRISM_DOM.wcoActiveAttr || 'data-agy-prism-wco-active')},
+      ${JSON.stringify(PRISM_DOM.welcomeLogoAttr || 'data-prism-welcome-logo')},
+      ${JSON.stringify(PRISM_DOM.topbarStyleAttr || 'data-prism-topbar-style')},
       ${JSON.stringify(PRISM_DOM.themeAttr)},
       ${JSON.stringify(PRISM_DOM.schemeAttr)},
       ${JSON.stringify(PRISM_DOM.accentModeAttr)},
@@ -1358,6 +1374,22 @@ export const REMOVE_SKIN_EXPR = `(function(){
       'data-prism-glass',
       'data-prism-code-mode'
     ].forEach(function(a){ r.removeAttribute(a); });
+    try {
+      r.style.removeProperty('--prism-wco-pill-top');
+      r.style.removeProperty('--prism-wco-pill-h');
+      r.style.removeProperty('--prism-wco-inset-right');
+      r.style.removeProperty('--prism-bg-topbar');
+    } catch (_) {}
+    window.__agyPrismOn = false;
+    var p = document.getElementById('agy-prism-pill');
+    if (p && p.dataset && p.dataset.prismLazyStub === '1') {
+      p.dataset.skinEnabled = 'false';
+      p.textContent = '\\u25C7 Prism \\u00B7 OFF';
+      p.style.color = '#94a3b8';
+      p.style.background = 'rgba(20,20,26,.52)';
+      p.style.borderColor = 'rgba(148,163,184,.28)';
+      p.style.opacity = '.78';
+    }
     if (window.electronNative && typeof window.electronNative.setTitleBarOverlay === 'function') {
       var lt = document.body && document.body.classList && document.body.classList.contains('theme-light');
       window.electronNative.setTitleBarOverlay({ color: lt ? '#FFFFFF' : '#131313', symbolColor: lt ? '#000000' : '#FAFAFA' });
@@ -1367,6 +1399,9 @@ export const REMOVE_SKIN_EXPR = `(function(){
 })()`;
 
 export const REMOVE_PANEL_EXPR = `(function(){
+  try { window.__agyPrismBootstrapped = false; } catch (_) {}
+  try { if (window.__agyPrismKt) { clearInterval(window.__agyPrismKt); window.__agyPrismKt = 0; } } catch (_) {}
+  try { if (window.__agyPrismSse) { window.__agyPrismSse.close(); window.__agyPrismSse = null; } } catch (_) {}
   try { if (window.${PRISM_DOM.panelGlobal} && typeof window.${PRISM_DOM.panelGlobal}.destroy === 'function') window.${PRISM_DOM.panelGlobal}.destroy(); } catch (_) {}
   try {
     ['agy-prism-popover', 'agy-prism-popover-css', 'agy-prism-pill', 'agy-prism-pill-css', 'agy-prism-panel-loader'].forEach(function(id){
@@ -1463,7 +1498,7 @@ export function buildRpcBootstrapSource({ rpcUrl = '', capToken = '' } = {}) {
 }
 
 /**
- * Compact (<1.4 KB) 1-shot Gentle Host Micro-Bootstrap:
+ * Compact (<= 6 KB) 1-shot Gentle Host Micro-Bootstrap:
  *   - Top-frame guard (`window === window.top`)
  *   - Dependency-free `Ctrl+Alt+Shift+R` & `4x Escape` (`900ms`) emergency panic strip
  *   - `window.__agyPrismCall` over `/host/<capToken>/rpc` + `EventSource('/host/<capToken>/events')`
@@ -1477,30 +1512,32 @@ export function buildHostMicroBootstrap({
   startupMode = 'gentle-auto',
   skinEnabled = true,
 } = {}) {
-  const base = `${String(hostOrigin || '').replace(/\/+$/, '')}/host/${capToken}`;
+  const hostPrefix = `${String(hostOrigin || '').replace(/\/+$/, '')}/host/`;
   const showStubPill = triggerMode !== 'shortcut-only' ? 1 : 0;
   const isStatic = startupMode === 'static-css' ? 1 : 0;
   const isSkinOn = skinEnabled !== false ? 1 : 0;
   return [
     ';(function(){var W=window,D=document;if(W.top&&W!==W.top)return{ok:false};',
-    `var B=${safeJsonLiteral(base)},T=${safeJsonLiteral(capToken)},prevB=W.__agyPrismHostBase||"",P="agy-prism-",K="__agyPrism",N="__agyPrismPanel",sp0=${showStubPill};`,
-    'function $(i){return D.getElementById(i)}function pd(e){e.preventDefault();e.stopPropagation()}function isL(n){return n&&n.dataset&&n.dataset.prismLazyStub==="1"}function ds(o){try{o&&o.destroy&&o.destroy()}catch(_){}}',
-    'W.__agyPrismHostBase=B;W.__agyPrismCapToken=T;W.__agyPrismRpcUrl=B+"/rpc";W.__agyPrismBootstrapped=true;',
-    'function clr(all){var r=D.documentElement;if(r)Array.from(r.attributes).forEach(function(a){if(/^data-(?:agy-)?prism/.test(a.name)&&(all||a.name!=="data-agy-prism-panel"))r.removeAttribute(a.name)});try{var en=W.electronNative;if(en&&en.setTitleBarOverlay){var lt=D.body&&D.body.classList&&D.body.classList.contains("theme-light");en.setTitleBarOverlay({color:lt?"#FFFFFF":"#131313",symbolColor:lt?"#000000":"#FAFAFA"})}}catch(_){}}',
-    'function ss(){ds(W[K]);"css,static-css,caret-css,stage,fx-canvas,wco-pill,stage-loader".split(",").forEach(function(k){var n=$(P+k);if(n)n.remove()});clr(0)}',
-    'function sa(){ds(W[K]);ds(W[N]);D.querySelectorAll(\'[id^="agy-prism-"],.prism-corner-orb\').forEach(function(e){e.remove()});clr(1)}',
-    'function pp(p,on){if(!isL(p))return;var en=on!==false,s=p.style;p.dataset.skinEnabled=en?"true":"false";p.textContent=en?"\\u25C6 Prism":"\\u25C7 Prism \\u00B7 OFF";s.color=en?"#e2e8f0":"#94a3b8";s.background=en?"rgba(20,20,26,.76)":"rgba(20,20,26,.52)";s.borderColor=en?"rgba(52,211,153,.42)":"rgba(148,163,184,.28)";s.opacity=en?"1":"0.78"}',
-    'function ep(on){var ex=$(P+"pill");if(ex){pp(ex,on);return}if(!sp0||W[N]||!D.body)return;var b=D.createElement("button");b.id=P+"pill";b.type="button";b.title="Wallpaper Prism (Click: Panel \\u00B7 Shift+Click: Enable/Disable \\u00B7 Ctrl+Alt+W)";b.setAttribute("translate","no");b.dataset.noTranslate="true";b.dataset.agNoI18n="1";b.dataset.prismLazyStub="1";b.style.cssText="all:initial;cursor:pointer;font:500 11px/18px system-ui,sans-serif;padding:2px 8px;border-radius:999px;border:1px solid transparent;z-index:44;";pp(b,on);var f=D.querySelector(".agy-composer-footer,[data-testid=\\"agent-input-box\\"] footer");if(f)f.appendChild(b);else{b.style.position="fixed";b.style.right="14px";b.style.bottom="10px";D.body.appendChild(b)}b.onclick=function(e){pd(e);if(e.shiftKey){rpc("skin.toggle",{}).catch(function(){});return}sum()}}',
-    'function sp(m){var pn=W[N];if(!pn)return;if(m.skinVersion&&pn.version!==m.skinVersion)ld(P+"panel-loader","/panel.js",1);else if(pn.syncState&&m.data)pn.syncState(m.data)}',
-    'function rpc(m,p){var o=typeof m==="string"&&m[0]==="{"?JSON.parse(m):{id:"r"+Date.now(),method:m,params:p||{}};return W.fetch(B+"/rpc",{method:"POST",headers:{"Content-Type":"application/json","X-Prism-Token":T},body:JSON.stringify(o)}).then(function(r){return r.json()}).then(function(e){if(e&&e.ok===false)throw Error(e.error||"rpc");var res=e?e.result:null;if(o.method==="skin.toggle"&&res&&typeof res.skinEnabled==="boolean"){ep(res.skinEnabled);if(!res.skinEnabled)ss();else{W.__agyPrismBootstrapped=true;if(!W[K]&&!$(P+"static-css")){var sm=res.state&&res.state.config&&res.state.config.startupMode;if(sm==="static-css")css();else if(!$(P+"stage-loader"))ld(P+"stage-loader","/stage.js",1)}}}return res})}',
-    'W.__agyPrismCall=rpc;W.__agyPrismPanicStrip=function(w){W.__agyPrismBootstrapped=false;try{if(W.__agyPrismSse){W.__agyPrismSse.close();W.__agyPrismSse=null}}catch(_){}sa();rpc("skin.panicRestore",{reason:w||"panic"}).catch(function(){})};',
-    'function sum(){if(W[N]&&W[N].toggle)return W[N].toggle();if($(P+"panel-loader"))return;var p=$(P+"pill");if(isL(p))p.remove();ld(P+"panel-loader","/panel.js?open=1",1)}',
-    'W.__agyPrismSummonPanel=sum;function ld(id,u,f){var ex=$(id);if(ex){if(!f)return;ex.remove()}var s=D.createElement("script");s.id=id;s.async=true;s.src=B+u+(u.indexOf("?")>0?"&":"?")+"t="+Date.now();(D.head||D.documentElement).appendChild(s)}',
-    'function css(){var l=$(P+"static-css");if(!l){l=D.createElement("link");l.id=P+"static-css";l.rel="stylesheet";(D.head||D.documentElement).appendChild(l)}l.href=B+"/static.css?t="+Date.now()}',
-    'if(!W.__agyPrismKeysBound){W.__agyPrismKeysBound=true;var esc=[];W.addEventListener("keydown",function(e){var k=String(e.key||""),c=(e.ctrlKey||e.metaKey)&&e.altKey;if(c&&e.shiftKey&&k.toLowerCase()==="r"){pd(e);W.__agyPrismPanicStrip("Ctrl+Alt+Shift+R");return}if(k==="Escape"&&!e.repeat){var n=Date.now();esc=esc.filter(function(t){return n-t<=900});esc.push(n);if(esc.length>=4){esc=[];pd(e);W.__agyPrismPanicStrip("4x-Escape");return}}else if(k!=="Escape")esc=[];if(c&&!e.shiftKey&&k.toLowerCase()==="w"){if(W[N]&&W[N].toggle)return;pd(e);sum()}},true)}',
-    `ep(${isSkinOn}?true:false);`,
-    'if(W.EventSource&&(!W.__agyPrismSse||W.__agyPrismSse.readyState===2||prevB!==B)){try{if(W.__agyPrismSse)W.__agyPrismSse.close()}catch(_){}try{var es=new W.EventSource(B+"/events");W.__agyPrismSse=es;es.onmessage=function(v){try{if(!W.__agyPrismBootstrapped)return;var m=JSON.parse(v.data),on=m.skinEnabled!==false,tm=m.data&&m.data.config&&m.data.config.triggerMode;if(typeof tm==="string")sp0=tm!=="shortcut-only"?1:0;var curP=$(P+"pill");if(!sp0&&isL(curP))curP.remove();else ep(on);if(!on){ss();sp(m);return}if(m.startupMode==="static-css"){ds(W[K]);css()}else{var sl=$(P+"static-css");if(sl)sl.remove();var sk=W[K],okV=sk&&(!m.skinVersion||sk.version===m.skinVersion);if(okV&&sk.applyPayload&&m.skinPayload)sk.applyPayload(m.skinPayload);else{if(m.skinPayload)W.__AGY_PRISM_BOOT_PAYLOAD__=m.skinPayload;ld(P+"stage-loader","/stage.js",1)}}sp(m)}catch(_){}}}catch(_){}}',
-    `if(${isSkinOn}){var go=function(){${isStatic}?(css()):((W[K]&&W[K].version===${safeJsonLiteral(PRISM_DOM.skinVersion)})||ld(P+"stage-loader","/stage.js",1))};W.requestIdleCallback?W.requestIdleCallback(go,{timeout:250}):setTimeout(go,16)}`,
+    `var T=${safeJsonLiteral(capToken)},B=${safeJsonLiteral(hostPrefix)}+T,P="agy-prism-",K="__agyPrism",N=K+"Panel",BT=K+"Bootstrapped",SS=K+"Sse",KT=K+"Kt",ON=K+"On",PS=K+"PanicStrip",SM=K+"SummonPanel",SC="static-css",PL=P+"panel-loader",SL=P+"stage-loader",prevB=W[K+"HostBase"]||"",sp0=${showStubPill},de=D.documentElement,hd=D.head||de;W[ON]=!!${isSkinOn};`,
+    'function $(i){return D.getElementById(i)}function pd(e){e.preventDefault();e.stopPropagation()}function isL(n){return n&&n.dataset&&n.dataset.prismLazyStub==="1"}function ds(o){try{o&&o.destroy&&o.destroy()}catch(_){}}function rm(n){n&&n.remove()}',
+    'function sk(a){if(!a||!sp0||W[N]||!W[BT]){if(W[KT]){clearInterval(W[KT]);W[KT]=0}return}if(!W[KT])W[KT]=setInterval(function(){if(!W[BT]||W[N]||!sp0)sk(0);else ep(W[ON])},1500)}sk(0);',
+    'W[K+"HostBase"]=B;W[K+"CapToken"]=T;W[K+"RpcUrl"]=B+"/rpc";W[BT]=true;',
+    'function clr(all){if(de)Array.from(de.attributes).forEach(function(a){if(/^data-(?:agy-)?prism/.test(a.name)&&(all||a.name!=="data-agy-prism-panel"))de.removeAttribute(a.name)});try{var en=W.electronNative;if(en&&en.setTitleBarOverlay){var lt=D.body&&D.body.classList.contains("theme-light");en.setTitleBarOverlay({color:lt?"#FFFFFF":"#131313",symbolColor:lt?"#000000":"#FAFAFA"})}}catch(_){}}',
+    'function ss(){ds(W[K]);("css,"+SC+",caret-css,stage,fx-canvas,wco-pill,topbar-pills,stage-loader").split(",").forEach(function(k){rm($(P+k))});clr(0)}',
+    'function sa(){sk(0);ds(W[K]);ds(W[N]);D.querySelectorAll(\'[id^="\'+P+\'"],.prism-corner-orb\').forEach(rm);clr(1)}',
+    'function pp(p,on){if(!isL(p))return;var en=on!==false,se=en?"true":"false",d=p.dataset,s=p.style,rg="rgba(";if(d.skinEnabled===se)return;d.skinEnabled=se;p.textContent=en?"\\u25C6 Prism":"\\u25C7 Prism \\u00B7 OFF";s.color=en?"#e2e8f0":"#94a3b8";s.background=rg+"20,20,26,"+(en?".76)":".52)");s.borderColor=rg+(en?"52,211,153,.42)":"148,163,184,.28)");s.opacity=en?"1":".78"}',
+    'function clk(e){pd(e);if(e.shiftKey){W[K+"Call"]("skin.toggle",{}).catch(function(){});return}W[SM]()}',
+    'function ep(on){W[ON]=on!==false;var ex=$(P+"pill"),f=D.querySelector(".agy-composer-footer,[data-testid=\\"agent-input-box\\"] footer,.composer-bar");if(!sp0||W[N]||!D.body){if(isL(ex))rm(ex);if(W[N])sk(0);return}if(ex&&!isL(ex))return;var b=ex||D.createElement("button"),d=b.dataset,t=f||D.body,cs="all:initial;display:inline-flex;align-items:center;white-space:nowrap;flex-shrink:0;cursor:pointer;font:500 11px/18px sans-serif;padding:2px 8px;border-radius:999px;border:1px solid transparent;z-index:44;";if(!ex){b.id=P+"pill";b.className=P+"pill";b.type="button";b.title="Wallpaper Prism (Click: Panel \\u00B7 Shift+Click: Enable/Disable \\u00B7 Ctrl+Alt+W)";b.setAttribute("translate","no");d.noTranslate="true";d.agNoI18n=d.prismLazyStub="1"}else if(!b.className)b.className=P+"pill";if(b.onclick!==clk)b.onclick=clk;if(b.parentNode!==t){d.skinEnabled="";b.style.cssText=f?cs:cs+"position:fixed;right:14px;bottom:10px;";t.appendChild(b)}pp(b,W[ON])}',
+    'function sp(m){var pn=W[N];if(!pn)return;sk(0);if(m.skinVersion&&pn.version!==m.skinVersion)ld(PL,"/panel.js",1);else if(pn.syncState&&m.data)pn.syncState(m.data)}',
+    'function rpc(m,p){var o=typeof m==="string"&&m[0]==="{"?JSON.parse(m):{id:"r"+Date.now(),method:m,params:p||{}};return W.fetch(B+"/rpc",{method:"POST",headers:{"Content-Type":"application/json","X-Prism-Token":T},body:JSON.stringify(o)}).then(function(r){return r.json()}).then(function(e){if(e&&e.ok===false)throw Error(e.error||"rpc");var res=e?e.result:null;if(o.method==="skin.toggle"&&res&&typeof res.skinEnabled==="boolean"){ep(res.skinEnabled);if(!res.skinEnabled)ss();else{W[BT]=true;if(!W[K]&&!$(P+SC)){var sm=res.state&&res.state.config&&res.state.config.startupMode;if(sm===SC)css();else if(!$(SL))ld(SL,"/stage.js",1)}}}return res})}',
+    'W[K+"Call"]=rpc;W[PS]=function(w){W[BT]=false;sk(0);try{if(W[SS]){W[SS].close();W[SS]=null}}catch(_){}sa();rpc("skin.panicRestore",{reason:w||"panic"}).catch(function(){})};',
+    'function sum(){sk(0);if(W[N]&&W[N].toggle)return W[N].toggle();if($(PL))return;var p=$(P+"pill");if(isL(p))p.style.opacity=".55";ld(PL,"/panel.js?open=1",1)}',
+    'W[SM]=sum;function ld(id,u,f){var ex=$(id);if(ex){if(!f)return;rm(ex)}var s=D.createElement("script");s.id=id;s.async=true;s.onerror=function(){rm(s);if(id===PL){var p=$(P+"pill");if(isL(p)){p.dataset.skinEnabled="";pp(p,W[ON])}sk(1)}};s.src=B+u+(u.indexOf("?")>0?"&":"?")+"t="+Date.now();hd.appendChild(s)}',
+    'function css(){var l=$(P+SC);if(!l){l=D.createElement("link");l.id=P+SC;l.rel="stylesheet";hd.appendChild(l)}l.href=B+"/static.css?t="+Date.now()}',
+    'if(!W[K+"KeysBound"]){W[K+"KeysBound"]=true;var esc=[];W.addEventListener("keydown",function(e){var k=String(e.key||""),kl=k.toLowerCase(),c=(e.ctrlKey||e.metaKey)&&e.altKey;if(c&&e.shiftKey&&kl==="r"){pd(e);W[PS]("Ctrl+Alt+Shift+R");return}if(k==="Escape"&&!e.repeat){var n=Date.now();esc=esc.filter(function(t){return n-t<=900});esc.push(n);if(esc.length>=4){esc=[];pd(e);W[PS]("4x-Escape");return}}else if(k!=="Escape")esc=[];if(c&&!e.shiftKey&&kl==="w"){if(W[N]&&W[N].toggle)return;pd(e);W[SM]()}},true)}',
+    'ep(W[ON]);sk(1);',
+    'if(W.EventSource){if(!W[SS]||W[SS].readyState===2||prevB!==B){try{W[SS]&&W[SS].close()}catch(_){}try{W[SS]=new W.EventSource(B+"/events")}catch(_){}}if(W[SS])W[SS].onmessage=function(v){try{if(!W[BT])return;var m=JSON.parse(v.data),on=m.skinEnabled!==false,tm=m.data&&m.data.config&&m.data.config.triggerMode;if(typeof tm==="string")sp0=tm!=="shortcut-only"?1:0;var curP=$(P+"pill");if(!sp0&&isL(curP)){rm(curP);sk(0)}else{ep(on);sk(1)}if(!on){ss();sp(m);return}if(m.startupMode===SC){ds(W[K]);css()}else{rm($(P+SC));var sk0=W[K],okV=sk0&&(!m.skinVersion||sk0.version===m.skinVersion);if(okV&&sk0.applyPayload&&m.skinPayload)sk0.applyPayload(m.skinPayload);else{if(m.skinPayload)W.__AGY_PRISM_BOOT_PAYLOAD__=m.skinPayload;ld(SL,"/stage.js",1)}}sp(m)}catch(_){}}}',
+    `if(${isSkinOn}){var go=function(){${isStatic}?(css()):((W[K]&&W[K].version===${safeJsonLiteral(PRISM_DOM.skinVersion)})||ld(SL,"/stage.js",1))};W.requestIdleCallback?W.requestIdleCallback(go,{timeout:250}):setTimeout(go,16)}`,
     'return{ok:true}})()',
   ].join('');
 }
@@ -1546,12 +1583,49 @@ export function createPassiveCdpBridge({
   const firstReadyAt = new Map(); // targetId -> timestamp ms
   const settleTimers = new Map(); // targetId -> Timeout
   const sseClients = new Set(); // Set<ServerResponse>
+  const sseCleanups = new WeakMap(); // ServerResponse -> (opts?) => void
   let sessionAwake = false;
   let sessionForcedWake = false;
   let bootCanaryChecked = false;
   let timer = null;
   let stopped = false;
   let tickInFlight = null;
+
+  const isSseResponseAlive = (res) =>
+    Boolean(
+      res &&
+      !res.writableEnded &&
+      !res.destroyed &&
+      (!res.socket || (!res.socket.destroyed && res.socket.writable !== false)),
+    );
+
+  const countLiveSseClients = () => {
+    let alive = 0;
+    for (const res of [...sseClients]) {
+      if (isSseResponseAlive(res)) {
+        alive += 1;
+      } else {
+        const fn = sseCleanups.get(res);
+        if (fn) fn({ skipRecovery: true });
+        else sseClients.delete(res);
+      }
+    }
+    return alive;
+  };
+
+  const closeAllSseClients = () => {
+    for (const res of [...sseClients]) {
+      const fn = sseCleanups.get(res);
+      if (fn) fn({ skipRecovery: true });
+      else sseClients.delete(res);
+      try {
+        res.end();
+      } catch {
+        /* ignore */
+      }
+    }
+    sseClients.clear();
+  };
 
   let lastStatus = {
     phase: 'standby',
@@ -1601,6 +1675,8 @@ export function createPassiveCdpBridge({
         canary: canary.getStatus(),
         sessionAwake: isSessionAwake(startupMode),
         studioUri: SIDECAR_URI,
+        updateStatus: st.updateStatus || null,
+        updateSummary: st.updateSummary || null,
       },
     };
   };
@@ -1621,36 +1697,56 @@ export function createPassiveCdpBridge({
     while (sseClients.size >= MAX_HOST_SSE) {
       const oldest = sseClients.values().next().value;
       if (!oldest) break;
-      sseClients.delete(oldest);
+      const oldCleanup = sseCleanups.get(oldest);
+      if (oldCleanup) oldCleanup({ skipRecovery: true });
+      else sseClients.delete(oldest);
       try { oldest.end(); } catch {}
     }
     sseClients.add(res);
     res.write(`retry: 2500\ndata: ${JSON.stringify(initial)}\n\n`);
-    const ka = setInterval(() => {
+    let cleaned = false;
+    let ka = null;
+    const cleanup = ({ skipRecovery = false } = {}) => {
+      if (cleaned) return;
+      cleaned = true;
+      if (ka) clearInterval(ka);
+      sseCleanups.delete(res);
+      const hadClients = sseClients.delete(res);
+      // When Hub reloads (Ctrl+R), EventSource closes -> re-verify & gently re-mount after settle!
+      if (!skipRecovery && hadClients && !stopped) {
+        const aliveCount = countLiveSseClients();
+        if (aliveCount === 0) {
+          activeTargets.clear();
+          firstReadyAt.clear();
+          const t = setTimeout(() => {
+            if (!stopped) void tick();
+          }, 600);
+          t.unref?.();
+        } else if (aliveCount < activeTargets.size) {
+          const t = setTimeout(() => {
+            if (!stopped) void tick({ immediateWake: true });
+          }, 600);
+          t.unref?.();
+        }
+      }
+    };
+    sseCleanups.set(res, cleanup);
+    ka = setInterval(() => {
+      if (!isSseResponseAlive(res)) {
+        cleanup();
+        return;
+      }
       try {
         res.write(': keepalive\n\n');
       } catch {
-        clearInterval(ka);
-        sseClients.delete(res);
+        cleanup();
       }
     }, 15_000);
     ka.unref?.();
 
-    const cleanup = () => {
-      clearInterval(ka);
-      const hadClients = sseClients.delete(res);
-      // When Hub reloads (Ctrl+R), EventSource closes -> re-verify & gently re-mount after settle!
-      if (hadClients && sseClients.size === 0 && !stopped) {
-        activeTargets.clear();
-        firstReadyAt.clear();
-        const t = setTimeout(() => {
-          if (!stopped) void tick();
-        }, 600);
-        t.unref?.();
-      }
-    };
-    req.on('close', cleanup);
-    res.on('close', cleanup);
+    req.on('close', () => cleanup());
+    res.on('close', () => cleanup());
+    res.on('error', () => cleanup());
   };
 
   const candidatePorts = async (st) => {
@@ -1774,18 +1870,26 @@ export function createPassiveCdpBridge({
   const broadcastState = async () => {
     const envelope = await buildEnvelopePayload();
     const serialized = `data: ${JSON.stringify(envelope)}\n\n`;
-    let pushedViaSse = false;
+    let sseDeliveredCount = 0;
     for (const res of [...sseClients]) {
+      if (!isSseResponseAlive(res)) {
+        const fn = sseCleanups.get(res);
+        if (fn) fn({ skipRecovery: true });
+        else sseClients.delete(res);
+        continue;
+      }
       try {
         res.write(serialized);
-        pushedViaSse = true;
+        sseDeliveredCount += 1;
       } catch {
-        sseClients.delete(res);
+        const fn = sseCleanups.get(res);
+        if (fn) fn({ skipRecovery: true });
+        else sseClients.delete(res);
       }
     }
 
     // Fallback ephemeral push when SSE has no open socket (e.g. immediately after Restore or before EventSource opens)
-    if (!pushedViaSse && activeTargets.size > 0) {
+    if (sseDeliveredCount === 0 && activeTargets.size > 0) {
       for (const [tid, entry] of [...activeTargets.entries()]) {
         if (!entry.target?.webSocketDebuggerUrl) continue;
         if (!envelope.skinEnabled) {
@@ -1805,6 +1909,7 @@ export function createPassiveCdpBridge({
         }
       }
     }
+    return { sseDeliveredCount };
   };
 
   const bootedAtMs = Date.now();
@@ -1820,6 +1925,7 @@ export function createPassiveCdpBridge({
 
     const pluginEnabled = isPluginEnabledInHostConfig(configPath, pluginRoot);
     if (!pluginEnabled) {
+      closeAllSseClients();
       if (activeTargets.size > 0) await cleanupTargetsEphemeral({ removeSkin: true, removePanel: true });
       lastStatus = {
         ...lastStatus,
@@ -1864,7 +1970,7 @@ export function createPassiveCdpBridge({
     }
 
     // Steady-state zero-CDP polling while SSE is connected!
-    if (!immediateWake && activeTargets.size > 0 && sseClients.size > 0) {
+    if (!immediateWake && activeTargets.size > 0 && countLiveSseClients() > 0) {
       lastStatus = {
         ...lastStatus,
         phase: 'attached',
@@ -1937,7 +2043,7 @@ export function createPassiveCdpBridge({
       }
 
       for (const h of hubs) {
-        if (!activeTargets.has(h.id) || immediateWake || sseClients.size === 0) {
+        if (!activeTargets.has(h.id) || immediateWake || countLiveSseClients() === 0) {
           await injectTargetOnce(h, browserSessionId, st, immediateWake).catch((err) => log(`gentle mount warn: ${err.message}`));
         }
       }
@@ -1967,11 +2073,24 @@ export function createPassiveCdpBridge({
     return getStatus();
   };
 
+  const runSerializedTick = async (opts = {}) => {
+    if (tickInFlight) {
+      await tickInFlight.catch(() => {});
+    }
+    if (stopped) return getStatus();
+    const p = runTick(opts).finally(() => {
+      if (tickInFlight === p) tickInFlight = null;
+    });
+    tickInFlight = p;
+    return p;
+  };
+
   const tick = (opts = {}) => {
     if (!tickInFlight) {
-      tickInFlight = runTick(opts).finally(() => {
-        tickInFlight = null;
+      const p = runTick(opts).finally(() => {
+        if (tickInFlight === p) tickInFlight = null;
       });
+      tickInFlight = p;
     }
     return tickInFlight;
   };
@@ -2017,22 +2136,35 @@ export function createPassiveCdpBridge({
       const next = canary.reset();
       sessionAwake = true;
       sessionForcedWake = true;
-      await runTick({ immediateWake: true });
+      await runSerializedTick({ immediateWake: true });
       await broadcastState();
       return next;
     },
-    wake: async () => {
+    wake: async (opts = {}) => {
+      const forceProbe = Boolean(opts && opts.forceProbe);
       sessionAwake = true;
       sessionForcedWake = true;
-      await runTick({ immediateWake: true });
-      await broadcastState();
+      const liveSseAttached =
+        activeTargets.size > 0 &&
+        countLiveSseClients() > 0 &&
+        lastStatus.phase === 'attached' &&
+        canary.getStatus().state !== 'tripped';
+      const usedFastPath = !forceProbe && liveSseAttached;
+      if (!usedFastPath) {
+        await runSerializedTick({ immediateWake: true });
+      }
+      const bc = await broadcastState();
+      if (usedFastPath && (!bc || bc.sseDeliveredCount === 0)) {
+        await runSerializedTick({ immediateWake: true });
+        await broadcastState();
+      }
       return getStatus();
     },
     reloadHostScripts: async () => {
       activeTargets.clear();
       sessionAwake = true;
       sessionForcedWake = true;
-      await runTick({ immediateWake: true });
+      await runSerializedTick({ immediateWake: true });
       await broadcastState();
       return getStatus();
     },
@@ -2046,19 +2178,21 @@ export function createPassiveCdpBridge({
     tick,
     getStatus,
     broadcastState,
-    async stop({ removeSkin = true, removePanel = true } = {}) {
+    async stop({ removeSkin = true, removePanel = true, preserveHostDom = false } = {}) {
       stopped = true;
       if (timer) {
         clearTimeout(timer);
         timer = null;
       }
       clearSettleTimers();
-      for (const res of [...sseClients]) {
-        try { res.end(); } catch { /* ignore */ }
-      }
-      sseClients.clear();
+      closeAllSseClients();
       if (tickInFlight) await tickInFlight.catch(() => {});
-      await cleanupTargetsEphemeral({ removeSkin, removePanel });
+      if (preserveHostDom) {
+        activeTargets.clear();
+        firstReadyAt.clear();
+      } else {
+        await cleanupTargetsEphemeral({ removeSkin, removePanel });
+      }
       lastStatus = {
         ...lastStatus,
         phase: 'stopped',

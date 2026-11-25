@@ -3,9 +3,9 @@
 // (+ imported src/shared/*.mjs modules) into a single self-contained sidecars/prism_studio/index.html.
 //
 // Strategy:
-//   1. Prefer esbuild if available locally or in sibling workspace poc/route-b-poc/node_modules/esbuild.
-//   2. Fall back automatically to a deterministic zero-dependency ESM-to-IIFE bundler + vm.Script syntax check
-//      so `node scripts/build.mjs` succeeds 100% sandboxed offline without `npm install`.
+//   1. Default to the deterministic pure-Node zero-dependency ESM-to-IIFE bundler + vm.Script syntax check
+//      so local Windows dev machines and Ubuntu CI emit 100% byte-identical pure-LF `index.html`.
+//   2. Only probe local `esbuild` when explicitly opted in via `PRISM_USE_ESBUILD=1` (never probes sibling repos).
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -38,35 +38,44 @@ const DEFAULT_TEMPLATE = `<!DOCTYPE html>
 `;
 
 async function tryLoadEsbuild() {
-  const candidates = [
-    join(repoRoot, 'node_modules', 'esbuild', 'lib', 'main.js'),
-    join(repoRoot, '..', 'agy-plugin-wallpaper-engine', 'node_modules', 'esbuild', 'lib', 'main.js'),
-    join(repoRoot, '..', 'agy-plugin-wallpaper-engine', 'poc', 'route-b-poc', 'node_modules', 'esbuild', 'lib', 'main.js'),
-  ];
-  for (const c of candidates) {
-    if (existsSync(c)) {
-      try {
-        return await import(pathToFileURL(c).href);
-      } catch {
-        /* try next */
-      }
+  if (process.env.PRISM_USE_ESBUILD !== '1') {
+    return null;
+  }
+  const localCandidate = join(repoRoot, 'node_modules', 'esbuild', 'lib', 'main.js');
+  if (existsSync(localCandidate)) {
+    try {
+      return await import(pathToFileURL(localCandidate).href);
+    } catch {
+      /* fall through to package resolution */
     }
   }
-  return null;
+  try {
+    return await import('esbuild');
+  } catch {
+    return null;
+  }
+}
+
+function stripInlineJsComments(specList) {
+  return specList.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
 
 /**
  * Pure-Node zero-dependency ESM topological bundler for relative local `.mjs`/`.js` graphs.
- * Handles `import { a, b as c } from './x.mjs'`, `import * as ns from './x.mjs'`,
- * and `export const / let / var / function / async function / class / { ... }`.
+ * Handles named/namespace/default/mixed imports, side-effect imports, re-exports
+ * (`export { ... } from`, `export * from`, `export * as ns from`), and
+ * `export const / let / var / function / async function / class / default / { ... }`.
  */
-function bundleZeroDepEsm(entryFile) {
+export function bundleZeroDepEsm(entryFile) {
   const visited = new Set();
   const ordered = [];
   let modSeq = 0;
   const nsMap = new Map(); // absPath -> { nsVar, exports: Set<string> }
 
   function resolveImport(fromFile, spec) {
+    if (!spec.startsWith('.')) {
+      throw new Error(`External non-relative import "${spec}" not allowed in browser Studio bundle`);
+    }
     const base = resolve(dirname(fromFile), spec);
     for (const candidate of [base, `${base}.mjs`, `${base}.js`]) {
       if (existsSync(candidate)) return candidate;
@@ -74,22 +83,46 @@ function bundleZeroDepEsm(entryFile) {
     throw new Error(`Cannot resolve import "${spec}" from ${fromFile}`);
   }
 
+  function pushNamedBindings(namedClause, depNsVar, targetList) {
+    const inner = stripInlineJsComments(namedClause.slice(1, namedClause.lastIndexOf('}'))).trim();
+    for (const part of inner.split(',')) {
+      const p = part.trim();
+      if (!p) continue;
+      const asMatch = /^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/.exec(p);
+      if (asMatch) {
+        targetList.push(`const ${asMatch[2]} = ${depNsVar}.${asMatch[1]};`);
+      } else {
+        targetList.push(`const ${p} = ${depNsVar}.${p};`);
+      }
+    }
+  }
+
   function visit(filePath) {
     const abs = resolve(filePath);
     if (visited.has(abs)) return nsMap.get(abs);
     visited.add(abs);
 
-    let code = readFileSync(abs, 'utf8').replace(/^\uFEFF/, '');
+    let code = readFileSync(abs, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
     const nsVar = `__prism_mod_${++modSeq}`;
     const exportedNames = new Set();
-    const importBindings = [];
+    const info = { nsVar, exports: exportedNames };
+    nsMap.set(abs, info);
 
-    // Strip static imports (supports multi-line `import { ... } from '...'`)
-    const importRe = /^\s*import\s+([\s\S]*?)\s+from\s+['"]([^'"]+)['"]\s*;?/gm;
+    const importBindings = [];
+    const reExportProps = [];
+    const starReExportVars = [];
+
+    // 1. Strip side-effect-only relative imports FIRST (`import './foo.mjs';`) so they can never be spanned by `importRe`
+    code = code.replace(/^[ \t]*import[ \t]+['"]([^'"]+)['"][ \t]*;?/gm, (_full, spec) => {
+      const depAbs = resolveImport(abs, spec);
+      visit(depAbs);
+      return '';
+    });
+
+    // 2. Strip static imports (named, namespace, default, and default + named/namespace; grammar-bounded, never spans across `;` or `}`)
+    const importRe =
+      /^[ \t]*import\s+(\*\s+as\s+[A-Za-z_$][\w$]*|\{[^}]*\}|[A-Za-z_$][\w$]*(?:\s*,\s*(?:\*\s+as\s+[A-Za-z_$][\w$]*|\{[^}]*\}))?)\s+from\s+['"]([^'"]+)['"][ \t]*;?/gm;
     code = code.replace(importRe, (_full, clause, spec) => {
-      if (!spec.startsWith('.')) {
-        throw new Error(`External non-relative import "${spec}" not allowed in browser Studio bundle`);
-      }
       const depAbs = resolveImport(abs, spec);
       const depInfo = visit(depAbs);
       const trimmed = clause.trim();
@@ -97,27 +130,57 @@ function bundleZeroDepEsm(entryFile) {
         const m = /\*\s+as\s+([A-Za-z_$][\w$]*)/.exec(trimmed);
         if (m) importBindings.push(`const ${m[1]} = ${depInfo.nsVar};`);
       } else if (trimmed.startsWith('{')) {
-        const inner = trimmed.slice(1, trimmed.lastIndexOf('}')).trim();
-        for (const part of inner.split(',')) {
-          const p = part.trim();
-          if (!p) continue;
-          const asMatch = /^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/.exec(p);
-          if (asMatch) {
-            importBindings.push(`const ${asMatch[2]} = ${depInfo.nsVar}.${asMatch[1]};`);
-          } else {
-            importBindings.push(`const ${p} = ${depInfo.nsVar}.${p};`);
-          }
-        }
+        pushNamedBindings(trimmed, depInfo.nsVar, importBindings);
       } else {
-        importBindings.push(`const ${trimmed} = ${depInfo.nsVar}.default;`);
+        const commaIdx = trimmed.indexOf(',');
+        if (commaIdx !== -1) {
+          const defIdent = trimmed.slice(0, commaIdx).trim();
+          const rest = trimmed.slice(commaIdx + 1).trim();
+          if (defIdent) importBindings.push(`const ${defIdent} = ${depInfo.nsVar}.default;`);
+          if (rest.startsWith('*')) {
+            const m = /\*\s+as\s+([A-Za-z_$][\w$]*)/.exec(rest);
+            if (m) importBindings.push(`const ${m[1]} = ${depInfo.nsVar};`);
+          } else if (rest.startsWith('{')) {
+            pushNamedBindings(rest, depInfo.nsVar, importBindings);
+          }
+        } else {
+          importBindings.push(`const ${trimmed} = ${depInfo.nsVar}.default;`);
+        }
       }
       return '';
     });
 
-    // Side-effect-only relative imports: `import './foo.mjs';`
-    code = code.replace(/^\s*import\s+['"]([^'"]+)['"]\s*;?/gm, (_full, spec) => {
+    // Namespace re-exports: `export * as ns from './foo.mjs';`
+    code = code.replace(
+      /^[ \t]*export\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"][ \t]*;?/gm,
+      (_full, alias, spec) => {
+        const depAbs = resolveImport(abs, spec);
+        const depInfo = visit(depAbs);
+        reExportProps.push(`${alias}: ${depInfo.nsVar}`);
+        return '';
+      },
+    );
+
+    // Wildcard re-exports: `export * from './foo.mjs';`
+    code = code.replace(/^[ \t]*export\s+\*\s+from\s+['"]([^'"]+)['"][ \t]*;?/gm, (_full, spec) => {
       const depAbs = resolveImport(abs, spec);
-      visit(depAbs);
+      const depInfo = visit(depAbs);
+      starReExportVars.push(depInfo.nsVar);
+      return '';
+    });
+
+    // Named re-exports: `export { a, b as c } from './foo.mjs';` (`[^}]*` prevents spanning across preceding local `export { ... };`)
+    code = code.replace(/^[ \t]*export\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"][ \t]*;?/gm, (_full, inner, spec) => {
+      const depAbs = resolveImport(abs, spec);
+      const depInfo = visit(depAbs);
+      const cleaned = stripInlineJsComments(inner).trim();
+      for (const part of cleaned.split(',')) {
+        const p = part.trim();
+        if (!p) continue;
+        const asMatch = /^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/.exec(p);
+        if (asMatch) reExportProps.push(`${asMatch[2]}: ${depInfo.nsVar}.${asMatch[1]}`);
+        else reExportProps.push(`${p}: ${depInfo.nsVar}.${p}`);
+      }
       return '';
     });
 
@@ -140,10 +203,10 @@ function bundleZeroDepEsm(entryFile) {
       return 'const __prism_default__ = ';
     });
 
-    // Transform `export { a, b as c };`
+    // Transform local `export { a, b as c };`
     const aliasPairs = [];
     code = code.replace(/^\s*export\s*\{([^}]*)\}\s*;?/gm, (_m, inner) => {
-      for (const part of inner.split(',')) {
+      for (const part of stripInlineJsComments(inner).split(',')) {
         const p = part.trim();
         if (!p) continue;
         const asMatch = /^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/.exec(p);
@@ -154,6 +217,8 @@ function bundleZeroDepEsm(entryFile) {
     });
 
     const props = [
+      ...starReExportVars.map((v) => `...${v}`),
+      ...reExportProps,
       ...[...exportedNames].map((n) => `${n}: ${n}`),
       ...aliasPairs,
       ...(hasDefault ? ['default: __prism_default__'] : []),
@@ -167,8 +232,6 @@ function bundleZeroDepEsm(entryFile) {
       `})();`,
     ].join('\n');
 
-    const info = { nsVar, exports: exportedNames };
-    nsMap.set(abs, info);
     ordered.push(wrappedModule);
     return info;
   }
@@ -182,7 +245,7 @@ export async function buildStudioBundle() {
     throw new Error(`Missing Studio UI entrypoint: ${appEntry}`);
   }
 
-  const rawCss = existsSync(cssEntry) ? readFileSync(cssEntry, 'utf8') : '';
+  const rawCss = existsSync(cssEntry) ? readFileSync(cssEntry, 'utf8').replace(/\r\n?/g, '\n') : '';
   const heightLockCss = /#app\b[\s\S]*?height\s*:\s*100%/i.test(rawCss)
     ? ''
     : '\nhtml, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }\n';
@@ -239,6 +302,8 @@ export async function buildStudioBundle() {
   } else {
     html = `${html}\n${scriptBlock}`;
   }
+
+  html = html.replace(/\r\n?/g, '\n');
 
   mkdirSync(dirname(outHtmlPath), { recursive: true });
   writeFileSync(outHtmlPath, html, 'utf8');

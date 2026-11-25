@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   DEFAULT_DEBUG_PORT,
+  PER_WALLPAPER_OVERRIDE_KEYS,
   PLUGIN_ID,
   PLUGIN_VERSION,
   PRISM_DOM,
@@ -23,6 +24,7 @@ import {
   hasRawTraversalAttempt,
   resolveDefaultPrismDataDir,
 } from '../../src/engine/index.mjs';
+import { createPrismUpdater, isManagedSidecar } from '../../src/engine/updater.mjs';
 import * as hostModule from '../../src/host/index.mjs';
 import {
   createCanaryController,
@@ -30,7 +32,11 @@ import {
   createPassiveCdpBridge,
   disableNormalShortcutAutoLoad,
   enableNormalShortcutAutoLoad,
+  evaluateTargetEphemeral,
   inspectNormalShortcuts,
+  listCdpTargets,
+  probeCdpPort,
+  readDevToolsActivePort,
 } from './cdp-bridge.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -39,7 +45,8 @@ const INDEX_HTML_PATH = join(__dirname, 'index.html');
 const MAX_JSON_BYTES = 16 * 1024 * 1024;
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
-const PRELOAD_SHIM_JS = `(function() {
+const PRELOAD_SHIM_JS = `window.__agyDomTranslatorInitialized = true;
+(function() {
   var params = new URLSearchParams(window.location.search);
   var boot = window.__SIDECAR_BOOT__ || {};
   var token = params.get('token') || boot.token || '';
@@ -126,15 +133,97 @@ function injectBootIntoHtml(rawHtml, token = '', conversationId = '') {
   return html;
 }
 
-function sendJson(res, status, payload, extraHeaders = {}) {
+function safeCompareTokens(a, b) {
+  const sa = String(a || '');
+  const sb = String(b || '');
+  if (!sa || !sb) return false;
+  const ba = Buffer.from(sa, 'utf8');
+  const bb = Buffer.from(sb, 'utf8');
+  return ba.length === bb.length && timingSafeEqual(ba, bb);
+}
+
+function isAllowedLoopbackHost(hostHeader) {
+  const raw = String(hostHeader || '').trim();
+  if (!raw) return false;
+  const m = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::(\d{1,5}))?$/i.exec(raw);
+  if (!m) return false;
+  if (m[1] !== undefined) {
+    const port = Number(m[1]);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
+  }
+  return true;
+}
+
+function isAllowedStrictOrigin(originHeader) {
+  const raw = String(originHeader || '').trim();
+  if (!raw || raw === 'null') return true;
+  if (/^plugin:\/\/[a-z0-9._-]+$/i.test(raw)) return true;
+  if (/^vscode-webview:\/\/[a-z0-9._-]+$/i.test(raw)) return true;
+  const m = /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::(\d{1,5}))?$/i.exec(raw);
+  if (!m) return false;
+  if (m[1] !== undefined) {
+    const port = Number(m[1]);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
+  }
+  return true;
+}
+
+function decorateUpdateStatus(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const hasUpdate = Boolean(raw.hasUpdate || raw.updateAvailable);
+  return {
+    ...raw,
+    hasUpdate,
+    updateAvailable: hasUpdate,
+  };
+}
+
+function buildUpdateSummary(status) {
+  if (!status || typeof status !== 'object') return null;
+  const hasUpdate = Boolean(status.hasUpdate || status.updateAvailable);
+  return {
+    hasUpdate,
+    updateAvailable: hasUpdate,
+    currentVersion: status.currentVersion || PLUGIN_VERSION,
+    latestVersion: status.latestVersion || null,
+    latestTag: status.latestTag || null,
+    releaseUrl: status.releaseUrl || '',
+    canAutoUpdate: Boolean(status.canAutoUpdate),
+    canSelfUpdate: Boolean(status.canSelfUpdate ?? status.canAutoUpdate),
+    blockReason: status.blockReason || '',
+  };
+}
+
+function sendJson(res, status, payload, extraHeaders = {}, opts = {}) {
+  const { omitCors = false, onFlushed = null } = opts || {};
   const body = JSON.stringify(payload);
-  res.writeHead(status, {
+  const headers = {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
-    'Access-Control-Allow-Origin': '*',
-    ...extraHeaders,
-  });
-  res.end(body);
+    'X-Content-Type-Options': 'nosniff',
+  };
+  if (!omitCors) {
+    headers['Access-Control-Allow-Origin'] = '*';
+  }
+  Object.assign(headers, extraHeaders);
+  res.writeHead(status, headers);
+  if (typeof onFlushed === 'function') {
+    res.end(body, () => {
+      setImmediate(() => {
+        try {
+          onFlushed();
+        } catch {
+          /* ignore post-flush callback errors */
+        }
+      });
+    });
+  } else {
+    res.end(body);
+  }
+}
+
+function sendStrictJson(res, status, payload, extraHeaders = {}, onFlushed = null) {
+  sendJson(res, status, payload, extraHeaders, { omitCors: true, onFlushed });
 }
 
 function readJsonBody(req, maxBytes = MAX_JSON_BYTES) {
@@ -217,31 +306,78 @@ export async function createPrismStudioServer(options = {}) {
     10,
   );
   const listenPort = options.port !== undefined ? Number(options.port) : Number.isFinite(envPort) ? envPort : 0;
-  const authToken =
-    options.token !== undefined
-      ? String(options.token || '')
-      : String(
-          process.env.ANTIGRAVITY_SIDECAR_UI_TOKEN ||
-            process.env.ANTIGRAVITY_SIDECAR_AUTH_TOKEN ||
-            process.env.ANTIGRAVITY_SIDECAR_WEB_TOKEN ||
-            '',
-        );
+  const envAuthToken = String(
+    process.env.ANTIGRAVITY_SIDECAR_UI_TOKEN ||
+      process.env.ANTIGRAVITY_SIDECAR_AUTH_TOKEN ||
+      process.env.ANTIGRAVITY_SIDECAR_WEB_TOKEN ||
+      '',
+  ).trim();
+  const explicitOptionToken = options.token !== undefined ? String(options.token || '').trim() : '';
+  const effectiveAuthToken = explicitOptionToken || envAuthToken || randomBytes(32).toString('hex');
+  const startedAt = new Date().toISOString();
+  const resolvedPluginRoot = options.pluginRoot ? resolve(options.pluginRoot) : PLUGIN_ROOT;
+  const updaterEnv = options.env || process.env;
+  let closed = false;
 
   const engine =
     options.engine ||
     (await createWallpaperPrismEngine({
       dataDir,
       allowLegacyMigration: !hasExplicitDataDir,
-      pluginRoot: PLUGIN_ROOT,
+      pluginRoot: resolvedPluginRoot,
       sidecarDataDir: sidecarExecDataDir,
     }));
   if (typeof engine.init === 'function') {
     await engine.init();
   }
 
+  const updater =
+    options.updater ||
+    createPrismUpdater({
+      pluginRoot: resolvedPluginRoot,
+      dataDir,
+      currentVersion: options.currentVersion || PLUGIN_VERSION,
+      ...(options.updaterOptions || {}),
+      onBeforeSync: async (ctx) => {
+        if (typeof options.onBeforeSync === 'function') await options.onBeforeSync(ctx);
+      },
+      onRollback: async (err) => {
+        if (typeof options.onRollback === 'function') await options.onRollback(err);
+      },
+      managedSidecar: options.managedSidecar,
+      env: updaterEnv,
+      fetchImpl: options.fetchImpl || options.updaterOptions?.fetchImpl || fetch,
+    });
+
+  try {
+    updater.recoverPendingJournal?.();
+  } catch {
+    /* non-fatal startup journal recovery */
+  }
+  const justUpdatedMarker = (() => {
+    try {
+      return updater.consumeJustUpdatedMarker?.() || null;
+    } catch {
+      return null;
+    }
+  })();
+
+  let cachedUpdateStatus = decorateUpdateStatus(
+    (() => {
+      try {
+        return updater.getCachedStatus?.() || null;
+      } catch {
+        return null;
+      }
+    })(),
+  );
+  let updateApplyInFlight = false;
+  let bootUpdateTimer = null;
+  let retiredSweepTimer = null;
+
   const canaryController = createCanaryController({
     dataDir,
-    pluginRoot: PLUGIN_ROOT,
+    pluginRoot: resolvedPluginRoot,
     onTripSafeMode: async () => {
       localSessionAwake = false;
       await engine.updateConfig({ skinEnabled: false });
@@ -409,26 +545,41 @@ export async function createPrismStudioServer(options = {}) {
       pid: process.pid,
       version: PLUGIN_VERSION,
       studioUri: SIDECAR_URI,
+      updateStatus: cachedUpdateStatus,
+      updateSummary: buildUpdateSummary(cachedUpdateStatus),
     };
   };
 
   const studioSseClients = new Set();
   const studioSseKeepalives = new Set();
   let studioBroadcastScheduled = false;
+  let studioBroadcastPending = false;
 
   const broadcastStudioState = async () => {
-    if (studioSseClients.size === 0 || studioBroadcastScheduled) return;
+    if (studioSseClients.size === 0) return;
+    if (studioBroadcastScheduled) {
+      studioBroadcastPending = true;
+      return;
+    }
     studioBroadcastScheduled = true;
     try {
-      const st = await buildCanonicalState();
-      const serialized = `event: state\ndata: ${JSON.stringify(st)}\n\n`;
-      for (const clientRes of [...studioSseClients]) {
-        try {
-          clientRes.write(serialized);
-        } catch {
-          studioSseClients.delete(clientRes);
+      do {
+        studioBroadcastPending = false;
+        if (studioSseClients.size === 0) break;
+        const st = await buildCanonicalState();
+        const serialized = `event: state\ndata: ${JSON.stringify(st)}\n\n`;
+        for (const clientRes of [...studioSseClients]) {
+          if (clientRes.writableEnded || clientRes.destroyed) {
+            studioSseClients.delete(clientRes);
+            continue;
+          }
+          try {
+            clientRes.write(serialized);
+          } catch {
+            studioSseClients.delete(clientRes);
+          }
         }
-      }
+      } while (studioBroadcastPending);
     } catch {
       /* best-effort studio sync */
     } finally {
@@ -437,15 +588,100 @@ export async function createPrismStudioServer(options = {}) {
   };
 
   let pushScheduled = false;
+  let pushPending = false;
   const pushToHost = async () => {
     void broadcastStudioState();
-    if (!cdpBridge || pushScheduled) return;
+    if (!cdpBridge) return;
+    if (pushScheduled) {
+      pushPending = true;
+      return;
+    }
     pushScheduled = true;
     try {
-      await cdpBridge.broadcastState().catch(() => {});
+      do {
+        pushPending = false;
+        await cdpBridge.broadcastState().catch(() => {});
+      } while (pushPending);
     } finally {
       pushScheduled = false;
     }
+  };
+
+  const PER_WALLPAPER_OVERRIDE_KEY_SET = new Set(PER_WALLPAPER_OVERRIDE_KEYS);
+  const routeRpcConfigPatch = async (rawPatch) => {
+    const patch = rawPatch && typeof rawPatch === 'object' ? { ...rawPatch } : {};
+    if ('perWallpaperOverrides' in patch) return patch;
+    const cfg = await engine.getConfig();
+    const activeId = String(cfg?.activeWallpaperId || '');
+    const existingOv =
+      activeId && cfg?.perWallpaperOverrides && typeof cfg.perWallpaperOverrides[activeId] === 'object'
+        ? cfg.perWallpaperOverrides[activeId]
+        : null;
+    if (!existingOv) return patch;
+
+    const nextOv = { ...existingOv };
+    const hasPatchSurfaceTints = Object.prototype.hasOwnProperty.call(patch, 'surfaceTints');
+    const hasPatchSidebarOp = Object.prototype.hasOwnProperty.call(patch, 'sidebarOpacity');
+    let touchedOv = false;
+    const topPatch = {};
+    for (const [k, v] of Object.entries(patch)) {
+      if (PER_WALLPAPER_OVERRIDE_KEY_SET.has(k)) {
+        if (k === 'surfaceTints') {
+          if (v === null) {
+            nextOv.surfaceTints = null;
+            if ('sidebarOpacity' in nextOv && !hasPatchSidebarOp) nextOv.sidebarOpacity = null;
+          } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+            const prevTints =
+              nextOv.surfaceTints && typeof nextOv.surfaceTints === 'object' && !Array.isArray(nextOv.surfaceTints)
+                ? nextOv.surfaceTints
+                : {};
+            const mergedTints = { ...prevTints };
+            for (const [comp, compVal] of Object.entries(v)) {
+              if (compVal === null) {
+                mergedTints[comp] = null;
+              } else if (compVal && typeof compVal === 'object' && !Array.isArray(compVal)) {
+                const prevComp = prevTints[comp] && typeof prevTints[comp] === 'object' ? prevTints[comp] : {};
+                mergedTints[comp] = { ...prevComp, ...compVal };
+              }
+            }
+            nextOv.surfaceTints = mergedTints;
+            if (Object.prototype.hasOwnProperty.call(v, 'sidebar') && 'sidebarOpacity' in nextOv && !hasPatchSidebarOp) {
+              const sbEntry = mergedTints.sidebar;
+              nextOv.sidebarOpacity = sbEntry && typeof sbEntry === 'object' ? (sbEntry.opacity ?? null) : null;
+            }
+          }
+        } else {
+          // Preserve explicit `null` (e.g. sidebarBlur: null / sidebarOpacity: null) — NEVER delete the key!
+          nextOv[k] = v;
+          if (
+            k === 'sidebarOpacity' &&
+            !hasPatchSurfaceTints &&
+            nextOv.surfaceTints &&
+            typeof nextOv.surfaceTints === 'object' &&
+            !Array.isArray(nextOv.surfaceTints) &&
+            Object.prototype.hasOwnProperty.call(nextOv.surfaceTints, 'sidebar')
+          ) {
+            const prevSb =
+              nextOv.surfaceTints.sidebar && typeof nextOv.surfaceTints.sidebar === 'object'
+                ? nextOv.surfaceTints.sidebar
+                : {};
+            nextOv.surfaceTints = {
+              ...nextOv.surfaceTints,
+              sidebar: { ...prevSb, opacity: v },
+            };
+          }
+        }
+        touchedOv = true;
+      } else {
+        topPatch[k] = v;
+      }
+    }
+    if (!touchedOv) return patch;
+    topPatch.perWallpaperOverrides = {
+      ...(cfg.perWallpaperOverrides || {}),
+      [activeId]: nextOv,
+    };
+    return topPatch;
   };
 
   const applyAnyPreset = async (presetId) => {
@@ -468,13 +704,15 @@ export async function createPrismStudioServer(options = {}) {
     'bootstrap.get': () => buildCanonicalState(),
     'library.list': async (params = {}) => normalizeLibrary(Boolean(params.refresh)),
     'config.set': async (params = {}) => {
-      const patch = params.patch && typeof params.patch === 'object' ? params.patch : params;
+      const rawPatch = params.patch && typeof params.patch === 'object' ? params.patch : params;
+      const patch = await routeRpcConfigPatch(rawPatch);
       await engine.updateConfig(patch, { debounce: true });
       await pushToHost();
       return buildCanonicalState();
     },
     'prefs.set': async (params = {}) => {
-      const patch = params.patch && typeof params.patch === 'object' ? params.patch : params;
+      const rawPatch = params.patch && typeof params.patch === 'object' ? params.patch : params;
+      const patch = await routeRpcConfigPatch(rawPatch);
       await engine.updateConfig(patch, { debounce: true });
       await pushToHost();
       return buildCanonicalState();
@@ -493,8 +731,12 @@ export async function createPrismStudioServer(options = {}) {
       const wid = String(params.wallpaperId || params.id || '');
       localSessionAwake = true;
       await engine.applyWallpaper(wid, { ...(params.patch || {}), skinEnabled: true });
-      if (cdpBridge) await cdpBridge.wake();
-      else await pushToHost();
+      if (cdpBridge) {
+        await cdpBridge.wake();
+        void broadcastStudioState();
+      } else {
+        await pushToHost();
+      }
       return buildCanonicalState();
     },
     'playlist.step': async (params = {}) => {
@@ -506,7 +748,10 @@ export async function createPrismStudioServer(options = {}) {
     'preset.apply': async (params = {}) => {
       localSessionAwake = true;
       const st = await applyAnyPreset(params.presetId || params.id || params.name);
-      if (cdpBridge) await cdpBridge.wake();
+      if (cdpBridge) {
+        await cdpBridge.wake();
+        void broadcastStudioState();
+      }
       return st;
     },
     'accent.save': async (params = {}) => {
@@ -551,8 +796,12 @@ export async function createPrismStudioServer(options = {}) {
     'skin.wake': async () => {
       localSessionAwake = true;
       await engine.updateConfig({ skinEnabled: true });
-      if (cdpBridge) await cdpBridge.wake();
-      else await pushToHost();
+      if (cdpBridge) {
+        await cdpBridge.wake({ forceProbe: true });
+        void broadcastStudioState();
+      } else {
+        await pushToHost();
+      }
       const state = await buildCanonicalState();
       return { ok: true, sessionAwake: true, state };
     },
@@ -567,7 +816,7 @@ export async function createPrismStudioServer(options = {}) {
         }
         await engine.updateConfig({ skinEnabled: true });
         if (cdpBridge) {
-          await cdpBridge.wake();
+          await cdpBridge.wake({ forceProbe: true });
           void broadcastStudioState();
         } else {
           await pushToHost();
@@ -631,7 +880,7 @@ export async function createPrismStudioServer(options = {}) {
       getPluginOrigin,
       capToken: hostCapToken,
       dataDir,
-      pluginRoot: PLUGIN_ROOT,
+      pluginRoot: resolvedPluginRoot,
       canaryController,
       cdpPort: options.cdpPort || 0,
       pollMs: options.cdpPollMs ?? 3000,
@@ -649,11 +898,12 @@ export async function createPrismStudioServer(options = {}) {
     }
   }
 
-  const validateToken = (req, urlObj) => {
-    if (!authToken) return true;
+  const validateToken = (req, urlObj, { headerOnly = false } = {}) => {
     const headerTok = typeof req.headers['x-sidecar-token'] === 'string' ? req.headers['x-sidecar-token'].trim() : '';
+    if (safeCompareTokens(headerTok, effectiveAuthToken)) return true;
+    if (headerOnly) return false;
     const queryTok = (urlObj.searchParams.get('token') || '').trim();
-    return headerTok === authToken || queryTok === authToken;
+    return safeCompareTokens(queryTok, effectiveAuthToken);
   };
 
   const verifyHostCapToken = (candidate) => {
@@ -662,10 +912,71 @@ export async function createPrismStudioServer(options = {}) {
     return a.length === b.length && timingSafeEqual(a, b);
   };
 
+  let close = async () => {};
+  const triggerManagedSelfRestart = (applyResult) => {
+    if (typeof options.onSelfRestart === 'function') {
+      try {
+        options.onSelfRestart(applyResult);
+      } catch {
+        /* ignore test hook error */
+      }
+      return;
+    }
+    if (!isManagedSidecar(updaterEnv, options.managedSidecar)) return;
+    close({ preserveHostDom: true })
+      .catch(() => {})
+      .finally(() => {
+        setTimeout(() => process.exit(1), 250);
+      });
+  };
+
   const handleRequest = async (req, res) => {
+    // Global loopback Host DNS-rebinding guard (before OPTIONS, GET /, /preload.js, /host/*, /api/*)
+    const rawHostHeader = Array.isArray(req.headers.host)
+      ? req.headers.host.join(',').trim()
+      : typeof req.headers.host === 'string'
+        ? req.headers.host.trim()
+        : '';
+    const isInMemoryReq = !req.socket || typeof req.socket.setNoDelay !== 'function';
+    const remoteAddr = String(req.socket?.remoteAddress || '');
+    const isLoopbackRemote = remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1';
+    if (rawHostHeader) {
+      if (!isAllowedLoopbackHost(rawHostHeader)) {
+        sendStrictJson(res, 403, { ok: false, code: 'ERR_DNS_REBINDING', error: 'Forbidden: non-loopback Host header' });
+        return;
+      }
+    } else if (!isInMemoryReq && !isLoopbackRemote) {
+      sendStrictJson(res, 403, { ok: false, code: 'ERR_DNS_REBINDING', error: 'Forbidden: missing Host header' });
+      return;
+    }
+
     const urlObj = new URL(req.url || '/', 'http://127.0.0.1');
     const pathname = urlObj.pathname;
     const reqOrigin = typeof req.headers.origin === 'string' && req.headers.origin ? req.headers.origin : '*';
+
+    // Strict preflight interception for /api/update/* & /api/healthz BEFORE global wildcard/PNA OPTIONS
+    const isStrictRoute =
+      pathname === '/api/healthz' || pathname === '/api/update' || pathname.startsWith('/api/update/');
+    if (req.method === 'OPTIONS' && isStrictRoute) {
+      const rawOrigin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
+      if (!isAllowedStrictOrigin(rawOrigin)) {
+        sendStrictJson(res, 403, { ok: false, code: 'ERR_CSRF_ORIGIN', error: 'Forbidden: disallowed Origin' });
+        return;
+      }
+      const preflightHeaders = {
+        'Access-Control-Allow-Methods': pathname === '/api/update/apply' ? 'POST, OPTIONS' : 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Sidecar-Token',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        Vary: 'Origin',
+      };
+      if (rawOrigin) {
+        preflightHeaders['Access-Control-Allow-Origin'] = rawOrigin;
+      }
+      res.writeHead(204, preflightHeaders);
+      res.end();
+      return;
+    }
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
@@ -915,7 +1226,7 @@ export async function createPrismStudioServer(options = {}) {
       const indexHtml = existsSync(INDEX_HTML_PATH)
         ? readFileSync(INDEX_HTML_PATH, 'utf8')
         : '<!doctype html><html><body><div id="app">Run node scripts/build.mjs first.</div></body></html>';
-      const tok = urlObj.searchParams.get('token') || authToken;
+      const tok = urlObj.searchParams.get('token') || effectiveAuthToken;
       const convId = urlObj.searchParams.get('conversationId') || '';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(injectBootIntoHtml(indexHtml, tok, convId));
@@ -925,6 +1236,130 @@ export async function createPrismStudioServer(options = {}) {
     if (req.method === 'GET' && pathname === '/preload.js') {
       res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(PRELOAD_SHIM_JS);
+      return;
+    }
+
+    // ---- Strict Non-Wildcard Healthz & Auto-Updater Routes ----
+    if (req.method === 'GET' && pathname === '/api/healthz') {
+      const rawOrigin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
+      if (rawOrigin && !isAllowedStrictOrigin(rawOrigin)) {
+        sendStrictJson(res, 403, { ok: false, code: 'ERR_CSRF_ORIGIN', error: 'Forbidden: disallowed Origin' });
+        return;
+      }
+      const extra = rawOrigin ? { 'Access-Control-Allow-Origin': rawOrigin, Vary: 'Origin' } : {};
+      sendStrictJson(
+        res,
+        200,
+        {
+          ok: true,
+          plugin: PLUGIN_ID,
+          version: PLUGIN_VERSION,
+          pid: process.pid,
+          startedAt,
+        },
+        extra,
+      );
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/update/status') {
+      const rawOrigin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
+      if (rawOrigin && !isAllowedStrictOrigin(rawOrigin)) {
+        sendStrictJson(res, 403, { ok: false, code: 'ERR_CSRF_ORIGIN', error: 'Forbidden: disallowed Origin' });
+        return;
+      }
+      const force = urlObj.searchParams.get('force') === '1' || urlObj.searchParams.get('force') === 'true';
+      const status = decorateUpdateStatus(await updater.checkForUpdate({ force }));
+      cachedUpdateStatus = status;
+      void broadcastStudioState();
+      const extra = rawOrigin ? { 'Access-Control-Allow-Origin': rawOrigin, Vary: 'Origin' } : {};
+      sendStrictJson(res, 200, status, extra);
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/update/apply') {
+      const rawOrigin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
+      if (!isAllowedStrictOrigin(rawOrigin)) {
+        sendStrictJson(res, 403, { ok: false, code: 'ERR_CSRF_ORIGIN', error: 'Forbidden: disallowed Origin' });
+        return;
+      }
+      if (!validateToken(req, urlObj, { headerOnly: true })) {
+        sendStrictJson(res, 401, {
+          ok: false,
+          code: 'ERR_AUTH_TOKEN_REQUIRED',
+          error: 'Unauthorized: missing or invalid X-Sidecar-Token header',
+        });
+        return;
+      }
+      const rawCt = String(req.headers['content-type'] || '').trim();
+      const hasJsonCt = rawCt.toLowerCase().includes('application/json');
+      if (rawCt && !hasJsonCt) {
+        sendStrictJson(res, 415, {
+          ok: false,
+          code: 'ERR_INVALID_CONTENT_TYPE',
+          error: 'Unsupported Media Type: Content-Type must be application/json',
+        });
+        return;
+      }
+      const rawBodyBuf = await readRawBuffer(req, 64 * 1024);
+      let body = {};
+      if (rawBodyBuf.length > 0) {
+        if (!hasJsonCt) {
+          sendStrictJson(res, 415, {
+            ok: false,
+            code: 'ERR_INVALID_CONTENT_TYPE',
+            error: 'Unsupported Media Type: Content-Type must be application/json',
+          });
+          return;
+        }
+        try {
+          const parsed = JSON.parse(rawBodyBuf.toString('utf8'));
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            sendStrictJson(res, 400, { ok: false, code: 'ERR_INVALID_JSON', error: 'Request body must be a JSON object' });
+            return;
+          }
+          body = parsed;
+        } catch (err) {
+          sendStrictJson(res, 400, { ok: false, code: 'ERR_INVALID_JSON', error: `Invalid JSON body: ${err?.message || String(err)}` });
+          return;
+        }
+      }
+      if (updateApplyInFlight || updater.isUpdateInProgress?.()) {
+        sendStrictJson(res, 409, { ok: false, code: 'ERR_UPDATE_IN_PROGRESS', error: 'An update is already in progress' });
+        return;
+      }
+      updateApplyInFlight = true;
+      const extra = rawOrigin ? { 'Access-Control-Allow-Origin': rawOrigin, Vary: 'Origin' } : {};
+      try {
+        const result = await updater.applyUpdate({
+          expectedVersion: typeof body.expectedVersion === 'string' ? body.expectedVersion : '',
+          targetTag: typeof body.targetTag === 'string' ? body.targetTag : '',
+        });
+        if (!result.willRestart && result.updated) {
+          hostModule.getHostSkinScript?.({ reload: true });
+          hostModule.getHostPanelScript?.({ reload: true });
+        }
+        cachedUpdateStatus = decorateUpdateStatus(updater.getCachedStatus?.() || cachedUpdateStatus);
+        const onFlushed = result.willRestart ? () => triggerManagedSelfRestart(result) : null;
+        sendStrictJson(res, 200, result, extra, onFlushed);
+      } catch (err) {
+        const errStatus =
+          Number.isInteger(err?.statusCode) && err.statusCode >= 400 && err.statusCode < 600
+            ? err.statusCode
+            : 400;
+        sendStrictJson(
+          res,
+          errStatus,
+          {
+            ok: false,
+            code: err?.code || 'ERR_UPDATE_FAILED',
+            error: err?.message || String(err),
+          },
+          extra,
+        );
+      } finally {
+        updateApplyInFlight = false;
+      }
       return;
     }
 
@@ -981,7 +1416,7 @@ export async function createPrismStudioServer(options = {}) {
       return;
     }
 
-    if (req.method === 'GET' && pathname === '/api/bootstrap') {
+    if (req.method === 'GET' && (pathname === '/api/bootstrap' || pathname === '/api/state')) {
       sendJson(res, 200, await buildCanonicalState());
       return;
     }
@@ -1015,6 +1450,8 @@ export async function createPrismStudioServer(options = {}) {
         pluginOrigin: st.pluginOrigin,
         pid: process.pid,
         version: PLUGIN_VERSION,
+        updateStatus: st.updateStatus,
+        updateSummary: st.updateSummary,
       });
       return;
     }
@@ -1116,8 +1553,12 @@ export async function createPrismStudioServer(options = {}) {
         const extraPatch = body?.patch && typeof body.patch === 'object' ? body.patch : {};
         localSessionAwake = true;
         await engine.applyWallpaper(wallpaperId, { ...extraPatch, skinEnabled: true });
-        if (cdpBridge) await cdpBridge.wake();
-        else await pushToHost();
+        if (cdpBridge) {
+          await cdpBridge.wake();
+          void broadcastStudioState();
+        } else {
+          await pushToHost();
+        }
         sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
         return;
       }
@@ -1292,18 +1733,84 @@ export async function createPrismStudioServer(options = {}) {
     await cdpBridge.start().catch(() => {});
   }
 
+  // Post-update Studio iframe reload if `.just-updated.json` marker was consumed on boot
+  if (justUpdatedMarker && options.startCdp !== false && process.env.AGY_PRISM_DISABLE_CDP !== '1') {
+    const reloadStudioTimer = setTimeout(async () => {
+      if (closed) return;
+      try {
+        const pf = readDevToolsActivePort(options.profileDir || '');
+        const cdpPorts = [...new Set([options.cdpPort, pf?.port, DEFAULT_DEBUG_PORT].filter((n) => Number.isInteger(n) && n > 0))];
+        for (const cp of cdpPorts) {
+          const pr = await probeCdpPort(cp).catch(() => ({ ok: false }));
+          if (!pr.ok) continue;
+          const targets = await listCdpTargets(pr.port, pr.host || '127.0.0.1').catch(() => []);
+          for (const t of targets) {
+            if (typeof t?.url === 'string' && /^plugin:\/\/agy-wallpaper-prism--prism_studio/i.test(t.url) && t.webSocketDebuggerUrl) {
+              await evaluateTargetEphemeral(t.webSocketDebuggerUrl, 'window.location.reload()').catch(() => {});
+            }
+          }
+          break;
+        }
+      } catch {
+        /* best-effort post-update iframe reload */
+      }
+    }, 800);
+    reloadStudioTimer.unref?.();
+  }
+
+  // Non-blocking boot-time retired file GC (8s after startup)
+  retiredSweepTimer = setTimeout(() => {
+    retiredSweepTimer = null;
+    if (closed) return;
+    try {
+      updater.sweepRetiredFiles?.();
+    } catch {
+      /* non-fatal GC */
+    }
+  }, 8000);
+  retiredSweepTimer.unref?.();
+
+  // Non-blocking background update check after boot (never blocks server startup)
+  if (options.autoCheckUpdates !== false) {
+    const delayMs = Number.isFinite(Number(options.bootUpdateCheckDelayMs))
+      ? Math.max(0, Number(options.bootUpdateCheckDelayMs))
+      : 1500;
+    bootUpdateTimer = setTimeout(() => {
+      bootUpdateTimer = null;
+      if (closed) return;
+      updater
+        .checkForUpdate({ force: false })
+        .then((st) => {
+          if (closed) return;
+          cachedUpdateStatus = decorateUpdateStatus(st);
+          void broadcastStudioState();
+        })
+        .catch(() => {});
+    }, delayMs);
+    bootUpdateTimer.unref?.();
+  }
+
   const serverInfoPath = join(dataDir, 'server_info.json');
   try {
     writeFileSync(
       serverInfoPath,
-      `${JSON.stringify({ plugin: PLUGIN_ID, pid: process.pid, port: actualPort, token: authToken || null, startedAt: new Date().toISOString() }, null, 2)}\n`,
-      'utf8',
+      `${JSON.stringify({ plugin: PLUGIN_ID, pid: process.pid, port: actualPort, token: effectiveAuthToken, startedAt }, null, 2)}\n`,
+      { encoding: 'utf8', mode: 0o600 },
     );
   } catch {
     /* non-fatal */
   }
 
-  const close = async () => {
+  close = async ({ preserveHostDom = false } = {}) => {
+    closed = true;
+    if (bootUpdateTimer) {
+      clearTimeout(bootUpdateTimer);
+      bootUpdateTimer = null;
+    }
+    if (retiredSweepTimer) {
+      clearTimeout(retiredSweepTimer);
+      retiredSweepTimer = null;
+    }
     for (const ka of studioSseKeepalives) clearInterval(ka);
     studioSseKeepalives.clear();
     for (const clientRes of studioSseClients) {
@@ -1311,7 +1818,13 @@ export async function createPrismStudioServer(options = {}) {
     }
     studioSseClients.clear();
     if (cdpBridge) {
-      await cdpBridge.stop({ removeSkin: true, removePanel: true }).catch(() => {});
+      await cdpBridge
+        .stop({
+          removeSkin: !preserveHostDom,
+          removePanel: !preserveHostDom,
+          preserveHostDom: Boolean(preserveHostDom),
+        })
+        .catch(() => {});
       cdpBridge = null;
     }
     if (typeof engine.close === 'function') {
@@ -1370,10 +1883,12 @@ export async function createPrismStudioServer(options = {}) {
         if (chunk) outChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
         return true;
       },
-      end(chunk) {
+      end(chunk, encodingOrCb, cb) {
         if (ended) return;
         ended = true;
-        if (chunk) outChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        if (chunk && typeof chunk !== 'function') {
+          outChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        }
         const rawBody = Buffer.concat(outChunks);
         const text = rawBody.toString('utf8');
         resolveDone({
@@ -1385,6 +1900,12 @@ export async function createPrismStudioServer(options = {}) {
             return JSON.parse(text);
           },
         });
+        const doneCb = typeof chunk === 'function' ? chunk : typeof encodingOrCb === 'function' ? encodingOrCb : cb;
+        if (typeof doneCb === 'function') {
+          queueMicrotask(() => {
+            try { doneCb(); } catch { /* ignore */ }
+          });
+        }
       },
     };
 
@@ -1401,11 +1922,14 @@ export async function createPrismStudioServer(options = {}) {
     port: actualPort,
     origin,
     pluginOrigin: getPluginOrigin(),
-    token: authToken,
+    token: effectiveAuthToken,
     hostCapToken,
     hostBaseUrl: `${origin}/host/${hostCapToken}`,
+    startedAt,
     canary: canaryController,
     engine,
+    updater,
+    isManagedSidecar: () => isManagedSidecar(updaterEnv, options.managedSidecar),
     cdpBridge,
     rpcHandlers,
     getState: buildCanonicalState,
@@ -1423,51 +1947,75 @@ function isMainEntry() {
 }
 
 if (isMainEntry()) {
-  const instance = await createPrismStudioServer();
-  console.log(
-    `[prism_studio] listening on ${instance.origin} (media=${instance.engine.getMediaOrigin?.() || 'n/a'}, pid=${process.pid})`,
-  );
-
-  let shuttingDown = false;
-  const shutdown = () => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    instance.close().finally(() => process.exit(0));
-  };
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
-
   // Clean in-process host script hot-reload (never exits 0 under `restart_policy: "on-failure"`!)
   const watchedFiles = [
     join(PLUGIN_ROOT, 'src', 'host', 'wallpaper-inject.js'),
     join(PLUGIN_ROOT, 'src', 'host', 'panel-inject.js'),
   ];
   const mtimes = new Map();
-  for (const wf of watchedFiles) {
-    try {
-      if (existsSync(wf)) mtimes.set(wf, statSync(wf).mtimeMs);
-    } catch {
-      /* ignore */
-    }
-  }
-  const watchTimer = setInterval(() => {
-    let changed = false;
+  const refreshWatchedMtimes = () => {
     for (const wf of watchedFiles) {
       try {
-        if (!existsSync(wf)) continue;
-        const cur = statSync(wf).mtimeMs;
-        const prev = mtimes.get(wf) || 0;
-        if (prev > 0 && cur > prev + 50) changed = true;
-        mtimes.set(wf, cur);
+        if (existsSync(wf)) mtimes.set(wf, statSync(wf).mtimeMs);
       } catch {
         /* ignore */
       }
     }
-    if (changed) {
-      hostModule.getHostSkinScript?.({ reload: true });
-      hostModule.getHostPanelScript?.({ reload: true });
-      void instance.cdpBridge?.broadcastState?.().catch(() => {});
+  };
+  refreshWatchedMtimes();
+
+  let watchTimer = null;
+  let instance = null;
+
+  const pauseWatchTimer = () => {
+    if (watchTimer) {
+      clearInterval(watchTimer);
+      watchTimer = null;
     }
-  }, 4000);
-  watchTimer.unref?.();
+  };
+
+  const startWatchTimer = () => {
+    if (watchTimer) return;
+    refreshWatchedMtimes();
+    watchTimer = setInterval(() => {
+      let changed = false;
+      for (const wf of watchedFiles) {
+        try {
+          if (!existsSync(wf)) continue;
+          const cur = statSync(wf).mtimeMs;
+          const prev = mtimes.get(wf) || 0;
+          if (prev > 0 && cur > prev + 50) changed = true;
+          mtimes.set(wf, cur);
+        } catch {
+          /* ignore */
+        }
+      }
+      if (changed) {
+        hostModule.getHostSkinScript?.({ reload: true });
+        hostModule.getHostPanelScript?.({ reload: true });
+        void instance?.cdpBridge?.broadcastState?.().catch(() => {});
+      }
+    }, 4000);
+    watchTimer.unref?.();
+  };
+
+  instance = await createPrismStudioServer({
+    onBeforeSync: pauseWatchTimer,
+    onRollback: startWatchTimer,
+  });
+  console.log(
+    `[prism_studio] listening on ${instance.origin} (media=${instance.engine.getMediaOrigin?.() || 'n/a'}, pid=${process.pid})`,
+  );
+
+  startWatchTimer();
+
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    pauseWatchTimer();
+    instance.close().finally(() => process.exit(0));
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
 }

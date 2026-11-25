@@ -10,6 +10,7 @@ Desktop.ini
 *.tmp.*
 .studio-data/
 out-host/
+dist/
 test/.tmp*/
 test/tmp*/
 test/out*/

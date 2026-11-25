@@ -1,31 +1,36 @@
 #!/usr/bin/env node
 /**
- * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.0.8
+ * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.1.0
  *
- * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.0.8 specifications across:
- *   Suite 1 — Manifest (v2.0.8), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
+ * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.1.0 specifications across:
+ *   Suite 1 — Manifest (v2.1.0), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
  *             Zero-PII Audit & SHA-256 Workspace <-> Global Plugin Sync
  *   Suite 2 — Backend Engine, DSH Parity, Co-Keyed Storage, Two-Phase `fsync` Boot Canary Circuit-Breaker
  *             (`canary.json` arming -> tripped, `/api/canary/reset`, `/api/skin/wake`), PR #6 Hardened `fetch+blob`,
  *             PR #7 `/video-stage/` Streaming Iframe + v2.0.8 OOPIF Web Audio & Studio/Host SSE 6-Socket Cap,
- *             Static CSS Mode & v2.0.7 HTTPS Zero-Stall Images/Accent/Thumbnails + `plugin://` 206 Proxy +
- *             971 MB `MediaSource` `/mse-fmp4/`
- *   Suite 3 — Studio v2.0 UI (`Host & System` 3-way Startup Strategy + Canary + Panic Badge + 21:9 `.mini-aux` Parity) &
- *             Antigravity 2.34.0 Hub Headless Chrome E2E:
- *               1) Zero-Enable Ephemeral Micro-Bootstrap & Lazy `/host/<token>/panel.js` Load (0 KB boot)
+ *             PR #9 `deadPluginOrigins` TTL/AbortError/Ghost-Video Guard & `wake()` Live-SSE Fast-Path,
+ *             Issue #10 Pure-Optical `SCENE_PRESETS`, Req #4 7-Component `surfaceTints` + 128/128 WCAG AA Matrix,
+ *             Req #5 + D1 Mock GitHub Auto-Updater / Loopback `Host` / Tar-Safe / Rollback & Req #7 Release Packager
+ *   Suite 3 — Studio v2.1 UI (`Host & System` 3-way Startup Strategy + Canary + Panic Badge + Update Card +
+ *             21:9 `.mini-blur-veil` / `.mini-aux` Parity) & Antigravity 2.35.1 Hub Headless Chrome E2E:
+ *               1) Zero-Enable Ephemeral Micro-Bootstrap (`<= 6144 B`), Lazy `/host/<token>/panel.js` Load,
+ *                  PR #8 Footer-Remount Self-Heal, `REMOVE_PANEL_EXPR` Non-Resurrection & Double-Inject Guard
  *               2) Fail-Open Media-Ready Gate (404 video -> solid #070708, `z-index: -1` inert stage, clickable `#root`;
  *                  valid H.264 video -> `data-agy-prism-wallpaper="ready"` ONLY after Frame 1 decode)
- *               3) 2.34.0 Issue #1 + PR #2 Refined Selectors (`.h-full.w-full.dark`, `.browser-hole-opaque`,
+ *               3) 2.34.0/2.35.1 Refined Selectors (`.h-full.w-full.dark`, `.browser-hole-opaque`,
  *                  `.settings-modal-container` + inner `.hover:bg-background` tabs, `[role="menu"]` alpha >= 0.94,
  *                  `#ag-usage-monitor-capsule` & `#gemini-neko-pet-root` untouched)
- *               4) 2.34.0 3-Layer `[data-browser-hole]` Synchronous Rounded GPU Cutout (`clip-path: path(...)`,
+ *               4) 3-Layer `[data-browser-hole]` Synchronous Rounded GPU Cutout (`clip-path: path(...)`,
  *                  12px bottom arcs, `alpha = 0` compositor pixel proof, `elementFromPoint`, synchronous resize)
  *               5) `Ctrl+Alt+Shift+R` Emergency Panic Strip + `skinEnabled === false` Persistence
- *               6) Four v2.0.6 Glass UI Fixes (WCO `#agy-prism-wco-pill` + `syncOverlay` guard, rounded glass titlebar,
- *                  deep rounded `Projects` & `[data-testid="project-header"]` capsules, right aux-pane = center chat alignment)
- *               7) v2.0.7 3-Point 1-Click Master Toggle E2E (Studio `#prism-master-toggle-btn` + `Ctrl+Alt+W`
+ *               6) Four Glass UI Fixes + Req #2 2.35.1 Hollowed Topbar + Compact Rounded Pills + `P$c` Preservation +
+ *                  WCO Height 30/35/40 Alignment + D18 Z-Index Layering
+ *               7) 3-Point 1-Click Master Toggle E2E (Studio `#prism-master-toggle-btn` + `Ctrl+Alt+W`
  *                  `[data-testid="prism-power-toggle"]` + persistent `#agy-prism-pill` + `/api/skin/toggle` Canary auto-reset)
- *               8) Full-Window Verification Screenshots
+ *               8) Issue #10 + D2 Optical Presets & `.agy-prism-blur-veil`, Req #1 `hideWelcomeLogo` (5 modes),
+ *                  Req #3 `glassBlur` 0..64px & Quick Prism Inheritance, Req #4 Per-Component Tints Isolation,
+ *                  Req #6 `Antigravity-Chinese-Localization` Coexistence E2E
+ *               9) Full-Window Verification Screenshots
  */
 
 import assert from 'node:assert/strict';
@@ -192,7 +197,7 @@ function decodePngRgba(pngBuf) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  console.log('=== agy-wallpaper-prism v2.0.8 Full Verification Harness ===');
+  console.log('=== agy-wallpaper-prism v2.1.0 Full Verification Harness ===');
   fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
   fs.mkdirSync(DEFAULT_ARTIFACT_DIR, { recursive: true });
   const fixturesDir = path.join(SCRATCH_ROOT, 'fixtures');
@@ -201,9 +206,9 @@ async function main() {
   // =========================================================================
   // SUITE 1: Manifest, Bundle, Zero-Enable CDP Audit, Zero-PII & Byte Sync
   // =========================================================================
-  console.log('\n--- Suite 1: Manifest (v2.0.8), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
+  console.log('\n--- Suite 1: Manifest (v2.1.0), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
 
-  await check('plugin.json, package.json & 7-point v2.0.8 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
+  await check('plugin.json, package.json & 7-point v2.1.0 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
     const pPath = path.join(REPO_ROOT, 'plugin.json');
     const pkgPath = path.join(REPO_ROOT, 'package.json');
     const readmePath = path.join(REPO_ROOT, 'README.md');
@@ -221,13 +226,13 @@ async function main() {
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.0.8', `Expected plugin.json version 2.0.8, got ${raw.version}`);
-    assert.equal(pkg.version, '2.0.8', `Expected package.json version 2.0.8, got ${pkg.version}`);
-    assert.match(readme, /\*\*Version\*\*:\s*`2\.0\.8`/, 'Expected README.md **Version**: `2.0.8`');
-    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.0\.8'/, 'Expected schema.mjs PLUGIN_VERSION = 2.0.8');
-    assert.match(schemaSrc, /skinVersion:\s*'2\.0\.8'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.0.8');
-    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.0\.8'/, 'Expected wallpaper-inject.js VERSION = 2.0.8');
-    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.0\.8'/, 'Expected panel-inject.js VERSION = 2.0.8');
+    assert.equal(raw.version, '2.1.0', `Expected plugin.json version 2.1.0, got ${raw.version}`);
+    assert.equal(pkg.version, '2.1.0', `Expected package.json version 2.1.0, got ${pkg.version}`);
+    assert.match(readme, /\*\*Version\*\*:\s*`2\.1\.0`/, 'Expected README.md **Version**: `2.1.0`');
+    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.1\.0'/, 'Expected schema.mjs PLUGIN_VERSION = 2.1.0');
+    assert.match(schemaSrc, /skinVersion:\s*'2\.1\.0'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.1.0');
+    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.1\.0'/, 'Expected wallpaper-inject.js VERSION = 2.1.0');
+    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.1\.0'/, 'Expected panel-inject.js VERSION = 2.1.0');
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -318,20 +323,25 @@ async function main() {
     assert.ok(/#app[\s\S]{0,220}height:\s*100(%|dvh|vh)/i.test(html), 'Missing #app 100% height lock in Studio CSS');
     assert.ok(html.includes('prism-startup-safety-card'), 'Bundled index.html missing v2.0 #prism-startup-safety-card');
     assert.ok(html.includes('prism-master-toggle-btn'), 'Bundled index.html missing v2.0.7 #prism-master-toggle-btn');
-    assert.ok(html.includes('2.0.8'), 'Bundled index.html missing inlined v2.0.8 version marker');
+    assert.ok(html.includes('prism-update-card'), 'Bundled index.html missing v2.1.0 #prism-update-card');
+    assert.ok(html.includes('mini-blur-veil'), 'Bundled index.html missing v2.1.0 .mini-blur-veil');
+    assert.ok(html.includes('class="agy-prism-root"'), 'Bundled index.html missing Req #6 #app.agy-prism-root guard');
+    assert.ok(html.includes('2.1.0'), 'Bundled index.html missing inlined v2.1.0 version marker');
     assert.equal(html.includes('\r'), false, 'Bundled index.html must be pure LF (0 CR/CRLF)');
-    return `${Math.round(html.length / 1024)} KB inlined v2.0.8 pure-LF bundle`;
+    return `${Math.round(html.length / 1024)} KB inlined v2.1.0 pure-LF bundle`;
   });
 
   await check('Syntax check (`node --check`) across all JS/MJS entrypoints & test modules', '@resilience-designer', () => {
     const targets = [
       'scripts/build.mjs',
       'scripts/install-local.mjs',
+      'scripts/pack-release.mjs',
       'host/cli.mjs',
       'sidecars/prism_studio/main.mjs',
       'sidecars/prism_studio/cdp-bridge.mjs',
       'src/shared/schema.mjs',
       'src/shared/i18n.mjs',
+      'src/shared/semver.mjs',
       'src/engine/index.mjs',
       'src/engine/store.mjs',
       'src/engine/scanner.mjs',
@@ -339,6 +349,8 @@ async function main() {
       'src/engine/pkg-scene.mjs',
       'src/engine/media-server.mjs',
       'src/engine/playlist.mjs',
+      'src/engine/tar-safe.mjs',
+      'src/engine/updater.mjs',
       'src/engine/runtime/web-shim.mjs',
       'src/host/index.mjs',
       'src/host/wallpaper-inject.js',
@@ -361,7 +373,7 @@ async function main() {
       ['Kurami', '_Utaho'].join(''),
       ['sk', 'fish', ''].join('-'),
     ];
-    const skipDirs = new Set(['.git', 'node_modules']);
+    const skipDirs = new Set(['.git', 'node_modules', 'dist']);
     const walkRepo = (dir, out = []) => {
       for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
         if (skipDirs.has(ent.name) || ent.name.startsWith('.tmp-verify')) continue;
@@ -382,7 +394,11 @@ async function main() {
       }
     }
 
-    const gitDiff = execFileSync('git', ['diff', 'HEAD'], { cwd: REPO_ROOT, stdio: 'pipe' }).toString('utf8');
+    const gitDiff = execFileSync('git', ['diff', 'HEAD'], {
+      cwd: REPO_ROOT,
+      stdio: 'pipe',
+      maxBuffer: 32 * 1024 * 1024,
+    }).toString('utf8');
     for (const tok of piiTokens) {
       assert.equal(gitDiff.includes(tok), false, 'Forbidden PII/secret token found in git diff HEAD!');
     }
@@ -406,6 +422,7 @@ async function main() {
       'host/cli.mjs',
       'src/shared/schema.mjs',
       'src/shared/i18n.mjs',
+      'src/shared/semver.mjs',
       'src/engine/index.mjs',
       'src/engine/store.mjs',
       'src/engine/scanner.mjs',
@@ -413,6 +430,8 @@ async function main() {
       'src/engine/pkg-scene.mjs',
       'src/engine/media-server.mjs',
       'src/engine/playlist.mjs',
+      'src/engine/tar-safe.mjs',
+      'src/engine/updater.mjs',
       'src/engine/runtime/web-shim.mjs',
       'src/host/index.mjs',
       'src/host/wallpaper-inject.js',
@@ -1170,6 +1189,13 @@ async function main() {
         if (key === 'id') return this.id || null;
         if (key === 'class') return this.className || null;
         return this._attrs.has(key) ? this._attrs.get(key) : null;
+      }
+
+      hasAttribute(k) {
+        const key = String(k);
+        if (key === 'id') return Boolean(this.id);
+        if (key === 'class') return Boolean(this.className);
+        return this._attrs.has(key);
       }
 
       removeAttribute(k) {
@@ -2463,6 +2489,12 @@ async function main() {
           if (this.tagName === 'VIDEO' || this.tagName === 'AUDIO') this.readyState = 0;
         }
       }
+      hasAttribute(k) {
+        const key = String(k);
+        if (key === 'id') return Boolean(this.id);
+        if (key === 'class') return Boolean(this.className);
+        return this._attrs.has(key);
+      }
       appendChild(child) {
         if (!child) return child;
         if (child.parentNode) child.parentNode.removeChild(child);
@@ -2579,15 +2611,75 @@ async function main() {
       dispatchEvent: (e) => docRoot.dispatchEvent(e),
     };
 
+    let vmNowOffset = 0;
+    let deadOriginRecovered = false;
+    const RealDate = Date;
+    class MockDate extends RealDate {
+      constructor(...args) {
+        if (args.length === 0) super(RealDate.now() + vmNowOffset);
+        else super(...args);
+      }
+      static now() {
+        return RealDate.now() + vmNowOffset;
+      }
+    }
+
     const mockFetch = async (url, init) => {
       const u = String(url || '');
       const method = String((init && init.method) || 'GET').toUpperCase();
       fetchCalls.push({
         url: u,
         method,
-        elapsedMs: Date.now() - stepStartMs,
+        elapsedMs: RealDate.now() - stepStartMs,
         hasSignal: Boolean(init && init.signal),
       });
+      if (u.includes('dead-origin-v210') && method === 'HEAD') {
+        if (deadOriginRecovered) {
+          return { ok: true, status: 200, headers: { get: () => null } };
+        }
+        throw new TypeError('Failed to fetch (simulated dead plugin:// origin)');
+      }
+      if (u.includes('abort-safe-v210') && method === 'HEAD') {
+        if (u.includes('abort-slow')) {
+          return new Promise((_resolve, reject) => {
+            const onAbort = () => {
+              const e = new Error('The user aborted a request.');
+              e.name = 'AbortError';
+              reject(e);
+            };
+            if (init?.signal?.aborted) {
+              onAbort();
+              return;
+            }
+            init?.signal?.addEventListener?.('abort', onAbort, { once: true });
+          });
+        }
+        return { ok: true, status: 200, headers: { get: () => null } };
+      }
+      if (u.includes('ghost-v210') && method === 'HEAD') {
+        await sleep(55);
+        return { ok: true, status: 200, headers: { get: () => null } };
+      }
+      if (u.includes('alive-timeout-v210') && method === 'HEAD') {
+        if (u.includes('alive-slow-timeout')) {
+          return new Promise((resolve) => {
+            const t = setTimeout(() => resolve({ ok: true, status: 200, headers: { get: () => null } }), 500);
+            t.unref?.();
+          });
+        }
+        return { ok: true, status: 200, headers: { get: () => null } };
+      }
+      if (u.includes('small-fallback-') && method === 'GET') {
+        const mp4Bytes = new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (String(h || '').toLowerCase() === 'content-length' ? String(mp4Bytes.byteLength) : 'video/mp4'),
+          },
+          blob: async () => new Blob([mp4Bytes], { type: 'video/mp4' }),
+        };
+      }
       if (u.includes('tok971-ok') && method === 'HEAD') {
         return { ok: true, status: 200, headers: { get: () => null } };
       }
@@ -2676,12 +2768,13 @@ async function main() {
       MediaSource: MockMediaSource,
       AbortController,
       Blob,
+      Date: MockDate,
       Event: class MockEvent { constructor(type) { this.type = type; } },
       setTimeout,
       clearTimeout,
       setInterval,
       clearInterval,
-      requestAnimationFrame: (cb) => setTimeout(() => cb(Date.now()), 16),
+      requestAnimationFrame: (cb) => setTimeout(() => cb(MockDate.now()), 16),
       cancelAnimationFrame: (id) => clearTimeout(id),
       getComputedStyle: () => ({ backgroundColor: 'rgb(7, 7, 8)', getPropertyValue: () => '' }),
       matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
@@ -2714,6 +2807,7 @@ async function main() {
       MediaSource: MockMediaSource,
       Blob,
       AbortController,
+      Date: MockDate,
       Uint8Array,
       Event: mockWin.Event,
       setTimeout,
@@ -2846,6 +2940,144 @@ async function main() {
         `Real MediaSource https: env must NOT mount plaintext http:// video-stage iframe (seen: ${createdIframeSrcs.join(', ')})`,
       );
 
+      // 2D-bis) PR #9: `deadPluginOrigins` fast fallback on TypeError — 2nd video on same dead origin skips HEAD (HEAD count === 1)
+      const deadHeadCount = () => fetchCalls.filter((c) => c.method === 'HEAD' && c.url.includes('dead-origin-v210')).length;
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-pr9-dead-1',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-fallback-1.mp4',
+          pluginMediaUrl: 'plugin://dead-origin-v210/media-proxy/media/v1',
+        },
+      });
+      await sleep(50);
+      assert.equal(prism.status().videoTransport, 'blob', `PR #9 2D-bis #1 expected blob fallback, got ${prism.status().videoTransport}`);
+      assert.equal(deadHeadCount(), 1, `PR #9 2D-bis expected 1 HEAD on first dead video, got ${deadHeadCount()}`);
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-pr9-dead-2',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-fallback-2.mp4',
+          pluginMediaUrl: 'plugin://dead-origin-v210/media-proxy/media/v2',
+        },
+      });
+      await sleep(50);
+      assert.equal(prism.status().videoTransport, 'blob', `PR #9 2D-bis #2 expected instant blob fallback, got ${prism.status().videoTransport}`);
+      assert.equal(deadHeadCount(), 1, `PR #9 2D-bis expected 2nd video on cached dead origin to skip HEAD (got ${deadHeadCount()})`);
+
+      // 2D-ter) PR #9: Rapid-switch `AbortError` does NOT poison a healthy `plugin://` origin
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-pr9-abort-1',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-fallback-a1.mp4',
+          pluginMediaUrl: 'plugin://abort-safe-v210/media-proxy/media/abort-slow',
+        },
+      });
+      await sleep(10);
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-pr9-abort-2',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-fallback-a2.mp4',
+          pluginMediaUrl: 'plugin://abort-safe-v210/media-proxy/media/abort-fast',
+        },
+      });
+      await sleep(60);
+      assert.equal(
+        prism.status().videoTransport,
+        'plugin',
+        `PR #9 2D-ter: rapid-switch AbortError poisoned plugin:// origin (got ${prism.status().videoTransport})`,
+      );
+
+      // 2D-quater) PR #9: `teardownSkinDomOnly()` ghost-video guard (mid-HEAD `skinEnabled: false` -> 0 ghost <video>)
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-pr9-ghost-1',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-fallback-g1.mp4',
+          pluginMediaUrl: 'plugin://ghost-v210/media-proxy/media/slow-ghost',
+        },
+      });
+      await sleep(15);
+      prism.applyPayload({ skinEnabled: false });
+      await sleep(80);
+      assert.equal(mockDoc.getElementById('agy-prism-stage'), null, 'PR #9 2D-quater: mid-HEAD skinEnabled=false leaked ghost #agy-prism-stage!');
+      assert.equal(prism.status().videoTransport, 'none', `PR #9 2D-quater: expected videoTransport="none" after disable, got ${prism.status().videoTransport}`);
+
+      // 2D-quinquies) PR #9: `deadPluginOrigins` TTL recovery (>300s) + `alivePluginOrigins` non-poisoning on >350ms HEAD timeout
+      deadOriginRecovered = true;
+      vmNowOffset += 305_000;
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-pr9-ttl-recover',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-fallback-ttl.mp4',
+          pluginMediaUrl: 'plugin://dead-origin-v210/media-proxy/media/recovered',
+        },
+      });
+      await sleep(50);
+      assert.equal(
+        prism.status().videoTransport,
+        'plugin',
+        `PR #9 2D-quinquies: deadPluginOrigins did not recover after TTL expiry (got ${prism.status().videoTransport})`,
+      );
+      assert.equal(deadHeadCount(), 2, `PR #9 2D-quinquies: expected re-probe HEAD after TTL expiry (got ${deadHeadCount()})`);
+
+      // Proven-alive origin experiencing a single transient >350ms HEAD timeout MUST NOT be blacklisted!
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-pr9-alive-1',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-fallback-al1.mp4',
+          pluginMediaUrl: 'plugin://alive-timeout-v210/media-proxy/media/alive-ok',
+        },
+      });
+      await sleep(40);
+      assert.equal(prism.status().videoTransport, 'plugin');
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-pr9-alive-timeout',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-fallback-al2.mp4',
+          pluginMediaUrl: 'plugin://alive-timeout-v210/media-proxy/media/alive-slow-timeout',
+        },
+      });
+      await sleep(420);
+      assert.equal(prism.status().videoTransport, 'blob', 'Transient >350ms HEAD timeout should fall back to blob');
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-pr9-alive-after-timeout',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/small-fallback-al3.mp4',
+          pluginMediaUrl: 'plugin://alive-timeout-v210/media-proxy/media/alive-ok-2',
+        },
+      });
+      await sleep(50);
+      assert.equal(
+        prism.status().videoTransport,
+        'plugin',
+        `PR #9 2D-quinquies: proven-alive origin was wrongly blacklisted by transient >350ms timeout (got ${prism.status().videoTransport})`,
+      );
+
       // 2E) Also verify `panel-inject.js` thumbnail grid (`bindSafeThumb`) uses 0ms fetch+blob under https://127.0.0.1
       vm.runInContext(panelInjectSrc, vmCtx, { filename: 'panel-inject.js' });
       const panel = mockWin.__agyPrismPanel;
@@ -2888,10 +3120,981 @@ async function main() {
       assert.deepEqual(directHttpImgSrcs, [], `ZERO plaintext http:// allowed in img.src on https: host (found: ${directHttpImgSrcs.join(', ')})`);
       assert.deepEqual(directHttpVideoSrcs, [], `ZERO plaintext http:// allowed in video.src on https: host (found: ${directHttpVideoSrcs.join(', ')})`);
 
-      return `/media-proxy 206 (${proxyRange.body.length}B ftyp${mseHeadMime ? ` + MSE ${mseHeadMime}` : ''}) + 0 directHttpImgSrcs (image/slideshow/accent/panel-thumb) + 971MB plugin:// & MediaSource (${mseAppendedChunks.length} chunks) verified`;
+      return `/media-proxy 206 (${proxyRange.body.length}B ftyp${mseHeadMime ? ` + MSE ${mseHeadMime}` : ''}) + 0 directHttpImgSrcs + 971MB plugin:// & MSE + PR #9 deadPluginOrigins TTL/AbortError/ghost-video/alive-timeout verified`;
     } finally {
       prism.destroy();
     }
+  });
+
+  await check('PR #9 + Req #6: `selectHubTargets` bilingual scoring, `cdpBridge.wake()` live-SSE fast-path vs `forceProbe` vs dead SSE & `/preload.js`+iframe translator guards', '@exec-sidecar / @exec-tests', async () => {
+    const { selectHubTargets, createPassiveCdpBridge, probeCdpPort } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs')).href
+    );
+
+    // 1) Bilingual target scoring (`反重力` positive; `^`-anchored splash/loading/wizard/disconnected `-100`; active chat NOT penalized)
+    const ranked = selectHubTargets([
+      { id: 'splash-zh', type: 'page', title: '正在加载 Antigravity...', url: 'http://127.0.0.1:42000/loading', webSocketDebuggerUrl: 'ws://127.0.0.1:9339/devtools/page/splash-zh' },
+      { id: 'wizard-zh', type: 'page', title: '欢迎使用 Antigravity', url: 'http://127.0.0.1:42000/wizard', webSocketDebuggerUrl: 'ws://127.0.0.1:9339/devtools/page/wizard-zh' },
+      { id: 'disc-zh', type: 'page', title: '已断开连接 - Antigravity', url: 'http://127.0.0.1:42000/disconnected', webSocketDebuggerUrl: 'ws://127.0.0.1:9339/devtools/page/disc-zh' },
+      { id: 'hub-zh', type: 'page', title: '反重力 工作区', url: 'https://127.0.0.1:9443/index.html', webSocketDebuggerUrl: 'ws://127.0.0.1:9339/devtools/page/hub-zh' },
+      { id: 'chat-disc', type: 'page', title: 'Fix disconnected socket — Antigravity', url: 'https://127.0.0.1:9443/index.html', webSocketDebuggerUrl: 'ws://127.0.0.1:9339/devtools/page/chat-disc' },
+    ]);
+    const rankedIds = ranked.map((t) => t.id);
+    assert.ok(rankedIds.includes('hub-zh'), `Expected Chinese 反重力 Hub selected, got ${rankedIds.join(', ')}`);
+    assert.ok(rankedIds.includes('chat-disc'), `Expected active chat "Fix disconnected socket — Antigravity" NOT penalized, got ${rankedIds.join(', ')}`);
+    assert.equal(rankedIds.includes('splash-zh'), false, 'Chinese splash target must be excluded');
+    assert.equal(rankedIds.includes('wizard-zh'), false, 'Chinese wizard target must be excluded');
+    assert.equal(rankedIds.includes('disc-zh'), false, 'Chinese disconnected target must be excluded');
+    // Also verify non-HTTPS active chat containing "disconnected" mid-title is NOT penalized below 0 (proving `^` anchor)
+    const httpRanked = selectHubTargets([
+      { id: 'http-splash', type: 'page', title: '正在加载 Antigravity...', url: 'http://127.0.0.1:42000/loading', webSocketDebuggerUrl: 'ws://127.0.0.1:9339/devtools/page/http-splash' },
+      { id: 'http-chat', type: 'page', title: 'Fix disconnected socket — Antigravity', url: 'http://127.0.0.1:42000/hub', webSocketDebuggerUrl: 'ws://127.0.0.1:9339/devtools/page/http-chat' },
+    ]);
+    assert.deepEqual(httpRanked.map((t) => t.id), ['http-chat'], 'Non-HTTPS active chat with "disconnected" mid-title must beat Chinese splash');
+
+    // 2) `createPassiveCdpBridge.wake()` live-SSE fast-path vs `forceProbe: true` vs dead SSE (`writableEnded` / `destroyed`)
+    let mockCdpProbeCount = 0;
+    let wakeNote = 'bilingual targets verified';
+    const encodeWsTextFrame = (text) => {
+      const payload = Buffer.from(text, 'utf8');
+      const len = payload.length;
+      if (len < 126) return Buffer.concat([Buffer.from([0x81, len]), payload]);
+      const hdr = Buffer.alloc(4);
+      hdr[0] = 0x81;
+      hdr[1] = 126;
+      hdr.writeUInt16BE(len, 2);
+      return Buffer.concat([hdr, payload]);
+    };
+    const mockCdpServer = http.createServer((req, res) => {
+      const addr = mockCdpServer.address();
+      const p = typeof addr === 'object' && addr ? addr.port : 0;
+      if (req.url === '/json/version') {
+        mockCdpProbeCount += 1;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ Browser: 'MockChrome/135.0', webSocketDebuggerUrl: `ws://127.0.0.1:${p}/devtools/browser/1` }));
+        return;
+      }
+      if (req.url === '/json/list') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify([{
+          id: 'mock-hub-target-1',
+          type: 'page',
+          title: 'Antigravity',
+          url: 'https://127.0.0.1:9443/workbench',
+          webSocketDebuggerUrl: `ws://127.0.0.1:${p}/devtools/page/mock-hub-target-1`,
+        }]));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    mockCdpServer.on('upgrade', (req, socket) => {
+      const key = req.headers['sec-websocket-key'];
+      const accept = createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\n' +
+        'Upgrade: websocket\r\n' +
+        'Connection: Upgrade\r\n' +
+        `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
+      );
+      let wsBuf = Buffer.alloc(0);
+      socket.on('data', (chunk) => {
+        wsBuf = Buffer.concat([wsBuf, chunk]);
+        while (wsBuf.length >= 2) {
+          const masked = (wsBuf[1] & 0x80) !== 0;
+          let len = wsBuf[1] & 0x7f;
+          let offset = 2;
+          if (len === 126) {
+            if (wsBuf.length < 4) return;
+            len = wsBuf.readUInt16BE(2);
+            offset = 4;
+          } else if (len === 127) {
+            if (wsBuf.length < 10) return;
+            len = Number(wsBuf.readBigUInt64BE(2));
+            offset = 10;
+          }
+          const maskLen = masked ? 4 : 0;
+          if (wsBuf.length < offset + maskLen + len) return;
+          const payload = Buffer.alloc(len);
+          if (masked) {
+            const mask = wsBuf.subarray(offset, offset + 4);
+            for (let i = 0; i < len; i += 1) payload[i] = wsBuf[offset + 4 + i] ^ mask[i & 3];
+          } else {
+            wsBuf.copy(payload, 0, offset, offset + len);
+          }
+          const opcode = wsBuf[0] & 0x0f;
+          wsBuf = wsBuf.subarray(offset + maskLen + len);
+          if (opcode === 0x8) {
+            try { socket.end(); } catch {}
+            return;
+          }
+          if (opcode === 0x1) {
+            try {
+              const msg = JSON.parse(payload.toString('utf8'));
+              const expr = String(msg?.params?.expression || '');
+              const val = expr.includes('document.readyState')
+                ? { ready: true, w: 1440, h: 900, booted: false, hostBase: '', sseState: -1, skinVer: '', skin: false }
+                : true;
+              const reply = JSON.stringify({ id: msg.id, result: { result: { value: val } } });
+              socket.write(encodeWsTextFrame(reply));
+            } catch {}
+          }
+        }
+      });
+    });
+
+    let mockPort = 0;
+    try {
+      await new Promise((resolveListen, rejectListen) => {
+        mockCdpServer.once('error', rejectListen);
+        mockCdpServer.listen(0, '127.0.0.1', () => {
+          mockCdpServer.removeListener('error', rejectListen);
+          resolveListen();
+        });
+      });
+      mockPort = mockCdpServer.address().port;
+    } catch (err) {
+      if (err?.code !== 'EACCES' && err?.code !== 'EPERM') throw err;
+    }
+
+    let bridgeFactory = createPassiveCdpBridge;
+    let wakeTransportMode = 'tcp';
+    let tcpReachable = false;
+    if (mockPort > 0) {
+      const probeCheck = await probeCdpPort(mockPort, '127.0.0.1', 500);
+      tcpReachable = Boolean(probeCheck && probeCheck.ok);
+      mockCdpProbeCount = 0; // reset probe counter after reachability check
+    }
+    if (!tcpReachable) {
+      // Windows AppContainer sandbox blocks outbound TCP connect(127.0.0.1) with EACCES;
+      // run verbatim cdp-bridge.mjs code over an in-proc mock HTTP+RFC-6455 WS socket transport!
+      wakeTransportMode = 'inproc-ws';
+      const cdpSrc = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs'), 'utf8');
+      const storeUrl = pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'store.mjs')).href;
+      const schemaUrl = pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href;
+      const patchedSrc = cdpSrc
+        .replace(
+          "import { request as httpRequest } from 'node:http';",
+          'const httpRequest = (...args) => globalThis.__prismMockCdpHttpRequest(...args);',
+        )
+        .replace('../../src/engine/store.mjs', storeUrl)
+        .replace('../../src/shared/schema.mjs', schemaUrl);
+      const shimFile = path.join(SCRATCH_ROOT, 'cdp-bridge-inproc-wake.mjs');
+      fs.writeFileSync(shimFile, patchedSrc, 'utf8');
+      const shimMod = await import(`${pathToFileURL(shimFile).href}?t=${Date.now()}`);
+      bridgeFactory = shimMod.createPassiveCdpBridge;
+
+      const handleWsChunk = (socketOut, stateObj, chunk) => {
+        stateObj.buf = Buffer.concat([stateObj.buf, Buffer.from(chunk)]);
+        while (stateObj.buf.length >= 2) {
+          const masked = (stateObj.buf[1] & 0x80) !== 0;
+          let len = stateObj.buf[1] & 0x7f;
+          let offset = 2;
+          if (len === 126) {
+            if (stateObj.buf.length < 4) return;
+            len = stateObj.buf.readUInt16BE(2);
+            offset = 4;
+          } else if (len === 127) {
+            if (stateObj.buf.length < 10) return;
+            len = Number(stateObj.buf.readBigUInt64BE(2));
+            offset = 10;
+          }
+          const maskLen = masked ? 4 : 0;
+          if (stateObj.buf.length < offset + maskLen + len) return;
+          const payload = Buffer.alloc(len);
+          if (masked) {
+            const mask = stateObj.buf.subarray(offset, offset + 4);
+            for (let i = 0; i < len; i += 1) payload[i] = stateObj.buf[offset + 4 + i] ^ mask[i & 3];
+          } else {
+            stateObj.buf.copy(payload, 0, offset, offset + len);
+          }
+          const opcode = stateObj.buf[0] & 0x0f;
+          stateObj.buf = stateObj.buf.subarray(offset + maskLen + len);
+          if (opcode === 0x8) {
+            try { socketOut.push(null); } catch {}
+            return;
+          }
+          if (opcode === 0x1) {
+            try {
+              const msg = JSON.parse(payload.toString('utf8'));
+              const expr = String(msg?.params?.expression || '');
+              const val = expr.includes('document.readyState')
+                ? { ready: true, w: 1440, h: 900, booted: false, hostBase: '', sseState: -1, skinVer: '', skin: false }
+                : true;
+              const reply = JSON.stringify({ id: msg.id, result: { result: { value: val } } });
+              socketOut.push(encodeWsTextFrame(reply));
+            } catch {}
+          }
+        }
+      };
+
+      globalThis.__prismMockCdpHttpRequest = (opts, cb) => {
+        const listeners = new Map();
+        const reqObj = {
+          on(ev, fn) {
+            const arr = listeners.get(ev) || [];
+            arr.push(fn);
+            listeners.set(ev, arr);
+            return reqObj;
+          },
+          emit(ev, ...args) {
+            for (const fn of (listeners.get(ev) || []).slice()) fn(...args);
+          },
+          destroy() {},
+          end() {
+            queueMicrotask(() => {
+              const p = Number(opts?.port || mockPort || 9339);
+              const reqPath = String(opts?.path || '/');
+              const isUpgrade = String(opts?.headers?.Upgrade || '').toLowerCase() === 'websocket';
+              if (isUpgrade) {
+                const wsState = { buf: Buffer.alloc(0) };
+                const clientSock = new Duplex({
+                  read() {},
+                  write(chunk, _enc, done) {
+                    handleWsChunk(clientSock, wsState, chunk);
+                    done();
+                  },
+                });
+                clientSock.setNoDelay = () => clientSock;
+                reqObj.emit('upgrade', { statusCode: 101, headers: {} }, clientSock, Buffer.alloc(0));
+                return;
+              }
+              let statusCode = 404;
+              let bodyStr = '';
+              if (reqPath === '/json/version') {
+                mockCdpProbeCount += 1;
+                statusCode = 200;
+                bodyStr = JSON.stringify({ Browser: 'MockChrome/135.0', webSocketDebuggerUrl: `ws://127.0.0.1:${p}/devtools/browser/1` });
+              } else if (reqPath === '/json/list') {
+                statusCode = 200;
+                bodyStr = JSON.stringify([{
+                  id: 'mock-hub-target-1',
+                  type: 'page',
+                  title: 'Antigravity',
+                  url: 'https://127.0.0.1:9443/workbench',
+                  webSocketDebuggerUrl: `ws://127.0.0.1:${p}/devtools/page/mock-hub-target-1`,
+                }]);
+              }
+              const resListeners = new Map();
+              const resObj = {
+                statusCode,
+                setEncoding() {},
+                resume() {},
+                on(ev, fn) {
+                  const arr = resListeners.get(ev) || [];
+                  arr.push(fn);
+                  resListeners.set(ev, arr);
+                  return resObj;
+                },
+                emit(ev, ...args) {
+                  for (const fn of (resListeners.get(ev) || []).slice()) fn(...args);
+                },
+              };
+              if (typeof cb === 'function') cb(resObj);
+              reqObj.emit('response', resObj);
+              queueMicrotask(() => {
+                if (bodyStr) resObj.emit('data', Buffer.from(bodyStr, 'utf8'));
+                resObj.emit('end');
+              });
+            });
+          },
+        };
+        return reqObj;
+      };
+    }
+
+    const wakeDataDir = path.join(SCRATCH_ROOT, 'pr9-wake-data');
+    fs.mkdirSync(wakeDataDir, { recursive: true });
+    const bridge = bridgeFactory({
+      getEngineState: async () => ({
+        config: { skinEnabled: true, startupMode: 'gentle-auto', liveBootDelay: 0, triggerMode: 'both' },
+        activeItem: null,
+        skinEnabled: true,
+        mediaOrigin: 'http://127.0.0.1:49152',
+      }),
+      hostScripts: {
+        buildClientSkinPayload: () => ({ skinEnabled: true, config: {} }),
+        buildStaticCssSheet: () => '',
+      },
+      getHostOrigin: () => studio.origin,
+      capToken: 'wake-test-cap-token',
+      dataDir: wakeDataDir,
+      pluginRoot: REPO_ROOT,
+      cdpPort: mockPort || 9339,
+      pollMs: 0,
+    });
+
+    const makeMockSsePair = () => {
+      const chunks = [];
+      const reqListeners = new Map();
+      const resListeners = new Map();
+      const req = {
+        on: (ev, fn) => { reqListeners.set(ev, fn); },
+        off: () => {},
+      };
+      const res = {
+        writableEnded: false,
+        destroyed: false,
+        socket: { destroyed: false, writable: true },
+        write: (data) => {
+          if (res.writableEnded || res.destroyed) throw new Error('socket closed');
+          chunks.push(String(data));
+          return true;
+        },
+        end: () => { res.writableEnded = true; },
+        on: (ev, fn) => { resListeners.set(ev, fn); },
+        off: () => {},
+      };
+      return { req, res, chunks };
+    };
+
+    try {
+      await bridge.start();
+      // Initial immediate wake attaches with settleMs=0 (avoiding 500ms boot settle floor)
+      await bridge.wake({ forceProbe: true });
+      const st0 = bridge.getStatus();
+      assert.equal(st0.phase, 'attached', `Expected bridge attached to mock CDP, got ${st0.phase}`);
+      assert.equal(st0.attachedCount, 1);
+      // Confirm healthy boot (mirroring wallpaper-inject.js canary.healthy RPC) so repeated wake() probes don't trip canary
+      bridge.markCanaryHealthy('mock-hub-target-1');
+      const probesAfterAttach = mockCdpProbeCount;
+      assert.ok(probesAfterAttach >= 1, 'Expected initial CDP probe during attach');
+
+      // Register a live SSE client -> wake() without forceProbe MUST take fast-path (0 new CDP probes!)
+      const sse1 = makeMockSsePair();
+      await bridge.registerSseClient(sse1.req, sse1.res, false);
+      const chunksBeforeWake = sse1.chunks.length;
+      await bridge.wake();
+      assert.equal(mockCdpProbeCount, probesAfterAttach, `PR #9 wake() with live SSE should make 0 CDP probes (went ${probesAfterAttach} -> ${mockCdpProbeCount})`);
+      assert.ok(sse1.chunks.length > chunksBeforeWake, 'PR #9 wake() live-SSE fast-path did not broadcast SSE frame');
+
+      // wake({ forceProbe: true }) MUST bypass fast-path and run CDP probe!
+      await bridge.wake({ forceProbe: true });
+      assert.ok(mockCdpProbeCount > probesAfterAttach, 'PR #9 wake({ forceProbe: true }) did not run CDP probe');
+      const probesAfterForce = mockCdpProbeCount;
+
+      // Mark SSE #1 writableEnded=true (silent dead socket) -> wake() MUST detect dead SSE & fall back to CDP probe!
+      sse1.res.writableEnded = true;
+      await bridge.wake();
+      assert.ok(mockCdpProbeCount > probesAfterForce, 'PR #9 wake() failed to detect writableEnded SSE & fall back to CDP probe');
+      const probesAfterEnded = mockCdpProbeCount;
+
+      // Register SSE #2, mark destroyed=true -> wake() MUST detect destroyed SSE & fall back to CDP probe!
+      const sse2 = makeMockSsePair();
+      await bridge.registerSseClient(sse2.req, sse2.res, false);
+      sse2.res.destroyed = true;
+      await bridge.wake();
+      assert.ok(mockCdpProbeCount > probesAfterEnded, 'PR #9 wake() failed to detect destroyed SSE & fall back to CDP probe');
+      wakeNote = `live-SSE fast-path (0 probes) + forceProbe (+1) + dead writableEnded/destroyed fallback (${wakeTransportMode}) verified`;
+    } finally {
+      await bridge.stop({ preserveHostDom: true }).catch(() => {});
+      delete globalThis.__prismMockCdpHttpRequest;
+      if (mockPort > 0) await new Promise((r) => mockCdpServer.close(() => r()));
+    }
+
+    // 3) Req #6: Verify `/preload.js`, `/video-stage/`, `/web/`, `/scene-live/` inject `window.__agyDomTranslatorInitialized = true;`
+    const preloadResp = await invokeServerInMemory(studio.server, { method: 'GET', url: '/preload.js' });
+    assert.equal(preloadResp.status, 200);
+    assert.ok(
+      preloadResp.text().includes('__agyDomTranslatorInitialized'),
+      'Studio /preload.js missing window.__agyDomTranslatorInitialized = true guard',
+    );
+    const activeMediaSrv = engine?.mediaServer?.server || engine?._mediaServer?.server || fallbackMediaSrv?.server;
+    const sampleVid = findWorkshopItem('100002');
+    const sampleWeb = findWorkshopItem('100003');
+    if (activeMediaSrv && sampleVid) {
+      const vsResp = await invokeServerInMemory(activeMediaSrv, { method: 'GET', url: `/video-stage/${encodeURIComponent(sampleVid.id)}` });
+      assert.equal(vsResp.status, 200);
+      assert.ok(vsResp.text().includes('__agyDomTranslatorInitialized'), '/video-stage/ HTML missing __agyDomTranslatorInitialized guard');
+    }
+    if (activeMediaSrv && sampleWeb) {
+      const webResp = await invokeServerInMemory(activeMediaSrv, { method: 'GET', url: `/web/${encodeURIComponent(sampleWeb.id)}/` });
+      assert.equal(webResp.status, 200);
+      assert.ok(webResp.text().includes('__agyDomTranslatorInitialized'), '/web/ HTML missing __agyDomTranslatorInitialized guard');
+    }
+
+    return `selectHubTargets bilingual + ${wakeNote} + /preload.js & iframe __agyDomTranslatorInitialized guards`;
+  });
+
+  await check('Issue #10 + Req #4: Pure-Optical `SCENE_PRESETS`, 7-Component `surfaceTints` + `resolveComponentDefaultAlpha` & 128/128 WCAG AA (>= 4.5:1) Matrix', '@exec-shared / @exec-host-skin / @exec-tests', async () => {
+    const {
+      SCENE_PRESETS,
+      COLOR_SCHEMES,
+      SURFACE_TINT_COMPONENTS,
+      SURFACE_TINT_BOUNDS,
+      sanitizeConfig,
+      resolveComponentDefaultAlpha,
+    } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href);
+
+    // 1) Issue #10: All 4 SCENE_PRESETS are strictly optical-only (0 layout keys) and restore fpsCap=60 (eco=30)
+    const forbiddenLayoutKeys = [
+      'layoutMode',
+      'islandGap',
+      'workspacePad',
+      'cornerStyle',
+      'topbarStyle',
+      'leftSidebarRadius',
+      'rightSidebarRadius',
+    ];
+    for (const presetId of ['crystal', 'islands', 'focus', 'eco']) {
+      const p = SCENE_PRESETS[presetId];
+      assert.ok(p && p.patch, `Missing SCENE_PRESETS.${presetId}`);
+      for (const lk of forbiddenLayoutKeys) {
+        assert.equal(Object.prototype.hasOwnProperty.call(p.patch, lk), false, `SCENE_PRESETS.${presetId} leaked layout key "${lk}"!`);
+      }
+      assert.equal(p.patch.fpsCap, presetId === 'eco' ? 30 : 60, `SCENE_PRESETS.${presetId}.patch.fpsCap expected ${presetId === 'eco' ? 30 : 60}, got ${p.patch.fpsCap}`);
+    }
+
+    // 2) Req #4: 7-component surfaceTints schema, bounds clamping, null reset, sidebarOpacity bidirectional sync & resolveComponentDefaultAlpha
+    assert.deepEqual([...SURFACE_TINT_COMPONENTS], ['topbar', 'sidebar', 'workspace', 'rightPane', 'composer', 'card', 'popover']);
+    assert.equal(SURFACE_TINT_BOUNDS.popover.minOpacity, 0.5);
+    const syncedFromSb = sanitizeConfig({ sidebarOpacity: 0.88 });
+    assert.equal(syncedFromSb.sidebarOpacity, 0.88);
+    assert.equal(syncedFromSb.surfaceTints.sidebar.opacity, 0.88, 'sidebarOpacity did not sync into surfaceTints.sidebar.opacity');
+
+    const syncedFromSt = sanitizeConfig({ surfaceTints: { sidebar: { opacity: 0.42, tone: -150, tint: '#abc' }, popover: { opacity: 0.1, tone: 150, tint: 'invalid' } } });
+    assert.equal(syncedFromSt.sidebarOpacity, 0.42, 'surfaceTints.sidebar.opacity did not sync back into sidebarOpacity');
+    assert.equal(syncedFromSt.surfaceTints.sidebar.tone, -100, 'tone not clamped to -100');
+    assert.equal(syncedFromSt.surfaceTints.sidebar.tint, '#AABBCC', '3-digit hex tint not normalized to #AABBCC');
+    assert.equal(syncedFromSt.surfaceTints.popover.opacity, 0.5, 'popover opacity did not enforce >= 0.50 floor');
+    assert.equal(syncedFromSt.surfaceTints.popover.tone, 100, 'tone not clamped to +100');
+    assert.equal(syncedFromSt.surfaceTints.popover.tint, '', 'invalid tint string not sanitized to empty');
+
+    const resetSt = sanitizeConfig({ surfaceTints: null }, syncedFromSt);
+    assert.equal(resetSt.sidebarOpacity, null, 'surfaceTints: null did not reset sidebarOpacity');
+    for (const comp of SURFACE_TINT_COMPONENTS) {
+      assert.equal(resetSt.surfaceTints[comp].opacity, null);
+      assert.equal(resetSt.surfaceTints[comp].tone, 0);
+      assert.equal(resetSt.surfaceTints[comp].tint, '');
+    }
+
+    // Verify resolveComponentDefaultAlpha returns bounded numeric alpha for all 7 components in dark & light modes
+    const baseCfg = sanitizeConfig({});
+    for (const isLight of [false, true]) {
+      for (const comp of SURFACE_TINT_COMPONENTS) {
+        const a = resolveComponentDefaultAlpha(comp, baseCfg, isLight);
+        assert.ok(typeof a === 'number' && Number.isFinite(a) && a >= 0 && a <= 1, `resolveComponentDefaultAlpha(${comp}, ${isLight}) invalid: ${a}`);
+        if (comp === 'popover') assert.ok(a >= 0.9, `resolveComponentDefaultAlpha(popover, ${isLight}) expected >= 0.9, got ${a}`);
+      }
+      assert.equal(
+        resolveComponentDefaultAlpha('rightPane', baseCfg, isLight),
+        resolveComponentDefaultAlpha('workspace', baseCfg, isLight),
+        `Default rightPane alpha must match workspace alpha (isLight=${isLight})`,
+      );
+    }
+
+    // 3) 128/128 WCAG AA >= 4.5:1 Contrast Matrix using real `wallpaper-inject.js` CSS output in VM
+    const wallInjectSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+    const makeMiniNode = (tag) => {
+      const attrs = new Map();
+      const cls = new Set();
+      const styles = new Map();
+      const node = {
+        tagName: tag.toUpperCase(),
+        id: '',
+        textContent: '',
+        children: [],
+        parentNode: null,
+        classList: {
+          add: (...xs) => xs.forEach((x) => cls.add(x)),
+          remove: (...xs) => xs.forEach((x) => cls.delete(x)),
+          contains: (x) => cls.has(x),
+        },
+        style: {
+          setProperty: (k, v) => styles.set(k, String(v)),
+          removeProperty: (k) => styles.delete(k),
+          getPropertyValue: (k) => styles.get(k) || '',
+        },
+        setAttribute: (k, v) => attrs.set(k, String(v)),
+        getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
+        hasAttribute: (k) => attrs.has(String(k)),
+        removeAttribute: (k) => attrs.delete(k),
+        appendChild(ch) { ch.parentNode = this; this.children.push(ch); return ch; },
+        insertBefore(ch, ref) { ch.parentNode = this; const i = this.children.indexOf(ref); if (i >= 0) this.children.splice(i, 0, ch); else this.children.push(ch); return ch; },
+        removeChild(ch) { const i = this.children.indexOf(ch); if (i >= 0) this.children.splice(i, 1); ch.parentNode = null; return ch; },
+        remove() { if (this.parentNode) this.parentNode.removeChild(this); },
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 1440, height: 900 }),
+      };
+      return node;
+    };
+    const rootEl = makeMiniNode('HTML');
+    const headEl = makeMiniNode('HEAD');
+    const bodyEl = makeMiniNode('BODY');
+    rootEl.appendChild(headEl);
+    rootEl.appendChild(bodyEl);
+    const findById = (n, id) => {
+      if (n.id === id) return n;
+      for (const ch of n.children) {
+        const hit = findById(ch, id);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const miniDoc = {
+      documentElement: rootEl,
+      head: headEl,
+      body: bodyEl,
+      hidden: false,
+      createElement: (t) => makeMiniNode(t),
+      getElementById: (id) => findById(rootEl, id),
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    const miniWin = {
+      document: miniDoc,
+      location: { protocol: 'http:', origin: 'http://127.0.0.1:43199', href: 'http://127.0.0.1:43199/' },
+      innerWidth: 1440,
+      innerHeight: 900,
+      devicePixelRatio: 1,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: () => 0,
+      cancelAnimationFrame: () => {},
+      getComputedStyle: () => ({ backgroundColor: 'rgb(7, 7, 8)', getPropertyValue: () => '' }),
+      matchMedia: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    miniWin.window = miniWin;
+    miniWin.top = miniWin;
+    const wcagCtx = vm.createContext({
+      window: miniWin,
+      document: miniDoc,
+      location: miniWin.location,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      getComputedStyle: miniWin.getComputedStyle,
+    });
+    vm.runInContext(wallInjectSrc, wcagCtx, { filename: 'wallpaper-inject-wcag.js' });
+
+    const relLum = ([r, g, b]) => {
+      const f = (c) => {
+        const s = c / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const wcagRatio = (a, b) => {
+      const l1 = relLum(a);
+      const l2 = relLum(b);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    };
+    const parseColorRgb = (s) => {
+      const raw = String(s || '').trim();
+      if (raw.startsWith('#')) {
+        const h = raw.slice(1);
+        return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+      }
+      const m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/.exec(raw);
+      return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+    };
+
+    const stressVectors = [
+      { tint: '#FFFFFF', tone: 100 },
+      { tint: '#000000', tone: -100 },
+      { tint: '#00FF00', tone: 80 },
+      { tint: '#FFFF00', tone: 100 },
+      { tint: '#FF00FF', tone: -80 },
+      { tint: '#FF0000', tone: 50 },
+      { tint: '#0000FF', tone: -50 },
+      { tint: '#808080', tone: 100 },
+    ];
+    const surfaceVars = [
+      '--prism-surface-topbar',
+      '--prism-surface-sidebar',
+      '--prism-surface-chat',
+      '--prism-surface-right-pane',
+      '--prism-surface-composer',
+      '--prism-surface-card',
+      '--prism-surface-popover',
+    ];
+    let wcagPassedCombos = 0;
+    let worstRatio = 99;
+    try {
+      for (const schemeId of Object.keys(COLOR_SCHEMES)) {
+        for (const themeMode of ['dark', 'light']) {
+          for (const vec of stressVectors) {
+            const st = {};
+            for (const comp of SURFACE_TINT_COMPONENTS) {
+              st[comp] = { opacity: 0.9, tone: vec.tone, tint: vec.tint };
+            }
+            miniWin.__agyPrism.applyPayload({
+              skinEnabled: true,
+              config: {
+                colorScheme: schemeId,
+                themeMode,
+                contrastFloor: true,
+                glassSurfaces: true,
+                surfaceTints: st,
+              },
+              activeItem: null,
+            });
+            const cssText = miniDoc.getElementById('agy-prism-css')?.textContent || '';
+            const fgHex = rootEl.style.getPropertyValue('--prism-fg').trim() || COLOR_SCHEMES[schemeId]?.[themeMode]?.fg;
+            const fgRgb = parseColorRgb(fgHex);
+            assert.ok(fgRgb, `Missing --prism-fg for ${schemeId}/${themeMode}`);
+            for (const sv of surfaceVars) {
+              const inlineVal = rootEl.style.getPropertyValue(sv);
+              const sm = inlineVal ? [null, inlineVal] : new RegExp(`${sv}:\\s*([^;]+);`).exec(cssText);
+              const bgRgb = parseColorRgb(sm?.[1]);
+              assert.ok(bgRgb, `Missing ${sv} for ${schemeId}/${themeMode}/${vec.tint}`);
+              const ratio = wcagRatio(bgRgb, fgRgb);
+              if (ratio < worstRatio) worstRatio = ratio;
+              assert.ok(
+                ratio >= 4.49,
+                `WCAG AA violation (<4.5:1): ${schemeId}/${themeMode}/${vec.tint}/tone=${vec.tone} ${sv}=${sm?.[1]} vs fg=${fgHex} -> ${ratio.toFixed(2)}:1`,
+              );
+            }
+            wcagPassedCombos += 1;
+          }
+        }
+      }
+    } finally {
+      miniWin.__agyPrism.destroy();
+    }
+    assert.equal(wcagPassedCombos, 128, `Expected 128 WCAG combos tested, got ${wcagPassedCombos}`);
+    return `4 optical presets (0 layout keys) + 7 surfaceTints + resolveComponentDefaultAlpha + ${wcagPassedCombos}/128 WCAG AA >= 4.5:1 (min=${worstRatio.toFixed(2)}:1)`;
+  });
+
+  await check('Req #5 + D1: SemVer, `tar-safe` hostile archive rejection, Loopback `Host` DNS-rebinding `403`, CSRF/Auth/Git `409`, Offline Fail-Safe & In-Proc Mock GitHub Updater Swap + Rollback', '@exec-shared / @exec-engine-updater / @exec-sidecar / @exec-tests', async () => {
+    const { parseSemver, compareSemver, isNewerVersion } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'semver.mjs')).href
+    );
+    const { createDeterministicTarGz, extractSafeTarGz, collectDirectoryFilesMap } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'tar-safe.mjs')).href
+    );
+    const { createPrismUpdater } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'updater.mjs')).href
+    );
+
+    // 1) SemVer unit checks (`isNewerVersion(candidate, current)`)
+    assert.equal(compareSemver('2.1.0', '2.0.9'), 1);
+    assert.equal(compareSemver('v2.1.0', '2.1.0'), 0);
+    assert.equal(compareSemver('2.1.0-beta.1', '2.1.0'), -1);
+    assert.equal(compareSemver('2.1.0+build.42', '2.1.0'), 0);
+    assert.equal(isNewerVersion('2.1.0', '2.0.9'), true);
+    assert.equal(isNewerVersion('2.0.9', '2.1.0'), false);
+    assert.equal(isNewerVersion('2.1.0-rc.1', '2.1.0'), false);
+    assert.equal(parseSemver('not-a-version'), null);
+
+    // 2) `tar-safe.mjs` hostile archive rejection (Zip-Slip, absolute, symlink, hardlink, Windows reserved, case collision)
+    const buildRawTarGz = (rawEntries) => {
+      const blocks = [];
+      for (const e of rawEntries) {
+        const hdr = Buffer.alloc(512, 0);
+        Buffer.from(e.name, 'utf8').copy(hdr, 0, 0, 100);
+        Buffer.from('0000644\0', 'ascii').copy(hdr, 100);
+        Buffer.from('0000000\0', 'ascii').copy(hdr, 108);
+        Buffer.from('0000000\0', 'ascii').copy(hdr, 116);
+        const data = Buffer.isBuffer(e.data) ? e.data : Buffer.from(String(e.data || ''), 'utf8');
+        Buffer.from(`${data.length.toString(8).padStart(11, '0')}\0`, 'ascii').copy(hdr, 124);
+        Buffer.from(`${Math.floor(1700000000).toString(8).padStart(11, '0')}\0`, 'ascii').copy(hdr, 136);
+        hdr.fill(0x20, 148, 156);
+        hdr[156] = String(e.typeFlag || '0').charCodeAt(0);
+        if (e.linkname) Buffer.from(e.linkname, 'utf8').copy(hdr, 157, 0, 100);
+        Buffer.from('ustar\0', 'ascii').copy(hdr, 257);
+        Buffer.from('00', 'ascii').copy(hdr, 263);
+        let sum = 0;
+        for (let i = 0; i < 512; i += 1) sum += hdr[i];
+        Buffer.from(`${sum.toString(8).padStart(6, '0')}\0 `, 'ascii').copy(hdr, 148);
+        blocks.push(hdr);
+        if (data.length > 0 && (e.typeFlag || '0') === '0') {
+          blocks.push(data);
+          const rem = data.length % 512;
+          if (rem !== 0) blocks.push(Buffer.alloc(512 - rem, 0));
+        }
+      }
+      blocks.push(Buffer.alloc(1024, 0));
+      return zlib.gzipSync(Buffer.concat(blocks));
+    };
+
+    const hostileCases = [
+      { label: 'zip-slip', entries: [{ name: '../evil.txt', data: 'x' }] },
+      { label: 'abs-path', entries: [{ name: '/etc/passwd', data: 'x' }] },
+      { label: 'symlink', entries: [{ name: 'link.js', typeFlag: '2', linkname: '/etc/hosts' }] },
+      { label: 'hardlink', entries: [{ name: 'hlink.js', typeFlag: '1', linkname: 'plugin.json' }] },
+      { label: 'win-reserved-CON', entries: [{ name: 'CON', data: 'x' }] },
+      { label: 'win-reserved-nul', entries: [{ name: 'sub/nul.txt', data: 'x' }] },
+      { label: 'case-collision', entries: [{ name: 'Foo.txt', data: 'a' }, { name: 'foo.txt', data: 'b' }] },
+    ];
+    for (const hc of hostileCases) {
+      const dest = path.join(SCRATCH_ROOT, `tar-hostile-${hc.label}`);
+      const buf = buildRawTarGz(hc.entries);
+      assert.throws(
+        () => extractSafeTarGz({ tarGzBuffer: buf, destDir: dest }),
+        (err) => Boolean(err),
+        `tar-safe failed to reject hostile archive "${hc.label}"!`,
+      );
+    }
+
+    // 3) Global Loopback `Host` DNS-Rebinding `403`, zero wildcard CORS on `/api/healthz` & `/api/update/status`,
+    //    and `POST /api/update/apply` CSRF/Auth/Content-Type/Git-dev `409` guards on `studio.server` (has `.git`)
+    for (const badPath of ['/', '/api/healthz', '/api/update/status']) {
+      const rebindRes = await invokeServerInMemory(studio.server, {
+        method: 'GET',
+        url: badPath,
+        headers: { Host: 'evil.attacker.example:53040' },
+      });
+      assert.equal(rebindRes.status, 403, `DNS-rebinding Host on ${badPath} expected 403, got ${rebindRes.status}`);
+      assert.equal(rebindRes.json().code, 'ERR_DNS_REBINDING');
+      assert.equal(rebindRes.headers['access-control-allow-origin'], undefined, `403 DNS-rebinding on ${badPath} must NOT emit CORS`);
+    }
+
+    const healthzRes = await invokeServerInMemory(studio.server, { method: 'GET', url: '/api/healthz', headers: { Host: '127.0.0.1:53040' } });
+    assert.equal(healthzRes.status, 200);
+    assert.equal(healthzRes.json().version, '2.1.0');
+    assert.notEqual(healthzRes.headers['access-control-allow-origin'], '*', '/api/healthz must NOT emit wildcard CORS');
+
+    const badOriginApply = await invokeServerInMemory(studio.server, {
+      method: 'POST',
+      url: '/api/update/apply',
+      headers: { Host: '127.0.0.1:53040', Origin: 'https://evil.example', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(badOriginApply.status, 403, `POST /api/update/apply bad Origin expected 403, got ${badOriginApply.status}`);
+
+    const noTokApply = await invokeServerInMemory(studio.server, {
+      method: 'POST',
+      url: `/api/update/apply?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+      headers: { Host: '127.0.0.1:53040', 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(noTokApply.status, 401, `POST /api/update/apply ?token= query without header expected 401, got ${noTokApply.status}`);
+
+    const wrongCtApply = await invokeServerInMemory(studio.server, {
+      method: 'POST',
+      url: '/api/update/apply',
+      headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'text/plain' },
+      body: '{}',
+    });
+    assert.equal(wrongCtApply.status, 415, `POST /api/update/apply non-JSON Content-Type expected 415, got ${wrongCtApply.status}`);
+
+    const gitCheckoutApply = await invokeServerInMemory(studio.server, {
+      method: 'POST',
+      url: '/api/update/apply',
+      headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(gitCheckoutApply.status, 409, `POST /api/update/apply in .git checkout expected 409, got ${gitCheckoutApply.status}`);
+    assert.equal(gitCheckoutApply.json().code, 'ERR_GIT_DEV_CHECKOUT');
+
+    // 4) Build deterministic v2.1.0 release tarball (all real runtime files) & test (a) Offline fail-safe, (b) Temp-plugin-dir swap, (c) Mid-sync rollback!
+    const pkg210Map = collectDirectoryFilesMap(REPO_ROOT);
+    const mockTarGz = createDeterministicTarGz(pkg210Map);
+    const mockSha256 = createHash('sha256').update(mockTarGz).digest('hex');
+    const mockShaText = `${mockSha256}  agy-wallpaper-prism-v2.1.0.tar.gz\n`;
+
+    const makeMockGhFetch = ({ offline = false } = {}) => async (url) => {
+      const u = String(url || '');
+      if (offline) {
+        const err = new Error('getaddrinfo ENOTFOUND api.github.com');
+        err.code = 'ENOTFOUND';
+        throw err;
+      }
+      if (u.includes('/releases/latest')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Map([['content-type', 'application/json']]),
+          async json() {
+            return {
+              tag_name: 'v2.1.0',
+              html_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/tag/v2.1.0',
+              body: 'Release v2.1.0 mock notes',
+              published_at: '2026-11-25T00:00:00Z',
+              assets: [
+                {
+                  name: 'agy-wallpaper-prism-v2.1.0.tar.gz',
+                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.1.0/agy-wallpaper-prism-v2.1.0.tar.gz',
+                  size: mockTarGz.length,
+                },
+                {
+                  name: 'agy-wallpaper-prism-v2.1.0.tar.gz.sha256',
+                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.1.0/agy-wallpaper-prism-v2.1.0.tar.gz.sha256',
+                  size: Buffer.byteLength(mockShaText, 'utf8'),
+                },
+              ],
+            };
+          },
+          async text() { return JSON.stringify(await this.json()); },
+          async arrayBuffer() { return new Uint8Array(0).buffer; },
+        };
+      }
+      if (u.endsWith('.tar.gz.sha256')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Map(),
+          async text() { return mockShaText; },
+          async arrayBuffer() { return Buffer.from(mockShaText, 'utf8'); },
+        };
+      }
+      if (u.endsWith('.tar.gz')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Map([['content-length', String(mockTarGz.length)]]),
+          async arrayBuffer() { return mockTarGz.buffer.slice(mockTarGz.byteOffset, mockTarGz.byteOffset + mockTarGz.byteLength); },
+        };
+      }
+      return { ok: false, status: 404, headers: new Map(), async text() { return 'not found'; } };
+    };
+
+    const seedMockPluginDir = (dir) => {
+      fs.mkdirSync(path.join(dir, 'sidecars', 'prism_studio'), { recursive: true });
+      fs.mkdirSync(path.join(dir, 'src', 'shared'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({ name: 'agy-wallpaper-prism', version: '2.0.9' }, null, 2), 'utf8');
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'agy-wallpaper-prism', version: '2.0.9' }, null, 2), 'utf8');
+      fs.writeFileSync(path.join(dir, 'sidecars', 'prism_studio', 'main.mjs'), '// v2.0.9 main\n', 'utf8');
+      fs.writeFileSync(path.join(dir, 'sidecars', 'prism_studio', 'index.html'), '<!doctype html><html><body>v2.0.9</body></html>\n', 'utf8');
+      fs.writeFileSync(path.join(dir, 'src', 'shared', 'schema.mjs'), "export const PLUGIN_VERSION = '2.0.9';\n", 'utf8');
+      fs.writeFileSync(path.join(dir, '.prism-install-id'), 'keep-this-install-id-12345\n', 'utf8');
+    };
+
+    // (4a) Offline fail-safe
+    const offPluginDir = path.join(SCRATCH_ROOT, 'upd-offline-plugin');
+    const offDataDir = path.join(SCRATCH_ROOT, 'upd-offline-data');
+    seedMockPluginDir(offPluginDir);
+    fs.mkdirSync(offDataDir, { recursive: true });
+    const offUpdater = createPrismUpdater({
+      pluginRoot: offPluginDir,
+      dataDir: offDataDir,
+      currentVersion: '2.0.9',
+      fetchImpl: makeMockGhFetch({ offline: true }),
+      managedSidecar: false,
+    });
+    const offStatus = await offUpdater.checkForUpdate({ force: true });
+    assert.equal(offStatus.offline, true, `Offline checkForUpdate expected offline=true, got ${JSON.stringify(offStatus)}`);
+    assert.equal(offStatus.hasUpdate, false);
+
+    // (4b) Full in-proc Mock GitHub Release updater swap via real `createPrismStudioServer` `/api/update/status` & `/api/update/apply`
+    const swapPluginDir = path.join(SCRATCH_ROOT, 'upd-swap-plugin');
+    const swapDataDir = path.join(SCRATCH_ROOT, 'upd-swap-data');
+    seedMockPluginDir(swapPluginDir);
+    fs.mkdirSync(swapDataDir, { recursive: true });
+    const UPD_TOKEN = 'mock-updater-token-210';
+    const updSrv = await createPrismStudioServer({
+      dataDir: swapDataDir,
+      pluginRoot: swapPluginDir,
+      currentVersion: '2.0.9',
+      token: UPD_TOKEN,
+      startCdp: false,
+      managedSidecar: false,
+      fetchImpl: makeMockGhFetch({ offline: false }),
+    });
+    try {
+      const stResp = await invokeServerInMemory(updSrv.server, {
+        method: 'GET',
+        url: '/api/update/status?force=1',
+        headers: { Host: '127.0.0.1:53040' },
+      });
+      assert.equal(stResp.status, 200);
+      assert.notEqual(stResp.headers['access-control-allow-origin'], '*', '/api/update/status must NOT emit wildcard CORS');
+      const stJson = stResp.json();
+      assert.equal(stJson.hasUpdate, true, `Expected mock GitHub release hasUpdate=true, got ${JSON.stringify(stJson)}`);
+      assert.equal(stJson.latestVersion, '2.1.0');
+      assert.equal(stJson.canAutoUpdate, true);
+
+      const applyResp = await invokeServerInMemory(updSrv.server, {
+        method: 'POST',
+        url: '/api/update/apply',
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': UPD_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetVersion: '2.1.0' }),
+      });
+      assert.equal(applyResp.status, 200, `Mock /api/update/apply expected 200, got ${applyResp.status}: ${applyResp.text()}`);
+      const applyJson = applyResp.json();
+      assert.equal(applyJson.ok, true);
+      assert.equal(applyJson.toVersion, '2.1.0');
+      assert.equal(JSON.parse(fs.readFileSync(path.join(swapPluginDir, 'plugin.json'), 'utf8')).version, '2.1.0');
+      assert.equal(fs.readFileSync(path.join(swapPluginDir, '.prism-install-id'), 'utf8'), 'keep-this-install-id-12345\n', '.prism-install-id was NOT preserved across update swap!');
+      assert.ok(fs.existsSync(path.join(swapPluginDir, 'src', 'engine', 'updater.mjs')), 'New v2.1.0 file missing after swap');
+    } finally {
+      await updSrv.close().catch(() => {});
+    }
+
+    // (4c) Mid-sync failure synchronous rollback (via writeOverride throwing ENOSPC on 3rd file)
+    const rbPluginDir = path.join(SCRATCH_ROOT, 'upd-rollback-plugin');
+    const rbDataDir = path.join(SCRATCH_ROOT, 'upd-rollback-data');
+    seedMockPluginDir(rbPluginDir);
+    fs.mkdirSync(rbDataDir, { recursive: true });
+    let writeCount = 0;
+    let rollbackCalled = false;
+    const rbUpdater = createPrismUpdater({
+      pluginRoot: rbPluginDir,
+      dataDir: rbDataDir,
+      currentVersion: '2.0.9',
+      fetchImpl: makeMockGhFetch({ offline: false }),
+      managedSidecar: false,
+      onRollback: () => { rollbackCalled = true; },
+      writeOverride: (src, dst) => {
+        writeCount += 1;
+        if (writeCount === 3) {
+          const e = new Error('Simulated disk full during swap');
+          e.code = 'ENOSPC';
+          throw e;
+        }
+        fs.copyFileSync(src, dst);
+      },
+    });
+    await assert.rejects(
+      () => rbUpdater.applyUpdate({ targetVersion: '2.1.0' }),
+      (err) => err && (err.code === 'ENOSPC' || String(err.message || '').includes('Simulated disk full')),
+      'Mid-sync ENOSPC failure must reject after synchronous rollback',
+    );
+    assert.equal(rollbackCalled, true, 'onRollback callback was not invoked');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(rbPluginDir, 'plugin.json'), 'utf8')).version, '2.0.9', 'Rollback did not restore original plugin.json 2.0.9!');
+    assert.equal(fs.readFileSync(path.join(rbPluginDir, '.prism-install-id'), 'utf8'), 'keep-this-install-id-12345\n', 'Rollback did not preserve .prism-install-id!');
+
+    return `SemVer + ${hostileCases.length} hostile tar rejections + Host 403 + Origin 403/Token 401/CT 415/Git 409 + offline fail-safe + swap (2.0.9->2.1.0) & ENOSPC rollback verified`;
+  });
+
+  await check('Req #7: `scripts/pack-release.mjs` 3-Artifact Release Bundle (`.tar.gz` + `.sha256` + `.zip`) & `dist/` Gitignore', '@exec-build-release / @exec-tests', async () => {
+    const { packReleaseBundle, validateTarGzArchive } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'scripts', 'pack-release.mjs')).href
+    );
+    const { extractSafeTarGz, validateStagedPlugin } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'tar-safe.mjs')).href
+    );
+
+    const scratchDist = path.join(SCRATCH_ROOT, 'dist-verify');
+    const pack = await packReleaseBundle({ sourceRoot: REPO_ROOT, outDir: scratchDist, skipBuild: true });
+    assert.equal(pack.version, '2.1.0');
+    assert.equal(pack.tag, 'v2.1.0');
+    assert.ok(fs.existsSync(pack.tarPath), 'Missing .tar.gz release artifact');
+    assert.ok(fs.existsSync(pack.shaPath), 'Missing .tar.gz.sha256 release artifact');
+    assert.ok(fs.existsSync(pack.zipPath), 'Missing .zip release artifact');
+
+    const tarBuf = fs.readFileSync(pack.tarPath);
+    const actualSha = createHash('sha256').update(tarBuf).digest('hex');
+    const shaFileText = fs.readFileSync(pack.shaPath, 'utf8').trim();
+    assert.ok(shaFileText.startsWith(actualSha), `SHA-256 mismatch: expected ${actualSha}, got ${shaFileText}`);
+    assert.equal(pack.sha256, actualSha);
+
+    const zipBuf = fs.readFileSync(pack.zipPath);
+    assert.equal(zipBuf.readUInt32LE(0), 0x04034b50, 'ZIP missing PK\\x03\\x04 Local File Header magic');
+    assert.ok(zipBuf.includes(Buffer.from([0x50, 0x4b, 0x05, 0x06])), 'ZIP missing PK\\x05\\x06 EOCD signature');
+
+    validateTarGzArchive(tarBuf, { expectedVersion: '2.1.0' });
+    const extractDir = path.join(SCRATCH_ROOT, 'dist-extract');
+    extractSafeTarGz({ tarGzBuffer: tarBuf, destDir: extractDir });
+    const staged = validateStagedPlugin({ stageDir: extractDir, currentVersion: '2.0.9', requireNewerVersion: true });
+    assert.equal(staged.version, '2.1.0');
+
+    // Verify `dist/` is gitignored so running `node scripts/pack-release.mjs` keeps working tree clean
+    const ignored = execFileSync('git', ['check-ignore', 'dist'], { cwd: REPO_ROOT, stdio: 'pipe' }).toString('utf8').trim();
+    assert.equal(ignored, 'dist', `Expected dist to be gitignored, got "${ignored}"`);
+
+    return `v${pack.version} 3 artifacts (.tar.gz ${Math.round(pack.tarSizeBytes / 1024)}KB, .sha256 match, .zip ${Math.round(pack.zipSizeBytes / 1024)}KB, ${pack.fileCount} files, dist gitignored)`;
   });
 
   // =========================================================================
@@ -3263,8 +4466,20 @@ async function main() {
         assert.equal(baseline.bodyBg, 'rgb(7, 7, 8)', `Unexpected pre-skin Hub body bg: ${baseline.bodyBg}`);
 
         // -------------------------------------------------------------------
-        // CHECK 1A — Ephemeral Micro-Bootstrap (`<1.5 KB`) & 0 KB `panel.js` on Boot
+        // CHECK 1A — Ephemeral Micro-Bootstrap (`<= 6144 B`), 0 KB `panel.js` on Boot & PR #8 Footer-Remount Self-Heal
         // -------------------------------------------------------------------
+        const worstCaseBootstrap = buildHostMicroBootstrap({
+          hostOrigin: 'https://127.0.0.1:65535',
+          capToken: 'a'.repeat(64),
+          triggerMode: 'both',
+          startupMode: 'gentle-auto',
+          skinEnabled: true,
+        });
+        assert.ok(
+          Buffer.byteLength(worstCaseBootstrap, 'utf8') <= 6144,
+          `PR #8 worst-case buildHostMicroBootstrap exceeded 6144 B budget: ${Buffer.byteLength(worstCaseBootstrap, 'utf8')} B`,
+        );
+
         const bootstrapExpr = buildHostMicroBootstrap({
           hostOrigin: studio.origin,
           capToken: studio.hostCapToken,
@@ -3302,6 +4517,68 @@ async function main() {
         );
         assert.equal(lazyBootCheck.hasLazyStubPill, true, 'Lazy stub #agy-prism-pill[data-prism-lazy-stub="1"] missing');
         assert.equal(lazyBootCheck.pillInFooter, true, '#agy-prism-pill not mounted inside .agy-composer-footer');
+
+        // PR #8 Footer-Remount E2E: simulate React remount replacing `.agy-composer-footer` without `#agy-prism-pill`
+        await hubPage.evaluate(`(() => {
+          const oldFooter = document.querySelector('.agy-composer-footer');
+          const clone = oldFooter.cloneNode(true);
+          const stalePill = clone.querySelector('#agy-prism-pill');
+          if (stalePill) stalePill.remove();
+          oldFooter.parentNode.replaceChild(clone, oldFooter);
+        })()`);
+        let healedAfterRemount = null;
+        const healDeadline = Date.now() + 3000;
+        while (Date.now() < healDeadline) {
+          healedAfterRemount = await hubPage.evaluate(`({
+            hasLazyStub: Boolean(document.querySelector('.agy-composer-footer #agy-prism-pill[data-prism-lazy-stub="1"]')),
+            panelType: typeof window.__agyPrismPanel,
+            pillCount: document.querySelectorAll('#agy-prism-pill').length,
+          })`);
+          if (healedAfterRemount.hasLazyStub) break;
+          await sleep(60);
+        }
+        assert.equal(healedAfterRemount?.hasLazyStub, true, 'PR #8: Lazy stub #agy-prism-pill did not self-heal after .agy-composer-footer React remount!');
+        assert.equal(healedAfterRemount?.panelType, 'undefined', 'PR #8: Footer remount self-heal must NOT load full panel.js!');
+        assert.equal(healedAfterRemount?.pillCount, 1, `PR #8: Expected single #agy-prism-pill after self-heal, got ${healedAfterRemount?.pillCount}`);
+        assert.equal(
+          hubRequestedPaths.some((p) => p.includes('/panel.js')),
+          false,
+          `PR #8: panel.js was fetched during footer remount heal: ${hubRequestedPaths.join(', ')}`,
+        );
+
+        // PR #8 Body-Fallback <-> Footer Relocation: detach footer -> body fixed fallback -> re-attach footer -> relocates back
+        await hubPage.evaluate(`(() => {
+          const footer = document.querySelector('.agy-composer-footer');
+          window.__detachedFooterParent = footer.parentNode;
+          window.__detachedFooter = footer;
+          footer.remove();
+        })()`);
+        let bodyFallback = false;
+        const fbDeadline = Date.now() + 3000;
+        while (Date.now() < fbDeadline) {
+          bodyFallback = await hubPage.evaluate(`(() => {
+            const p = document.getElementById('agy-prism-pill');
+            return Boolean(p && p.parentNode === document.body && getComputedStyle(p).position === 'fixed');
+          })()`);
+          if (bodyFallback) break;
+          await sleep(60);
+        }
+        assert.equal(bodyFallback, true, 'PR #8: Lazy #agy-prism-pill did not fall back to document.body fixed when footer detached');
+        await hubPage.evaluate(`(() => {
+          if (window.__detachedFooterParent && window.__detachedFooter) {
+            window.__detachedFooterParent.appendChild(window.__detachedFooter);
+          }
+          delete window.__detachedFooterParent;
+          delete window.__detachedFooter;
+        })()`);
+        let relocatedToFooter = false;
+        const relocDeadline = Date.now() + 3000;
+        while (Date.now() < relocDeadline) {
+          relocatedToFooter = await hubPage.evaluate(`Boolean(document.querySelector('.agy-composer-footer #agy-prism-pill[data-prism-lazy-stub="1"]'))`);
+          if (relocatedToFooter) break;
+          await sleep(60);
+        }
+        assert.equal(relocatedToFooter, true, 'PR #8: Lazy #agy-prism-pill did not relocate back from document.body to re-attached .agy-composer-footer');
 
         // -------------------------------------------------------------------
         // CHECK 2 — Fail-Open Media-Ready Gate & `z-index: -1` Inert Stage
@@ -4587,25 +5864,29 @@ async function main() {
         await sleep(80);
 
         const glassUiAudit = await hubPage.evaluate(`(() => {
-          // Bug 1: WCO pill + contextMeterAPI.syncOverlay interception
+          // Bug 1: WCO pill (v2.1.0 direct childless leaf at z-index: 0) + contextMeterAPI.syncOverlay interception
           window.contextMeterAPI.syncOverlay({ color: 'transparent', symbolColor: '#ffffff', height: 40 });
           const lastMeterCall = window.__meterOverlayCalls[window.__meterOverlayCalls.length - 1] || null;
           const wcoPill = document.getElementById('agy-prism-wco-pill');
           const wcoPillCs = wcoPill ? getComputedStyle(wcoPill) : null;
-          const wcoPillBeforeCs = wcoPill ? getComputedStyle(wcoPill, '::before') : null;
           const wcoPillRect = wcoPill ? wcoPill.getBoundingClientRect() : null;
           const wcoInsetRight = getComputedStyle(document.documentElement).getPropertyValue('--prism-wco-inset-right').trim();
           const bodyBgVar = getComputedStyle(document.body).getPropertyValue('--background').trim();
           const rootDarkBgVar = getComputedStyle(document.getElementById('v234-root-theme-wrap')).getPropertyValue('--background').trim();
 
-          // Bug 2: Rounded glass titlebar & dropdown safety
+          // Bug 2 (v2.1.0 Req #2): Hollowed 2.35.1 wrapper + titlebar + compact rounded pills + bar mode 8px gap + dropdown safety
+          const tbWrap = document.getElementById('v235-topbar-wrapper');
+          const tbWrapCs = tbWrap ? getComputedStyle(tbWrap) : null;
           const tb = document.querySelector('[data-testid="title-menu-bar"]');
           const tbCs = getComputedStyle(tb);
           const tbRect = tb.getBoundingClientRect();
+          const tbPillsHost = document.getElementById('agy-prism-topbar-pills');
+          const tbPills = tbPillsHost ? Array.from(tbPillsHost.querySelectorAll('.agy-prism-topbar-pill')) : [];
+          const tbFirstPillCs = tbPills[0] ? getComputedStyle(tbPills[0]) : null;
           const tbToPillGap = wcoPillRect ? Math.round(wcoPillRect.left - tbRect.right) : -1;
-          const tbBeforeCs = getComputedStyle(tb, '::before');
           const tbFixedRect = document.getElementById('titlebar-fixed-probe').getBoundingClientRect();
           const tbDropdownCs = getComputedStyle(document.getElementById('hub-title-menu-dropdown'));
+          const tbDropdownInnerCs = getComputedStyle(document.getElementById('hub-dropdown-inner-card'));
 
           // Bug 3: Deep rounded Projects sticky header + project-header folder capsules + transparent folder wrapper
           const sbBeforeCs = getComputedStyle(document.querySelector('.agy-sidebar'), '::before');
@@ -4620,9 +5901,11 @@ async function main() {
           const projBtnBeforeCs = getComputedStyle(projBtn, '::before');
           const projFixedRect = document.getElementById('project-header-fixed-probe').getBoundingClientRect();
 
-          // Bug 4: Right aux-pane matches center main-chat (NOT dark left sidebar), inner right-body transparent
-          const centerIslandCs = getComputedStyle(document.getElementById('v234-center-island-probe'));
-          const rightIslandCs = getComputedStyle(document.getElementById('v234-right-island-probe'));
+          // Bug 4 (v2.1.0 Req #3/#4): Main chat & right aux-pane render glass on ::before carriers (host transparent, zero fixed-trap)
+          const centerIslandHostCs = getComputedStyle(document.getElementById('v234-center-island-probe'));
+          const centerIslandBeforeCs = getComputedStyle(document.getElementById('v234-center-island-probe'), '::before');
+          const rightIslandHostCs = getComputedStyle(document.getElementById('v234-right-island-probe'));
+          const rightIslandBeforeCs = getComputedStyle(document.getElementById('v234-right-island-probe'), '::before');
           const rightBodyCs = getComputedStyle(document.getElementById('v234-right-body-probe'));
           const mainHeaderCs = getComputedStyle(document.getElementById('v234-main-header-probe'));
           const newTabSearchCs = getComputedStyle(document.getElementById('v234-new-tab-search-probe'));
@@ -4631,19 +5914,20 @@ async function main() {
           // Read live CSSStyleDeclaration string values BEFORE restoring null config!
           window.__agyPrism.updateConfig({ sidebarOpacity: 0.92, sidebarBlur: 24 });
           const sbAfterCustomCs = getComputedStyle(document.querySelector('.agy-sidebar'), '::before');
-          const rightIslandAfterCustomCs = getComputedStyle(document.getElementById('v234-right-island-probe'));
+          const rightIslandAfterCustomBeforeCs = getComputedStyle(document.getElementById('v234-right-island-probe'), '::before');
           const sbAfterCustomBg = sbAfterCustomCs.backgroundColor;
           const sbAfterCustomBlur = sbAfterCustomCs.backdropFilter || sbAfterCustomCs.webkitBackdropFilter || 'none';
-          const rightIslandAfterCustomBg = rightIslandAfterCustomCs.backgroundColor;
+          const rightIslandAfterCustomBg = rightIslandAfterCustomBeforeCs.backgroundColor;
           window.__agyPrism.updateConfig({ sidebarOpacity: null, sidebarBlur: null });
 
           return {
             bug1: {
               hasPill: Boolean(wcoPill),
               pillDisplay: wcoPillCs ? wcoPillCs.display : '',
+              pillZ: wcoPillCs ? wcoPillCs.zIndex : '',
               pillRadius: wcoPillCs ? parseFloat(wcoPillCs.borderTopLeftRadius) : 0,
-              pillBeforeBlur: wcoPillBeforeCs ? (wcoPillBeforeCs.backdropFilter || wcoPillBeforeCs.webkitBackdropFilter || 'none') : 'none',
-              pillBeforeBg: wcoPillBeforeCs ? wcoPillBeforeCs.backgroundColor : '',
+              pillBlur: wcoPillCs ? (wcoPillCs.backdropFilter || wcoPillCs.webkitBackdropFilter || 'none') : 'none',
+              pillBg: wcoPillCs ? wcoPillCs.backgroundColor : '',
               wcoInsetRight,
               bodyBgVar,
               rootDarkBgVar,
@@ -4652,14 +5936,19 @@ async function main() {
               lastWco: window.__lastWco,
             },
             bug2: {
-              tbRadius: tbCs.borderTopLeftRadius,
+              tbWrapBg: tbWrapCs ? tbWrapCs.backgroundColor : '',
+              tbBg: tbCs.backgroundColor,
               tbHostBlur: tbCs.backdropFilter || tbCs.webkitBackdropFilter || 'none',
               tbOverflow: tbCs.overflow,
-              tbBeforeBlur: tbBeforeCs.backdropFilter || tbBeforeCs.webkitBackdropFilter || 'none',
-              tbBeforeBg: tbBeforeCs.backgroundColor,
+              tbPillCount: tbPills.length,
+              tbPillsZ: tbPillsHost ? getComputedStyle(tbPillsHost).zIndex : '',
+              tbPillRadius: tbFirstPillCs ? tbFirstPillCs.borderTopLeftRadius : '',
+              tbPillBlur: tbFirstPillCs ? (tbFirstPillCs.backdropFilter || tbFirstPillCs.webkitBackdropFilter || 'none') : 'none',
+              tbPillBg: tbFirstPillCs ? tbFirstPillCs.backgroundColor : '',
               tbFixedTop: Math.round(tbFixedRect.top),
               tbFixedLeft: Math.round(tbFixedRect.left),
               tbDropdownBg: tbDropdownCs.backgroundColor,
+              tbDropdownInnerBg: tbDropdownInnerCs.backgroundColor,
             },
             bug3: {
               sbBeforeBg: sbBeforeCs.backgroundColor,
@@ -4677,8 +5966,12 @@ async function main() {
               folderWrapBeforeContent: folderWrapBeforeCs.content,
             },
             bug4: {
-              centerIslandBg: centerIslandCs.backgroundColor,
-              rightIslandBg: rightIslandCs.backgroundColor,
+              centerIslandHostBg: centerIslandHostCs.backgroundColor,
+              centerIslandBg: centerIslandBeforeCs.backgroundColor,
+              centerIslandBlur: centerIslandBeforeCs.backdropFilter || centerIslandBeforeCs.webkitBackdropFilter || 'none',
+              rightIslandHostBg: rightIslandHostCs.backgroundColor,
+              rightIslandBg: rightIslandBeforeCs.backgroundColor,
+              rightIslandBlur: rightIslandBeforeCs.backdropFilter || rightIslandBeforeCs.webkitBackdropFilter || 'none',
               rightBodyBg: rightBodyCs.backgroundColor,
               mainHeaderBg: mainHeaderCs.backgroundColor,
               newTabSearchBorder: newTabSearchCs.borderTopWidth,
@@ -4689,11 +5982,12 @@ async function main() {
           };
         })()`);
 
-        // Bug 1 Assertions
+        // Bug 1 Assertions (v2.1.0 direct #agy-prism-wco-pill leaf at z-index: 0)
         assert.equal(glassUiAudit.bug1.hasPill, true, 'Bug 1: #agy-prism-wco-pill not mounted');
         assert.equal(glassUiAudit.bug1.pillDisplay, 'block', `Bug 1: #agy-prism-wco-pill display expected block, got ${glassUiAudit.bug1.pillDisplay}`);
+        assert.equal(glassUiAudit.bug1.pillZ, '0', `Bug 1 (D18): #agy-prism-wco-pill z-index expected 0, got ${glassUiAudit.bug1.pillZ}`);
         assert.ok(glassUiAudit.bug1.pillRadius >= 6, `Bug 1: #agy-prism-wco-pill border-radius expected >= 6px, got ${glassUiAudit.bug1.pillRadius}px`);
-        assert.ok(String(glassUiAudit.bug1.pillBeforeBlur).includes('blur('), `Bug 1: #agy-prism-wco-pill::before missing blur(, got ${glassUiAudit.bug1.pillBeforeBlur}`);
+        assert.ok(String(glassUiAudit.bug1.pillBlur).includes('blur('), `Bug 1: #agy-prism-wco-pill missing direct blur(, got ${glassUiAudit.bug1.pillBlur}`);
         assert.equal(glassUiAudit.bug1.lastMeterCall?.color, '#00000000', `Bug 1: contextMeterAPI.syncOverlay({ color: 'transparent' }) not rewritten to #00000000 (got ${JSON.stringify(glassUiAudit.bug1.lastMeterCall)})`);
         assert.equal(glassUiAudit.bug1.lastMeterCall?.height, 35, `Bug 1: contextMeterAPI.syncOverlay height not normalized to 35 (got ${glassUiAudit.bug1.lastMeterCall?.height})`);
         assert.equal(glassUiAudit.bug1.wcoInsetRight, '148px', `Bug 1: expected --prism-wco-inset-right = 148px (140 + 8), got ${glassUiAudit.bug1.wcoInsetRight}`);
@@ -4701,16 +5995,24 @@ async function main() {
         assert.equal(glassUiAudit.bug1.rootDarkBgVar, 'transparent', `Bug 1: inner #v234-root-theme-wrap --background must stay 'transparent', got '${glassUiAudit.bug1.rootDarkBgVar}'`);
         assert.equal(glassUiAudit.bug1.tbToPillGap, 8, `Bug 1/2: expected titlebar-to-WCO-pill gap === 8px (no double-counted workspacePad), got ${glassUiAudit.bug1.tbToPillGap}px`);
 
-        // Bug 2 Assertions
-        assert.equal(glassUiAudit.bug2.tbRadius, '12px', `Bug 2: [data-testid="title-menu-bar"] islands borderRadius expected 12px, got ${glassUiAudit.bug2.tbRadius}`);
+        // Bug 2 Assertions (v2.1.0 Req #2 hollowed 2.35.1 wrapper + compact rounded pills + P$c solid dropdown)
+        assert.equal(glassUiAudit.bug2.tbWrapBg, 'rgba(0, 0, 0, 0)', `Bug 2: #v235-topbar-wrapper must be hollowed transparent, got ${glassUiAudit.bug2.tbWrapBg}`);
+        assert.equal(glassUiAudit.bug2.tbBg, 'rgba(0, 0, 0, 0)', `Bug 2: [data-testid="title-menu-bar"] center must be hollowed transparent, got ${glassUiAudit.bug2.tbBg}`);
         assert.equal(glassUiAudit.bug2.tbHostBlur, 'none', `Bug 2: [data-testid="title-menu-bar"] parent backdropFilter must be none, got ${glassUiAudit.bug2.tbHostBlur}`);
         assert.equal(glassUiAudit.bug2.tbOverflow, 'visible', `Bug 2: [data-testid="title-menu-bar"] overflow must be visible, got ${glassUiAudit.bug2.tbOverflow}`);
-        assert.ok(String(glassUiAudit.bug2.tbBeforeBlur).includes('blur('), `Bug 2: [data-testid="title-menu-bar"]::before missing blur(, got ${glassUiAudit.bug2.tbBeforeBlur}`);
+        assert.ok(glassUiAudit.bug2.tbPillCount >= 1, `Bug 2: expected compact rounded pills in #agy-prism-topbar-pills, got ${glassUiAudit.bug2.tbPillCount}`);
+        assert.equal(glassUiAudit.bug2.tbPillsZ, '0', `Bug 2 (D18): #agy-prism-topbar-pills z-index expected 0, got ${glassUiAudit.bug2.tbPillsZ}`);
+        assert.equal(glassUiAudit.bug2.tbPillRadius, '12px', `Bug 2: .agy-prism-topbar-pill borderRadius expected 12px, got ${glassUiAudit.bug2.tbPillRadius}`);
+        assert.ok(String(glassUiAudit.bug2.tbPillBlur).includes('blur('), `Bug 2: .agy-prism-topbar-pill missing blur(, got ${glassUiAudit.bug2.tbPillBlur}`);
         assert.equal(glassUiAudit.bug2.tbFixedTop, 0, `Bug 2: #titlebar-fixed-probe top trapped at ${glassUiAudit.bug2.tbFixedTop}`);
         assert.equal(glassUiAudit.bug2.tbFixedLeft, 0, `Bug 2: #titlebar-fixed-probe left trapped at ${glassUiAudit.bug2.tbFixedLeft}`);
         assert.ok(
           parseAlphaFromCssColor(glassUiAudit.bug2.tbDropdownBg) >= 0.94,
           `Bug 2: #hub-title-menu-dropdown alpha expected >= 0.94, got ${glassUiAudit.bug2.tbDropdownBg}`,
+        );
+        assert.ok(
+          parseAlphaFromCssColor(glassUiAudit.bug2.tbDropdownInnerBg) >= 0.90,
+          `Bug 2: P$c descendant #hub-dropdown-inner-card alpha expected >= 0.90, got ${glassUiAudit.bug2.tbDropdownInnerBg}`,
         );
 
         // Bug 3 Assertions
@@ -4736,16 +6038,20 @@ async function main() {
         assert.equal(glassUiAudit.bug3.folderWrapBg, 'rgba(0, 0, 0, 0)', `Bug 3: #hub-project-folder-wrap background must be transparent, got ${glassUiAudit.bug3.folderWrapBg}`);
         assert.equal(glassUiAudit.bug3.folderWrapBeforeContent, 'none', `Bug 3: #hub-project-folder-wrap::before content must be none, got ${glassUiAudit.bug3.folderWrapBeforeContent}`);
 
-        // Bug 4 Assertions (Host)
+        // Bug 4 Assertions (Host ::before carriers: right aux-pane matches center main-chat, both frosted)
         const centerAlpha = parseAlphaFromCssColor(glassUiAudit.bug4.centerIslandBg);
         const rightAlpha = parseAlphaFromCssColor(glassUiAudit.bug4.rightIslandBg);
+        assert.equal(glassUiAudit.bug4.centerIslandHostBg, 'rgba(0, 0, 0, 0)', `Bug 4: center island host must stay transparent (glass on ::before), got ${glassUiAudit.bug4.centerIslandHostBg}`);
+        assert.equal(glassUiAudit.bug4.rightIslandHostBg, 'rgba(0, 0, 0, 0)', `Bug 4: right aux-pane host must stay transparent (glass on ::before), got ${glassUiAudit.bug4.rightIslandHostBg}`);
         assert.equal(
           glassUiAudit.bug4.rightIslandBg,
           glassUiAudit.bug4.centerIslandBg,
-          `Bug 4: right aux-pane (${glassUiAudit.bug4.rightIslandBg}) must match center main-chat (${glassUiAudit.bug4.centerIslandBg})`,
+          `Bug 4: right aux-pane::before (${glassUiAudit.bug4.rightIslandBg}) must match center main-chat::before (${glassUiAudit.bug4.centerIslandBg})`,
         );
-        assert.ok(rightAlpha < 0.55, `Bug 4: right aux-pane alpha (${rightAlpha}) must stay translucent main-chat (< 0.55), NOT dark left-sidebar!`);
-        assert.ok(centerAlpha < 0.55, `Bug 4: center island alpha (${centerAlpha}) expected < 0.55`);
+        assert.ok(String(glassUiAudit.bug4.centerIslandBlur).includes('blur('), `Bug 4 (Req #3): center island::before missing blur(, got ${glassUiAudit.bug4.centerIslandBlur}`);
+        assert.ok(String(glassUiAudit.bug4.rightIslandBlur).includes('blur('), `Bug 4 (Req #3): right aux-pane::before missing blur(, got ${glassUiAudit.bug4.rightIslandBlur}`);
+        assert.ok(rightAlpha > 0.05 && rightAlpha < 0.55, `Bug 4: right aux-pane::before alpha (${rightAlpha}) must stay translucent main-chat (0.05..0.55), NOT dark left-sidebar!`);
+        assert.ok(centerAlpha > 0.05 && centerAlpha < 0.55, `Bug 4: center island::before alpha (${centerAlpha}) expected 0.05..0.55`);
         assert.equal(glassUiAudit.bug4.rightBodyBg, 'rgba(0, 0, 0, 0)', `Bug 4: inner #v234-right-body-probe must be transparent (no double stacking), got ${glassUiAudit.bug4.rightBodyBg}`);
         assert.equal(glassUiAudit.bug4.mainHeaderBg, 'rgba(0, 0, 0, 0)', `Bug 4: inner #v234-main-header-probe in islands mode must be transparent (no double stacking), got ${glassUiAudit.bug4.mainHeaderBg}`);
         assert.ok(
@@ -4755,10 +6061,10 @@ async function main() {
         assert.equal(
           glassUiAudit.bug4.rightIslandAfterCustomBg,
           glassUiAudit.bug4.centerIslandBg,
-          `Bug 4: changing sidebarOpacity/sidebarBlur leaked into right aux-pane (${glassUiAudit.bug4.rightIslandAfterCustomBg})!`,
+          `Bug 4: changing sidebarOpacity/sidebarBlur leaked into right aux-pane::before (${glassUiAudit.bug4.rightIslandAfterCustomBg})!`,
         );
 
-        // Bug 4 Assertion (Studio 21:9 Mini Preview `.mini-aux` === `.mini-center`)
+        // Bug 4 Assertion (Studio 21:9 Mini Preview `.mini-aux` === `.mini-center`, Req #3 frosted glass blur)
         await sleep(600);
         const studioMiniAudit = await studioPage.evaluate(`(() => {
           const aux = document.querySelector('.mini-aux');
@@ -4770,6 +6076,7 @@ async function main() {
             centerBg: center ? getComputedStyle(center).backgroundColor : '',
             sidebarBg: sidebar ? getComputedStyle(sidebar).backgroundColor : '',
             auxBlur: aux ? (getComputedStyle(aux).backdropFilter || getComputedStyle(aux).webkitBackdropFilter || 'none') : '',
+            centerBlur: center ? (getComputedStyle(center).backdropFilter || getComputedStyle(center).webkitBackdropFilter || 'none') : '',
           };
         })()`);
         assert.equal(studioMiniAudit.hasAll, true, 'Bug 4: Studio 21:9 mini preview elements (.mini-aux/.mini-center/.mini-sidebar) missing');
@@ -4783,14 +6090,15 @@ async function main() {
           studioMiniAudit.sidebarBg,
           `Bug 4: Studio 21:9 .mini-aux bg (${studioMiniAudit.auxBg}) must NOT match dark .mini-sidebar bg (${studioMiniAudit.sidebarBg})`,
         );
-        assert.equal(studioMiniAudit.auxBlur, 'none', `Bug 4: Studio 21:9 .mini-aux backdropFilter expected none, got ${studioMiniAudit.auxBlur}`);
+        assert.ok(String(studioMiniAudit.auxBlur).includes('blur('), `Bug 4 (Req #3): Studio 21:9 .mini-aux backdropFilter expected blur(, got ${studioMiniAudit.auxBlur}`);
+        assert.equal(studioMiniAudit.auxBlur, studioMiniAudit.centerBlur, `Bug 4 (Req #3): Studio 21:9 .mini-aux blur (${studioMiniAudit.auxBlur}) must match .mini-center blur (${studioMiniAudit.centerBlur})`);
 
         assert.deepEqual(hubPage.consoleErrors, [], `3D Hub console.error: ${hubPage.consoleErrors.join(' | ')}`);
         assert.deepEqual(hubPage.pageExceptions, [], `3D Hub exception: ${hubPage.pageExceptions.join(' | ')}`);
         assert.deepEqual(studioPage.consoleErrors, [], `3D Studio console.error: ${studioPage.consoleErrors.join(' | ')}`);
         assert.deepEqual(studioPage.pageExceptions, [], `3D Studio exception: ${studioPage.pageExceptions.join(' | ')}`);
 
-        return `Bug1(pill r=${glassUiAudit.bug1.pillRadius}px + bodyBg=#00000000 + gap=${glassUiAudit.bug1.tbToPillGap}px + syncOverlay->#00000000/35) + Bug2(tb r=12px + overflow=visible + fixed 0,0) + Bug3(sticky=${stickyAlpha.toFixed(2)}/proj=${projAlpha.toFixed(2)} > sb=${sbAlpha.toFixed(2)}) + Bug4(right=${rightAlpha.toFixed(2)}==center & Studio .mini-aux==.mini-center) verified`;
+        return `Bug1(pill z=0 r=${glassUiAudit.bug1.pillRadius}px + bodyBg=#00000000 + gap=${glassUiAudit.bug1.tbToPillGap}px + syncOverlay->#00000000/35) + Bug2(hollowed 2.35.1 + ${glassUiAudit.bug2.tbPillCount} pill(s) r=12px + P$c solid) + Bug3(sticky=${stickyAlpha.toFixed(2)}/proj=${projAlpha.toFixed(2)} > sb=${sbAlpha.toFixed(2)}) + Bug4(::before right=${rightAlpha.toFixed(2)}==center + blur & Studio .mini-aux==.mini-center) verified`;
       } finally {
         await browser.closePage(studioPage);
         await browser.closePage(hubPage);
@@ -5117,12 +6425,619 @@ async function main() {
         await browser.closePage(hubPage);
       }
     });
+
+    // -----------------------------------------------------------------------
+    // 3F. PR #8 E2E: `REMOVE_PANEL_EXPR` >1700ms Non-Resurrection & Same-Origin Double-Inject `skinEnabled: false`
+    // -----------------------------------------------------------------------
+    await check('PR #8 E2E: `REMOVE_PANEL_EXPR` >1700ms non-resurrection & same-origin double-inject `skinEnabled: false` remount', '@exec-sidecar / @exec-tests', async () => {
+      const { REMOVE_PANEL_EXPR } = await import(
+        pathToFileURL(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs')).href
+      );
+
+      await engine.applyWallpaper(auroraItem.id, { skinEnabled: true, layoutMode: 'islands' });
+
+      const hubPage = await browser.openPage({
+        url: `${HUB_MOCK_ORIGIN}/hub`,
+        requestHandler: universalHttpRouter,
+      });
+
+      try {
+        const bootOn = buildHostMicroBootstrap({
+          hostOrigin: studio.origin,
+          capToken: studio.hostCapToken,
+          triggerMode: 'both',
+          startupMode: 'gentle-auto',
+          skinEnabled: true,
+        });
+        await hubPage.evaluate(bootOn);
+
+        const waitBoot = Date.now() + 3000;
+        while (Date.now() < waitBoot) {
+          const ok = await hubPage.evaluate(`Boolean(document.getElementById('agy-prism-pill') && window.__agyPrism)`);
+          if (ok) break;
+          await sleep(40);
+        }
+
+        // 1) Same-origin double-inject with `skinEnabled: false` -> must NOT split-brain flip pill back to ON after >1700ms
+        await engine.updateConfig({ skinEnabled: false });
+        const bootOff = buildHostMicroBootstrap({
+          hostOrigin: studio.origin,
+          capToken: studio.hostCapToken,
+          triggerMode: 'both',
+          startupMode: 'gentle-auto',
+          skinEnabled: false,
+        });
+        await hubPage.evaluate(bootOff);
+        // Simulate footer remount while disabled to confirm keepalive remounts with `data-skin-enabled="false"`
+        await hubPage.evaluate(`(() => {
+          const f = document.querySelector('.agy-composer-footer');
+          const c = f.cloneNode(true);
+          const p = c.querySelector('#agy-prism-pill');
+          if (p) p.remove();
+          f.parentNode.replaceChild(c, f);
+        })()`);
+        await sleep(1850);
+        const doubleInjectAudit = await hubPage.evaluate(`(() => {
+          const p = document.getElementById('agy-prism-pill');
+          return {
+            hasPill: Boolean(p),
+            skinAttr: p ? p.getAttribute('data-skin-enabled') : null,
+            liveOnFlag: typeof window.__agyPrismOn === 'boolean' ? window.__agyPrismOn : null,
+            inFooter: Boolean(document.querySelector('.agy-composer-footer #agy-prism-pill')),
+          };
+        })()`);
+        assert.equal(doubleInjectAudit.hasPill, true, 'PR #8 double-inject disabled remount lost persistent #agy-prism-pill');
+        assert.equal(doubleInjectAudit.inFooter, true, 'PR #8 double-inject disabled remount failed to remount inside footer');
+        assert.equal(doubleInjectAudit.skinAttr, 'false', `PR #8 double-inject split-brain flipped data-skin-enabled to "${doubleInjectAudit.skinAttr}"!`);
+        assert.equal(doubleInjectAudit.liveOnFlag, false, 'PR #8 double-inject window.__agyPrismOn did not stay false');
+
+        // 2) `REMOVE_PANEL_EXPR` MUST cancel `__agyPrismKt` keepalive timer & never resurrect `#agy-prism-pill` over >1700ms
+        await hubPage.evaluate(REMOVE_PANEL_EXPR);
+        const afterRemoveNow = await hubPage.evaluate(`({
+          kt: window.__agyPrismKt || 0,
+          hasPill: Boolean(document.getElementById('agy-prism-pill')),
+        })`);
+        assert.equal(afterRemoveNow.kt, 0, `REMOVE_PANEL_EXPR left window.__agyPrismKt active (${afterRemoveNow.kt})`);
+        assert.equal(afterRemoveNow.hasPill, false, 'REMOVE_PANEL_EXPR left #agy-prism-pill in DOM');
+
+        await sleep(1850);
+        const afterWait = await hubPage.evaluate(`({
+          kt: window.__agyPrismKt || 0,
+          hasPill: Boolean(document.getElementById('agy-prism-pill')),
+        })`);
+        assert.equal(afterWait.kt, 0);
+        assert.equal(afterWait.hasPill, false, 'PR #8: #agy-prism-pill resurrected after REMOVE_PANEL_EXPR (>1700ms)!');
+
+        assert.deepEqual(hubPage.consoleErrors, [], `3F Hub console.error: ${hubPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(hubPage.pageExceptions, [], `3F Hub exception: ${hubPage.pageExceptions.join(' | ')}`);
+        return 'same-origin double-inject skinEnabled=false remount + REMOVE_PANEL_EXPR >1700ms non-resurrection verified';
+      } finally {
+        await engine.updateConfig({ skinEnabled: true });
+        await browser.closePage(hubPage);
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // 3G. v2.1.0 Optical Presets (Issue #10 + D2) + Req #1 `hideWelcomeLogo` +
+    //     Req #2 2.35.1 Topbar/WCO/D18 + Req #3 `glassBlur` 0..64px + Req #4 Per-Component Tints E2E
+    // -----------------------------------------------------------------------
+    await check('v2.1.0 Hub+Studio E2E: Issue #10+D2 Optical Presets & Blur-Veil Z-Order, Req #1 hideWelcomeLogo (5 modes), Req #2 2.35.1 Topbar/WCO 30-35-40/D18, Req #3 glassBlur 0..64px & Quick Prism Inheritance, Req #4 Per-Component Surface Isolation', '@exec-host-skin / @exec-host-panel / @exec-studio-ui / @exec-tests', async () => {
+      const { SCENE_PRESETS } = await import(
+        pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href
+      );
+
+      await engine.applyWallpaper(auroraItem.id, {
+        skinEnabled: true,
+        preset: 'islands',
+        layoutMode: 'islands',
+        islandGap: 12,
+        workspacePad: 10,
+        cornerStyle: 'soft',
+        topbarStyle: 'pills',
+        hideWelcomeLogo: false,
+        glassSurfaces: true,
+        glassOpacity: 0.76,
+        glassBlur: 16,
+        sidebarOpacity: null,
+        sidebarBlur: null,
+        surfaceTints: null,
+        fxEnabled: true,
+        parallaxEnabled: true,
+        mediaBlur: 0,
+        fpsCap: 60,
+        language: 'zh',
+      });
+
+      const studioPage = await browser.openPage({
+        url: `${studio.origin}/?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+        requestHandler: universalHttpRouter,
+      });
+      const hubPage = await browser.openPage({
+        url: `${HUB_MOCK_ORIGIN}/hub`,
+        requestHandler: universalHttpRouter,
+      });
+
+      try {
+        await hubPage.call('Page.bringToFront').catch(() => {});
+        await sleep(700);
+        await hubPage.evaluate(`(() => {
+          window.__wcoCalls = [];
+          window.__lastWco = null;
+          window.electronNative = {
+            setTitleBarOverlay(opts) { window.__wcoCalls.push(opts); window.__lastWco = opts; return Promise.resolve(); },
+          };
+        })()`);
+
+        const bootExpr = buildHostMicroBootstrap({
+          hostOrigin: studio.origin,
+          capToken: studio.hostCapToken,
+          triggerMode: 'both',
+          startupMode: 'gentle-auto',
+          skinEnabled: true,
+        });
+        await hubPage.evaluate(bootExpr);
+
+        const readyDeadline = Date.now() + 3500;
+        while (Date.now() < readyDeadline) {
+          const rdy = await hubPage.evaluate(`document.documentElement.getAttribute('data-agy-prism-wallpaper') === 'ready'`);
+          if (rdy) break;
+          await sleep(40);
+        }
+
+        // Open Ctrl+Alt+W Quick Prism Popover so we can verify D18 z-index & Req #3 `.prism-sheet` blur inheritance
+        await hubPage.pressKey({ key: 'w', code: 'KeyW', windowsVirtualKeyCode: 87, modifiers: 3 });
+        const popWait = Date.now() + 3000;
+        while (Date.now() < popWait) {
+          const open = await hubPage.evaluate(`Boolean(window.__agyPrismPanel && window.__agyPrismPanel.status().open)`);
+          if (open) break;
+          await sleep(40);
+        }
+
+        // ---- 1) Issue #10 + D2: Preset switching preserves layout (0px jump), 0.00% transform scale jump, `.agy-prism-blur-veil` z-order, `eco` parallax/fx reset & `fpsCap: 60` restoration ----
+        const snapLayout = () => hubPage.evaluate(`(() => {
+          const rect = (sel) => {
+            const el = document.querySelector(sel);
+            if (!el) return null;
+            const r = el.getBoundingClientRect();
+            return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+          };
+          const mw = document.querySelector('#agy-prism-stage .agy-prism-media-wrap');
+          const bv = document.querySelector('#agy-prism-stage .agy-prism-blur-veil');
+          const sc = document.querySelector('#agy-prism-stage .agy-prism-scrim');
+          const vg = document.querySelector('#agy-prism-stage .agy-prism-vignette');
+          const gr = document.querySelector('#agy-prism-stage .agy-prism-grain');
+          const fx = document.getElementById('agy-prism-fx-canvas');
+          return {
+            shell: rect('.agy-shell'),
+            sidebar: rect('.agy-sidebar'),
+            main: rect('#hub-main-pane'),
+            gutter: rect('[data-testid="sidebar-split"] > div:nth-child(2)'),
+            layoutAttr: document.documentElement.getAttribute('data-prism-layout'),
+            mediaTransform: mw ? getComputedStyle(mw).transform : '',
+            zOrder: [mw, bv, sc, vg, gr].map((el) => (el ? Number(getComputedStyle(el).zIndex) : -99)),
+            blurVeilBackdrop: bv ? (getComputedStyle(bv).backdropFilter || getComputedStyle(bv).webkitBackdropFilter || 'none') : '',
+            px: getComputedStyle(document.documentElement).getPropertyValue('--prism-px').trim(),
+            py: getComputedStyle(document.documentElement).getPropertyValue('--prism-py').trim(),
+            fxDisplay: fx ? getComputedStyle(fx).display : 'none',
+          };
+        })()`);
+
+        const baseLayout = await snapLayout();
+        assert.deepEqual(baseLayout.zOrder, [0, 1, 2, 3, 4], `D2: expected stage z-index stacking [0,1,2,3,4], got ${JSON.stringify(baseLayout.zOrder)}`);
+        assert.equal(baseLayout.layoutAttr, 'islands');
+
+        for (const pId of ['focus', 'eco', 'crystal', 'islands']) {
+          await engine.updateConfig(SCENE_PRESETS[pId].patch);
+          const curCfg = await engine.getConfig();
+          assert.equal(curCfg.fpsCap, pId === 'eco' ? 30 : 60, `Preset ${pId} fpsCap mismatch`);
+          await hubPage.evaluate(`window.__agyPrism.updateConfig(${JSON.stringify(SCENE_PRESETS[pId].patch)})`);
+          await sleep(60);
+          const cur = await snapLayout();
+          assert.deepEqual(cur.shell, baseLayout.shell, `Issue #10: preset "${pId}" shifted .agy-shell layout!`);
+          assert.deepEqual(cur.sidebar, baseLayout.sidebar, `Issue #10: preset "${pId}" shifted .agy-sidebar layout!`);
+          assert.deepEqual(cur.main, baseLayout.main, `Issue #10: preset "${pId}" shifted #hub-main-pane layout!`);
+          assert.deepEqual(cur.gutter, baseLayout.gutter, `Issue #10: preset "${pId}" shifted split gutter layout!`);
+          if (pId === 'focus') {
+            assert.equal(cur.mediaTransform, baseLayout.mediaTransform, `Issue #10: mediaBlur 0->8px caused transform scale jump (${baseLayout.mediaTransform} -> ${cur.mediaTransform})!`);
+            assert.ok(cur.blurVeilBackdrop.includes('blur(8px)'), `D2: focus mode .agy-prism-blur-veil expected blur(8px), got ${cur.blurVeilBackdrop}`);
+          }
+          if (pId === 'eco') {
+            assert.ok(cur.px === '0px' || cur.px === '' || cur.px === '0', `Issue #10 eco: --prism-px not reset (${cur.px})`);
+            assert.ok(cur.py === '0px' || cur.py === '' || cur.py === '0', `Issue #10 eco: --prism-py not reset (${cur.py})`);
+            assert.equal(cur.fxDisplay, 'none', `Issue #10 eco: #agy-prism-fx-canvas not hidden (${cur.fxDisplay})`);
+          }
+        }
+
+        // Studio 21:9 `.mini-blur-veil` exact z-index stacking (0 < 1 < 2 < 3 < 4 < 5)
+        const studioZ = await studioPage.evaluate(`(() => {
+          const sels = ['#mini-media-layer', '.mini-blur-veil', '.mini-scrim', '.mini-vignette', '.mini-grain', '.mini-hub-shell'];
+          return sels.map((s) => {
+            const el = document.querySelector(s);
+            return el ? Number(getComputedStyle(el).zIndex) : -99;
+          });
+        })()`);
+        assert.deepEqual(studioZ, [0, 1, 2, 3, 4, 5], `D2: Studio 21:9 mini-stage z-index stacking expected [0,1,2,3,4,5], got ${JSON.stringify(studioZ)}`);
+
+        // ---- 2) Req #1: `hideWelcomeLogo` across ALL 5 modes + zero false positives + instant restore ----
+        await engine.updateConfig({ hideWelcomeLogo: true });
+        await hubPage.evaluate(`window.__agyPrism.updateConfig({ hideWelcomeLogo: true })`);
+        await sleep(60);
+
+        // Mode 'chat': zero false positives (#chat-inline-svg stays visible)
+        await hubPage.evaluate(`window.__setMockConversationMode('chat')`);
+        await sleep(90);
+        const chatModeAudit = await hubPage.evaluate(`(() => {
+          const svg = document.getElementById('chat-inline-svg');
+          const cs = svg ? getComputedStyle(svg) : null;
+          return {
+            hiddenMarks: document.querySelectorAll('[data-agy-prism-welcome-logo="1"], [data-agy-prism-welcome-logo-pseudo]').length,
+            svgOpacity: cs ? cs.opacity : '',
+            svgVis: cs ? cs.visibility : '',
+          };
+        })()`);
+        assert.equal(chatModeAudit.hiddenMarks, 0, `Req #1: chat mode falsely hid ${chatModeAudit.hiddenMarks} element(s)!`);
+        assert.equal(chatModeAudit.svgOpacity, '0.4', `Req #1: chat inline SVG opacity altered from 0.4 to ${chatModeAudit.svgOpacity}`);
+        assert.equal(chatModeAudit.svgVis, 'visible');
+
+        for (const mode of ['empty-en', 'empty-zh', 'empty-mask', 'empty-pseudo']) {
+          await hubPage.evaluate(`window.__setMockConversationMode(${JSON.stringify(mode)})`);
+          let mAudit = null;
+          const modeDeadline = Date.now() + 1400;
+          while (Date.now() < modeDeadline) {
+            mAudit = await hubPage.evaluate(`(() => {
+              const modeName = ${JSON.stringify(mode)};
+              const starterBtn = document.querySelector('.mock-starter-card');
+              if (modeName === 'empty-pseudo') {
+                const pseudoEl = document.getElementById('mock-welcome-pseudo-wrap');
+                const bef = pseudoEl ? getComputedStyle(pseudoEl, '::before') : null;
+                return {
+                  marked: pseudoEl?.getAttribute('data-agy-prism-welcome-logo-pseudo') === 'before',
+                  opacity: bef ? bef.opacity : '',
+                  vis: bef ? bef.visibility : '',
+                  pe: bef ? bef.pointerEvents : '',
+                  starterVisible: Boolean(starterBtn && getComputedStyle(starterBtn).opacity === '1'),
+                };
+              }
+              const logoId =
+                modeName === 'empty-mask'
+                  ? 'mock-welcome-logo-mask'
+                  : modeName === 'empty-zh'
+                    ? 'mock-welcome-logo-svg-zh'
+                    : 'mock-welcome-logo-svg';
+              const el = document.getElementById(logoId);
+              const cs = el ? getComputedStyle(el) : null;
+              return {
+                marked: el?.getAttribute('data-agy-prism-welcome-logo') === '1',
+                opacity: cs ? cs.opacity : '',
+                vis: cs ? cs.visibility : '',
+                pe: cs ? cs.pointerEvents : '',
+                starterVisible: Boolean(starterBtn && getComputedStyle(starterBtn).opacity === '1'),
+              };
+            })()`);
+            if (mAudit?.marked) break;
+            await sleep(50);
+          }
+          assert.equal(mAudit.marked, true, `Req #1 mode=${mode}: welcome logo was not marked hidden`);
+          assert.equal(mAudit.opacity, '0', `Req #1 mode=${mode}: expected opacity 0, got ${mAudit.opacity}`);
+          assert.equal(mAudit.vis, 'hidden', `Req #1 mode=${mode}: expected visibility hidden, got ${mAudit.vis}`);
+          assert.equal(mAudit.pe, 'none', `Req #1 mode=${mode}: expected pointer-events none, got ${mAudit.pe}`);
+          assert.equal(mAudit.starterVisible, true, `Req #1 mode=${mode}: starter cards must stay visible!`);
+        }
+
+        // Instant restore on hideWelcomeLogo: false
+        await engine.updateConfig({ hideWelcomeLogo: false });
+        await hubPage.evaluate(`window.__agyPrism.updateConfig({ hideWelcomeLogo: false })`);
+        await sleep(60);
+        const restoredOff = await hubPage.evaluate(`document.querySelectorAll('[data-agy-prism-welcome-logo="1"], [data-agy-prism-welcome-logo-pseudo]').length`);
+        assert.equal(restoredOff, 0, 'Req #1: toggling hideWelcomeLogo=false left residual hidden marks');
+
+        // Re-hide then disable skinEnabled=false -> instant restore with 0 residual marks
+        await engine.updateConfig({ hideWelcomeLogo: true });
+        await hubPage.evaluate(`window.__agyPrism.updateConfig({ hideWelcomeLogo: true })`);
+        await sleep(180);
+        await engine.updateConfig({ skinEnabled: false });
+        await hubPage.evaluate(`window.__agyPrism.applyPayload({ skinEnabled: false })`);
+        await sleep(60);
+        const restoredDisable = await hubPage.evaluate(`document.querySelectorAll('[data-agy-prism-welcome-logo="1"], [data-agy-prism-welcome-logo-pseudo]').length`);
+        assert.equal(restoredDisable, 0, 'Req #1: skinEnabled=false left residual welcome hidden marks');
+
+        // Restore skin & chat mode
+        await engine.updateConfig({ skinEnabled: true, hideWelcomeLogo: false });
+        const stRes = await studio.getState();
+        const resPayload = buildClientSkinPayload(stRes.config, auroraItem, stRes.mediaOrigin, { skinEnabled: true });
+        await hubPage.evaluate(`window.__setMockConversationMode('chat'); window.__agyPrism.applyPayload(${JSON.stringify(resPayload)})`);
+        const waitRe = Date.now() + 2500;
+        while (Date.now() < waitRe) {
+          if (await hubPage.evaluate(`document.documentElement.getAttribute('data-agy-prism-wallpaper') === 'ready'`)) break;
+          await sleep(35);
+        }
+
+        // ---- 3) Req #2: 2.35.1 Topbar (empty center transparent, compact pills, `.agy-shell` never drag, P$c open dropdown preserved, wcoH=30/35/40, D18 z-index, `topbarStyle: 'bar'`) ----
+        await hubPage.evaluate(`window.__setMockTopbarDropdownOpen(true)`);
+        await sleep(60);
+        const req2Audit = await hubPage.evaluate(`(() => {
+          const shell = document.querySelector('.agy-shell');
+          const shellDrag = getComputedStyle(shell).webkitAppRegion || getComputedStyle(shell).getPropertyValue('-webkit-app-region').trim();
+          const drop = document.getElementById('hub-title-menu-dropdown');
+          const dropInner = document.getElementById('hub-dropdown-inner-card');
+          const wcoPill = document.getElementById('agy-prism-wco-pill');
+          const tbPills = document.getElementById('agy-prism-topbar-pills');
+          const pop = document.getElementById('agy-prism-popover');
+          const wcoHeights = [];
+          for (const h of [30, 35, 40]) {
+            window.__setMockWco({ visible: true, x: 0, y: 0, width: 1300, height: h });
+            const pillTop = getComputedStyle(document.documentElement).getPropertyValue('--prism-wco-pill-top').trim();
+            const pillH = getComputedStyle(document.documentElement).getPropertyValue('--prism-wco-pill-h').trim();
+            const r = wcoPill ? wcoPill.getBoundingClientRect() : null;
+            wcoHeights.push({
+              h,
+              mode: 'islands',
+              pillTop,
+              cssVar: pillH,
+              rectTop: r ? Math.round(r.top) : -1,
+              rectH: r ? Math.round(r.height) : -1,
+              rectBottom: r ? Math.round(r.top + r.height) : -1,
+            });
+          }
+          // Also verify flush mode (padTop=0 -> pillH === wcoH exactly for 30/35/40)
+          window.__agyPrism.updateConfig({ layoutMode: 'flush' });
+          for (const h of [30, 35, 40]) {
+            window.__setMockWco({ visible: true, x: 0, y: 0, width: 1300, height: h });
+            const pillH = getComputedStyle(document.documentElement).getPropertyValue('--prism-wco-pill-h').trim();
+            const r = wcoPill ? wcoPill.getBoundingClientRect() : null;
+            wcoHeights.push({
+              h,
+              mode: 'flush',
+              pillTop: '0px',
+              cssVar: pillH,
+              rectTop: r ? Math.round(r.top) : -1,
+              rectH: r ? Math.round(r.height) : -1,
+              rectBottom: r ? Math.round(r.top + r.height) : -1,
+            });
+          }
+          window.__agyPrism.updateConfig({ layoutMode: 'islands' });
+          window.__setMockWco({ visible: true, x: 0, y: 0, width: 1300, height: 35 });
+
+          // Switch to topbarStyle='bar' -> full single pill bar
+          window.__agyPrism.updateConfig({ topbarStyle: 'bar' });
+          const barAttr = document.documentElement.getAttribute('data-prism-topbar-style');
+          const barPillCount = tbPills ? tbPills.querySelectorAll('.agy-prism-topbar-pill').length : 0;
+          window.__agyPrism.updateConfig({ topbarStyle: 'pills' });
+
+          return {
+            shellDrag,
+            dropBg: getComputedStyle(drop).backgroundColor,
+            dropInnerBg: getComputedStyle(dropInner).backgroundColor,
+            wcoZ: Number(getComputedStyle(wcoPill).zIndex),
+            tbPillsZ: Number(getComputedStyle(tbPills).zIndex),
+            popZ: pop ? Number(getComputedStyle(pop).zIndex) : -1,
+            wcoHeights,
+            barAttr,
+            barPillCount,
+          };
+        })()`);
+        await hubPage.evaluate(`window.__setMockTopbarDropdownOpen(false)`);
+        assert.notEqual(req2Audit.shellDrag, 'drag', `Req #2: .agy-shell must NEVER have -webkit-app-region: drag (got ${req2Audit.shellDrag})`);
+        assert.ok(parseAlphaFromCssColor(req2Audit.dropBg) >= 0.94, `Req #2 P$c dropdown alpha < 0.94 (${req2Audit.dropBg})`);
+        assert.ok(parseAlphaFromCssColor(req2Audit.dropInnerBg) >= 0.90, `Req #2 P$c inner card alpha < 0.90 (${req2Audit.dropInnerBg})`);
+        assert.equal(req2Audit.wcoZ, 0, 'D18: #agy-prism-wco-pill z-index must be 0');
+        assert.equal(req2Audit.tbPillsZ, 0, 'D18: #agy-prism-topbar-pills z-index must be 0');
+        assert.ok(req2Audit.popZ > req2Audit.wcoZ && req2Audit.popZ === 45, `D18: #agy-prism-popover z-index expected 45 > 0, got ${req2Audit.popZ}`);
+        for (const wh of req2Audit.wcoHeights) {
+          const expectedPadTop = wh.mode === 'islands' ? 2 : 0;
+          const expectedH = Math.max(28, wh.h - expectedPadTop);
+          assert.equal(wh.cssVar, `${expectedH}px`, `Req #2 WCO ${wh.mode} h=${wh.h}: --prism-wco-pill-h expected ${expectedH}px, got ${wh.cssVar}`);
+          assert.equal(wh.rectTop, expectedPadTop, `Req #2 WCO ${wh.mode} h=${wh.h}: rect.top expected ${expectedPadTop}, got ${wh.rectTop}`);
+          assert.equal(wh.rectH, expectedH, `Req #2 WCO ${wh.mode} h=${wh.h}: rect.height expected ${expectedH}, got ${wh.rectH}`);
+          assert.equal(wh.rectBottom, wh.h, `Req #2 WCO ${wh.mode} h=${wh.h}: bottom alignment expected ${wh.h}px (0px drift), got ${wh.rectBottom}px`);
+        }
+        assert.equal(req2Audit.barAttr, 'bar');
+        assert.equal(req2Audit.barPillCount, 1, `Req #2 topbarStyle='bar' expected 1 unified bar pill, got ${req2Audit.barPillCount}`);
+
+        // ---- 4) Req #3: `glassBlur` 0..64px computed `backdrop-filter` + Quick Prism `.prism-sheet` CSS variable inheritance ----
+        const blurSweep = [];
+        for (const blurPx of [0, 16, 64]) {
+          await engine.updateConfig({ glassSurfaces: true, glassBlur: blurPx, sidebarBlur: null });
+          await hubPage.evaluate(`window.__agyPrism.updateConfig({ glassSurfaces: true, glassBlur: ${blurPx}, sidebarBlur: null })`);
+          await sleep(60);
+          const snap = await hubPage.evaluate(`(() => {
+            const bf = (el, pseudo) => {
+              if (!el) return '';
+              const cs = pseudo ? getComputedStyle(el, pseudo) : getComputedStyle(el);
+              return cs.backdropFilter || cs.webkitBackdropFilter || 'none';
+            };
+            return {
+              chat: bf(document.getElementById('v234-center-island-probe'), '::before'),
+              right: bf(document.getElementById('v234-right-island-probe'), '::before'),
+              sidebar: bf(document.querySelector('.agy-sidebar'), '::before'),
+              topbar: bf(document.querySelector('#agy-prism-topbar-pills .agy-prism-topbar-pill')),
+              wco: bf(document.getElementById('agy-prism-wco-pill')),
+              composer: bf(document.querySelector('.surface-composer-card'), '::before'),
+              quickSheet: bf(document.querySelector('#agy-prism-popover .prism-sheet')),
+            };
+          })()`);
+          blurSweep.push({ blurPx, ...snap });
+          if (blurPx === 0) {
+            for (const [k, v] of Object.entries(snap)) {
+              assert.equal(v, 'none', `Req #3 glassBlur=0: ${k} expected 'none', got '${v}'`);
+            }
+          } else {
+            for (const k of ['chat', 'right', 'sidebar', 'topbar', 'wco']) {
+              assert.ok(snap[k].includes(`blur(${blurPx}px)`), `Req #3 glassBlur=${blurPx}: ${k} expected blur(${blurPx}px), got '${snap[k]}'`);
+            }
+            const expectedComposerPx = Math.min(64, blurPx + 4);
+            assert.ok(
+              snap.composer.includes(`blur(${expectedComposerPx}px)`),
+              `Req #3 glassBlur=${blurPx}: composer expected blur(${expectedComposerPx}px) (blurLg), got '${snap.composer}'`,
+            );
+            const expectedQuickPx = Math.min(64, blurPx + 6);
+            assert.ok(
+              snap.quickSheet.includes(`blur(${expectedQuickPx}px)`),
+              `Req #3 glassBlur=${blurPx}: Quick Prism .prism-sheet expected blur(${expectedQuickPx}px) (blurXl), got '${snap.quickSheet}'`,
+            );
+            assert.notEqual(snap.quickSheet.includes('blur(26px)'), true, `Req #3: Quick Prism .prism-sheet still hardcoded blur(26px) at glassBlur=${blurPx}!`);
+          }
+        }
+
+        // ---- 5) Req #4: 7-component `surfaceTints` live isolation on Host ----
+        await engine.updateConfig({ glassBlur: 16, surfaceTints: null });
+        const tintIsoAudit = await hubPage.evaluate(`(() => {
+          window.__agyPrism.updateConfig({ glassBlur: 16, surfaceTints: null });
+          const centerBefore = getComputedStyle(document.getElementById('v234-center-island-probe'), '::before').backgroundColor;
+          window.__agyPrism.updateConfig({
+            surfaceTints: {
+              rightPane: { opacity: 0.85, tone: 0, tint: '#1E3A8A' },
+              topbar: { opacity: 0.90, tone: 0, tint: '#0F766E' },
+              popover: { opacity: 0.10, tone: 0, tint: '' },
+            },
+          });
+          const centerAfter = getComputedStyle(document.getElementById('v234-center-island-probe'), '::before').backgroundColor;
+          const rightAfter = getComputedStyle(document.getElementById('v234-right-island-probe'), '::before').backgroundColor;
+          const topbarPillBg = getComputedStyle(document.querySelector('#agy-prism-topbar-pills .agy-prism-topbar-pill')).backgroundColor;
+          const wcoPillBg = getComputedStyle(document.getElementById('agy-prism-wco-pill')).backgroundColor;
+          const menuBg = getComputedStyle(document.getElementById('hub-menu-probe')).backgroundColor;
+          window.__agyPrism.updateConfig({ surfaceTints: null });
+          return { centerBefore, centerAfter, rightAfter, topbarPillBg, wcoPillBg, menuBg };
+        })()`);
+        assert.equal(tintIsoAudit.centerAfter, tintIsoAudit.centerBefore, 'Req #4: mutating surfaceTints.rightPane leaked into center workspace!');
+        assert.notEqual(tintIsoAudit.rightAfter, tintIsoAudit.centerAfter, 'Req #4: surfaceTints.rightPane did not independently tint right aux-pane!');
+        assert.ok(parseAlphaFromCssColor(tintIsoAudit.rightAfter) >= 0.83, `Req #4: rightPane opacity 0.85 expected >= 0.83, got ${tintIsoAudit.rightAfter}`);
+        assert.equal(tintIsoAudit.topbarPillBg, tintIsoAudit.wcoPillBg, `Req #4: topbar pill (${tintIsoAudit.topbarPillBg}) and WCO pill (${tintIsoAudit.wcoPillBg}) must share surfaceTints.topbar`);
+        assert.ok(parseAlphaFromCssColor(tintIsoAudit.menuBg) >= 0.50, `Req #4: popover floor >= 0.50 violated (${tintIsoAudit.menuBg})`);
+
+        assert.deepEqual(hubPage.consoleErrors, [], `3G Hub console.error: ${hubPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(hubPage.pageExceptions, [], `3G Hub exception: ${hubPage.pageExceptions.join(' | ')}`);
+        assert.deepEqual(studioPage.consoleErrors, [], `3G Studio console.error: ${studioPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(studioPage.pageExceptions, [], `3G Studio exception: ${studioPage.pageExceptions.join(' | ')}`);
+
+        return 'Issue#10+D2(0px layout jump, 0% scale jump, z=0..4 & Studio 0..5) + Req#1(5 modes + restore) + Req#2(2.35.1 hollowed/P$c/wcoH=30-35-40/D18/bar) + Req#3(blur 0/16/64 + Quick Prism) + Req#4(surfaceTints isolation) verified';
+      } finally {
+        await browser.closePage(studioPage);
+        await browser.closePage(hubPage);
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // 3H. Req #6: `Antigravity-Chinese-Localization` (`dom-translator.js`) Coexistence E2E
+    // -----------------------------------------------------------------------
+    await check('Req #6 E2E: `Antigravity-Chinese-Localization` coexistence (Hub topbar zh-CN pill shrink + 0 Prism DOM mutations + Studio `window.__agyDomTranslatorInitialized` & `#app.agy-prism-root` guard)', '@exec-host-skin / @exec-studio-ui / @exec-tests', async () => {
+      await engine.applyWallpaper(auroraItem.id, { skinEnabled: true, topbarStyle: 'pills', layoutMode: 'islands', language: 'en' });
+
+      const studioPage = await browser.openPage({
+        url: `${studio.origin}/?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+        requestHandler: universalHttpRouter,
+      });
+      const hubPage = await browser.openPage({
+        url: `${HUB_MOCK_ORIGIN}/hub`,
+        requestHandler: universalHttpRouter,
+      });
+
+      try {
+        await hubPage.call('Page.bringToFront').catch(() => {});
+        await sleep(700);
+        const bootExpr = buildHostMicroBootstrap({
+          hostOrigin: studio.origin,
+          capToken: studio.hostCapToken,
+          triggerMode: 'both',
+          startupMode: 'gentle-auto',
+          skinEnabled: true,
+        });
+        await hubPage.evaluate(bootExpr);
+        const waitRdy = Date.now() + 3000;
+        while (Date.now() < waitRdy) {
+          if (await hubPage.evaluate(`document.documentElement.getAttribute('data-agy-prism-wallpaper') === 'ready'`)) break;
+          await sleep(40);
+        }
+
+        // Open Ctrl+Alt+W Quick Prism Popover so ALL Prism surfaces exist simultaneously when `dom-translator.js` sweeps
+        await hubPage.pressKey({ key: 'w', code: 'KeyW', windowsVirtualKeyCode: 87, modifiers: 3 });
+        const popWait = Date.now() + 3000;
+        while (Date.now() < popWait) {
+          if (await hubPage.evaluate(`Boolean(window.__agyPrismPanel && window.__agyPrismPanel.status().open)`)) break;
+          await sleep(40);
+        }
+
+        const pillWidthBefore = await hubPage.evaluate(`(() => {
+          const p = document.querySelector('#agy-prism-topbar-pills .agy-prism-topbar-pill');
+          return p ? Math.round(p.getBoundingClientRect().width) : 0;
+        })()`);
+
+        const hubTransRes = await hubPage.evaluate(`window.__runMockDomTranslator()`);
+        let hubAfterZh = null;
+        const shrinkDeadline = Date.now() + 1500;
+        while (Date.now() < shrinkDeadline) {
+          hubAfterZh = await hubPage.evaluate(`(() => {
+            const items = Array.from(document.querySelectorAll('[data-testid="title-menu-bar-item"]')).map((e) => e.textContent.trim());
+            const p = document.querySelector('#agy-prism-topbar-pills .agy-prism-topbar-pill');
+            return {
+              items,
+              pillWidthAfter: p ? Math.round(p.getBoundingClientRect().width) : 0,
+            };
+          })()`);
+          if (hubAfterZh.pillWidthAfter > 0 && hubAfterZh.pillWidthAfter < pillWidthBefore) break;
+          await sleep(40);
+        }
+
+        assert.equal(hubTransRes.skippedInit, false, 'Hub page should allow Antigravity-Chinese-Localization to translate host UI');
+        assert.deepEqual(hubAfterZh.items, ['工作区', '视图', '窗口'], `Host menu items not translated cleanly: ${JSON.stringify(hubAfterZh.items)}`);
+        assert.deepEqual(hubTransRes.touchedPrismIds, [], `dom-translator mutated Prism DOM nodes on Hub: ${hubTransRes.touchedPrismIds.join(', ')}`);
+        assert.ok(
+          hubAfterZh.pillWidthAfter > 0 && hubAfterZh.pillWidthAfter < pillWidthBefore,
+          `Req #6+Req #2: .agy-prism-topbar-pill did not shrink after zh-CN menu translation (${pillWidthBefore}px -> ${hubAfterZh.pillWidthAfter}px)`,
+        );
+
+        // Studio page: verify BOTH `window.__agyDomTranslatorInitialized === true` AND `#app.agy-prism-root` non-<body> codeClassPattern guard!
+        const studioTransAudit = await studioPage.evaluate(`(() => {
+          const codeClassPattern = /(?:^|[\\s_-])(code|editor|monaco|xterm|terminal|syntax|highlight|prism|hljs|shiki|cm-|ace_)/i;
+          const isInsideCodeOrPrism = (node) => {
+            let cur = node.nodeType === 1 ? node : node.parentElement;
+            while (cur && cur !== document.body) {
+              const cls = typeof cur.className === 'string' ? cur.className : '';
+              if (cls && codeClassPattern.test(cls)) return true;
+              cur = cur.parentElement;
+            }
+            return false;
+          };
+          const app = document.getElementById('app');
+          const initFlag = Boolean(window.__agyDomTranslatorInitialized);
+          const skipTags = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
+          let unprotectedNodes = 0;
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          let n;
+          while ((n = walker.nextNode())) {
+            if (!n.nodeValue || !n.nodeValue.trim()) continue;
+            const pTag = n.parentElement ? n.parentElement.tagName.toUpperCase() : '';
+            if (skipTags.has(pTag)) continue;
+            if (!isInsideCodeOrPrism(n)) unprotectedNodes += 1;
+          }
+          return {
+            initFlag,
+            appClass: app ? app.className : '',
+            unprotectedNodes,
+          };
+        })()`);
+
+        assert.equal(studioTransAudit.initFlag, true, 'Studio page missing window.__agyDomTranslatorInitialized === true');
+        assert.ok(studioTransAudit.appClass.includes('agy-prism-root'), `Studio #app missing .agy-prism-root class (got "${studioTransAudit.appClass}")`);
+        assert.equal(studioTransAudit.unprotectedNodes, 0, `Studio page had ${studioTransAudit.unprotectedNodes} text nodes outside non-<body> codeClassPattern guard!`);
+
+        assert.deepEqual(hubPage.consoleErrors, [], `3H Hub console.error: ${hubPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(hubPage.pageExceptions, [], `3H Hub exception: ${hubPage.pageExceptions.join(' | ')}`);
+        assert.deepEqual(studioPage.consoleErrors, [], `3H Studio console.error: ${studioPage.consoleErrors.join(' | ')}`);
+        assert.deepEqual(studioPage.pageExceptions, [], `3H Studio exception: ${studioPage.pageExceptions.join(' | ')}`);
+
+        return `Hub zh-CN pill shrink (${pillWidthBefore}px->${hubAfterZh.pillWidthAfter}px, 0 Prism mutations) + Studio initFlag=true & 0 unprotected text nodes`;
+      } finally {
+        await browser.closePage(studioPage);
+        await browser.closePage(hubPage);
+      }
+    });
   } finally {
     await browser.close().catch(() => {});
     if (fallbackMediaSrv) await fallbackMediaSrv.close().catch(() => {});
     if (studio) await studio.close().catch(() => {});
     try {
-      fs.rmSync(SCRATCH_ROOT, { recursive: true, force: true });
+      fs.rmSync(SCRATCH_ROOT, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 });
     } catch {}
   }
 

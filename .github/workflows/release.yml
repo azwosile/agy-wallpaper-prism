@@ -1,0 +1,225 @@
+name: Release Wallpaper Prism
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to verify and publish (defaults to v<plugin.json version>)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, Verify & Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify release tag matches plugin.json & package.json
+        id: version
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import fs from "node:fs";
+
+            const allowedKeys = new Set([
+              "name", "displayName", "description", "version", "logo",
+              "suggestedPrompts", "author", "homepage", "repository", "disabled",
+            ]);
+            const plugin = JSON.parse(fs.readFileSync("plugin.json", "utf8"));
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+
+            const badKeys = Object.keys(plugin).filter((k) => !allowedKeys.has(k));
+            assert.deepEqual(badKeys, [], `Forbidden plugin.json keys: ${badKeys.join(", ")}`);
+            assert.equal(plugin.name, "agy-wallpaper-prism");
+            assert.equal(pkg.name, "agy-wallpaper-prism");
+            assert.match(plugin.version, /^\d+\.\d+\.\d+$/, `Expected stable X.Y.Z version, got ${plugin.version}`);
+            assert.equal(pkg.version, plugin.version, `package.json (${pkg.version}) != plugin.json (${plugin.version})`);
+
+            const expectedTag = `v${plugin.version}`;
+            const eventName = process.env.GITHUB_EVENT_NAME || "";
+            const resolvedTag = eventName === "push"
+              ? String(process.env.GITHUB_REF_NAME || "").trim()
+              : (String(process.env.INPUT_TAG || "").trim() || expectedTag);
+
+            assert.equal(resolvedTag, expectedTag, `Tag "${resolvedTag}" does not match plugin.json "${expectedTag}"`);
+
+            const readme = fs.readFileSync("README.md", "utf8");
+            const schemaSrc = fs.readFileSync("src/shared/schema.mjs", "utf8");
+            const wallSrc = fs.readFileSync("src/host/wallpaper-inject.js", "utf8");
+            const panelSrc = fs.readFileSync("src/host/panel-inject.js", "utf8");
+            const verRe = plugin.version.replace(/\./g, "\\.");
+            assert.match(readme, new RegExp(`\\*\\*Version\\*\\*:\\s*\`${verRe}\``), "README.md version mismatch");
+            assert.match(schemaSrc, new RegExp(`export const PLUGIN_VERSION\\s*=\\s*[\x27"]${verRe}[\x27"]`), "schema.mjs PLUGIN_VERSION mismatch");
+            assert.match(schemaSrc, new RegExp(`skinVersion:\\s*[\x27"]${verRe}[\x27"]`), "schema.mjs skinVersion mismatch");
+            assert.match(wallSrc, new RegExp(`var VERSION\\s*=\\s*[\x27"]${verRe}[\x27"]`), "wallpaper-inject.js VERSION mismatch");
+            assert.match(panelSrc, new RegExp(`var VERSION\\s*=\\s*[\x27"]${verRe}[\x27"]`), "panel-inject.js VERSION mismatch");
+
+            fs.appendFileSync(process.env.GITHUB_ENV, `RELEASE_TAG=${resolvedTag}\nPLUGIN_VERSION=${plugin.version}\n`);
+            console.log(`Verified release tag ${resolvedTag} across all 7 version anchors.`);
+          '
+
+      - name: Build Studio bundle & verify committed index.html is deterministic
+        run: |
+          node scripts/build.mjs
+          git diff --exit-code sidecars/prism_studio/index.html
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import fs from "node:fs";
+            const html = fs.readFileSync("sidecars/prism_studio/index.html", "utf8");
+            assert.equal(html.includes("\r"), false, "sidecars/prism_studio/index.html must be pure LF");
+            assert.ok(html.includes("<style") && html.includes("<script") && html.includes("id=\"app\""), "index.html missing inline bundle structure");
+            assert.ok(html.includes(process.env.PLUGIN_VERSION), `index.html missing version ${process.env.PLUGIN_VERSION}`);
+            console.log(`Verified deterministic pure-LF sidecars/prism_studio/index.html (${html.length} bytes).`);
+          '
+
+      - name: Run cross-platform static & unit verification
+        run: |
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import { execFileSync } from "node:child_process";
+            import fs from "node:fs";
+            import path from "node:path";
+
+            // 1. Syntax check every .mjs / .js file across scripts, host, sidecars, src, test
+            const scanRoots = ["scripts", "host", "sidecars", "src", "test"];
+            const jsFiles = [];
+            const walk = (dir) => {
+              if (!fs.existsSync(dir)) return;
+              for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (ent.name === "node_modules" || ent.name.startsWith(".tmp")) continue;
+                const full = path.join(dir, ent.name);
+                if (ent.isDirectory()) walk(full);
+                else if (ent.isFile() && /\.(?:mjs|js)$/.test(ent.name)) jsFiles.push(full);
+              }
+            };
+            for (const r of scanRoots) walk(r);
+            jsFiles.sort();
+            assert.ok(jsFiles.length >= 20, `Unexpectedly few JS/MJS files: ${jsFiles.length}`);
+            for (const file of jsFiles) {
+              execFileSync(process.execPath, ["--check", file], { stdio: "pipe" });
+            }
+
+            // 2. Sidecar contract, assets, SKILL.md & Zero-Enable Ephemeral CDP audit
+            const sc = JSON.parse(fs.readFileSync("sidecars/prism_studio/sidecar.json", "utf8"));
+            assert.equal(sc.command, "node");
+            assert.deepEqual(sc.args, ["main.mjs"]);
+            assert.equal(sc.restart_policy, "on-failure");
+            assert.equal(sc.has_web_ui, true);
+
+            const cdpSrc = fs.readFileSync("sidecars/prism_studio/cdp-bridge.mjs", "utf8");
+            for (const forbidden of ["Page.enable", "Runtime.enable", "Page.addScriptToEvaluateOnNewDocument", "Runtime.addBinding"]) {
+              assert.equal(cdpSrc.includes(forbidden), false, `Forbidden invasive CDP call found: ${forbidden}`);
+            }
+
+            const svg = fs.readFileSync("assets/logo.svg", "utf8");
+            assert.ok(svg.includes("<svg") && svg.includes("viewBox=\"0 0 256 256\""), "Invalid assets/logo.svg");
+            const skill = fs.readFileSync("skills/wallpaper-prism/SKILL.md", "utf8");
+            assert.ok(skill.includes("sidecar://agy-wallpaper-prism/prism_studio/"), "Missing sidecar:// URI in SKILL.md");
+            assert.ok(skill.includes("customization://agy-wallpaper-prism"), "Missing customization:// URI in SKILL.md");
+
+            // 3. Unit checks on shared SemVer, schema, and zh/en i18n parity
+            const semver = await import("./src/shared/semver.mjs");
+            assert.equal(semver.isNewerVersion("2.1.0", "2.0.9"), true);
+            assert.equal(semver.isNewerVersion("2.1.0", "2.1.0"), false);
+            assert.equal(semver.compareSemver("2.1.0", "2.1.0-rc.1") > 0, true);
+
+            const { PLUGIN_VERSION, sanitizeConfig } = await import("./src/shared/schema.mjs");
+            assert.equal(PLUGIN_VERSION, process.env.PLUGIN_VERSION);
+            const sanitized = sanitizeConfig({});
+            assert.equal(sanitized.startupMode, "gentle-auto");
+
+            const { DICT } = await import("./src/shared/i18n.mjs");
+            const zhKeys = Object.keys(DICT.zh).sort();
+            const enKeys = Object.keys(DICT.en).sort();
+            assert.deepEqual(zhKeys, enKeys, "zh/en i18n key mismatch");
+
+            console.log(`Static & unit checks PASSED (${jsFiles.length} JS/MJS syntax-checked, ${zhKeys.length} i18n keys verified).`);
+          '
+
+      - name: Pack deterministic release artifacts (.tar.gz, .sha256, .zip)
+        run: |
+          node scripts/pack-release.mjs
+          ls -la dist/
+
+      - name: Verify release artifacts integrity & tar-safe extraction
+        run: |
+          set -euo pipefail
+          TAR="dist/agy-wallpaper-prism-${RELEASE_TAG}.tar.gz"
+          SHA="dist/agy-wallpaper-prism-${RELEASE_TAG}.tar.gz.sha256"
+          ZIP="dist/agy-wallpaper-prism-${RELEASE_TAG}.zip"
+
+          test -s "${TAR}"
+          test -s "${SHA}"
+          test -s "${ZIP}"
+
+          (cd dist && sha256sum -c "agy-wallpaper-prism-${RELEASE_TAG}.tar.gz.sha256")
+          tar -tzf "${TAR}" >/dev/null
+          unzip -t "${ZIP}" >/dev/null
+
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import fs from "node:fs";
+            import os from "node:os";
+            import path from "node:path";
+            import { extractSafeTarGz } from "./src/engine/tar-safe.mjs";
+
+            const tarPath = `dist/agy-wallpaper-prism-${process.env.RELEASE_TAG}.tar.gz`;
+            const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "prism-release-check-"));
+            try {
+              const res = extractSafeTarGz({
+                tarGzBuffer: fs.readFileSync(tarPath),
+                destDir: tmpDir,
+              });
+              assert.ok(fs.existsSync(path.join(tmpDir, "plugin.json")), "Extracted archive missing plugin.json");
+              assert.ok(fs.existsSync(path.join(tmpDir, "sidecars/prism_studio/index.html")), "Extracted archive missing index.html");
+              assert.equal(fs.existsSync(path.join(tmpDir, "test")), false, "Extracted archive must not contain test/");
+              assert.equal(fs.existsSync(path.join(tmpDir, ".git")), false, "Extracted archive must not contain .git/");
+              console.log(`tar-safe extraction check PASSED (${JSON.stringify(res)}).`);
+            } finally {
+              fs.rmSync(tmpDir, { recursive: true, force: true });
+            }
+          '
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAR="dist/agy-wallpaper-prism-${RELEASE_TAG}.tar.gz"
+          SHA="dist/agy-wallpaper-prism-${RELEASE_TAG}.tar.gz.sha256"
+          ZIP="dist/agy-wallpaper-prism-${RELEASE_TAG}.zip"
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" "${TAR}" "${SHA}" "${ZIP}" --clobber
+          elif [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            gh release create "${RELEASE_TAG}" "${TAR}" "${SHA}" "${ZIP}" \
+              --verify-tag \
+              --title "Wallpaper Prism ${RELEASE_TAG}" \
+              --generate-notes
+          else
+            gh release create "${RELEASE_TAG}" "${TAR}" "${SHA}" "${ZIP}" \
+              --target "${GITHUB_SHA}" \
+              --title "Wallpaper Prism ${RELEASE_TAG}" \
+              --generate-notes
+          fi
