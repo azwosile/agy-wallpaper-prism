@@ -1002,6 +1002,7 @@ function inspectWeProjectDir({
     let durationSec = null;
     let fps = null;
     let hasSceneVideo = false;
+    let hasSceneImage = false;
     let hasSceneAudio = false;
     let fileSize = primaryStat?.size || sceneStat?.size || fencedStat?.size || 0;
 
@@ -1030,17 +1031,21 @@ function inspectWeProjectDir({
     } else if (kind === 'scene' && sceneContainerAbs) {
       const sceneInfo = inspectSceneContainer(sceneContainerAbs);
       hasSceneVideo = Boolean(sceneInfo.hasVideo);
+      hasSceneImage = Boolean(sceneInfo.hasImage && sceneInfo.imageSource);
       hasSceneAudio = Boolean(sceneInfo.hasAudio);
       if (sceneInfo.videoSource?.width && sceneInfo.videoSource?.height) {
         width = sceneInfo.videoSource.width;
         height = sceneInfo.videoSource.height;
+      } else if (hasSceneImage && sceneInfo.imageSource.width > 0 && sceneInfo.imageSource.height > 0) {
+        width = sceneInfo.imageSource.width;
+        height = sceneInfo.imageSource.height;
       } else if (previewAbs) {
         const dim = probeImageDimensions(previewAbs);
         if (dim) { width = dim.width; height = dim.height; }
       }
     }
 
-    probe = { width, height, durationSec, fps, hasSceneVideo, hasSceneAudio, fileSize };
+    probe = { width, height, durationSec, fps, hasSceneVideo, hasSceneImage, hasSceneAudio, fileSize };
   }
   nextCacheMap[id] = { fp: fingerprint, probe };
 
@@ -1097,6 +1102,7 @@ function inspectWeProjectDir({
       slidesAbs: slides,
       sceneContainerAbs,
       hasSceneVideo: Boolean(probe.hasSceneVideo),
+      hasSceneImage: Boolean(probe.hasSceneImage),
       hasSceneAudio: Boolean(probe.hasSceneAudio),
       looseAudioAbs,
       webEntryRel: kind === 'web' && primaryAbs

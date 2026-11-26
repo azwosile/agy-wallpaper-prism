@@ -26,6 +26,7 @@ import {
   hasRawTraversalAttempt,
   resolveDefaultPrismDataDir,
 } from '../../src/engine/index.mjs';
+import { tokenForWallpaperId } from '../../src/engine/media-server.mjs';
 import { createPrismUpdater, isManagedSidecar } from '../../src/engine/updater.mjs';
 import * as hostModule from '../../src/host/index.mjs';
 import {
@@ -760,6 +761,27 @@ export async function createPrismStudioServer(options = {}) {
     const p = typeof addr === 'object' && addr ? addr.port : 0;
     return p > 0 ? `plugin://agy-wallpaper-prism--prism_studio-${p}` : '';
   };
+  const STREAMING_PROXY_ROUTES = new Set(['media', 'scene-video', 'mse-fmp4', 'audio', 'scene-audio']);
+  const MAX_CONCURRENT_STREAM_PROXIES = Math.max(1, Number(options.maxConcurrentStreamProxies || 2));
+  const STREAM_BACKPRESSURE_STALL_MS = Math.max(50, Number(options.streamBackpressureStallMs || 10000));
+  const activeMediaProxies = new Set(); // { token, subRoute, abort }
+  const abortStaleMediaProxies = (keepTokenOrId = '') => {
+    const raw = String(keepTokenOrId || '').trim();
+    const keepTokens = new Set();
+    if (raw) {
+      keepTokens.add(raw);
+      keepTokens.add(tokenForWallpaperId(raw));
+    }
+    for (const entry of [...activeMediaProxies]) {
+      if (!STREAMING_PROXY_ROUTES.has(entry.subRoute)) continue;
+      if (keepTokens.size > 0 && keepTokens.has(entry.token)) continue;
+      try {
+        entry.abort();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
 
   const envPort = parseInt(
     process.env.ANTIGRAVITY_SIDECAR_WEB_PORT ||
@@ -1424,6 +1446,8 @@ export async function createPrismStudioServer(options = {}) {
     'wallpaper.apply': async (params = {}) => {
       const wid = String(params.wallpaperId || params.id || '');
       localSessionAwake = true;
+      abortStaleMediaProxies(wid);
+      engine.mediaServer?.prunePinnedSessions?.(wid);
       await withDeferredPush(
         () => engine.applyWallpaper(wid, { ...(params.patch || {}), skinEnabled: true }),
         { ensureRevBump: true },
@@ -1439,6 +1463,10 @@ export async function createPrismStudioServer(options = {}) {
     'playlist.step': async (params = {}) => {
       const dir = Number(params.direction) === -1 ? -1 : 1;
       await withDeferredPush(() => engine.stepPlaylist(dir, String(params.reason || 'rpc')), { ensureRevBump: true });
+      const nextCfg = await engine.getConfig();
+      const nextWid = String(nextCfg?.activeWallpaperId || '');
+      abortStaleMediaProxies(nextWid);
+      engine.mediaServer?.prunePinnedSessions?.(nextWid);
       await pushToHost();
       return buildCanonicalState();
     },
@@ -1483,12 +1511,16 @@ export async function createPrismStudioServer(options = {}) {
       return { ok: true, extractedAccent: entry };
     },
     'skin.restore': async () => {
+      abortStaleMediaProxies('');
+      engine.mediaServer?.prunePinnedSessions?.('');
       await withDeferredPush(() => engine.updateConfig({ skinEnabled: false }), { ensureRevBump: true });
       await pushToHost();
       return buildCanonicalState();
     },
     'skin.panicRestore': async () => {
       localSessionAwake = false;
+      abortStaleMediaProxies('');
+      engine.mediaServer?.prunePinnedSessions?.('');
       await withDeferredPush(async () => {
         await engine.updateConfig({ skinEnabled: false });
         await engine.store?.flush?.();
@@ -1533,6 +1565,8 @@ export async function createPrismStudioServer(options = {}) {
           await pushToHost();
         }
       } else {
+        abortStaleMediaProxies('');
+        engine.mediaServer?.prunePinnedSessions?.('');
         await withDeferredPush(() => engine.updateConfig({ skinEnabled: false }), { ensureRevBump: true });
         await pushToHost();
       }
@@ -1859,17 +1893,28 @@ export async function createPrismStudioServer(options = {}) {
         sendJson(res, 403, { ok: false, error: 'Forbidden: path traversal blocked' }, proxyCors);
         return;
       }
-      const proxyMatch = /^\/media-proxy\/(media|preview|slide|slides|audio|scene-video|scene-audio|video-stage|scene-live|web|scene-files|mse-fmp4)(\/.*)?$/.exec(pathname);
+      const proxyMatch = /^\/media-proxy\/(media|preview|slide|slides|audio|scene-video|scene-audio|scene-image|video-stage|scene-live|web|scene-files|mse-fmp4)(\/.*)?$/.exec(pathname);
       if (!proxyMatch) {
         sendJson(res, 404, { ok: false, error: 'Unsupported media-proxy sub-route' }, proxyCors);
         return;
       }
       const [, subRoute, rest = ''] = proxyMatch;
+      const proxyTokenRaw = rest.replace(/^\/+/, '').split('/')[0] || '';
+      let proxyToken = proxyTokenRaw;
+      try {
+        proxyToken = decodeURIComponent(proxyTokenRaw);
+      } catch {
+        /* keep raw */
+      }
       const upstreamPath = `/${subRoute}${rest}${urlObj.search}`;
       const fwdHeaders = {};
       if (req.headers.range) fwdHeaders.range = String(req.headers.range);
       if (req.headers['if-range']) fwdHeaders['if-range'] = String(req.headers['if-range']);
       if (req.headers['if-none-match']) fwdHeaders['if-none-match'] = String(req.headers['if-none-match']);
+      if (subRoute === 'web') {
+        const pOrigin = getPluginOrigin();
+        if (pOrigin) fwdHeaders['x-prism-proxy-base'] = `${pOrigin}/media-proxy`;
+      }
 
       const passthroughKeys = [
         'content-type',
@@ -1881,6 +1926,7 @@ export async function createPrismStudioServer(options = {}) {
         'x-prism-mse-mime',
         'x-prism-animated-preview',
       ];
+      const isStreamingRoute = STREAMING_PROXY_ROUTES.has(subRoute);
 
       const isInMemory = typeof req.socket?.setNoDelay !== 'function';
       if (isInMemory && typeof engine.mediaServer?.inject === 'function') {
@@ -1894,6 +1940,9 @@ export async function createPrismStudioServer(options = {}) {
           if (up.headers && up.headers[hk] !== undefined) {
             outHeaders[hk] = up.headers[hk];
           }
+        }
+        if (isStreamingRoute) {
+          outHeaders['cache-control'] = 'no-store';
         }
         res.writeHead(up.status || up.statusCode || 200, outHeaders);
         if (req.method === 'HEAD') res.end();
@@ -1911,10 +1960,53 @@ export async function createPrismStudioServer(options = {}) {
       const targetUrl = new URL(`${mediaOrigin}${upstreamPath}`);
       await new Promise((resolveProxy) => {
         let settled = false;
+        let proxyEntry = null;
+        let activeUpRes = null;
+        let backpressuredSince = 0;
+        let stallTimer = null;
+        let onResDrain = null;
+        const clearStallTimer = () => {
+          if (stallTimer) {
+            clearInterval(stallTimer);
+            stallTimer = null;
+          }
+        };
         const finish = () => {
           if (settled) return;
           settled = true;
+          clearStallTimer();
+          if (onResDrain && typeof res.off === 'function') {
+            try { res.off('drain', onResDrain); } catch { /* ignore */ }
+          }
+          if (proxyEntry) {
+            activeMediaProxies.delete(proxyEntry);
+            proxyEntry = null;
+          }
           resolveProxy();
+        };
+        const abortUpstreamOnly = () => {
+          clearStallTimer();
+          try { if (activeUpRes && typeof activeUpRes.unpipe === 'function') activeUpRes.unpipe(res); } catch { /* ignore */ }
+          try { if (activeUpRes) activeUpRes.destroy(); } catch { /* ignore */ }
+          try { upReq.destroy(); } catch { /* ignore */ }
+          finish();
+        };
+        const abortStaleStream = () => {
+          clearStallTimer();
+          try { if (activeUpRes && typeof activeUpRes.unpipe === 'function') activeUpRes.unpipe(res); } catch { /* ignore */ }
+          try { if (activeUpRes) activeUpRes.destroy(); } catch { /* ignore */ }
+          try { upReq.destroy(); } catch { /* ignore */ }
+          if (!res.writableEnded) {
+            // Use TCP RST (resetAndDestroy) instead of graceful FIN (res.destroy) so a paused/zero-window
+            // peer (e.g. Electron/language_server plugin:// proxy) releases its pool slot immediately instead
+            // of leaving sockets wedged in FIN_WAIT_1.
+            if (req.socket && typeof req.socket.resetAndDestroy === 'function') {
+              try { req.socket.resetAndDestroy(); } catch { /* ignore */ }
+            } else {
+              try { res.destroy(); } catch { /* ignore */ }
+            }
+          }
+          finish();
         };
         const upReq = httpRequest(
           {
@@ -1926,10 +2018,17 @@ export async function createPrismStudioServer(options = {}) {
             headers: fwdHeaders,
           },
           (upRes) => {
+            activeUpRes = upRes;
             const outHeaders = { ...proxyCors };
             for (const hk of passthroughKeys) {
               if (upRes.headers[hk] !== undefined) {
                 outHeaders[hk] = upRes.headers[hk];
+              }
+            }
+            if (isStreamingRoute) {
+              outHeaders['cache-control'] = 'no-store';
+              if (req.method !== 'HEAD') {
+                outHeaders.Connection = 'close';
               }
             }
             res.writeHead(upRes.statusCode || 200, outHeaders);
@@ -1944,18 +2043,54 @@ export async function createPrismStudioServer(options = {}) {
               finish();
             });
             res.on('finish', finish);
-            upRes.pipe(res);
+            if (isStreamingRoute) {
+              onResDrain = () => {
+                backpressuredSince = 0;
+                if (!settled && activeUpRes && !activeUpRes.destroyed) {
+                  activeUpRes.resume();
+                }
+              };
+              res.on('drain', onResDrain);
+              upRes.on('data', (chunk) => {
+                if (settled || res.writableEnded) return;
+                if (!res.write(chunk)) {
+                  if (!backpressuredSince) backpressuredSince = Date.now();
+                  upRes.pause();
+                }
+              });
+              upRes.on('end', () => {
+                backpressuredSince = 0;
+                if (!res.writableEnded) {
+                  try { res.end(); } catch { /* ignore */ }
+                }
+                finish();
+              });
+              const pollMs = Math.min(3000, Math.max(50, Math.floor(STREAM_BACKPRESSURE_STALL_MS / 3)));
+              stallTimer = setInterval(() => {
+                if (!settled && backpressuredSince > 0 && Date.now() - backpressuredSince >= STREAM_BACKPRESSURE_STALL_MS) {
+                  abortStaleStream();
+                }
+              }, pollMs);
+              stallTimer.unref?.();
+            } else {
+              upRes.pipe(res);
+            }
           },
         );
-        const abortUpstream = () => {
-          if (!res.writableEnded) {
-            try { upReq.destroy(); } catch { /* ignore */ }
+        if (req.method !== 'HEAD' && isStreamingRoute) {
+          while (activeMediaProxies.size >= MAX_CONCURRENT_STREAM_PROXIES) {
+            const oldest = activeMediaProxies.values().next().value;
+            if (!oldest) break;
+            try { oldest.abort(); } catch { /* ignore */ }
+            activeMediaProxies.delete(oldest);
           }
-          finish();
-        };
-        req.on('aborted', abortUpstream);
+          proxyEntry = { token: proxyToken, subRoute, abort: abortStaleStream };
+          activeMediaProxies.add(proxyEntry);
+        }
+        req.on('aborted', abortUpstreamOnly);
+        res.on('error', abortUpstreamOnly);
         res.on('close', () => {
-          if (!res.writableEnded) abortUpstream();
+          if (!res.writableEnded) abortUpstreamOnly();
           else finish();
         });
         upReq.on('error', (err) => {
@@ -2528,6 +2663,8 @@ export async function createPrismStudioServer(options = {}) {
         const wallpaperId = String(body?.wallpaperId ?? body?.id ?? '');
         const extraPatch = body?.patch && typeof body.patch === 'object' ? body.patch : {};
         localSessionAwake = true;
+        abortStaleMediaProxies(wallpaperId);
+        engine.mediaServer?.prunePinnedSessions?.(wallpaperId);
         await withDeferredPush(
           () => engine.applyWallpaper(wallpaperId, { ...extraPatch, skinEnabled: true }),
           { ensureRevBump: true },
@@ -2549,6 +2686,10 @@ export async function createPrismStudioServer(options = {}) {
           () => engine.stepPlaylist(direction, String(body?.reason || 'manual')),
           { ensureRevBump: true },
         );
+        const nextCfg = await engine.getConfig();
+        const nextWid = String(nextCfg?.activeWallpaperId || '');
+        abortStaleMediaProxies(nextWid);
+        engine.mediaServer?.prunePinnedSessions?.(nextWid);
         await pushToHost();
         const state = await buildCanonicalState();
         sendJson(res, 200, { ok: true, stateRev: state.stateRev, state });
@@ -2718,6 +2859,8 @@ export async function createPrismStudioServer(options = {}) {
       }
 
       if (pathname === '/api/skin/restore') {
+        abortStaleMediaProxies('');
+        engine.mediaServer?.prunePinnedSessions?.('');
         await withDeferredPush(() => engine.updateConfig({ skinEnabled: false }), { ensureRevBump: true });
         await pushToHost();
         const state = await buildCanonicalState();

@@ -1040,12 +1040,15 @@ function bootPrismStudioApp() {
         .join('');
     }
 
+    const ws = document.querySelector('.prism-workspace');
+    const prevWsScroll = ws ? ws.scrollTop : 0;
     const scroller = document.getElementById('prism-tab-scroll');
     const prevScroll = scroller ? scroller.scrollTop : 0;
 
     if (scroller) {
       scroller.innerHTML = renderActiveTabContentHtml();
       scroller.scrollTop = prevScroll;
+      if (ws && prevWsScroll > 0) ws.scrollTop = prevWsScroll;
       attachLibraryThumbHoverController(scroller);
     }
 
@@ -1214,31 +1217,39 @@ function bootPrismStudioApp() {
     `;
 
     app.dataset.prismReady = 'true';
+    if (store.runtime.rootResizeObserver) {
+      try {
+        store.runtime.rootResizeObserver.observe(app);
+      } catch {
+        // ignore observer errors
+      }
+    }
     renderActiveSurface();
 
-    // Virtual scroll + capture-phase <details data-region> toggle persistence on #prism-tab-scroll
+    // Virtual scroll + capture-phase <details data-region> toggle persistence on #prism-tab-scroll & .prism-workspace
     const scroller = document.getElementById('prism-tab-scroll');
+    const ws = document.querySelector('.prism-workspace');
+    let vScrollTicking = false;
+    const scheduleLibraryVirtualRefresh = () => {
+      if (store.activeTab !== 'library' || vScrollTicking) return;
+      vScrollTicking = true;
+      requestAnimationFrame(() => {
+        vScrollTicking = false;
+        const model = computeLibraryModel();
+        if (model.visibleItems.length > VIRTUAL_SCROLL_THRESHOLD) {
+          const nextWin = computeVirtualSlice(model.visibleItems.length);
+          if (nextWin.start !== store.virtualWindow.start || nextWin.end !== store.virtualWindow.end) {
+            const gridHost = document.getElementById('prism-lib-grid-host');
+            if (gridHost) gridHost.innerHTML = renderLibraryGridHtml(model);
+          }
+        }
+      });
+    };
+    if (ws) {
+      ws.addEventListener('scroll', scheduleLibraryVirtualRefresh, { passive: true });
+    }
     if (scroller) {
-      let ticking = false;
-      scroller.addEventListener(
-        'scroll',
-        () => {
-          if (store.activeTab !== 'library' || ticking) return;
-          ticking = true;
-          requestAnimationFrame(() => {
-            ticking = false;
-            const model = computeLibraryModel();
-            if (model.visibleItems.length > VIRTUAL_SCROLL_THRESHOLD) {
-              const nextWin = computeVirtualSlice(model.visibleItems.length);
-              if (nextWin.start !== store.virtualWindow.start || nextWin.end !== store.virtualWindow.end) {
-                const gridHost = document.getElementById('prism-lib-grid-host');
-                if (gridHost) gridHost.innerHTML = renderLibraryGridHtml(model);
-              }
-            }
-          });
-        },
-        { passive: true },
-      );
+      scroller.addEventListener('scroll', scheduleLibraryVirtualRefresh, { passive: true });
 
       // Capture-phase toggle listener because `<details>` toggle event does NOT bubble
       scroller.addEventListener(
@@ -1346,8 +1357,10 @@ function bootPrismStudioApp() {
     }
   }
 
+  let applyWallpaperSeq = 0;
   async function applyWallpaperById(wallpaperId, patch = undefined) {
     if (!wallpaperId) return;
+    const seq = ++applyWallpaperSeq;
     const item = store.items.find((x) => x.id === wallpaperId);
     if (item) {
       store.activeItem = item;
@@ -1360,6 +1373,7 @@ function bootPrismStudioApp() {
     try {
       const body = patch ? { wallpaperId, patch } : { wallpaperId };
       const res = await apiJson('/api/wallpaper/apply', { method: 'POST', body });
+      if (seq !== applyWallpaperSeq) return;
       ingestServerState(res);
       const resolvedId = getActiveId();
       patchActiveCardsInPlace(resolvedId);
@@ -1367,6 +1381,7 @@ function bootPrismStudioApp() {
       updateLeftRailPanels();
       updateTopStatusIndicators();
     } catch (err) {
+      if (seq !== applyWallpaperSeq) return;
       showToast(err.message || 'Failed to apply wallpaper', 'danger');
     }
   }
@@ -3692,11 +3707,14 @@ function bootPrismStudioApp() {
             renderVisualEditorHost();
           }
           if (!isEditingField && (store.activeTab === 'skin' || store.activeTab === 'playback')) {
+            const ws = document.querySelector('.prism-workspace');
+            const prevWsScroll = ws ? ws.scrollTop : 0;
             const scroller = document.getElementById('prism-tab-scroll');
             if (scroller) {
               const prevScroll = scroller.scrollTop;
               scroller.innerHTML = renderActiveTabContentHtml();
               scroller.scrollTop = prevScroll;
+              if (ws && prevWsScroll > 0) ws.scrollTop = prevWsScroll;
               bindVirtualPickerScrollListeners();
             }
           }
@@ -3945,6 +3963,7 @@ function bootPrismStudioApp() {
 
     rt.dormantDraftSnapshot = {
       scrollerScrollTop: document.getElementById('prism-tab-scroll')?.scrollTop || 0,
+      workspaceScrollTop: document.querySelector('.prism-workspace')?.scrollTop || 0,
       railScrollTop: document.querySelector('.prism-left-rail')?.scrollTop || 0,
       activeTab: store.activeTab,
       drawer: store.drawer,
@@ -4005,6 +4024,8 @@ function bootPrismStudioApp() {
       if (wasDeep && snap) {
         const sc = document.getElementById('prism-tab-scroll');
         if (sc) sc.scrollTop = snap.scrollerScrollTop || 0;
+        const ws = document.querySelector('.prism-workspace');
+        if (ws) ws.scrollTop = snap.workspaceScrollTop || 0;
         const rail = document.querySelector('.prism-left-rail');
         if (rail) rail.scrollTop = snap.railScrollTop || 0;
       }
@@ -4061,6 +4082,8 @@ function bootPrismStudioApp() {
       try {
         const ro = new window.ResizeObserver(reconcile);
         ro.observe(document.documentElement);
+        const appEl = document.getElementById('app');
+        if (appEl) ro.observe(appEl);
         store.runtime.rootResizeObserver = ro;
       } catch {
         // ignore observer errors

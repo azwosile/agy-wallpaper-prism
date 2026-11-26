@@ -607,6 +607,8 @@ async function main() {
     parsePkg,
     readPkgEntry,
     extractMp4FromTexBytes,
+    extractImageFromTexBytes,
+    extractSceneImagePayload,
     parseWeProjectProperties,
     evaluateWeCondition,
   } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'pkg-scene.mjs')).href);
@@ -9362,6 +9364,774 @@ async function main() {
         await browser.closePage(popoutPage);
         await browser.closePage(studioPage);
       }
+    });
+
+    await check('S3-07: Large-video proxy abort & eager release, scene.pkg HD .tex extraction (PNG/JPEG/RGBA/DXT1/DXT5) & Web proxy/crisp/shim', '@exec-mock-tests', async () => {
+      const { buildLiveSceneHtml, injectWebWallpaperHtml } = await import(
+        pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'runtime', 'web-shim.mjs')).href
+      );
+
+      // 1) Synthetic TEX builder & LZ4 literal-block encoder
+      const lz4Literal = (buf) => {
+        const len = buf.length;
+        const parts = [];
+        if (len < 15) {
+          parts.push(Buffer.from([(len << 4) & 0xf0]));
+        } else {
+          parts.push(Buffer.from([0xf0]));
+          let rem = len - 15;
+          while (rem >= 255) {
+            parts.push(Buffer.from([255]));
+            rem -= 255;
+          }
+          parts.push(Buffer.from([rem]));
+        }
+        parts.push(buf);
+        return Buffer.concat(parts);
+      };
+      const buildTex = ({ format = 0, texW = 4, texH = 4, imgW = 4, imgH = 4, ver = 3, fif = -1, lz4 = false, payload }) => {
+        const parts = [];
+        const cstr = (s) => Buffer.from(`${s}\0`, 'ascii');
+        const i32 = (n) => { const b = Buffer.allocUnsafe(4); b.writeInt32LE(n, 0); return b; };
+        const u32 = (n) => { const b = Buffer.allocUnsafe(4); b.writeUInt32LE(n >>> 0, 0); return b; };
+        parts.push(cstr('TEXV0005'), cstr('TEXI0001'));
+        parts.push(i32(format), i32(2), i32(texW), i32(texH), i32(imgW), i32(imgH), u32(0));
+        parts.push(cstr(`TEXB000${ver}`), i32(1));
+        if (ver >= 3) parts.push(i32(fif));
+        if (ver >= 4) parts.push(i32(0));
+        parts.push(i32(1), i32(texW), i32(texH));
+        const rawBytes = Buffer.from(payload);
+        const enc = lz4 ? lz4Literal(rawBytes) : rawBytes;
+        if (ver >= 2) parts.push(i32(lz4 ? 1 : 0), i32(lz4 ? rawBytes.length : 0));
+        parts.push(i32(enc.length), enc);
+        return Buffer.concat(parts);
+      };
+
+      // 1a) TEXB0004 embedded PNG
+      const fakePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+      const pngHit = extractImageFromTexBytes(buildTex({ format: 0, texW: 1920, texH: 1080, imgW: 1920, imgH: 1080, ver: 4, fif: 13, payload: fakePng }));
+      assert.equal(pngHit?.mime, 'image/png');
+      assert.equal(pngHit?.width, 1920);
+      assert.equal(pngHit?.height, 1080);
+      assert.ok(pngHit.bytes.equals(fakePng));
+
+      // 1b) TEXB0003 embedded JPEG
+      const fakeJpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+      const jpgHit = extractImageFromTexBytes(buildTex({ format: 0, texW: 1280, texH: 720, imgW: 1280, imgH: 720, ver: 3, fif: 2, payload: fakeJpg }));
+      assert.equal(jpgHit?.mime, 'image/jpeg');
+      assert.ok(jpgHit.bytes.equals(fakeJpg));
+
+      // 1c) TEXB0003 LZ4 RGBA8888 (8x8 padded -> 6x5 cropped)
+      const rgba8x8 = Buffer.alloc(8 * 8 * 4, 0);
+      for (let i = 0; i < 8 * 8; i += 1) {
+        rgba8x8[i * 4] = 12;
+        rgba8x8[i * 4 + 1] = 200;
+        rgba8x8[i * 4 + 2] = 90;
+        rgba8x8[i * 4 + 3] = 255;
+      }
+      const rgbaHit = extractImageFromTexBytes(buildTex({ format: 0, texW: 8, texH: 8, imgW: 6, imgH: 5, ver: 3, fif: -1, lz4: true, payload: rgba8x8 }));
+      assert.equal(rgbaHit?.mime, 'image/png');
+      assert.equal(rgbaHit?.width, 6);
+      assert.equal(rgbaHit?.height, 5);
+      const decRgba = decodePngRgba(rgbaHit.bytes);
+      assert.equal(decRgba.width, 6);
+      assert.equal(decRgba.height, 5);
+      const pRgba = decRgba.pixelAt(0, 0);
+      assert.equal(pRgba.r, 12);
+      assert.equal(pRgba.g, 200);
+      assert.equal(pRgba.b, 90);
+
+      // 1d) TEXB0003 LZ4 DXT5 (4x4 pure red, alpha=128)
+      const dxt5Block = Buffer.alloc(16, 0);
+      dxt5Block[0] = 128; // a0
+      dxt5Block[1] = 128; // a1
+      dxt5Block.writeUInt16LE(0xf800, 8); // c0 = pure red RGB565
+      dxt5Block.writeUInt16LE(0xf800, 10); // c1 = pure red RGB565
+      const dxt5Hit = extractImageFromTexBytes(buildTex({ format: 4, texW: 4, texH: 4, imgW: 4, imgH: 4, ver: 3, fif: -1, lz4: true, payload: dxt5Block }));
+      assert.equal(dxt5Hit?.mime, 'image/png');
+      const decDxt5 = decodePngRgba(dxt5Hit.bytes);
+      assert.equal(decDxt5.width, 4);
+      assert.equal(decDxt5.height, 4);
+      const pDxt5 = decDxt5.pixelAt(0, 0);
+      assert.equal(pDxt5.r, 255);
+      assert.equal(pDxt5.g, 0);
+      assert.equal(pDxt5.b, 0);
+      assert.equal(pDxt5.a, 128);
+
+      // 1e) TEXB0003 LZ4 DXT1 (4x4 pure green)
+      const dxt1Block = Buffer.alloc(8, 0);
+      dxt1Block.writeUInt16LE(0x07e0, 0);
+      dxt1Block.writeUInt16LE(0x07e0, 2);
+      const dxt1Hit = extractImageFromTexBytes(buildTex({ format: 7, texW: 4, texH: 4, imgW: 4, imgH: 4, ver: 3, fif: -1, lz4: true, payload: dxt1Block }));
+      assert.equal(dxt1Hit?.mime, 'image/png');
+      const decDxt1 = decodePngRgba(dxt1Hit.bytes);
+      const pDxt1 = decDxt1.pixelAt(0, 0);
+      assert.equal(pDxt1.r, 0);
+      assert.equal(pDxt1.g, 255);
+      assert.equal(pDxt1.b, 0);
+
+      // 2) Loose scene dir disk-cache + /scene-image/ & /scene-live/ + /web/ proxy base + web-shim
+      const tmpSceneDir = path.join(SCRATCH_ROOT, 's307-loose-scene');
+      const tmpCacheDir = path.join(SCRATCH_ROOT, 's307-cache');
+      const tmpWebDir = path.join(SCRATCH_ROOT, 's307-web');
+      fs.mkdirSync(path.join(tmpSceneDir, 'materials'), { recursive: true });
+      fs.mkdirSync(tmpCacheDir, { recursive: true });
+      fs.mkdirSync(tmpWebDir, { recursive: true });
+
+      const tex64 = Buffer.alloc(64 * 64 * 4, 200);
+      fs.writeFileSync(
+        path.join(tmpSceneDir, 'materials', 'hero_bg.tex'),
+        buildTex({ format: 0, texW: 64, texH: 64, imgW: 64, imgH: 64, ver: 3, fif: -1, lz4: true, payload: tex64 }),
+      );
+      const ex1 = extractSceneImagePayload(tmpSceneDir, { cacheDir: tmpCacheDir });
+      assert.equal(ex1?.kind, 'file');
+      assert.equal(ex1?.cached, false);
+      const ex2 = extractSceneImagePayload(tmpSceneDir, { cacheDir: tmpCacheDir });
+      assert.equal(ex2?.kind, 'file');
+      assert.equal(ex2?.cached, true);
+
+      const webHtmlFile = path.join(tmpWebDir, 'index.html');
+      fs.writeFileSync(webHtmlFile, '<!doctype html><html><head><title>W</title></head><body>Hi</body></html>', 'utf8');
+      const srvS307 = await createMediaServer({ cacheDir: () => tmpCacheDir });
+      try {
+        const regScene = srvS307.registerEntry({
+          id: 's307-hd-scene',
+          title: 'S307 Scene',
+          kind: 'scene',
+          source: 'local',
+          sceneMode: 'live',
+          schemeColor: '#669DF6',
+          _fs: {
+            projectDir: tmpSceneDir,
+            primaryAbs: null,
+            previewAbs: null,
+            slidesAbs: [],
+            sceneContainerAbs: tmpSceneDir,
+            hasSceneVideo: false,
+            hasSceneImage: true,
+            hasSceneAudio: false,
+            looseAudioAbs: null,
+            webEntryRel: '',
+          },
+        });
+        assert.ok(regScene.sceneImageUrl && regScene.sceneImageUrl.includes('/scene-image/'));
+        const rSceneImg = await invokeServerInMemory(srvS307.server, { method: 'GET', url: '/scene-image/s307-hd-scene' });
+        assert.equal(rSceneImg.status, 200);
+        assert.equal(rSceneImg.headers['content-type'], 'image/png');
+        assert.equal(rSceneImg.body.readUInt32BE(0), 0x89504e47);
+
+        const rSceneLive = await invokeServerInMemory(srvS307.server, { method: 'GET', url: '/scene-live/s307-hd-scene' });
+        assert.equal(rSceneLive.status, 200);
+        const liveTxt = rSceneLive.text();
+        assert.ok(liveTxt.includes('../scene-image/s307-hd-scene'), 'scene-live must reference relative ../scene-image/');
+        assert.ok(liveTxt.includes('runtime.onBattery ? 1.0 : 2.0'), 'scene-live DPR cap should be 2.0');
+
+        const regWeb = srvS307.registerFile('s307-web-1', webHtmlFile, 'web');
+        assert.ok(regWeb.webUrl);
+        const rWebProxy = await invokeServerInMemory(srvS307.server, {
+          method: 'GET',
+          url: '/web/s307-web-1/index.html',
+          headers: { 'x-prism-proxy-base': 'plugin://test-proxy-origin/media-proxy' },
+        });
+        assert.equal(rWebProxy.status, 200);
+        const webOut = rWebProxy.text();
+        assert.ok(webOut.includes('<base href="plugin://test-proxy-origin/media-proxy/web/s307-web-1/">'));
+        assert.ok(webOut.includes('<meta name="viewport" content="width=device-width,initial-scale=1">'));
+        assert.ok(webOut.includes('wallpaperRequestRandomFileForProperty'));
+
+        const injectedRaw = injectWebWallpaperHtml('<html><head></head><body></body></html>', { baseHref: 'http://127.0.0.1/web/x/' });
+        assert.ok(injectedRaw.includes('<meta name="viewport"'));
+        const liveBuilt = buildLiveSceneHtml({ id: 'x' }, {}, { sceneImageUrl: '../scene-image/x', thumbUrl: '../preview/x' });
+        assert.ok(liveBuilt.includes('"sceneImageUrl":"../scene-image/x"'));
+      } finally {
+        await srvS307.close();
+      }
+
+      // 3) Server-side stale /media-proxy/ cancellation on /api/wallpaper/apply + buildClientSkinPayload pluginWebUrl
+      const builtWeb = buildClientSkinPayload(
+        await engine.getConfig(),
+        {
+          id: 'web-proxy-check',
+          kind: 'web',
+          mediaUrl: `${mediaOrigin}/web/web-proxy-check/index.html`,
+          webUrl: `${mediaOrigin}/web/web-proxy-check/index.html`,
+        },
+        mediaOrigin,
+        { skinEnabled: true, pluginOrigin: 'plugin://agy-wallpaper-prism--prism_studio-55555' },
+      );
+      assert.equal(
+        builtWeb.activeItem?.pluginWebUrl,
+        'plugin://agy-wallpaper-prism--prism_studio-55555/media-proxy/web/web-proxy-check/index.html',
+      );
+
+      // Verify /media-proxy/media/<token> serves full unbounded 206 Range with Cache-Control: no-store
+      // plus explicit slice Range, HEAD Content-Length, and non-wedging connection pool after abort.
+      const capTmpVideo = path.join(SCRATCH_ROOT, 's307-3mb.mp4');
+      fs.writeFileSync(capTmpVideo, Buffer.alloc(3 * 1024 * 1024, 0x41));
+      const regCapVid = engine.mediaServer.registerFile('s307-cap-video', capTmpVideo, 'video');
+      assert.ok(regCapVid && regCapVid.mediaUrl);
+      const capPath = new URL(regCapVid.mediaUrl).pathname;
+
+      const capRange = await invokeServerInMemory(studio.server, {
+        method: 'GET',
+        url: `/media-proxy${capPath}`,
+        headers: { Range: 'bytes=0-' },
+      });
+      assert.equal(capRange.status, 206, `Expected 206 for open-ended Range on /media-proxy${capPath}`);
+      assert.equal(capRange.body.length, 3 * 1024 * 1024, `Expected unbounded 3 MiB Range response, got ${capRange.body.length}`);
+      assert.equal(
+        capRange.headers['content-range'],
+        `bytes 0-${3 * 1024 * 1024 - 1}/${3 * 1024 * 1024}`,
+        `Unexpected content-range: ${capRange.headers['content-range']}`,
+      );
+      assert.equal(capRange.headers['cache-control'], 'no-store');
+
+      const capExplicitRange = await invokeServerInMemory(studio.server, {
+        method: 'GET',
+        url: `/media-proxy${capPath}`,
+        headers: { Range: 'bytes=0-63' },
+      });
+      assert.equal(capExplicitRange.status, 206);
+      assert.equal(capExplicitRange.body.length, 64);
+
+      const capHead = await invokeServerInMemory(studio.server, {
+        method: 'HEAD',
+        url: `/media-proxy${capPath}`,
+      });
+      assert.equal(capHead.status, 200);
+      assert.equal(String(capHead.headers['content-length']), String(3 * 1024 * 1024));
+
+      const slowHttp = http.createServer((req, res) => {
+        res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': '9999999' });
+        res.write(Buffer.alloc(1024));
+        // Keep open intentionally until server closes or client destroys
+      });
+      await new Promise((r) => slowHttp.listen(0, '127.0.0.1', r));
+      const slowPort = slowHttp.address().port;
+      const slowSrv = await createPrismStudioServer({
+        dataDir: path.join(SCRATCH_ROOT, 's307-proxy-data'),
+        token: 's307-proxy-tok',
+        startCdp: false,
+        inspectShortcuts: false,
+        engine: {
+          ...engine,
+          getMediaOrigin: () => `http://127.0.0.1:${slowPort}`,
+          getActivePayload: () => engine.getActivePayload(),
+          getConfig: () => engine.getConfig(),
+          applyWallpaper: (id, patch) => engine.applyWallpaper(id, patch),
+        },
+      });
+      try {
+        const srvUrl = new URL(slowSrv.origin || `http://127.0.0.1:${slowSrv.server.address().port}`);
+        let proxyClosedOrEnded = false;
+        const streamReq = http.get({
+          host: srvUrl.hostname,
+          port: srvUrl.port,
+          path: '/media-proxy/media/old-heavy-video',
+        }, (proxyRes) => {
+          proxyRes.on('close', () => { proxyClosedOrEnded = true; });
+          proxyRes.on('end', () => { proxyClosedOrEnded = true; });
+          proxyRes.on('error', () => { proxyClosedOrEnded = true; });
+        });
+        streamReq.on('error', () => { proxyClosedOrEnded = true; });
+        await sleep(80);
+        const applyRes = await invokeServerInMemory(slowSrv.server, {
+          method: 'POST',
+          url: '/api/wallpaper/apply',
+          headers: { 'Content-Type': 'application/json', 'X-Sidecar-Token': 's307-proxy-tok' },
+          body: JSON.stringify({ wallpaperId: auroraItem.id }),
+        });
+        assert.equal(applyRes.status, 200);
+        await sleep(80);
+        assert.equal(proxyClosedOrEnded, true, 'Switching wallpaper did not abort stale /media-proxy/media/ stream!');
+        try { streamReq.destroy(); } catch {}
+
+        const statusAfterAbort = await new Promise((resolve, reject) => {
+          const t0 = Date.now();
+          const stReq = http.get({
+            host: srvUrl.hostname,
+            port: srvUrl.port,
+            path: '/api/status?token=s307-proxy-tok',
+            timeout: 1000,
+          }, (r) => {
+            r.resume();
+            r.on('end', () => resolve({ status: r.statusCode, ms: Date.now() - t0 }));
+          });
+          stReq.on('timeout', () => { stReq.destroy(); reject(new Error('GET /api/status timed out after stale stream abort')); });
+          stReq.on('error', reject);
+        });
+        assert.equal(statusAfterAbort.status, 200);
+        assert.ok(statusAfterAbort.ms < 1000, `Expected /api/status <1000ms after abort, got ${statusAfterAbort.ms}ms`);
+
+        // Concurrency cap (MAX_CONCURRENT_STREAM_PROXIES = 2): 3rd slow stream evicts the oldest so API saves never starve
+        const slowStreams = [];
+        let firstSlowClosed = false;
+        for (let si = 0; si < 3; si += 1) {
+          let closed = false;
+          const req = http.get({
+            host: srvUrl.hostname,
+            port: srvUrl.port,
+            path: `/media-proxy/media/concurrent-slow-${si}`,
+          }, (proxyRes) => {
+            proxyRes.on('close', () => { closed = true; if (si === 0) firstSlowClosed = true; });
+            proxyRes.on('end', () => { closed = true; if (si === 0) firstSlowClosed = true; });
+            proxyRes.on('error', () => { closed = true; if (si === 0) firstSlowClosed = true; });
+          });
+          req.on('error', () => { closed = true; if (si === 0) firstSlowClosed = true; });
+          slowStreams.push({ req, isClosed: () => closed });
+          await sleep(40);
+        }
+        await sleep(60);
+        assert.equal(firstSlowClosed, true, '3rd concurrent /media-proxy/media/ stream should evict oldest stream when cap=2');
+        const cfgSaveRes = await new Promise((resolve, reject) => {
+          const payload = JSON.stringify({ patch: { topbarStyle: 'bar' } });
+          const req = http.request({
+            host: srvUrl.hostname,
+            port: srvUrl.port,
+            path: '/api/config',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(payload),
+              'X-Sidecar-Token': 's307-proxy-tok',
+            },
+            timeout: 1000,
+          }, (r) => {
+            r.resume();
+            r.on('end', () => resolve(r.statusCode));
+          });
+          req.on('timeout', () => { req.destroy(); reject(new Error('POST /api/config timed out during concurrent streaming')); });
+          req.on('error', reject);
+          req.end(payload);
+        });
+        assert.equal(cfgSaveRes, 200, 'POST /api/config should succeed cleanly alongside active streams');
+        for (const s of slowStreams) {
+          try { s.req.destroy(); } catch {}
+        }
+      } finally {
+        await slowSrv.close().catch(() => {});
+        await new Promise((r) => slowHttp.close(() => r()));
+      }
+
+      // 4) Host wallpaper-inject.js VM checks: eager plugin:// release + crisp --prism-media-transform: none + pluginWebUrl preference
+      const wallSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+      const vNodes = [];
+      const byId = new Map();
+      const makeStyle = () => {
+        const props = new Map();
+        return {
+          props,
+          opacity: '',
+          transition: '',
+          clipPath: '',
+          transform: '',
+          setProperty(k, v) { props.set(k, String(v)); },
+          getPropertyValue(k) { return props.get(k) || ''; },
+          removeProperty(k) { props.delete(k); },
+        };
+      };
+      const vmMsMap = new Map();
+      let vmMsSeq = 0;
+      const makeNode = (tag) => {
+        const t = String(tag || 'DIV').toUpperCase();
+        const el = {
+          tagName: t,
+          className: '',
+          style: makeStyle(),
+          children: [],
+          parentNode: null,
+          _attrs: new Map(),
+          _listeners: new Map(),
+          _src: '',
+          _id: '',
+          readyState: 0,
+          videoWidth: 0,
+          videoHeight: 0,
+          paused: true,
+          muted: true,
+          seeking: false,
+          ended: false,
+          currentTime: 0,
+          duration: 20,
+          classList: {
+            contains(c) { return String(el.className || '').split(/\s+/).includes(c); },
+            add() {},
+            remove() {},
+          },
+          appendChild(c) { c.parentNode = el; el.children.push(c); return c; },
+          insertBefore(c) { c.parentNode = el; el.children.push(c); return c; },
+          removeChild(c) { const i = el.children.indexOf(c); if (i >= 0) el.children.splice(i, 1); c.parentNode = null; return c; },
+          querySelector(sel) {
+            if (sel === '.agy-prism-blur-veil' || sel === '.agy-prism-scrim') return null;
+            return el.children[0] || null;
+          },
+          querySelectorAll(sel) {
+            const tags = sel.split(',').map((s) => s.trim().toUpperCase());
+            const out = [];
+            const walk = (n) => { for (const c of n.children || []) { if (tags.includes(c.tagName)) out.push(c); walk(c); } };
+            walk(el);
+            return out;
+          },
+          contains(n) { return (el.children || []).includes(n); },
+          setAttribute(k, v) { el._attrs.set(k, String(v)); },
+          removeAttribute(k) { el._attrs.delete(k); if (k === 'src') el._src = ''; },
+          getAttribute(k) { return el._attrs.get(k) || null; },
+          hasAttribute(k) { return el._attrs.has(k); },
+          addEventListener(type, fn) { const l = el._listeners.get(type) || []; l.push(fn); el._listeners.set(type, l); },
+          removeEventListener() {},
+          dispatchEvent(ev) { for (const fn of (el._listeners.get(ev.type) || []).slice()) fn(ev); },
+          pause() { el.paused = true; },
+          play() { el.paused = false; return Promise.resolve(); },
+          load() { el.loadCalled = (el.loadCalled || 0) + 1; },
+        };
+        Object.defineProperty(el, 'id', {
+          get() { return el._id; },
+          set(v) { el._id = String(v || ''); if (el._id) byId.set(el._id, el); },
+        });
+        Object.defineProperty(el, 'firstChild', { get() { return el.children[0] || null; } });
+        Object.defineProperty(el, 'src', {
+          configurable: true,
+          get() { return el._src; },
+          set(v) {
+            el._src = String(v || '');
+            if (t === 'VIDEO' && el._src) {
+              if (vmMsMap.has(el._src)) {
+                vmMsMap.get(el._src)._openFor(el);
+                return;
+              }
+              el.readyState = 4; el.videoWidth = 1920; el.videoHeight = 1080;
+              queueMicrotask(() => el.dispatchEvent({ type: 'canplay' }));
+            } else if (t === 'IFRAME' && el._src && el._src !== 'about:blank') {
+              queueMicrotask(() => el.dispatchEvent({ type: 'load' }));
+            }
+          },
+        });
+        Object.defineProperty(el, 'currentSrc', { get() { return el._src; } });
+        Object.defineProperty(el, 'isConnected', {
+          get() {
+            let c = el;
+            while (c) {
+              if (c === rootNode) return true;
+              c = c.parentNode;
+            }
+            return false;
+          },
+        });
+        if (t === 'VIDEO') vNodes.push(el);
+        return el;
+      };
+      const rootNode = makeNode('HTML');
+      const headNode = makeNode('HEAD');
+      const bodyNode = makeNode('BODY');
+      rootNode.appendChild(headNode);
+      rootNode.appendChild(bodyNode);
+      byId.set('root', bodyNode);
+      const vmDoc = {
+        hidden: false,
+        documentElement: rootNode,
+        head: headNode,
+        body: bodyNode,
+        createElement: makeNode,
+        getElementById(id) { return byId.get(id) || null; },
+        querySelector() { return null; },
+        querySelectorAll() { return []; },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+      let releaseObservedBeforeHead = false;
+      const vmFetchUrls = [];
+      let vmFakeOffsetMs = 0;
+      class VmDate extends Date {
+        static now() { return Date.now() + vmFakeOffsetMs; }
+      }
+      let mseBufStart = 0;
+      const vmWinListeners = new Map();
+      class SimpleMockMediaSource {
+        static isTypeSupported(mime) { return String(mime || '').includes('video/mp4'); }
+        constructor() { this.readyState = 'closed'; this._listeners = new Map(); this._video = null; }
+        addEventListener(t, fn) { const l = this._listeners.get(t) || []; l.push(fn); this._listeners.set(t, l); }
+        removeEventListener() {}
+        _openFor(v) {
+          this._video = v;
+          this.readyState = 'open';
+          queueMicrotask(() => {
+            for (const fn of (this._listeners.get('sourceopen') || []).slice()) fn({ type: 'sourceopen' });
+          });
+        }
+        addSourceBuffer() {
+          const ms = this;
+          const sbL = new Map();
+          const bufRange = { length: 1, start: () => mseBufStart, end: () => 5 };
+          const sb = {
+            updating: false,
+            buffered: bufRange,
+            addEventListener(t, fn) { const l = sbL.get(t) || []; l.push(fn); sbL.set(t, l); },
+            removeEventListener() {},
+            appendBuffer() {
+              sb.updating = true;
+              queueMicrotask(() => {
+                sb.updating = false;
+                if (ms._video) {
+                  ms._video.buffered = bufRange;
+                  if (ms._video.readyState < 4) {
+                    ms._video.readyState = 4; ms._video.videoWidth = 1920; ms._video.videoHeight = 1080;
+                    ms._video.dispatchEvent({ type: 'loadeddata' });
+                    ms._video.dispatchEvent({ type: 'canplay' });
+                  }
+                }
+                for (const fn of (sbL.get('updateend') || []).slice()) fn({ type: 'updateend' });
+              });
+            },
+            remove() {},
+          };
+          return sb;
+        }
+        endOfStream() { this.readyState = 'ended'; }
+      }
+      const vmWin = {
+        document: vmDoc,
+        MediaSource: SimpleMockMediaSource,
+        URL: {
+          createObjectURL: (obj) => {
+            const u = `blob:mock-${++vmMsSeq}`;
+            if (obj instanceof SimpleMockMediaSource) vmMsMap.set(u, obj);
+            return u;
+          },
+          revokeObjectURL(u) { vmMsMap.delete(u); },
+        },
+        location: { protocol: 'https:', href: 'https://127.0.0.1:9443/' },
+        innerWidth: 1920,
+        innerHeight: 1080,
+        fetch: (u, o) => {
+          const urlStr = String(u);
+          vmFetchUrls.push(urlStr);
+          if (urlStr.includes('/media/vid-next') && o?.method === 'HEAD') {
+            releaseObservedBeforeHead = Boolean(vNodes[0] && vNodes[0]._src === '' && vNodes[0].loadCalled > 0);
+            return new Promise((r) => setTimeout(() => r({ ok: true, status: 200 }), 25));
+          }
+          if (urlStr.includes('/mse-fmp4/')) {
+            return Promise.resolve({
+              ok: true,
+              status: 200,
+              headers: { get: (k) => (String(k).toLowerCase() === 'x-prism-mse-mime' ? 'video/mp4; codecs="avc1.640028"' : '') },
+              arrayBuffer: () => Promise.resolve(new Uint8Array([0, 0, 0, 8, 102, 116, 121, 112]).buffer),
+            });
+          }
+          return Promise.resolve({ ok: true, status: 200 });
+        },
+        AbortController,
+        Date: VmDate,
+        setTimeout,
+        clearTimeout,
+        setInterval,
+        clearInterval,
+        requestAnimationFrame: (cb) => setTimeout(() => cb(VmDate.now()), 16),
+        cancelAnimationFrame: clearTimeout,
+        getComputedStyle: () => ({ backgroundColor: 'rgb(7,7,8)', getPropertyValue: () => '' }),
+        matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
+        addEventListener(t, fn) { const l = vmWinListeners.get(t) || []; l.push(fn); vmWinListeners.set(t, l); },
+        removeEventListener(t, fn) {
+          const l = vmWinListeners.get(t);
+          if (l) vmWinListeners.set(t, l.filter((f) => f !== fn));
+        },
+        dispatchEvent(ev) { for (const fn of (vmWinListeners.get(ev.type) || []).slice()) fn(ev); },
+        navigator: {},
+      };
+      vmWin.window = vmWin;
+      vmWin.top = vmWin;
+      const ctx307 = vm.createContext({
+        window: vmWin,
+        document: vmDoc,
+        location: vmWin.location,
+        MediaSource: SimpleMockMediaSource,
+        AbortController,
+        Date: VmDate,
+        setTimeout,
+        clearTimeout,
+        setInterval,
+        clearInterval,
+        requestAnimationFrame: vmWin.requestAnimationFrame,
+        cancelAnimationFrame: clearTimeout,
+        getComputedStyle: vmWin.getComputedStyle,
+      });
+      vm.runInContext(wallSrc, ctx307, { filename: 'wallpaper-inject.js' });
+      const p307 = vmWin.__agyPrism;
+      try {
+        p307.applyPayload({
+          skinEnabled: true,
+          config: { switchTransition: 'fade', layerScale: 100, parallaxEnabled: false },
+          activeItem: {
+            id: 'vid-prev',
+            kind: 'video',
+            mediaUrl: 'http://127.0.0.1:49152/media/vid-prev',
+            pluginMediaUrl: 'plugin://test-p307/media-proxy/media/vid-prev',
+          },
+        });
+        await sleep(40);
+        assert.equal(vmDoc.documentElement.style.props.get('--prism-media-transform'), 'none');
+        p307.applyPayload({
+          skinEnabled: true,
+          config: { switchTransition: 'fade', layerScale: 100, parallaxEnabled: false },
+          activeItem: {
+            id: 'vid-next',
+            kind: 'video',
+            mediaUrl: 'http://127.0.0.1:49152/media/vid-next',
+            pluginMediaUrl: 'plugin://test-p307/media-proxy/media/vid-next',
+          },
+        });
+        await sleep(60);
+        assert.equal(releaseObservedBeforeHead, true, 'Outgoing plugin:// video was NOT eagerly released before next HEAD probe!');
+
+        // Large/long muted video (>= 100 MiB or >= 90s) routes directly via MSE /mse-fmp4/ with ZERO plugin:// fetches!
+        vmFetchUrls.length = 0;
+        p307.applyPayload({
+          skinEnabled: true,
+          config: { switchTransition: 'cut', layerScale: 100, parallaxEnabled: false, muted: true },
+          activeItem: {
+            id: 'vid-huge-adler',
+            kind: 'video',
+            fileSize: 517634490,
+            durationSec: 537,
+            mediaUrl: 'http://127.0.0.1:49152/media/vid-huge-adler',
+            pluginMediaUrl: 'plugin://test-p307/media-proxy/media/vid-huge-adler',
+            mseFmp4Url: 'http://127.0.0.1:49152/mse-fmp4/vid-huge-adler',
+          },
+        });
+        await sleep(60);
+        assert.equal(p307.status().videoTransport, 'mse', 'Large/long muted video should use direct MSE /mse-fmp4/');
+        assert.equal(
+          vmFetchUrls.some((u) => u.startsWith('plugin://')),
+          false,
+          `Large/long muted video must NOT issue plugin:// fetches, saw: ${vmFetchUrls.join(', ')}`,
+        );
+        assert.equal(
+          vmFetchUrls.some((u) => u.includes('/mse-fmp4/vid-huge-adler')),
+          true,
+          'Large/long muted video should fetch /mse-fmp4/',
+        );
+        const hugeMseVid = vNodes[vNodes.length - 1];
+        assert.equal(hugeMseVid.loop, false, 'MSE video must disable native loop so ended handler controls loopStart/remount');
+
+        // HEVC non-zero first PTS (buffered.start(0) > 0): pump aligns currentTime, and ended seeks to buffered.start(0) + 0.001
+        mseBufStart = 0.033333;
+        p307.applyPayload({
+          skinEnabled: true,
+          config: { switchTransition: 'cut', layerScale: 100, parallaxEnabled: false, muted: true },
+          activeItem: {
+            id: 'vid-hevc-offset',
+            kind: 'video',
+            fileSize: 206986766,
+            durationSec: 20,
+            mediaUrl: 'http://127.0.0.1:49152/media/vid-hevc-offset',
+            pluginMediaUrl: 'plugin://test-p307/media-proxy/media/vid-hevc-offset',
+            mseFmp4Url: 'http://127.0.0.1:49152/mse-fmp4/vid-hevc-offset',
+          },
+        });
+        await sleep(60);
+        const hevcVid = vNodes[vNodes.length - 1];
+        assert.ok(hevcVid.currentTime >= 0.033 && hevcVid.currentTime < 0.05, `Expected HEVC initial PTS alignment ~0.034s, got ${hevcVid.currentTime}`);
+        hevcVid.currentTime = 19.9;
+        hevcVid.dispatchEvent({ type: 'ended' });
+        assert.ok(hevcVid.currentTime >= 0.033 && hevcVid.currentTime < 0.05, `Expected HEVC ended loop to seek ~0.034s, got ${hevcVid.currentTime}`);
+        mseBufStart = 0;
+
+        // Blur/wake seeking deadlock self-heal: video stuck at seeking=true, readyState=1 triggers remount after 3 stalled wake checks
+        const beforeSeekDeadlockCount = vNodes.length;
+        hevcVid.paused = false;
+        hevcVid.readyState = 1;
+        hevcVid.seeking = true;
+        hevcVid.currentTime = 2.565;
+        for (let wk = 0; wk < 4; wk += 1) {
+          vmFakeOffsetMs += 1100;
+          vmWin.dispatchEvent({ type: 'focus' });
+          await sleep(220);
+        }
+        assert.ok(vNodes.length > beforeSeekDeadlockCount, 'Video stuck at seeking=true, readyState=1 should trigger mountStageMedia remount');
+
+        p307.applyPayload({
+          skinEnabled: true,
+          config: { switchTransition: 'cut', layerScale: 100, parallaxEnabled: false },
+          activeItem: {
+            id: 'web-p307',
+            kind: 'web',
+            mediaUrl: 'http://127.0.0.1:49152/web/web-p307/index.html',
+            webUrl: 'http://127.0.0.1:49152/web/web-p307/index.html',
+            pluginWebUrl: 'plugin://test-p307/media-proxy/web/web-p307/index.html',
+          },
+        });
+        await sleep(30);
+        const iframes = vmDoc.getElementById('agy-prism-stage').querySelectorAll('iframe');
+        assert.equal(iframes.length, 1);
+        assert.equal(iframes[0]._src, 'plugin://test-p307/media-proxy/web/web-p307/index.html');
+      } finally {
+        p307?.destroy?.();
+      }
+
+      // 5) Narrow Studio E2E (560x740): verify #prism-rail-profile-card hidden, .prism-workspace scrolls,
+      //    and scrolling down with 90 items advances virtual slice past card 27 (no black void below 27!).
+      const narrowRouter = async (reqInfo) => {
+        const u = new URL(reqInfo.url);
+        if (u.pathname === '/api/library') {
+          const mockItems = Array.from({ length: 90 }, (_, idx) => ({
+            id: `mock-vscroll-${idx}`,
+            title: `Mock Wall ${idx}`,
+            kind: 'image',
+            source: 'local',
+            schemeColor: '#669DF6',
+          }));
+          return {
+            status: 200,
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+            body: JSON.stringify({ items: mockItems, playlists: [], favorites: [], hidden: [] }),
+          };
+        }
+        return universalHttpRouter(reqInfo);
+      };
+      const narrowPage = await browser.openPage({
+        url: `${studio.origin}/?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+        requestHandler: narrowRouter,
+        width: 560,
+        height: 740,
+      });
+      try {
+        const waitLimit = Date.now() + 8000;
+        while (Date.now() < waitLimit) {
+          if (await narrowPage.evaluate(`document.querySelectorAll('.prism-wall-card').length > 0`)) break;
+          await sleep(60);
+        }
+        const narrowLayout = await narrowPage.evaluate(`(() => {
+          const prof = document.getElementById('prism-rail-profile-card');
+          const ws = document.querySelector('.prism-workspace');
+          const profDisp = prof ? getComputedStyle(prof).display : 'missing';
+          const wsOvY = ws ? getComputedStyle(ws).overflowY : 'missing';
+          const initialIds = [...document.querySelectorAll('.prism-wall-card')].map((el) => el.dataset.id);
+          return { profDisp, wsOvY, initialFirst: initialIds[0], initialLast: initialIds[initialIds.length - 1], initialCount: initialIds.length };
+        })()`);
+        assert.equal(narrowLayout.profDisp, 'none', '#prism-rail-profile-card must be hidden in <840px narrow sidebar');
+        assert.equal(narrowLayout.wsOvY, 'auto', '.prism-workspace must scroll in <840px narrow sidebar');
+        assert.ok(narrowLayout.initialCount > 0, 'Narrow Studio must render initial wallpaper cards');
+
+        // Scroll .prism-workspace down 2200px and assert virtual window renders later cards (e.g. idx > 27)!
+        const scrolledState = await narrowPage.evaluate(`(async () => {
+          const ws = document.querySelector('.prism-workspace');
+          ws.scrollTop = 2200;
+          ws.dispatchEvent(new Event('scroll'));
+          await new Promise((r) => setTimeout(r, 150));
+          const ids = [...document.querySelectorAll('.prism-wall-card')].map((el) => el.dataset.id);
+          return { wsScrollTop: ws.scrollTop, firstId: ids[0], lastId: ids[ids.length - 1], count: ids.length };
+        })()`);
+        const firstIdx = Number(String(scrolledState.firstId || '').replace('mock-vscroll-', ''));
+        const lastIdx = Number(String(scrolledState.lastId || '').replace('mock-vscroll-', ''));
+        assert.ok(
+          scrolledState.count > 0 && lastIdx > 27,
+          `Expected virtual scroll in <840px to render past item 27, got ${scrolledState.firstId}..${scrolledState.lastId} (count=${scrolledState.count})`,
+        );
+        assert.ok(firstIdx > 0, `Expected virtual start index > 0 after scrolling .prism-workspace, got ${firstIdx}`);
+      } finally {
+        await browser.closePage(narrowPage);
+      }
+
+      return 'TEX(PNG/JPG/RGBA/DXT5/DXT1) + /scene-image/ + web proxy base + /media-proxy/ cancel + large-video MSE + narrow layout & virtual scroll verified';
     });
   } finally {
     await browser.close().catch(() => {});

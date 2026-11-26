@@ -210,6 +210,19 @@ export function buildWebShimScript(seedProps = {}, options = {}) {
     syncAudioLoop();
   };
 
+  if (typeof window.wallpaperRequestRandomFileForProperty !== 'function') {
+    window.wallpaperRequestRandomFileForProperty = function (propName, cb) {
+      if (typeof cb === 'function') {
+        try { cb(propName, ''); } catch (_) {}
+      }
+    };
+  }
+  ['wallpaperRegisterMediaStatusListener', 'wallpaperRegisterMediaPropertiesListener', 'wallpaperRegisterMediaThumbnailListener', 'wallpaperRegisterMediaPlaybackListener', 'wallpaperRegisterMediaTimelineListener'].forEach(function (fnName) {
+    if (typeof window[fnName] !== 'function') {
+      window[fnName] = function () {};
+    }
+  });
+
   window.__weSeedProps = function (nextProps) {
     state.props = cloneProps(nextProps);
     if (state.listener && typeof state.listener.applyUserProperties === 'function') {
@@ -306,9 +319,12 @@ export function buildWebShimScript(seedProps = {}, options = {}) {
 export function injectWebWallpaperHtml(rawHtml, { baseHref = '', seedProps = {}, fps = 30, paused = false } = {}) {
   const html = typeof rawHtml === 'string' ? rawHtml : String(rawHtml ?? '');
   const hasBase = /<base\s/i.test(html);
+  const hasViewport = /<meta\s[^>]*name\s*=\s*["']?viewport/i.test(html);
   const baseTag = baseHref && !hasBase ? `<base href="${escapeHtmlAttr(baseHref)}">` : '';
+  const viewportTag = !hasViewport ? '<meta name="viewport" content="width=device-width,initial-scale=1">' : '';
   const injectedBlock = [
     baseTag,
+    viewportTag,
     `<script data-agy-prism="focus-guard">${buildFocusGuardScript()}</script>`,
     `<script data-agy-prism="we-shim">${buildWebShimScript(seedProps, { fps, paused })}</script>`,
   ].filter(Boolean).join('\n');
@@ -332,7 +348,7 @@ export function injectWebWallpaperHtml(rawHtml, { baseHref = '', seedProps = {},
  * Generates an interactive live scene HTML document for `/scene-live/<token>`
  * (handles both extracted WE Scene wallpapers and the built-in Prism Aurora scene).
  */
-export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '', thumbUrl = '', audioUrl = '' } = {}) {
+export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '', sceneImageUrl = '', thumbUrl = '', audioUrl = '' } = {}) {
   const onBattery = Boolean(config.onBattery);
   const baseFps = Math.max(10, Math.min(60, Number(config.sceneLiveFps) || 30));
   const fps = onBattery ? Math.min(15, baseFps) : baseFps;
@@ -345,6 +361,7 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
     title: item.title || 'Prism Scene',
     isBuiltinAurora: item.id === 'builtin-prism-aurora',
     sceneVideoUrl,
+    sceneImageUrl,
     thumbUrl,
     audioUrl,
     schemeColor,
@@ -471,9 +488,15 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
     } catch (_) {}
   }
 
-  if (cfg.thumbUrl && !cfg.isBuiltinAurora) {
+  var primaryBgUrl = !cfg.isBuiltinAurora ? (cfg.sceneImageUrl || cfg.thumbUrl || '') : '';
+  if (primaryBgUrl) {
     bgImg.onload = function () { bgImg.classList.add('ready'); };
-    bgImg.src = cfg.thumbUrl;
+    bgImg.onerror = function () {
+      if (cfg.thumbUrl && bgImg.getAttribute('src') !== cfg.thumbUrl) {
+        bgImg.src = cfg.thumbUrl;
+      }
+    };
+    bgImg.src = primaryBgUrl;
   }
 
   if (cfg.sceneVideoUrl) {
@@ -496,7 +519,7 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
   }
 
   function resize() {
-    var dprCap = runtime.onBattery ? 1.0 : 1.5;
+    var dprCap = runtime.onBattery ? 1.0 : 2.0;
     var dpr = Math.min(window.devicePixelRatio || 1, dprCap);
     canvas.width = Math.max(1, Math.floor(window.innerWidth * dpr));
     canvas.height = Math.max(1, Math.floor(window.innerHeight * dpr));
@@ -606,7 +629,7 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
     var t = now * 0.00035;
     ctx.clearRect(0, 0, w, h);
 
-    if (cfg.isBuiltinAurora || (!cfg.sceneVideoUrl && !cfg.thumbUrl)) {
+    if (cfg.isBuiltinAurora || (!cfg.sceneVideoUrl && !cfg.sceneImageUrl && !cfg.thumbUrl)) {
       var bgGrad = ctx.createLinearGradient(0, 0, w, h);
       bgGrad.addColorStop(0, '#090b12');
       bgGrad.addColorStop(0.52, '#101729');
@@ -630,7 +653,7 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
       }
-    } else if (cfg.thumbUrl && !cfg.sceneVideoUrl) {
+    } else if ((cfg.sceneImageUrl || cfg.thumbUrl) && !cfg.sceneVideoUrl) {
       if (bgImg && bgImg.style.willChange !== 'transform') bgImg.style.willChange = 'transform';
       var kbScale = 1.045 + Math.sin(t * 0.65) * 0.015;
       var tx = (0.5 - runtime.pointerX) * 14 + Math.cos(t * 0.5) * 6;

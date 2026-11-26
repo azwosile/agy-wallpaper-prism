@@ -559,7 +559,13 @@ export function isStudioViewportActive() {
   try {
     const w = (typeof window !== 'undefined' ? window.innerWidth : 0) || document.documentElement?.clientWidth || 0;
     const h = (typeof window !== 'undefined' ? window.innerHeight : 0) || document.documentElement?.clientHeight || 0;
-    return w > 20 && h > 20;
+    if (w <= 20 || h <= 20) return false;
+    const appEl = document.getElementById('app');
+    if (appEl && appEl.dataset?.prismReady === 'true' && typeof appEl.getBoundingClientRect === 'function') {
+      const r = appEl.getBoundingClientRect();
+      if (r.width <= 20 || r.height <= 20) return false;
+    }
+    return true;
   } catch {
     return true;
   }

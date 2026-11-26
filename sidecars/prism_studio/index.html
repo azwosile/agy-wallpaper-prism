@@ -621,7 +621,8 @@ button, input, select, textarea {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .prism-stage-dock {
@@ -646,11 +647,11 @@ button, input, select, textarea {
 }
 
 .prism-main-deck {
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
   background: var(--prism-studio-bg, rgb(var(--prism-base-rgb)));
 }
 
@@ -658,6 +659,12 @@ button, input, select, textarea {
   .prism-workspace {
     display: grid;
     grid-template-columns: minmax(380px, 444px) minmax(0, 1fr);
+    overflow: hidden;
+  }
+  .prism-main-deck {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
   }
   .prism-stage-dock,
   .prism-left-rail {
@@ -802,6 +809,9 @@ button, input, select, textarea {
    Main 4-Tab Bar & Scrollable Tab Content
    ========================================================================== */
 .prism-tabs-bar {
+  position: sticky;
+  top: 0;
+  z-index: 12;
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -847,10 +857,8 @@ button, input, select, textarea {
 }
 
 .prism-tab-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  flex: 1 0 auto;
+  overflow: visible;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -859,9 +867,14 @@ button, input, select, textarea {
 
 @media (min-width: 840px) {
   .prism-tabs-bar {
+    position: static;
     padding: 8px 16px;
   }
   .prism-tab-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
     padding: 14px 16px 26px;
     gap: 14px;
   }
@@ -3561,7 +3574,6 @@ html[data-prism-dormant="1"] .prism-spinner {
    Minimal Wide-Screen Left Rail Profile Card (zero duplicate sliders)
    ========================================================================== */
 .prism-rail-profile-card {
-  display: flex;
   flex-direction: column;
   gap: 7px;
   padding: 10px 12px;
@@ -8431,7 +8443,13 @@ function isStudioViewportActive() {
   try {
     const w = (typeof window !== 'undefined' ? window.innerWidth : 0) || document.documentElement?.clientWidth || 0;
     const h = (typeof window !== 'undefined' ? window.innerHeight : 0) || document.documentElement?.clientHeight || 0;
-    return w > 20 && h > 20;
+    if (w <= 20 || h <= 20) return false;
+    const appEl = document.getElementById('app');
+    if (appEl && appEl.dataset?.prismReady === 'true' && typeof appEl.getBoundingClientRect === 'function') {
+      const r = appEl.getBoundingClientRect();
+      if (r.width <= 20 || r.height <= 20) return false;
+    }
+    return true;
   } catch {
     return true;
   }
@@ -12043,15 +12061,37 @@ function computeVirtualSlice(totalCount) {
   if (totalCount <= threshold) {
     return { start: 0, end: totalCount, padTop: 0, padBottom: 0, cols: 3 };
   }
-  const scroller = document.getElementById('prism-tab-scroll');
-  const viewW = scroller ? Math.max(240, scroller.clientWidth - 28) : Math.max(240, window.innerWidth - 32);
   const isWide = window.innerWidth >= 840;
+  const scroller = document.getElementById('prism-tab-scroll');
+  const ws = document.querySelector('.prism-workspace');
+  const scrollHost = isWide ? scroller : (ws || scroller);
+  const viewW = scroller && scroller.clientWidth > 0
+    ? Math.max(240, scroller.clientWidth - 28)
+    : scrollHost && scrollHost.clientWidth > 0
+      ? Math.max(240, scrollHost.clientWidth - 28)
+      : Math.max(240, window.innerWidth - 32);
   const cols = isWide ? Math.max(2, Math.floor((viewW + 11) / 206)) : window.innerWidth >= 480 ? 3 : 2;
   const isCompact = store.config.pickerLayout === 'fixed';
   const rowH = isCompact ? 136 : Math.round((viewW / cols) * 0.625) + 46;
   const totalRows = Math.ceil(totalCount / cols);
-  const scrollTop = scroller ? Math.max(0, scroller.scrollTop - 160) : 0;
-  const viewH = scroller && scroller.clientHeight > 0 ? scroller.clientHeight : 720;
+  let scrollTop = 0;
+  let viewH = 720;
+  if (isWide) {
+    scrollTop = scroller ? Math.max(0, scroller.scrollTop - 160) : 0;
+    viewH = scroller && scroller.clientHeight > 0 ? scroller.clientHeight : 720;
+  } else {
+    const gridHost = document.getElementById('prism-lib-grid-host');
+    let gridOffset = 420;
+    if (gridHost && scrollHost && typeof gridHost.getBoundingClientRect === 'function' && typeof scrollHost.getBoundingClientRect === 'function') {
+      const gRect = gridHost.getBoundingClientRect();
+      const sRect = scrollHost.getBoundingClientRect();
+      if (sRect.height > 0) {
+        gridOffset = Math.max(0, gRect.top - sRect.top + scrollHost.scrollTop);
+      }
+    }
+    scrollTop = scrollHost ? Math.max(0, scrollHost.scrollTop - gridOffset) : 0;
+    viewH = scrollHost && scrollHost.clientHeight > 0 ? scrollHost.clientHeight : (window.innerHeight || 720);
+  }
 
   const firstRow = Math.max(0, Math.floor(scrollTop / rowH) - 3);
   const visibleRows = Math.ceil(viewH / rowH) + 6;
@@ -16969,12 +17009,15 @@ function bootPrismStudioApp() {
         .join('');
     }
 
+    const ws = document.querySelector('.prism-workspace');
+    const prevWsScroll = ws ? ws.scrollTop : 0;
     const scroller = document.getElementById('prism-tab-scroll');
     const prevScroll = scroller ? scroller.scrollTop : 0;
 
     if (scroller) {
       scroller.innerHTML = renderActiveTabContentHtml();
       scroller.scrollTop = prevScroll;
+      if (ws && prevWsScroll > 0) ws.scrollTop = prevWsScroll;
       attachLibraryThumbHoverController(scroller);
     }
 
@@ -17143,31 +17186,39 @@ function bootPrismStudioApp() {
     `;
 
     app.dataset.prismReady = 'true';
+    if (store.runtime.rootResizeObserver) {
+      try {
+        store.runtime.rootResizeObserver.observe(app);
+      } catch {
+        // ignore observer errors
+      }
+    }
     renderActiveSurface();
 
-    // Virtual scroll + capture-phase <details data-region> toggle persistence on #prism-tab-scroll
+    // Virtual scroll + capture-phase <details data-region> toggle persistence on #prism-tab-scroll & .prism-workspace
     const scroller = document.getElementById('prism-tab-scroll');
+    const ws = document.querySelector('.prism-workspace');
+    let vScrollTicking = false;
+    const scheduleLibraryVirtualRefresh = () => {
+      if (store.activeTab !== 'library' || vScrollTicking) return;
+      vScrollTicking = true;
+      requestAnimationFrame(() => {
+        vScrollTicking = false;
+        const model = computeLibraryModel();
+        if (model.visibleItems.length > VIRTUAL_SCROLL_THRESHOLD) {
+          const nextWin = computeVirtualSlice(model.visibleItems.length);
+          if (nextWin.start !== store.virtualWindow.start || nextWin.end !== store.virtualWindow.end) {
+            const gridHost = document.getElementById('prism-lib-grid-host');
+            if (gridHost) gridHost.innerHTML = renderLibraryGridHtml(model);
+          }
+        }
+      });
+    };
+    if (ws) {
+      ws.addEventListener('scroll', scheduleLibraryVirtualRefresh, { passive: true });
+    }
     if (scroller) {
-      let ticking = false;
-      scroller.addEventListener(
-        'scroll',
-        () => {
-          if (store.activeTab !== 'library' || ticking) return;
-          ticking = true;
-          requestAnimationFrame(() => {
-            ticking = false;
-            const model = computeLibraryModel();
-            if (model.visibleItems.length > VIRTUAL_SCROLL_THRESHOLD) {
-              const nextWin = computeVirtualSlice(model.visibleItems.length);
-              if (nextWin.start !== store.virtualWindow.start || nextWin.end !== store.virtualWindow.end) {
-                const gridHost = document.getElementById('prism-lib-grid-host');
-                if (gridHost) gridHost.innerHTML = renderLibraryGridHtml(model);
-              }
-            }
-          });
-        },
-        { passive: true },
-      );
+      scroller.addEventListener('scroll', scheduleLibraryVirtualRefresh, { passive: true });
 
       // Capture-phase toggle listener because `<details>` toggle event does NOT bubble
       scroller.addEventListener(
@@ -17275,8 +17326,10 @@ function bootPrismStudioApp() {
     }
   }
 
+  let applyWallpaperSeq = 0;
   async function applyWallpaperById(wallpaperId, patch = undefined) {
     if (!wallpaperId) return;
+    const seq = ++applyWallpaperSeq;
     const item = store.items.find((x) => x.id === wallpaperId);
     if (item) {
       store.activeItem = item;
@@ -17289,6 +17342,7 @@ function bootPrismStudioApp() {
     try {
       const body = patch ? { wallpaperId, patch } : { wallpaperId };
       const res = await apiJson('/api/wallpaper/apply', { method: 'POST', body });
+      if (seq !== applyWallpaperSeq) return;
       ingestServerState(res);
       const resolvedId = getActiveId();
       patchActiveCardsInPlace(resolvedId);
@@ -17296,6 +17350,7 @@ function bootPrismStudioApp() {
       updateLeftRailPanels();
       updateTopStatusIndicators();
     } catch (err) {
+      if (seq !== applyWallpaperSeq) return;
       showToast(err.message || 'Failed to apply wallpaper', 'danger');
     }
   }
@@ -19621,11 +19676,14 @@ function bootPrismStudioApp() {
             renderVisualEditorHost();
           }
           if (!isEditingField && (store.activeTab === 'skin' || store.activeTab === 'playback')) {
+            const ws = document.querySelector('.prism-workspace');
+            const prevWsScroll = ws ? ws.scrollTop : 0;
             const scroller = document.getElementById('prism-tab-scroll');
             if (scroller) {
               const prevScroll = scroller.scrollTop;
               scroller.innerHTML = renderActiveTabContentHtml();
               scroller.scrollTop = prevScroll;
+              if (ws && prevWsScroll > 0) ws.scrollTop = prevWsScroll;
               bindVirtualPickerScrollListeners();
             }
           }
@@ -19874,6 +19932,7 @@ function bootPrismStudioApp() {
 
     rt.dormantDraftSnapshot = {
       scrollerScrollTop: document.getElementById('prism-tab-scroll')?.scrollTop || 0,
+      workspaceScrollTop: document.querySelector('.prism-workspace')?.scrollTop || 0,
       railScrollTop: document.querySelector('.prism-left-rail')?.scrollTop || 0,
       activeTab: store.activeTab,
       drawer: store.drawer,
@@ -19934,6 +19993,8 @@ function bootPrismStudioApp() {
       if (wasDeep && snap) {
         const sc = document.getElementById('prism-tab-scroll');
         if (sc) sc.scrollTop = snap.scrollerScrollTop || 0;
+        const ws = document.querySelector('.prism-workspace');
+        if (ws) ws.scrollTop = snap.workspaceScrollTop || 0;
         const rail = document.querySelector('.prism-left-rail');
         if (rail) rail.scrollTop = snap.railScrollTop || 0;
       }
@@ -19990,6 +20051,8 @@ function bootPrismStudioApp() {
       try {
         const ro = new window.ResizeObserver(reconcile);
         ro.observe(document.documentElement);
+        const appEl = document.getElementById('app');
+        if (appEl) ro.observe(appEl);
         store.runtime.rootResizeObserver = ro;
       } catch {
         // ignore observer errors
