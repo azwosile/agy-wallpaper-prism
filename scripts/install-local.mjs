@@ -74,8 +74,11 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
     join('sidecars', 'prism_studio', 'cdp-bridge.mjs'),
     join('sidecars', 'prism_studio', 'index.html'),
     join('src', 'shared', 'schema.mjs'),
+    join('src', 'shared', 'i18n.mjs'),
     join('src', 'engine', 'index.mjs'),
     join('src', 'host', 'index.mjs'),
+    join('src', 'host', 'wallpaper-inject.js'),
+    join('src', 'host', 'panel-inject.js'),
     join('host', 'cli.mjs'),
   ];
 
@@ -127,7 +130,7 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
         }
       }
 
-      // Force-replace in-memory `window.__agyPrism` & `window.__agyPrismPanel` even on same-version (`2.0.6 -> 2.0.6`) hot installs
+      // Force-replace in-memory `window.__agyPrism` & `window.__agyPrismPanel` even on same-version (`2.2.0 -> 2.2.0`) hot installs
       const pf = readDevToolsActivePort();
       const cdpPorts = [...new Set([pf?.port, DEFAULT_DEBUG_PORT].filter((n) => Number.isInteger(n) && n > 0))];
       const hotReplacedTargets = [];
@@ -220,6 +223,7 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
             var ex = document.getElementById('agy-prism-stage-loader');
             if (ex) ex.remove();
             if (!skinOn) return 'disabled';
+            window.__agyPrismOn = true;
             return (function(){
               ${freshSkinScript}
               return window.__agyPrism ? 'hot-replaced' : false;
@@ -230,8 +234,13 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
             hotReplacedTargets.push(h.webSocketDebuggerUrl);
           }
         }
+        const liveOriginPrefix = livePort ? `http://127.0.0.1:${livePort}/` : '';
         for (const t of targets) {
-          if (t.type === 'iframe' && String(t.url || '').startsWith('plugin://agy-wallpaper-prism--prism_studio')) {
+          const tUrl = String(t.url || '');
+          if (
+            (t.type === 'iframe' && tUrl.startsWith('plugin://agy-wallpaper-prism--prism_studio')) ||
+            (t.type === 'page' && liveOriginPrefix && tUrl.startsWith(liveOriginPrefix))
+          ) {
             await evaluateTargetEphemeral(t.webSocketDebuggerUrl, 'window.location.reload()').catch(() => {});
           }
         }

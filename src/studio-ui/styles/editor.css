@@ -1,0 +1,607 @@
+/* ==========================================================================
+   Wallpaper Prism Studio — Dual-Form Visual Region Editor (#14 Phase 1)
+   1. Sidebar 320-560px Full-Height Modal (pan/zoom canvas + inspector)
+   2. Standalone Browser /?mode=visual-editor 3-Column IDE
+   All overlays strictly live inside #app.agy-prism-root (#15 isolation)
+   ========================================================================== */
+
+/* Modal Host inside #app.agy-prism-root */
+#prism-visual-editor-host {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--prism-studio-bg, rgb(var(--prism-base-rgb)));
+  overflow: hidden;
+}
+#prism-visual-editor-host:empty {
+  display: none;
+}
+
+/* ==========================================================================
+   Shared Visual Editor Shell & Top Toolbar
+   ========================================================================== */
+.prism-ve-modal,
+.prism-ve-popout-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--prism-studio-bg, rgb(var(--prism-base-rgb)));
+  color: var(--prism-fg);
+  overflow: hidden;
+}
+
+.prism-ve-toolbar,
+.prism-ve-topbar {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--prism-rail-bg, rgb(var(--prism-shade-rgb)));
+  background-image: var(--prism-sheen);
+  border-bottom: 1px solid var(--prism-border-hairline);
+  box-shadow: inset 0 1px 0 var(--prism-specular-top);
+  z-index: 5;
+}
+
+.prism-ve-toolbar-left,
+.prism-ve-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.prism-ve-title {
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.prism-ve-zoom-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-ctl-bg);
+}
+.prism-ve-zoom-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: calc(var(--prism-r-ctl) - 2px);
+  background: transparent;
+  color: var(--prism-fg-2);
+  font-family: var(--prism-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.prism-ve-zoom-btn:hover {
+  background: var(--prism-ctl-hover);
+  color: var(--prism-fg);
+}
+.prism-ve-zoom-readout {
+  min-width: 38px;
+  text-align: center;
+  font-family: var(--prism-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--prism-fg-2);
+  cursor: pointer;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+}
+.prism-ve-zoom-readout:hover {
+  color: var(--prism-accent);
+}
+
+.prism-ve-preview-toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   Form 1: Sidebar Full-Height Modal Body (320-560px stack -> >=960px 2-col)
+   ========================================================================== */
+.prism-ve-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.prism-ve-modal-body .prism-ve-canvas-pane {
+  flex: 0 0 42%;
+  min-height: 170px;
+  max-height: 52%;
+  border-bottom: 1px solid var(--prism-border-hairline);
+}
+
+.prism-ve-region-strip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  overflow-x: auto;
+  background: var(--prism-rail-bg, rgb(var(--prism-shade-rgb)));
+  border-bottom: 1px solid var(--prism-border-hairline);
+}
+.prism-ve-region-strip::-webkit-scrollbar {
+  height: 4px;
+}
+.prism-ve-region-chip {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-ctl-bg);
+  color: var(--prism-fg-2);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--prism-dur-fast) ease;
+}
+.prism-ve-region-chip:hover {
+  background: var(--prism-ctl-hover);
+  color: var(--prism-fg);
+}
+.prism-ve-region-chip.is-selected,
+.prism-ve-region-chip[aria-selected="true"] {
+  background: var(--prism-accent-soft);
+  border-color: var(--prism-accent);
+  color: var(--prism-fg);
+}
+
+.prism-ve-modal-body .prism-ve-inspector-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px 20px;
+}
+
+@media (min-width: 960px) {
+  .prism-ve-modal-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 356px;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .prism-ve-modal-body .prism-ve-region-strip {
+    grid-column: 1 / -1;
+  }
+  .prism-ve-modal-body .prism-ve-canvas-pane {
+    height: 100%;
+    max-height: none;
+    border-bottom: none;
+    border-right: 1px solid var(--prism-border-hairline);
+  }
+  .prism-ve-modal-body .prism-ve-inspector-pane {
+    height: 100%;
+    padding: 12px 14px 24px;
+  }
+}
+
+/* ==========================================================================
+   Form 2: Standalone Browser /?mode=visual-editor 3-Column IDE
+   grid-template-columns: 220px minmax(0, 1fr) 340px
+   ========================================================================== */
+.prism-ve-ide-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 340px;
+  overflow: hidden;
+}
+
+@media (max-width: 1023px) and (min-width: 720px) {
+  .prism-ve-ide-grid {
+    grid-template-columns: 186px minmax(0, 1fr) 300px;
+  }
+}
+
+@media (max-width: 719px) {
+  .prism-ve-ide-grid {
+    display: flex;
+    flex-direction: column;
+  }
+  .prism-ve-ide-grid .prism-ve-tree-pane {
+    flex: 0 0 auto;
+    max-height: 112px;
+    border-right: none;
+    border-bottom: 1px solid var(--prism-border-hairline);
+  }
+  .prism-ve-ide-grid .prism-ve-tree-list {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .prism-ve-ide-grid .prism-ve-canvas-pane {
+    flex: 0 0 42%;
+    min-height: 180px;
+    border-right: none;
+    border-bottom: 1px solid var(--prism-border-hairline);
+  }
+  .prism-ve-ide-grid .prism-ve-inspector-pane {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+/* Column 1: 8-Region Structure Tree */
+.prism-ve-tree-pane {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 8px;
+  background: var(--prism-rail-bg, rgb(var(--prism-shade-rgb)));
+  border-right: 1px solid var(--prism-border-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prism-ve-tree-head {
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--prism-fg-muted);
+}
+
+.prism-ve-tree-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prism-ve-tree-item {
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--prism-fg-2);
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  transition: background var(--prism-dur-fast) ease, border-color var(--prism-dur-fast) ease, color var(--prism-dur-fast) ease;
+}
+.prism-ve-tree-item:hover {
+  background: var(--prism-ctl-bg);
+  color: var(--prism-fg);
+}
+.prism-ve-tree-item.is-selected,
+.prism-ve-tree-item[aria-selected="true"] {
+  background: var(--prism-accent-soft);
+  border-color: var(--prism-accent-border);
+  color: var(--prism-fg);
+  box-shadow: inset 2px 0 0 var(--prism-accent);
+}
+
+.prism-ve-tree-item-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.prism-ve-tree-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 550;
+}
+.prism-ve-tree-count {
+  font-family: var(--prism-font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-ctl-bg);
+  color: var(--prism-fg-muted);
+  flex-shrink: 0;
+}
+.prism-ve-tree-count.is-custom {
+  border-color: var(--prism-accent-border);
+  background: var(--prism-accent-soft);
+  color: var(--prism-accent);
+}
+
+/* Column 2: Interactive Pan/Zoom Canvas Pane */
+.prism-ve-canvas-pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--prism-studio-bg, rgb(var(--prism-base-rgb)));
+  background-image: radial-gradient(rgba(var(--prism-pt-rgb), 0.11) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.prism-ve-canvas-viewport {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  cursor: grab;
+  touch-action: none;
+}
+.prism-ve-canvas-viewport.is-panning {
+  cursor: grabbing;
+}
+
+.prism-ve-canvas-transform {
+  width: min(100%, 760px);
+  transform-origin: center center;
+  transition: transform 80ms linear;
+}
+.prism-ve-canvas-viewport.is-panning .prism-ve-canvas-transform {
+  transition: none;
+}
+
+#prism-visual-canvas-stage,
+.prism-ve-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  min-height: 150px;
+  border-radius: var(--prism-r-card);
+  border: 1px solid var(--prism-border-popover);
+  box-shadow: var(--prism-shadow-popover);
+  background: #0a0c14;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Larger workbench shell proportions inside Visual Editor */
+.prism-ve-stage .mini-hub-shell {
+  grid-template-rows: 22px minmax(0, 1fr);
+}
+.prism-ve-stage .mini-topbar {
+  height: 22px;
+}
+.prism-ve-stage .mini-topbar-pill {
+  padding: 0 8px;
+  font-size: 10px;
+}
+.prism-ve-stage .mini-wco-pill {
+  width: 54px;
+  gap: 5px;
+}
+.prism-ve-stage .mini-wco-pill span {
+  width: 6px;
+  height: 2.5px;
+}
+.prism-ve-stage .mini-sidebar,
+.prism-ve-stage .mini-center,
+.prism-ve-stage .mini-aux {
+  padding: 9px;
+  gap: 6px;
+}
+.prism-ve-stage .mini-nav-row {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+.prism-ve-stage .mini-bubble {
+  height: auto;
+  min-height: 20px;
+  width: 68%;
+  padding: 4px 8px;
+  font-size: 10px;
+  line-height: 1.3;
+}
+.prism-ve-stage .mini-code-card {
+  padding: 7px 9px;
+  font-size: 10px;
+}
+.prism-ve-stage .mini-composer {
+  padding: 7px 9px;
+}
+.prism-ve-stage .mini-composer-input {
+  font-size: 10px;
+}
+
+/* Interactive 8-Region Selection Ring & Hover Label */
+.prism-ve-stage [data-editor-region] {
+  position: relative;
+  cursor: pointer;
+  transition: outline-color 110ms ease, box-shadow 110ms ease;
+}
+.prism-ve-stage [data-editor-region]:hover {
+  outline: 2px dashed rgba(var(--prism-accent-rgb), 0.85);
+  outline-offset: -2px;
+  z-index: 6;
+}
+.prism-ve-stage [data-editor-region].is-selected,
+.prism-ve-stage [data-editor-region][data-selected="true"] {
+  outline: 2px solid var(--prism-accent);
+  outline-offset: -2px;
+  box-shadow: 0 0 0 3px rgba(var(--prism-accent-rgb), 0.25);
+  z-index: 7;
+}
+.prism-ve-stage [data-editor-region][data-region-label]:hover::after,
+.prism-ve-stage [data-editor-region][data-region-label].is-selected::after,
+.prism-ve-stage [data-editor-region][data-region-label][data-selected="true"]::after {
+  content: attr(data-region-label);
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  z-index: 12;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(10, 12, 18, 0.86);
+  border: 1px solid var(--prism-accent-border);
+  color: #F8FAFC;
+  font-family: var(--prism-font-sans);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Simulated Popover Preview inside Visual Canvas */
+.prism-ve-popover-sim {
+  position: absolute;
+  top: 34px;
+  right: 18%;
+  width: 156px;
+  padding: 7px 8px;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 10px;
+  line-height: 1.3;
+}
+.prism-ve-popover-row {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(var(--prism-pt-rgb), 0.06);
+}
+
+/* Simulated Empty Conversation Welcome Logo inside Workspace */
+.prism-ve-welcome-logo {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px;
+  color: var(--sim-workspace-fg, var(--prism-fg-muted));
+  opacity: 0.72;
+  font-size: 10.5px;
+  line-height: 1.25;
+  pointer-events: none;
+}
+.prism-ve-welcome-logo[data-hidden="true"] {
+  opacity: 0.14;
+  text-decoration: line-through;
+}
+
+.prism-ve-canvas-hint {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  z-index: 6;
+  padding: 2px 8px;
+  border-radius: var(--prism-r-pill);
+  background: rgba(10, 12, 18, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #E2E8F0;
+  font-size: 10px;
+  line-height: 1.25;
+  pointer-events: none;
+}
+
+/* Column 3: 11-Property Region Inspector Pane */
+.prism-ve-inspector-pane {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 14px 24px;
+  background: var(--prism-studio-bg, rgb(var(--prism-base-rgb)));
+  border-left: 1px solid var(--prism-border-hairline);
+}
+
+.prism-ve-modal-body .prism-ve-inspector-pane {
+  border-left: none;
+}
+
+.prism-ve-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prism-ve-inspector-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--prism-border-hairline);
+  flex-wrap: wrap;
+}
+
+.prism-ve-inspector-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.prism-ve-inspector-title {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--prism-fg);
+}
+
+.prism-ve-inspector-group {
+  padding: 9px 11px;
+  border-radius: var(--prism-r-card);
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-card-bg, rgb(var(--prism-tint-1-rgb)));
+  background-image: var(--prism-sheen);
+  box-shadow: inset 0 1px 0 var(--prism-specular-top);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prism-ve-inspector-group-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--prism-fg-2);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--prism-border-hairline);
+}

@@ -43,7 +43,7 @@ export const WE_APP_ID = '431960';
 const DISCOVERY_TTL_MS = 60_000;
 const SCAN_CHUNK_SIZE = 12;
 const MAX_SLIDESHOW_FRAMES = 2000;
-const INVENTORY_CACHE_VERSION = 3;
+const INVENTORY_CACHE_VERSION = 4;
 const MAX_LOCAL_SCAN_DEPTH = 4;
 const MAX_LOCAL_ITEMS = 5000;
 const MAX_LOCAL_STAT_OPS = 25_000;
@@ -858,6 +858,9 @@ export function loadWarmInventorySnapshot({
       if (activeRaw?._fs?.primaryAbs && !existsSync(activeRaw._fs.primaryAbs)) {
         return null;
       }
+      if (activeRaw?._fs?.sceneContainerAbs && !existsSync(activeRaw._fs.sceneContainerAbs)) {
+        return null;
+      }
       if (activeRaw?._fs?.projectDir && !existsSync(activeRaw._fs.projectDir)) {
         return null;
       }
@@ -903,7 +906,8 @@ function inspectWeProjectDir({
   if (cachedEntry && cachedEntry.projStamp === projStamp && cachedEntry.rawItem) {
     const cachedRaw = cachedEntry.rawItem;
     const primaryOk = !cachedRaw._fs?.primaryAbs || existsSync(cachedRaw._fs.primaryAbs);
-    if (primaryOk) {
+    const sceneOk = !cachedRaw._fs?.sceneContainerAbs || existsSync(cachedRaw._fs.sceneContainerAbs);
+    if (primaryOk && sceneOk) {
       nextCacheMap[id] = cachedEntry;
       return cachedRaw;
     }
@@ -966,12 +970,15 @@ function inspectWeProjectDir({
 
   let sceneContainerAbs = null;
   if (kind === 'scene') {
+    // Never expose scene.pkg / scene.json as primaryAbs (prevents feeding non-video files to ffmpeg)
+    primaryAbs = null;
     const pkgCand = resolveFencedPath(projectDir, 'scene.pkg')
       || (fencedFile && fencedFile.toLowerCase().endsWith('.pkg') ? fencedFile : null);
     sceneContainerAbs = pkgCand || projectDir;
   }
 
   const primaryStat = primaryAbs ? safeStat(primaryAbs) : null;
+  const fencedStat = fencedFile ? safeStat(fencedFile) : null;
   const sceneStat = sceneContainerAbs ? safeStat(sceneContainerAbs) : null;
 
   const fingerprint = sha1Short(
@@ -979,8 +986,8 @@ function inspectWeProjectDir({
       projectDir,
       projStat.mtimeMs,
       projStat.size,
-      primaryStat?.mtimeMs || 0,
-      primaryStat?.size || 0,
+      primaryStat?.mtimeMs || fencedStat?.mtimeMs || 0,
+      primaryStat?.size || fencedStat?.size || 0,
       sceneStat?.mtimeMs || 0,
       sceneStat?.size || 0,
       slides.length,
@@ -996,7 +1003,7 @@ function inspectWeProjectDir({
     let fps = null;
     let hasSceneVideo = false;
     let hasSceneAudio = false;
-    let fileSize = primaryStat?.size || sceneStat?.size || 0;
+    let fileSize = primaryStat?.size || sceneStat?.size || fencedStat?.size || 0;
 
     if (kind === 'video' && primaryAbs) {
       const mp4 = probeMp4Metadata(primaryAbs);

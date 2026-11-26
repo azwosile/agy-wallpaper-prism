@@ -3,14 +3,14 @@
 
 export const PLUGIN_ID = 'agy-wallpaper-prism';
 export const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-export const PLUGIN_VERSION = '2.1.0';
+export const PLUGIN_VERSION = '2.2.0';
 export const SIDECAR_ID = 'prism_studio';
 export const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 export const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 export const DEFAULT_DEBUG_PORT = 9339;
 
 export const PRISM_DOM = Object.freeze({
-  skinVersion: '2.1.0',
+  skinVersion: '2.2.0',
   skinAttr: 'data-agy-prism-skin',
   glassAttr: 'data-agy-prism-glass',
   wallpaperAttr: 'data-agy-prism-wallpaper',
@@ -18,6 +18,7 @@ export const PRISM_DOM = Object.freeze({
   wcoActiveAttr: 'data-agy-prism-wco-active',
   welcomeLogoAttr: 'data-prism-welcome-logo',
   topbarStyleAttr: 'data-prism-topbar-style',
+  sidebarStyleAttr: 'data-prism-sidebar-style',
   topbarPillsId: 'agy-prism-topbar-pills',
   staticStyleId: 'agy-prism-static-css',
   themeAttr: 'data-prism-theme',
@@ -60,6 +61,22 @@ export const ROTATION_TRIGGERS = Object.freeze(['interval', 'videoEnd']);
 export const TRIGGER_MODES = Object.freeze(['pill', 'corner', 'both', 'shortcut-only']);
 export const LANGUAGES = Object.freeze(['auto', 'zh', 'en']);
 export const SIDEBAR_RADII = Object.freeze(['auto', 'native', '0', '6', '12', '16', '20']);
+export const SIDEBAR_RADIUS_RANGE = Object.freeze({ min: 0, max: 28 });
+export const BORDER_STYLES = Object.freeze(['full', 'bottom', 'none']);
+export const SIDEBAR_LIST_STYLES = Object.freeze(['capsule', 'underline', 'accordion', 'tree']);
+export const SIDEBAR_TYPOGRAPHY_MODES = Object.freeze(['balanced', 'native']);
+export const LIBRARY_ANIMATED_THUMB_MODES = Object.freeze(['off', 'hover', 'always']);
+
+export const CJK_SAFE_FONT_PRESETS = Object.freeze([
+  Object.freeze({ id: 'system', value: '', labelKey: 'region.font.followSystem' }),
+  Object.freeze({ id: 'yahei', value: "'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif", labelKey: 'region.font.yahei' }),
+  Object.freeze({ id: 'pingfang', value: "'PingFang SC', 'Hiragino Sans GB', sans-serif", labelKey: 'region.font.pingfang' }),
+  Object.freeze({ id: 'noto-sans', value: "'Noto Sans SC', 'Source Han Sans SC', sans-serif", labelKey: 'region.font.notoSans' }),
+  Object.freeze({ id: 'segoe', value: "'Segoe UI', system-ui, sans-serif", labelKey: 'region.font.segoe' }),
+  Object.freeze({ id: 'inter', value: "Inter, 'Segoe UI', sans-serif", labelKey: 'region.font.inter' }),
+  Object.freeze({ id: 'jetbrains', value: "'JetBrains Mono', monospace", labelKey: 'region.font.jetbrains' }),
+  Object.freeze({ id: 'cascadia', value: "'Cascadia Code', monospace", labelKey: 'region.font.cascadia' }),
+]);
 
 /** 8 Paired Light/Dark Color Schemes (Obsidian Prism + Theme Classics). */
 export const COLOR_SCHEMES = Object.freeze({
@@ -392,49 +409,142 @@ export const ACCENT_PRESETS = Object.freeze({
   mono: Object.freeze({ dark: '#D4D7E0', darkFg: '#0E0F14', light: '#334155', lightFg: '#FFFFFF' }),
 });
 
-/** 7 Independent Frosted-Glass Component Surface IDs (Req #4). */
-export const SURFACE_TINT_COMPONENTS = Object.freeze([
+/** 8 Independent Glass & Appearance Region IDs (v2.2.0 unified regions schema). */
+export const REGION_IDS = Object.freeze([
   'topbar',
+  'wco',
   'sidebar',
   'workspace',
-  'rightPane',
-  'composer',
   'card',
+  'composer',
+  'rightPane',
   'popover',
 ]);
 
-export const GLASS_COMPONENT_IDS = SURFACE_TINT_COMPONENTS;
+export const SURFACE_TINT_COMPONENTS = REGION_IDS;
+export const GLASS_COMPONENT_IDS = REGION_IDS;
 
 export const SURFACE_TINT_BOUNDS = Object.freeze({
   topbar: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  wco: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
   sidebar: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
   workspace: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
-  rightPane: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
-  composer: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
   card: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  composer: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  rightPane: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
   popover: Object.freeze({ minOpacity: 0.5, maxOpacity: 0.99 }),
+});
+
+export const REGION_FONT_SIZE_BOUNDS = Object.freeze({
+  topbar: Object.freeze({ min: 10, max: 24 }),
+  wco: Object.freeze({ min: 10, max: 24 }),
+  sidebar: Object.freeze({ min: 11, max: 15 }),
+  workspace: Object.freeze({ min: 10, max: 24 }),
+  card: Object.freeze({ min: 10, max: 24 }),
+  composer: Object.freeze({ min: 10, max: 24 }),
+  rightPane: Object.freeze({ min: 10, max: 24 }),
+  popover: Object.freeze({ min: 10, max: 24 }),
+});
+
+/** Optical keys reset by SCENE_PRESETS (`surfaceTints: null`); structural keys are preserved. */
+export const REGION_OPTICAL_KEYS = Object.freeze([
+  'glassEnabled',
+  'blur',
+  'opacity',
+  'tone',
+  'tint',
+  'borderOpacity',
+]);
+
+export const REGION_STRUCTURAL_KEYS = Object.freeze([
+  'borderStyle',
+  'radius',
+  'fontSize',
+  'fontFamily',
+  'fontColor',
+  'allowRawFontColor',
+]);
+
+export const SIDEBAR_REGION_EXTRA_KEYS = Object.freeze([
+  'listStyle',
+  'sectionFontSize',
+  'projectFontSize',
+  'itemFontSize',
+]);
+
+export const DEFAULT_REGION_ENTRY = Object.freeze({
+  glassEnabled: null,       // boolean | null (null = follow global glassSurfaces)
+  blur: null,               // int 0..64 (px) | null
+  opacity: null,            // float 0..0.98 (popover: 0.50..0.99) | null
+  tone: 0,                  // int -100..+100
+  tint: '',                 // '#RRGGBB' | ''
+  borderOpacity: null,      // float 0..1 | null (null = auto-fade via computeBorderFactor #4)
+  borderStyle: null,        // 'full' | 'bottom' | 'none' | null
+  radius: null,             // int 0..28 (px) | null
+  fontSize: null,           // int 10..24 (sidebar clamped 11..15) | null
+  fontFamily: '',           // sanitized CSS font-family stack (<= 120 chars, <= 6 families) | ''
+  fontColor: '',            // '#RRGGBB' | '' (passes through D7 enforceFgContrastRgb)
+  allowRawFontColor: false, // boolean (D7: false = WCAG AA opposite-anchor guardrail; true = raw)
+});
+
+export const DEFAULT_SIDEBAR_REGION_ENTRY = Object.freeze({
+  ...DEFAULT_REGION_ENTRY,
+  listStyle: 'capsule',     // D5: 'capsule' | 'underline' | 'accordion' | 'tree'
+  sectionFontSize: null,    // float 11..15 (1 decimal) | null
+  projectFontSize: null,    // float 11..15 (1 decimal) | null
+  itemFontSize: null,       // float 11..15 (1 decimal) | null
+});
+
+export const DEFAULT_REGIONS = Object.freeze({
+  topbar: DEFAULT_REGION_ENTRY,
+  wco: DEFAULT_REGION_ENTRY,
+  sidebar: DEFAULT_SIDEBAR_REGION_ENTRY,
+  workspace: DEFAULT_REGION_ENTRY,
+  card: DEFAULT_REGION_ENTRY,
+  composer: DEFAULT_REGION_ENTRY,
+  rightPane: DEFAULT_REGION_ENTRY,
+  popover: DEFAULT_REGION_ENTRY,
 });
 
 export const DEFAULT_SURFACE_TINT_ENTRY = Object.freeze({
   opacity: null,
   tone: 0,
   tint: '',
+  blur: null,
+  glassEnabled: null,
+  borderOpacity: null,
 });
 
 export const DEFAULT_SURFACE_TINTS = Object.freeze({
   topbar: DEFAULT_SURFACE_TINT_ENTRY,
+  wco: DEFAULT_SURFACE_TINT_ENTRY,
   sidebar: DEFAULT_SURFACE_TINT_ENTRY,
   workspace: DEFAULT_SURFACE_TINT_ENTRY,
-  rightPane: DEFAULT_SURFACE_TINT_ENTRY,
-  composer: DEFAULT_SURFACE_TINT_ENTRY,
   card: DEFAULT_SURFACE_TINT_ENTRY,
+  composer: DEFAULT_SURFACE_TINT_ENTRY,
+  rightPane: DEFAULT_SURFACE_TINT_ENTRY,
   popover: DEFAULT_SURFACE_TINT_ENTRY,
 });
+
+export function createDefaultRegionEntry(id = '') {
+  if (id === 'sidebar') {
+    return { ...DEFAULT_SIDEBAR_REGION_ENTRY };
+  }
+  return { ...DEFAULT_REGION_ENTRY };
+}
+
+export function createDefaultRegions() {
+  const out = {};
+  for (const id of REGION_IDS) {
+    out[id] = createDefaultRegionEntry(id);
+  }
+  return out;
+}
 
 export function createDefaultSurfaceTints() {
   const out = {};
   for (const id of SURFACE_TINT_COMPONENTS) {
-    out[id] = { opacity: null, tone: 0, tint: '' };
+    out[id] = { ...DEFAULT_SURFACE_TINT_ENTRY };
   }
   return out;
 }
@@ -573,6 +683,7 @@ export const FACTORY_PRESETS = Object.freeze([
       mediaBlur: 0,
       vignette: true,
       grainAlpha: 0.022,
+      paused: false,
     }),
   }),
   Object.freeze({
@@ -603,6 +714,7 @@ export const FACTORY_PRESETS = Object.freeze([
       mediaBlur: 0,
       vignette: true,
       grainAlpha: 0.02,
+      paused: false,
     }),
   }),
   Object.freeze({
@@ -633,6 +745,7 @@ export const FACTORY_PRESETS = Object.freeze([
       mediaBlur: 0,
       vignette: true,
       grainAlpha: 0.015,
+      paused: false,
     }),
   }),
   Object.freeze({
@@ -663,6 +776,7 @@ export const FACTORY_PRESETS = Object.freeze([
       mediaBlur: 4,
       vignette: true,
       grainAlpha: 0.028,
+      paused: false,
     }),
   }),
   Object.freeze({
@@ -693,6 +807,7 @@ export const FACTORY_PRESETS = Object.freeze([
       mediaBlur: 0,
       vignette: true,
       grainAlpha: 0.018,
+      paused: false,
     }),
   }),
   Object.freeze({
@@ -724,6 +839,7 @@ export const FACTORY_PRESETS = Object.freeze([
       mediaBlur: 6,
       vignette: true,
       grainAlpha: 0.01,
+      paused: false,
     }),
   }),
   Object.freeze({
@@ -754,6 +870,7 @@ export const FACTORY_PRESETS = Object.freeze([
       mediaBlur: 0,
       vignette: true,
       grainAlpha: 0.024,
+      paused: false,
     }),
   }),
 ]);
@@ -781,6 +898,12 @@ export const DEFAULT_CONFIG = Object.freeze({
   transparentWindowControls: true,
   hideWelcomeLogo: false,
   topbarStyle: 'pills',
+  sidebarListStyle: 'capsule',
+  sidebarTypographyMode: 'balanced',
+  sidebarFontSize: null,
+  globalFontSize: null,
+  globalFontFamily: '',
+  globalFontColor: '',
 
   // Adaptive Theme, Color Scheme & Dynamic Accent
   themeMode: 'auto',
@@ -798,6 +921,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   glassBlur: 16,
   sidebarOpacity: null,
   sidebarBlur: null,
+  regions: DEFAULT_REGIONS,
   surfaceTints: DEFAULT_SURFACE_TINTS,
   glassFidelity: 92,
   chatGlassFidelity: 90,
@@ -836,6 +960,8 @@ export const DEFAULT_CONFIG = Object.freeze({
   sceneAutoQuality: true,
   liveBootDelay: 1.5,
   interactiveWeb: false,
+  previewLiveMedia: false,
+  libraryAnimatedThumbs: 'hover',
   switchTransition: 'fade',
   switchTransitionDir: 'left',
   switchTransitionSpeed: 'normal',
@@ -893,6 +1019,12 @@ export const RESET_SCOPES = Object.freeze({
     'transparentWindowControls',
     'hideWelcomeLogo',
     'topbarStyle',
+    'sidebarListStyle',
+    'sidebarTypographyMode',
+    'sidebarFontSize',
+    'globalFontSize',
+    'globalFontFamily',
+    'globalFontColor',
     'themeMode',
     'themeFollow',
     'colorScheme',
@@ -904,6 +1036,7 @@ export const RESET_SCOPES = Object.freeze({
     'glassBlur',
     'sidebarOpacity',
     'sidebarBlur',
+    'regions',
     'surfaceTints',
     'glassFidelity',
     'chatGlassFidelity',
@@ -948,6 +1081,8 @@ export const RESET_SCOPES = Object.freeze({
     'startupMode',
     'liveBootDelay',
     'interactiveWeb',
+    'previewLiveMedia',
+    'libraryAnimatedThumbs',
     'switchTransition',
     'switchTransitionDir',
     'switchTransitionSpeed',
@@ -972,7 +1107,11 @@ export const PER_WALLPAPER_OVERRIDE_KEYS = Object.freeze([
   'glassBlur',
   'sidebarOpacity',
   'sidebarBlur',
+  'regions',
   'surfaceTints',
+  'globalFontSize',
+  'globalFontFamily',
+  'globalFontColor',
   'scrimOpacity',
   'mediaOpacity',
   'mediaBlur',
@@ -990,6 +1129,44 @@ export const PER_WALLPAPER_OVERRIDE_KEYS = Object.freeze([
   'volume',
   'muted',
 ]);
+
+/** Canonical fast-path optical/region/typography keys (<0.3ms CSS var update without rebuilding #agy-prism-css). */
+export const FAST_OPTICAL_KEYS = Object.freeze([
+  'glassBlur',
+  'sidebarBlur',
+  'glassOpacity',
+  'sidebarOpacity',
+  'scrimOpacity',
+  'scrimColor',
+  'vignette',
+  'accentMode',
+  'customAccent',
+  'wallTintMix',
+  'glassFidelity',
+  'chatGlassFidelity',
+  'contrastFloor',
+  'floaterSolidBase',
+  'surfaceTints',
+  'regions',
+  'globalFontSize',
+  'globalFontFamily',
+  'globalFontColor',
+  'sidebarListStyle',
+  'sidebarTypographyMode',
+  'sidebarFontSize',
+  'preset',
+  'mediaBlur',
+  'mediaOpacity',
+  'mediaBrightness',
+  'mediaContrast',
+  'mediaSaturate',
+  'grainAlpha',
+  'filterPreset',
+]);
+
+export const FAST_OPTICAL_KEYS_MAP = Object.freeze(
+  Object.fromEntries(FAST_OPTICAL_KEYS.map((k) => [k, 1])),
+);
 
 function clamp(v, min, max) {
   return Math.min(max, Math.max(min, v));
@@ -1042,6 +1219,72 @@ function cleanColor(v, fallback = '') {
   return s.length <= 64 && SAFE_COLOR_RE.test(s) ? s : fallback;
 }
 
+export const FONT_FAMILY_FORBIDDEN_CHARS_RE = /[;{}()\\/<>\r\n\0`]/;
+export const FONT_FAMILY_FORBIDDEN_KW_RE = /\b(?:url|expression|javascript|vbscript|behavior)\b|@import/i;
+export const FONT_FAMILY_TOKEN_RE = /^[a-zA-Z0-9\u4e00-\u9fff _-]+$/;
+const GENERIC_FONT_FAMILIES = new Set([
+  'serif',
+  'sans-serif',
+  'monospace',
+  'cursive',
+  'fantasy',
+  'system-ui',
+  'ui-sans-serif',
+  'ui-serif',
+  'ui-monospace',
+  'ui-rounded',
+]);
+
+export function sanitizeFontFamily(raw) {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (FONT_FAMILY_FORBIDDEN_CHARS_RE.test(trimmed) || FONT_FAMILY_FORBIDDEN_KW_RE.test(trimmed)) {
+    return '';
+  }
+  const parts = trimmed.split(',');
+  const families = [];
+  const seen = new Set();
+  for (const part of parts) {
+    let tok = part.trim();
+    if (!tok) continue;
+    if ((tok.startsWith("'") && tok.endsWith("'")) || (tok.startsWith('"') && tok.endsWith('"'))) {
+      tok = tok.slice(1, -1).trim();
+    }
+    tok = tok.replace(/\s+/g, ' ');
+    if (!tok || tok.length > 64) continue;
+    if (FONT_FAMILY_FORBIDDEN_KW_RE.test(tok) || !FONT_FAMILY_TOKEN_RE.test(tok)) continue;
+    const lower = tok.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    if (GENERIC_FONT_FAMILIES.has(lower)) {
+      families.push(lower);
+    } else if (/\s/.test(tok) || /[\u4e00-\u9fff]/.test(tok)) {
+      families.push(`'${tok}'`);
+    } else {
+      families.push(tok);
+    }
+    if (families.length >= 6) break;
+  }
+  while (families.length > 0) {
+    const joined = families.join(', ');
+    if (joined.length <= 120) return joined;
+    families.pop();
+  }
+  return '';
+}
+
+export function sanitizeSidebarRadius(v, fallback = 'auto') {
+  if (v === null || v === undefined || v === '') return fallback;
+  const s = String(v).trim().toLowerCase();
+  if (s === 'auto') return 'auto';
+  if (s === 'native') return 'native';
+  if (/^-?\d+(?:\.\d+)?$/.test(s)) {
+    return String(Math.round(clamp(Number(s), SIDEBAR_RADIUS_RANGE.min, SIDEBAR_RADIUS_RANGE.max)));
+  }
+  return fallback;
+}
+
 function cleanStringArray(v, fallback = [], nonEmptyChoices = null) {
   if (!Array.isArray(v)) return [...fallback];
   const out = [];
@@ -1078,6 +1321,122 @@ export function contrastFgForHex(hex) {
   const b = parseInt(h.slice(4, 6), 16) / 255;
   const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return lum > 0.62 ? '#14120E' : '#FFFFFF';
+}
+
+export function hexToRgbArray(hex) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!m) return null;
+  let h = m[1];
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+export function rgbArrayToHex(rgb) {
+  return `#${[0, 1, 2]
+    .map((i) => clamp(Math.round(Number(rgb?.[i]) || 0), 0, 255).toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()}`;
+}
+
+export function relLumRgb(rgb) {
+  const lin = (c) => {
+    const n = clamp(Number(c) || 0, 0, 255) / 255;
+    return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+}
+
+export function contrastRatioRgb(rgbA, rgbB) {
+  const l1 = relLumRgb(rgbA);
+  const l2 = relLumRgb(rgbB);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+
+/**
+ * D7 Opposite-Anchor Foreground Readability Guardrail (WCAG AA >= 4.5:1).
+ * Dark theme (`!isLight`) pushes fg toward `[255, 255, 255]`;
+ * Light theme (`isLight`) pushes fg toward `[15, 23, 42]`.
+ */
+export function enforceFgContrastRgb(fgRgb, bgRgb, isLight, minRatio = 4.5) {
+  const target = Number.isFinite(minRatio) && minRatio > 1 ? minRatio : 4.5;
+  if (contrastRatioRgb(fgRgb, bgRgb) >= target) return [fgRgb[0], fgRgb[1], fgRgb[2]];
+  const primaryAnchor = isLight ? [15, 23, 42] : [255, 255, 255];
+  const altAnchor = isLight ? [255, 255, 255] : [15, 23, 42];
+  const anchor =
+    contrastRatioRgb(primaryAnchor, bgRgb) >= target ||
+    contrastRatioRgb(primaryAnchor, bgRgb) >= contrastRatioRgb(altAnchor, bgRgb)
+      ? primaryAnchor
+      : altAnchor;
+  let lo = 0;
+  let hi = 1;
+  let best = anchor;
+  for (let step = 0; step < 12; step += 1) {
+    const mid = (lo + hi) * 0.5;
+    const cand = [
+      Math.round(fgRgb[0] + (anchor[0] - fgRgb[0]) * mid),
+      Math.round(fgRgb[1] + (anchor[1] - fgRgb[1]) * mid),
+      Math.round(fgRgb[2] + (anchor[2] - fgRgb[2]) * mid),
+    ];
+    if (contrastRatioRgb(cand, bgRgb) >= target) {
+      best = cand;
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  return best;
+}
+
+/**
+ * D7 Region Foreground Resolution Policy:
+ * - `allowRawFontColor === true` -> skip clamping, return exact user color
+ * - `bgAlpha < 0.55` -> gentle low-opacity warning only, DO NOT hard-lock user color
+ * - otherwise -> clamp via opposite-anchor `enforceFgContrastRgb` (>= 4.5:1)
+ */
+export function resolveRegionFgColor({
+  fgHex = '',
+  bgRgb = [14, 14, 17],
+  bgAlpha = 0.76,
+  isLight = false,
+  allowRawFontColor = false,
+  minRatio = 4.5,
+} = {}) {
+  const cleanHex = cleanTintHex(fgHex);
+  if (!cleanHex) {
+    return { color: '', rawHex: '', ratio: null, rawRatio: null, clamped: false, lowOpacityWarning: false };
+  }
+  const fgRgb = hexToRgbArray(cleanHex);
+  if (!fgRgb) {
+    return { color: '', rawHex: '', ratio: null, rawRatio: null, clamped: false, lowOpacityWarning: false };
+  }
+  const rawRatio = Math.round(contrastRatioRgb(fgRgb, bgRgb) * 100) / 100;
+  const lowOpacityWarning =
+    bgAlpha !== null &&
+    bgAlpha !== undefined &&
+    bgAlpha !== '' &&
+    Number.isFinite(Number(bgAlpha)) &&
+    Number(bgAlpha) < 0.55;
+  if (allowRawFontColor || lowOpacityWarning) {
+    return {
+      color: cleanHex,
+      rawHex: cleanHex,
+      ratio: rawRatio,
+      rawRatio,
+      clamped: false,
+      lowOpacityWarning,
+    };
+  }
+  const safeRgb = enforceFgContrastRgb(fgRgb, bgRgb, isLight, minRatio);
+  const safeHex = rgbArrayToHex(safeRgb);
+  const ratio = Math.round(contrastRatioRgb(safeRgb, bgRgb) * 100) / 100;
+  return {
+    color: safeHex,
+    rawHex: cleanHex,
+    ratio,
+    rawRatio,
+    clamped: safeHex !== cleanHex,
+    lowOpacityWarning: false,
+  };
 }
 
 /** Resolve active scheme + accent tokens for either 'dark' or 'light' polarity. */
@@ -1160,6 +1519,22 @@ function sanitizeRotationGroups(raw) {
   return out;
 }
 
+function hasOwn(obj, key) {
+  return Boolean(obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key));
+}
+
+function isPlainObj(v) {
+  return Boolean(v && typeof v === 'object' && !Array.isArray(v));
+}
+
+function nullableBool(v) {
+  if (v === null || v === undefined || v === '' || v === 'auto') return null;
+  if (typeof v === 'boolean') return v;
+  if (v === 'on' || v === 'true' || v === 1) return true;
+  if (v === 'off' || v === 'false' || v === 0) return false;
+  return null;
+}
+
 function cleanTintHex(v) {
   if (typeof v !== 'string') return '';
   const s = v.trim();
@@ -1182,33 +1557,183 @@ function nullableUnitOpacity(v, min, max) {
   return Math.round(clamp(n, min, max) * 1000) / 1000;
 }
 
-export function sanitizeSurfaceTints(raw, baseTints = null) {
-  // Explicit `null` resets ALL 7 components back to Auto defaults (used by presets & "Reset All Components")
-  if (raw === null) return createDefaultSurfaceTints();
-  const baseMap = baseTints && typeof baseTints === 'object' && !Array.isArray(baseTints) ? baseTints : {};
-  const srcMap = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+function sanitizeRegionEntry(id, raw) {
+  const bounds = SURFACE_TINT_BOUNDS[id] || { minOpacity: 0, maxOpacity: 0.98 };
+  const fsBounds = REGION_FONT_SIZE_BOUNDS[id] || { min: 10, max: 24 };
+  const r = isPlainObj(raw) ? raw : {};
+  const entry = {
+    glassEnabled: nullableBool(r.glassEnabled),
+    blur: nullableNum(r.blur, 0, 64, 0),
+    opacity: nullableUnitOpacity(r.opacity, bounds.minOpacity, bounds.maxOpacity),
+    tone: num(r.tone, 0, -100, 100, 0),
+    tint: cleanTintHex(r.tint),
+    borderOpacity: nullableUnitOpacity(r.borderOpacity, 0, 1),
+    borderStyle: r.borderStyle === null || r.borderStyle === undefined || r.borderStyle === '' || r.borderStyle === 'auto'
+      ? null
+      : oneOf(r.borderStyle, BORDER_STYLES, null),
+    radius: nullableNum(r.radius, 0, 28, 0),
+    fontSize: nullableNum(r.fontSize, fsBounds.min, fsBounds.max, 0),
+    fontFamily: sanitizeFontFamily(r.fontFamily),
+    fontColor: cleanTintHex(r.fontColor),
+    allowRawFontColor: bool(r.allowRawFontColor, false),
+  };
+  if (id === 'sidebar') {
+    entry.listStyle = oneOf(r.listStyle, SIDEBAR_LIST_STYLES, 'capsule');
+    entry.sectionFontSize = nullableNum(r.sectionFontSize, 11, 15, 1);
+    entry.projectFontSize = nullableNum(r.projectFontSize, 11, 15, 1);
+    entry.itemFontSize = nullableNum(r.itemFontSize, 11, 15, 1);
+  }
+  return entry;
+}
+
+/**
+ * Canonical (regionId, propKey)-granular patch merger shared by all 4 layers:
+ * schema.mjs, studio-ui/state.mjs, main.mjs::routeRpcConfigPatch, and wallpaper-inject.js mirror.
+ */
+export function mergeRegionsPatch(baseRegions, patchRegions) {
+  if (patchRegions === null) return null;
+  if (!isPlainObj(patchRegions)) return isPlainObj(baseRegions) ? { ...baseRegions } : {};
+  const out = isPlainObj(baseRegions) ? { ...baseRegions } : {};
+  for (const id of REGION_IDS) {
+    if (!hasOwn(patchRegions, id)) continue;
+    const val = patchRegions[id];
+    if (val === null) {
+      out[id] = null;
+    } else if (isPlainObj(val)) {
+      const prev = isPlainObj(out[id]) ? out[id] : {};
+      out[id] = { ...prev, ...val };
+    }
+  }
+  return out;
+}
+
+export function sanitizeRegions(raw, baseRegions = null) {
+  if (raw === null) return createDefaultRegions();
+  const baseMap = isPlainObj(baseRegions) ? baseRegions : {};
+  const srcMap = isPlainObj(raw) ? raw : {};
+  const out = {};
+  for (const id of REGION_IDS) {
+    const def = createDefaultRegionEntry(id);
+    const bEnt = isPlainObj(baseMap[id]) ? { ...def, ...baseMap[id] } : def;
+    const hasSrc = hasOwn(srcMap, id);
+    const sRaw = hasSrc ? srcMap[id] : undefined;
+    if (hasSrc && sRaw === null) {
+      out[id] = createDefaultRegionEntry(id);
+      continue;
+    }
+    if (hasSrc && isPlainObj(sRaw)) {
+      out[id] = sanitizeRegionEntry(id, { ...bEnt, ...sRaw });
+    } else {
+      out[id] = sanitizeRegionEntry(id, bEnt);
+    }
+  }
+  return out;
+}
+
+export function projectSurfaceTintsFromRegions(regions) {
   const out = {};
   for (const id of SURFACE_TINT_COMPONENTS) {
-    const bounds = SURFACE_TINT_BOUNDS[id];
-    const bEnt = baseMap[id] && typeof baseMap[id] === 'object' ? baseMap[id] : DEFAULT_SURFACE_TINT_ENTRY;
-    const hasSrc = Object.prototype.hasOwnProperty.call(srcMap, id);
+    const r = regions?.[id] || DEFAULT_REGION_ENTRY;
+    out[id] = {
+      opacity: r.opacity ?? null,
+      tone: Number.isFinite(r.tone) ? r.tone : 0,
+      tint: r.tint || '',
+      blur: r.blur ?? null,
+      glassEnabled: r.glassEnabled ?? null,
+      borderOpacity: r.borderOpacity ?? null,
+    };
+  }
+  return out;
+}
+
+export function sanitizeSurfaceTints(raw, baseTints = null) {
+  // Explicit `null` resets ALL 8 components back to Auto defaults (used by presets & "Reset All Components")
+  if (raw === null) return createDefaultSurfaceTints();
+  const baseMap = isPlainObj(baseTints) ? baseTints : {};
+  const srcMap = isPlainObj(raw) ? raw : {};
+  const out = {};
+  for (const id of SURFACE_TINT_COMPONENTS) {
+    const bounds = SURFACE_TINT_BOUNDS[id] || { minOpacity: 0, maxOpacity: 0.98 };
+    const bEnt = isPlainObj(baseMap[id]) ? baseMap[id] : DEFAULT_SURFACE_TINT_ENTRY;
+    const hasSrc = hasOwn(srcMap, id);
     const sRaw = hasSrc ? srcMap[id] : undefined;
     // Explicit `surfaceTints[id] = null` resets that single component cleanly
     if (hasSrc && sRaw === null) {
-      out[id] = { opacity: null, tone: 0, tint: '' };
+      out[id] = { ...DEFAULT_SURFACE_TINT_ENTRY };
       continue;
     }
-    const sEnt = sRaw && typeof sRaw === 'object' ? sRaw : {};
-    const rawOp = Object.prototype.hasOwnProperty.call(sEnt, 'opacity') ? sEnt.opacity : bEnt.opacity;
-    const rawTone = Object.prototype.hasOwnProperty.call(sEnt, 'tone') ? sEnt.tone : bEnt.tone;
-    const rawTint = Object.prototype.hasOwnProperty.call(sEnt, 'tint') ? sEnt.tint : bEnt.tint;
+    const sEnt = isPlainObj(sRaw) ? sRaw : {};
+    const rawOp = hasOwn(sEnt, 'opacity') ? sEnt.opacity : bEnt.opacity;
+    const rawTone = hasOwn(sEnt, 'tone') ? sEnt.tone : bEnt.tone;
+    const rawTint = hasOwn(sEnt, 'tint') ? sEnt.tint : bEnt.tint;
+    const rawBlur = hasOwn(sEnt, 'blur') ? sEnt.blur : bEnt.blur;
+    const rawGlass = hasOwn(sEnt, 'glassEnabled') ? sEnt.glassEnabled : bEnt.glassEnabled;
+    const rawBorderOp = hasOwn(sEnt, 'borderOpacity') ? sEnt.borderOpacity : bEnt.borderOpacity;
     out[id] = {
       opacity: nullableUnitOpacity(rawOp, bounds.minOpacity, bounds.maxOpacity),
       tone: num(rawTone, 0, -100, 100, 0),
       tint: cleanTintHex(rawTint),
+      blur: nullableNum(rawBlur, 0, 64, 0),
+      glassEnabled: nullableBool(rawGlass),
+      borderOpacity: nullableUnitOpacity(rawBorderOp, 0, 1),
     };
   }
   return out;
+}
+
+function syncSidebarRadiusPair({ src, baseRegions, merged, legacyKey, regionId, regions, srcResetFullRegions }) {
+  const hasLegacy = hasOwn(src, legacyKey);
+  const hasRegionEntry = isPlainObj(src.regions) && hasOwn(src.regions, regionId);
+  const regionEntryRaw = hasRegionEntry ? src.regions[regionId] : undefined;
+  const isExplicitRegionReset = srcResetFullRegions || (hasRegionEntry && regionEntryRaw === null);
+  const hasRegionRad =
+    isExplicitRegionReset ||
+    Boolean(isPlainObj(regionEntryRaw) && hasOwn(regionEntryRaw, 'radius'));
+  const baseRegionRadius =
+    baseRegions && isPlainObj(baseRegions[regionId])
+      ? (baseRegions[regionId].radius ?? null)
+      : null;
+
+  let legacyVal = sanitizeSidebarRadius(merged[legacyKey], 'auto');
+  if (hasRegionRad && !hasLegacy) {
+    if (regions[regionId].radius === null) {
+      // Preserve explicit 'native' when base also had radius: null and this is NOT an explicit full-region reset
+      // (e.g. a full serialized `regions` object containing own-property `radius: null` without `leftSidebarRadius`).
+      // Switching back from 'native' -> 'auto' requires explicit `leftSidebarRadius: 'auto'` or `regions[id]: null` / `regions: null`.
+      if (legacyVal === 'native' && baseRegionRadius === null && !isExplicitRegionReset) {
+        legacyVal = 'native';
+      } else {
+        legacyVal = 'auto';
+      }
+    } else {
+      legacyVal = String(regions[regionId].radius);
+    }
+  } else if (hasLegacy && !hasRegionRad) {
+    if (legacyVal === 'auto' || legacyVal === 'native') {
+      regions[regionId].radius = null;
+    } else {
+      regions[regionId].radius = Number(legacyVal);
+    }
+  } else if (hasRegionRad && hasLegacy) {
+    if (srcResetFullRegions && legacyVal !== 'auto') {
+      regions[regionId].radius = legacyVal === 'native' ? null : Number(legacyVal);
+    } else if (legacyVal === 'native' && regions[regionId].radius === null) {
+      // Preserve explicit 'native' semantics distinct from '0'
+      legacyVal = 'native';
+    } else {
+      legacyVal = regions[regionId].radius === null ? 'auto' : String(regions[regionId].radius);
+    }
+  } else {
+    // Neutral merge / disk hydration: NEVER collapse 'native' into '0' or 'auto'
+    if (legacyVal === 'native' && regions[regionId].radius === null) {
+      legacyVal = 'native';
+    } else if (regions[regionId].radius !== null) {
+      legacyVal = String(regions[regionId].radius);
+    } else if (legacyVal !== 'auto') {
+      regions[regionId].radius = Number(legacyVal);
+    }
+  }
+  return legacyVal;
 }
 
 function normFidelity(raw, fallback) {
@@ -1235,7 +1760,14 @@ export function resolveComponentDefaultAlpha(comp, cfg = DEFAULT_CONFIG, isLight
   const layoutMode = c.layoutMode === 'flush' ? 'flush' : 'islands';
 
   let alpha;
-  if (comp === 'topbar' || comp === 'sidebar') {
+  if (comp === 'wco') {
+    const tbOp = c.regions?.topbar?.opacity ?? c.surfaceTints?.topbar?.opacity;
+    if (tbOp !== null && tbOp !== undefined && tbOp !== '' && Number.isFinite(Number(tbOp))) {
+      return Math.round(clamp(Number(tbOp), 0, 0.98) * 1000) / 1000;
+    }
+    const minSbFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
+    alpha = Math.max(g, minSbFloor * glassFid);
+  } else if (comp === 'topbar' || comp === 'sidebar') {
     const minSbFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
     alpha = Math.max(g, minSbFloor * glassFid);
   } else if (comp === 'workspace' || comp === 'rightPane') {
@@ -1284,45 +1816,239 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     muted = !audioEnabled;
   }
 
-  // Bidirectional 4-branch sync: legacy `sidebarOpacity` <-> `surfaceTints.sidebar.opacity`
-  const hasSrcTints = Object.prototype.hasOwnProperty.call(src, 'surfaceTints');
-  const srcResetAllTints = hasSrcTints && src.surfaceTints === null;
-  const srcTouchedSidebarOp =
-    srcResetAllTints ||
-    (hasSrcTints &&
-      src.surfaceTints &&
-      typeof src.surfaceTints === 'object' &&
-      !Array.isArray(src.surfaceTints) &&
-      (src.surfaceTints.sidebar === null ||
-        (src.surfaceTints.sidebar &&
-          typeof src.surfaceTints.sidebar === 'object' &&
-          Object.prototype.hasOwnProperty.call(src.surfaceTints.sidebar, 'opacity'))));
-  const srcTouchedLegacySb = Object.prototype.hasOwnProperty.call(src, 'sidebarOpacity');
-
-  const surfaceTints = sanitizeSurfaceTints(hasSrcTints ? src.surfaceTints : undefined, b.surfaceTints);
-  let sidebarOpacity = nullableNum(merged.sidebarOpacity, 0, 0.98, 3);
-
-  if (srcTouchedSidebarOp && !srcTouchedLegacySb) {
-    sidebarOpacity = surfaceTints.sidebar.opacity;
-  } else if (srcTouchedLegacySb && !srcTouchedSidebarOp) {
-    surfaceTints.sidebar.opacity = sidebarOpacity;
-  } else if (srcTouchedSidebarOp && srcTouchedLegacySb) {
-    // Both present in src: if `surfaceTints: null` reset all tints alongside an explicit legacy
-    // `sidebarOpacity` override (e.g. `{ ...SCENE_PRESETS.crystal.patch, sidebarOpacity: 0.50 }`),
-    // honor the explicit sidebarOpacity; otherwise canonical `surfaceTints.sidebar.opacity` wins.
-    if (srcResetAllTints && sidebarOpacity !== null) {
-      surfaceTints.sidebar.opacity = sidebarOpacity;
+  // Step 1: Hydrate 8-region baseline from `b.regions` (lossless fallback to `b.surfaceTints` for v2.1.0 configs)
+  const hasBaseRegions = isPlainObj(b.regions);
+  const baseRegions = {};
+  for (const id of REGION_IDS) {
+    const def = createDefaultRegionEntry(id);
+    if (hasBaseRegions && isPlainObj(b.regions[id])) {
+      baseRegions[id] = sanitizeRegionEntry(id, { ...def, ...b.regions[id] });
+    } else if (isPlainObj(b.surfaceTints) && isPlainObj(b.surfaceTints[id])) {
+      const legacyOpt = {};
+      for (const ok of REGION_OPTICAL_KEYS) {
+        if (hasOwn(b.surfaceTints[id], ok)) legacyOpt[ok] = b.surfaceTints[id][ok];
+      }
+      baseRegions[id] = sanitizeRegionEntry(id, { ...def, ...legacyOpt });
     } else {
-      sidebarOpacity = surfaceTints.sidebar.opacity;
-    }
-  } else {
-    // Neither explicitly touched in src (legacy config.json hydration or neutral merge)
-    if (surfaceTints.sidebar.opacity === null && sidebarOpacity !== null) {
-      surfaceTints.sidebar.opacity = sidebarOpacity;
-    } else {
-      sidebarOpacity = surfaceTints.sidebar.opacity;
+      baseRegions[id] = def;
     }
   }
+
+  // Step 2: (regionId, propKey)-granular merge of `src.surfaceTints` and `src.regions`
+  const hasSrcRegions = hasOwn(src, 'regions');
+  const srcResetFullRegions = hasSrcRegions && src.regions === null;
+  const hasSrcTints = hasOwn(src, 'surfaceTints');
+  const srcResetAllTints = hasSrcTints && src.surfaceTints === null;
+
+  const workingRegions = {};
+  for (const id of REGION_IDS) {
+    workingRegions[id] = { ...baseRegions[id] };
+  }
+
+  if (srcResetFullRegions) {
+    for (const id of REGION_IDS) {
+      workingRegions[id] = createDefaultRegionEntry(id);
+    }
+  } else if (srcResetAllTints) {
+    // SCENE_PRESETS (`surfaceTints: null`) reset ONLY the 6 optical keys; structural/font/radius/listStyle stay intact!
+    for (const id of REGION_IDS) {
+      const def = createDefaultRegionEntry(id);
+      for (const ok of REGION_OPTICAL_KEYS) {
+        workingRegions[id][ok] = def[ok];
+      }
+    }
+  }
+
+  if (!srcResetFullRegions && hasSrcTints && isPlainObj(src.surfaceTints)) {
+    for (const id of REGION_IDS) {
+      if (!hasOwn(src.surfaceTints, id)) continue;
+      const sRaw = src.surfaceTints[id];
+      if (sRaw === null) {
+        const def = createDefaultRegionEntry(id);
+        for (const ok of REGION_OPTICAL_KEYS) {
+          workingRegions[id][ok] = def[ok];
+        }
+      } else if (isPlainObj(sRaw)) {
+        for (const ok of REGION_OPTICAL_KEYS) {
+          if (hasOwn(sRaw, ok)) {
+            workingRegions[id][ok] = sRaw[ok];
+          }
+        }
+      }
+    }
+  }
+
+  if (!srcResetFullRegions && hasSrcRegions && isPlainObj(src.regions)) {
+    for (const id of REGION_IDS) {
+      if (!hasOwn(src.regions, id)) continue;
+      const rRaw = src.regions[id];
+      if (rRaw === null) {
+        workingRegions[id] = createDefaultRegionEntry(id);
+      } else if (isPlainObj(rRaw)) {
+        const allowedKeys = id === 'sidebar'
+          ? [...REGION_OPTICAL_KEYS, ...REGION_STRUCTURAL_KEYS, ...SIDEBAR_REGION_EXTRA_KEYS]
+          : [...REGION_OPTICAL_KEYS, ...REGION_STRUCTURAL_KEYS];
+        for (const pk of allowedKeys) {
+          if (hasOwn(rRaw, pk)) {
+            workingRegions[id][pk] = rRaw[pk];
+          }
+        }
+      }
+    }
+  }
+
+  const regions = {};
+  for (const id of REGION_IDS) {
+    regions[id] = sanitizeRegionEntry(id, workingRegions[id]);
+  }
+
+  // Step 3: Bidirectional 4-branch syncs for sidebar legacy aliases & radius pairs
+  const srcResetAllOptical = srcResetFullRegions || srcResetAllTints;
+  const srcResetRegionSidebar =
+    srcResetFullRegions || (hasSrcRegions && isPlainObj(src.regions) && src.regions.sidebar === null);
+
+  // (i) `sidebarOpacity` <-> `regions.sidebar.opacity`
+  const srcTouchedRegionSbOp =
+    srcResetAllOptical ||
+    (hasSrcRegions &&
+      isPlainObj(src.regions) &&
+      (src.regions.sidebar === null ||
+        (isPlainObj(src.regions.sidebar) && hasOwn(src.regions.sidebar, 'opacity')))) ||
+    (hasSrcTints &&
+      isPlainObj(src.surfaceTints) &&
+      (src.surfaceTints.sidebar === null ||
+        (isPlainObj(src.surfaceTints.sidebar) && hasOwn(src.surfaceTints.sidebar, 'opacity'))));
+  const srcTouchedLegacySbOp = hasOwn(src, 'sidebarOpacity');
+  let sidebarOpacity = nullableNum(merged.sidebarOpacity, 0, 0.98, 3);
+
+  if (srcTouchedRegionSbOp && !srcTouchedLegacySbOp) {
+    sidebarOpacity = regions.sidebar.opacity;
+  } else if (srcTouchedLegacySbOp && !srcTouchedRegionSbOp) {
+    regions.sidebar.opacity = sidebarOpacity;
+  } else if (srcTouchedRegionSbOp && srcTouchedLegacySbOp) {
+    if (srcResetAllOptical && sidebarOpacity !== null) {
+      regions.sidebar.opacity = sidebarOpacity;
+    } else {
+      sidebarOpacity = regions.sidebar.opacity;
+    }
+  } else {
+    if (regions.sidebar.opacity === null && sidebarOpacity !== null) {
+      regions.sidebar.opacity = sidebarOpacity;
+    } else {
+      sidebarOpacity = regions.sidebar.opacity;
+    }
+  }
+
+  // (ii) `sidebarBlur` <-> `regions.sidebar.blur`
+  const srcTouchedRegionSbBlur =
+    srcResetAllOptical ||
+    (hasSrcRegions &&
+      isPlainObj(src.regions) &&
+      (src.regions.sidebar === null ||
+        (isPlainObj(src.regions.sidebar) && hasOwn(src.regions.sidebar, 'blur')))) ||
+    (hasSrcTints &&
+      isPlainObj(src.surfaceTints) &&
+      (src.surfaceTints.sidebar === null ||
+        (isPlainObj(src.surfaceTints.sidebar) && hasOwn(src.surfaceTints.sidebar, 'blur'))));
+  const srcTouchedLegacySbBlur = hasOwn(src, 'sidebarBlur');
+  let sidebarBlur = nullableNum(merged.sidebarBlur, 0, 64, 0);
+
+  if (srcTouchedRegionSbBlur && !srcTouchedLegacySbBlur) {
+    sidebarBlur = regions.sidebar.blur;
+  } else if (srcTouchedLegacySbBlur && !srcTouchedRegionSbBlur) {
+    regions.sidebar.blur = sidebarBlur;
+  } else if (srcTouchedRegionSbBlur && srcTouchedLegacySbBlur) {
+    if (srcResetAllOptical && sidebarBlur !== null) {
+      regions.sidebar.blur = sidebarBlur;
+    } else {
+      sidebarBlur = regions.sidebar.blur;
+    }
+  } else {
+    if (regions.sidebar.blur === null && sidebarBlur !== null) {
+      regions.sidebar.blur = sidebarBlur;
+    } else {
+      sidebarBlur = regions.sidebar.blur;
+    }
+  }
+
+  // (iii) `sidebarFontSize` <-> `regions.sidebar.fontSize` (clamped 11..15; NEVER reset by `surfaceTints: null`)
+  const srcTouchedRegionSbFs =
+    srcResetRegionSidebar ||
+    (hasSrcRegions &&
+      isPlainObj(src.regions) &&
+      isPlainObj(src.regions.sidebar) &&
+      hasOwn(src.regions.sidebar, 'fontSize'));
+  const srcTouchedLegacySbFs = hasOwn(src, 'sidebarFontSize');
+  let sidebarFontSize = nullableNum(merged.sidebarFontSize, 11, 15, 0);
+
+  if (srcTouchedRegionSbFs && !srcTouchedLegacySbFs) {
+    sidebarFontSize = regions.sidebar.fontSize;
+  } else if (srcTouchedLegacySbFs && !srcTouchedRegionSbFs) {
+    regions.sidebar.fontSize = sidebarFontSize;
+  } else if (srcTouchedRegionSbFs && srcTouchedLegacySbFs) {
+    if (srcResetFullRegions && sidebarFontSize !== null) {
+      regions.sidebar.fontSize = sidebarFontSize;
+    } else {
+      sidebarFontSize = regions.sidebar.fontSize;
+    }
+  } else {
+    if (regions.sidebar.fontSize === null && sidebarFontSize !== null) {
+      regions.sidebar.fontSize = sidebarFontSize;
+    } else {
+      sidebarFontSize = regions.sidebar.fontSize;
+    }
+  }
+
+  // (iv) `sidebarListStyle` <-> `regions.sidebar.listStyle` (default 'capsule'; NEVER reset by `surfaceTints: null`)
+  const srcTouchedRegionSbList =
+    srcResetRegionSidebar ||
+    (hasSrcRegions &&
+      isPlainObj(src.regions) &&
+      isPlainObj(src.regions.sidebar) &&
+      hasOwn(src.regions.sidebar, 'listStyle'));
+  const srcTouchedLegacySbList = hasOwn(src, 'sidebarListStyle');
+  let sidebarListStyle = oneOf(merged.sidebarListStyle, SIDEBAR_LIST_STYLES, DEFAULT_CONFIG.sidebarListStyle);
+
+  if (srcTouchedRegionSbList && !srcTouchedLegacySbList) {
+    sidebarListStyle = regions.sidebar.listStyle;
+  } else if (srcTouchedLegacySbList && !srcTouchedRegionSbList) {
+    regions.sidebar.listStyle = sidebarListStyle;
+  } else if (srcTouchedRegionSbList && srcTouchedLegacySbList) {
+    if (srcResetFullRegions && sidebarListStyle !== DEFAULT_CONFIG.sidebarListStyle) {
+      regions.sidebar.listStyle = sidebarListStyle;
+    } else {
+      sidebarListStyle = regions.sidebar.listStyle;
+    }
+  } else {
+    if (!hasBaseRegions && regions.sidebar.listStyle === DEFAULT_CONFIG.sidebarListStyle && sidebarListStyle !== DEFAULT_CONFIG.sidebarListStyle) {
+      regions.sidebar.listStyle = sidebarListStyle;
+    } else {
+      sidebarListStyle = regions.sidebar.listStyle;
+    }
+  }
+
+  // (v) `leftSidebarRadius` <-> `regions.sidebar.radius` and `rightSidebarRadius` <-> `regions.rightPane.radius`
+  const leftSidebarRadius = syncSidebarRadiusPair({
+    src,
+    baseRegions,
+    merged,
+    legacyKey: 'leftSidebarRadius',
+    regionId: 'sidebar',
+    regions,
+    srcResetFullRegions,
+  });
+  const rightSidebarRadius = syncSidebarRadiusPair({
+    src,
+    baseRegions,
+    merged,
+    legacyKey: 'rightSidebarRadius',
+    regionId: 'rightPane',
+    regions,
+    srcResetFullRegions,
+  });
+
+  // Step 4: Project `surfaceTints` view from canonical `regions`
+  const surfaceTints = projectSurfaceTintsFromRegions(regions);
 
   // Legacy/DSH field aliases
   const pauseOnBlur = 'pauseOnUnfocus' in src ? bool(src.pauseOnUnfocus, false) : bool(merged.pauseOnBlur, DEFAULT_CONFIG.pauseOnBlur);
@@ -1358,13 +2084,19 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     islandGap: num(merged.islandGap, DEFAULT_CONFIG.islandGap, 0, 20, 0),
     workspacePad: num(merged.workspacePad, DEFAULT_CONFIG.workspacePad, 0, 20, 0),
     cornerStyle: oneOf(merged.cornerStyle, CORNER_STYLES, DEFAULT_CONFIG.cornerStyle),
-    leftSidebarRadius: oneOf(String(merged.leftSidebarRadius ?? 'auto'), SIDEBAR_RADII, 'auto'),
-    rightSidebarRadius: oneOf(String(merged.rightSidebarRadius ?? 'auto'), SIDEBAR_RADII, 'auto'),
+    leftSidebarRadius,
+    rightSidebarRadius,
     borders: oneOf(merged.borders, BORDER_MODES, DEFAULT_CONFIG.borders),
     shadows: bool(merged.shadows, DEFAULT_CONFIG.shadows),
     transparentWindowControls: bool(merged.transparentWindowControls, DEFAULT_CONFIG.transparentWindowControls),
     hideWelcomeLogo: bool(merged.hideWelcomeLogo, DEFAULT_CONFIG.hideWelcomeLogo),
     topbarStyle: oneOf(merged.topbarStyle, TOPBAR_STYLES, DEFAULT_CONFIG.topbarStyle),
+    sidebarListStyle,
+    sidebarTypographyMode: oneOf(merged.sidebarTypographyMode, SIDEBAR_TYPOGRAPHY_MODES, DEFAULT_CONFIG.sidebarTypographyMode),
+    sidebarFontSize,
+    globalFontSize: nullableNum(merged.globalFontSize, 10, 24, 0),
+    globalFontFamily: sanitizeFontFamily(merged.globalFontFamily),
+    globalFontColor: cleanTintHex(merged.globalFontColor),
 
     themeMode: oneOf(merged.themeMode, THEME_MODES, DEFAULT_CONFIG.themeMode),
     themeFollow: bool(merged.themeFollow, DEFAULT_CONFIG.themeFollow),
@@ -1381,7 +2113,8 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     glassOpacity: num(merged.glassOpacity, DEFAULT_CONFIG.glassOpacity, 0.15, 0.98, 3),
     glassBlur: num(merged.glassBlur, DEFAULT_CONFIG.glassBlur, 0, 64, 0),
     sidebarOpacity,
-    sidebarBlur: nullableNum(merged.sidebarBlur, 0, 64, 0),
+    sidebarBlur,
+    regions,
     surfaceTints,
     glassFidelity: num(merged.glassFidelity, DEFAULT_CONFIG.glassFidelity, 0, 100, 0),
     chatGlassFidelity: num(merged.chatGlassFidelity, DEFAULT_CONFIG.chatGlassFidelity, 0, 100, 0),
@@ -1418,6 +2151,8 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     sceneAutoQuality: bool(merged.sceneAutoQuality, DEFAULT_CONFIG.sceneAutoQuality),
     liveBootDelay: num(rawBootDelay, DEFAULT_CONFIG.liveBootDelay, 0.5, 10, 1),
     interactiveWeb: bool(merged.interactiveWeb, DEFAULT_CONFIG.interactiveWeb),
+    previewLiveMedia: bool(merged.previewLiveMedia, DEFAULT_CONFIG.previewLiveMedia),
+    libraryAnimatedThumbs: oneOf(merged.libraryAnimatedThumbs, LIBRARY_ANIMATED_THUMB_MODES, DEFAULT_CONFIG.libraryAnimatedThumbs),
     switchTransition: oneOf(merged.switchTransition, SWITCH_TRANSITIONS, DEFAULT_CONFIG.switchTransition),
     switchTransitionDir: oneOf(merged.switchTransitionDir, SWITCH_DIRECTIONS, DEFAULT_CONFIG.switchTransitionDir),
     switchTransitionSpeed: oneOf(merged.switchTransitionSpeed, SWITCH_SPEEDS, DEFAULT_CONFIG.switchTransitionSpeed),
@@ -1481,6 +2216,10 @@ export function applyResetScope(currentConfig, scope = 'all') {
   const patch = {};
   for (const k of keys) {
     patch[k] = DEFAULT_CONFIG[k];
+  }
+  if (keys.includes('regions')) {
+    patch.regions = null;
+    patch.surfaceTints = null;
   }
   return sanitizeConfig(patch, currentConfig);
 }

@@ -1,3510 +1,503 @@
-// Wallpaper Prism Studio UI — Obsidian Prism Style-Settings & Library Deck
-// Exclusively owns src/studio-ui/app.mjs. Imports canonical schema & i18n from ../shared/*.
+// Wallpaper Prism Studio UI — Layer 6 Thin-Shell Entrypoint, Event Delegation & Dormancy Engine
+// Imports L0-L5 strictly acyclic DAG modules. No exports (bundled via scripts/build.mjs).
+// Preserves exact symbol names `installStudioVisibilityGuards` & `disconnectStudioEvents` (verify-all.mjs:L1594-L1598).
 
 import {
   PLUGIN_VERSION,
   DEFAULT_DEBUG_PORT,
-  STARTUP_MODES,
-  CANARY_STATES,
   LIBRARY_KINDS,
   CONTENT_RATINGS,
-  TOPBAR_STYLES,
-  CORNER_STYLES,
-  BORDER_MODES,
-  THEME_MODES,
-  CODE_READABILITY_MODES,
-  FIT_MODES,
-  FILTER_PRESETS,
-  SWITCH_TRANSITIONS,
-  SWITCH_DIRECTIONS,
-  SWITCH_SPEEDS,
-  SIDEBAR_RADII,
-  COLOR_SCHEMES,
-  COLOR_SCHEME_IDS,
-  ACCENT_MODES,
-  ACCENT_PRESETS,
-  SURFACE_TINT_COMPONENTS,
-  SURFACE_TINT_BOUNDS,
-  DEFAULT_SURFACE_TINT_ENTRY,
-  DEFAULT_SURFACE_TINTS,
+  REGION_IDS,
+  CJK_SAFE_FONT_PRESETS,
   SCENE_PRESETS,
-  SCENE_PRESET_IDS,
   FACTORY_PRESETS,
   DEFAULT_CONFIG,
   PER_WALLPAPER_OVERRIDE_KEYS,
-  RESET_SCOPES,
-  sanitizeConfig,
-  resolveEffectiveConfig,
   resolveSchemeTokens,
-  resolveComponentDefaultAlpha,
-  hexToRgbTriplet,
+  sanitizeConfig,
+  sanitizeFontFamily,
 } from '../shared/schema.mjs';
 
-import { t, resolveLocale } from '../shared/i18n.mjs';
+import {
+  MAX_UPLOAD_BYTES,
+  VIRTUAL_SCROLL_THRESHOLD,
+  REGION_UI_ORDER,
+  REGION_RESET_EXTRA_KEYS,
+  store,
+  registerHooks,
+  apiFetch,
+  apiJson,
+  curLocale,
+  tr,
+  tx,
+  esc,
+  formatBytes,
+  withStaticPreviewParam,
+  isStudioViewportActive,
+  getActiveId,
+  getEffectiveConfig,
+  getResolvedPolarity,
+  hasPerWallpaperPin,
+  isHostAttached,
+  getMasterToggleLabel,
+  getMasterToggleHint,
+  setRegionOpen,
+  setAllRegionsOpen,
+  hasAnyRegionOpen,
+  applyLocalPatch,
+  queueConfigPatch,
+  flushConfigPatch,
+  flushConfigPatchKeepalive,
+  ingestServerState,
+  ingestUpdateStatus,
+  showToast,
+  setArmedConfirm,
+  normalizeWeProperties,
+  evaluateWeCondition,
+  computeLibraryModel,
+  computeQuickQueueItems,
+  externalStateSignature,
+  updateStatusSignature,
+} from './state.mjs';
+
+import {
+  weColorToHex,
+  hexToWeColor,
+  shouldPlayStudioPreviewVideo,
+  evaluateRegionFgContrast,
+  syncOpticalCssVars,
+  releaseExistingPreviewVideo,
+  syncMiniPreviewMedia,
+} from './optics.mjs';
+
+import {
+  sliderMeta,
+  renderSwitchRow,
+  renderSegRow,
+  renderConfirmRow,
+  renderColorPickerWithWcag,
+  renderScenePresetsHtml,
+  renderSaveStatusPillHtml,
+  renderMediaHealthAlertsHtml,
+  syncPairedSlidersInDom,
+  syncNullableFollowersInDom,
+  syncRegionBadgesInDom,
+} from './controls.mjs';
+
+import {
+  computeVirtualSlice,
+  renderLibraryGridHtml,
+  renderLibraryTab,
+  patchActiveCardsInPlace,
+  attachLibraryThumbHoverController,
+  resetLibraryHoverThumb,
+} from './tabs/library.mjs';
+
+import {
+  renderSkinTopActionBarHtml,
+  renderPresetsGridHtml,
+  renderPresetsManagerDrawerHtml,
+  renderPrismSkinTab,
+  isCurrentStateDirtyFromPreset,
+} from './tabs/skin-regions.mjs';
+
+import {
+  renderPlaylistPickerGridHtml,
+  renderPlaybackTab,
+} from './tabs/playback.mjs';
+
+import {
+  renderUpdateReconnectOverlay,
+  renderAutostartBannerHtml,
+  renderSystemTab,
+} from './tabs/system.mjs';
+
+import {
+  renderVisualEditorModalHtml,
+  renderVisualEditorPopoutShellHtml,
+  attachCanvasPanZoom,
+  syncVisualCanvasZoomTransform,
+} from './editor/visual-canvas.mjs';
 
 function bootPrismStudioApp() {
-  const MAX_UPLOAD_BYTES = 512 * 1024 * 1024; // 512 MB
+  const PRESERVE_FOCUS_IDS = Object.freeze([
+    'prism-lib-search',
+    'prism-preset-name-in',
+    'prism-preset-desc-in',
+    'prism-preset-rename-in',
+    'prism-pl-name-in',
+    'prism-fs-path-in',
+  ]);
 
-  // Canonical Sidecar + Standalone HTTP Fetch Wrapper
-  const rawSidecarFetch = (url, init) =>
-    window.sidecar?.fetch ? window.sidecar.fetch(url, init) : window.fetch(url, init);
-
-  function getSidecarAuthToken() {
-    try {
-      return new URLSearchParams(window.location.search).get('token') || window.__SIDECAR_BOOT__?.token || '';
-    } catch {
-      return '';
-    }
-  }
-
-  async function apiFetch(url, init = {}) {
-    const tok = getSidecarAuthToken();
-    if (window.sidecar && typeof window.sidecar.fetch === 'function') {
-      if (!tok) return window.sidecar.fetch(url, init);
-      const headers = new Headers(init.headers || {});
-      if (!headers.has('X-Sidecar-Token')) {
-        headers.set('X-Sidecar-Token', tok);
-      }
-      return window.sidecar.fetch(url, { ...init, headers });
-    }
-    const headers = new Headers(init.headers || {});
-    if (tok && !headers.has('X-Sidecar-Token')) {
-      headers.set('X-Sidecar-Token', tok);
-    }
-    return rawSidecarFetch(url, { ...init, headers });
-  }
-
-  async function apiJson(url, options = {}) {
-    const init = { ...options };
-    if (init.body && typeof init.body === 'object' && !(init.body instanceof Blob) && !(init.body instanceof ArrayBuffer) && !(init.body instanceof Uint8Array)) {
-      const headers = new Headers(init.headers || {});
-      if (!headers.has('Content-Type')) {
-        headers.set('Content-Type', 'application/json');
-      }
-      init.headers = headers;
-      init.body = JSON.stringify(init.body);
-    }
-    const res = await apiFetch(url, init);
-    const text = await res.text();
-    let data = {};
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { raw: text };
-      }
-    }
-    if (!res.ok) {
-      const msg = data?.error || data?.message || `HTTP ${res.status}`;
-      const err = new Error(msg);
-      err.status = res.status;
-      err.code = data?.code || '';
-      err.data = data;
-      throw err;
-    }
-    return data;
-  }
-
-  // Extra Studio-specific bilingual labels supplementing shared/i18n.mjs
-  const EXTRA_COPY = {
-    zh: {
-      scopeAll: '全部',
-      scopeWorkshop: '创意工坊',
-      scopeLocal: '本地与上传',
-      batchMode: '批量选择',
-      batchHide: '隐藏已选',
-      batchPlaylist: '加入轮播',
-      batchClear: '退出批量',
-      densityGrid: '画廊视图',
-      densityCompact: '紧凑视图',
-      nonEmptyGuard: '至少需要保留一个激活的筛选项',
-      uploadBusy: '正在流式上传媒体…',
-      uploadDone: '壁纸上传成功并已加入资源库',
-      uploadTooLarge: '文件超过 512 MB 上限',
-      inspectorBtn: '属性',
-      wePropsEmpty: '该壁纸未声明 Wallpaper Engine 自定义属性 (project.json)',
-      wePropsTitle: 'Wallpaper Engine 动态属性',
-      savePresetPlaceholder: '输入配置快照名称…',
-      savePresetDescPlaceholder: '简短描述（可选）…',
-      presetSaved: '配置快照已保存',
-      presetImported: '配置快照导入成功',
-      playlistNamePlaceholder: '新建轮播列表名称…',
-      playlistSaved: '轮播列表已更新',
-      playlistNeedTwo: '轮播列表至少需要选择 2 张未隐藏壁纸',
-      fsSelectCurrent: '选择当前目录',
-      fsUp: '上级目录',
-      fsEmpty: '当前目录下没有子文件夹',
-      statsTotal: '总壁纸数',
-      statsWorkshop: '创意工坊 431960',
-      statsUploads: '本地与上传',
-      statsSteam: 'Steam 路径',
-      skinGateLabel: '启用整窗棱镜玻璃皮肤',
-      skinReapply: '立即应用棱镜皮肤',
-      skinToggleToastOn: '棱镜皮肤已启用',
-      skinToggleToastOff: '已禁用棱镜皮肤，已还原宿主默认外观',
-      extractedTitle: '32×32 动态色度直方图取色',
-      dblClickFramingHint: '双击标题可一键归零 X / Y / 缩放 (50% / 50% / 100%)',
-      slideInterval: '多图幻灯片切换秒数 (0=跟随WE)',
-      interactiveWeb: '转发鼠标悬停/点击交互至网页壁纸',
-      filterPreset: '快速色彩滤镜预设',
-      addFolder: '添加壁纸目录…',
-      removeFolder: '移除',
-      noCustomFolders: '暂未添加额外扫描目录',
-    },
-    en: {
-      scopeAll: 'All',
-      scopeWorkshop: 'Workshop',
-      scopeLocal: 'Local & Uploads',
-      batchMode: 'Batch Select',
-      batchHide: 'Hide Selected',
-      batchPlaylist: 'Add to Playlist',
-      batchClear: 'Done',
-      densityGrid: 'Gallery',
-      densityCompact: 'Compact',
-      nonEmptyGuard: 'At least one filter chip must remain active',
-      uploadBusy: 'Streaming upload in progress…',
-      uploadDone: 'Media uploaded and added to library',
-      uploadTooLarge: 'File exceeds 512 MB maximum limit',
-      inspectorBtn: 'Inspect',
-      wePropsEmpty: 'No custom Wallpaper Engine properties declared in project.json',
-      wePropsTitle: 'Wallpaper Engine Properties',
-      savePresetPlaceholder: 'Snapshot name…',
-      savePresetDescPlaceholder: 'Short description (optional)…',
-      presetSaved: 'Profile snapshot saved',
-      presetImported: 'Profile snapshot imported',
-      playlistNamePlaceholder: 'New playlist name…',
-      playlistSaved: 'Rotation playlist updated',
-      playlistNeedTwo: 'Select at least 2 unhidden wallpapers for a playlist',
-      fsSelectCurrent: 'Select Current Folder',
-      fsUp: 'Parent Dir',
-      fsEmpty: 'No subdirectories in this folder',
-      statsTotal: 'Total Wallpapers',
-      statsWorkshop: 'Workshop 431960',
-      statsUploads: 'Uploads & Local',
-      statsSteam: 'Steam Root',
-      skinGateLabel: 'Enable Whole-Window Prism Skin',
-      skinReapply: 'Apply Prism Skin Now',
-      skinToggleToastOn: 'Prism skin enabled',
-      skinToggleToastOff: 'Prism skin disabled — native host restored',
-      extractedTitle: '32×32 Chroma Histogram Accent',
-      dblClickFramingHint: 'Double-click label to reset X / Y / Scale (50% / 50% / 100%)',
-      slideInterval: 'Slideshow Crossfade Seconds (0=WE)',
-      interactiveWeb: 'Forward pointer events to Web/Scene wallpaper',
-      filterPreset: 'Quick Optical Filter Preset',
-      addFolder: 'Add Custom Folder…',
-      removeFolder: 'Remove',
-      noCustomFolders: 'No extra wallpaper directories configured',
-    },
-  };
-
-  // Detect initial host luminance polarity
-  function detectInitialHostPolarity() {
-    if (document.body?.classList?.contains('light')) return 'light';
-    if (document.body?.classList?.contains('dark')) return 'dark';
-    if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: light)').matches) {
-      return 'light';
-    }
-    return 'dark';
-  }
-
-  // Reactive Studio State Store
-  const store = {
-    ready: false,
-    activeTab: 'library', // 'library' | 'skin' | 'playback' | 'system'
-    config: sanitizeConfig(DEFAULT_CONFIG),
-    skinEnabled: true,
-    activeItem: null,
-    items: [],
-    presets: [...FACTORY_PRESETS],
-    hostStatus: { debuggable: false, attached: false, cdpPort: DEFAULT_DEBUG_PORT, targets: 0 },
-    canary: {
-      state: 'idle',
-      trippedReason: '',
-      lastArmTs: 0,
-      lastHealthyTs: 0,
-      browserSessionId: '',
-    },
-    sessionAwake: false,
-    canaryBusy: false,
-    wakeBusy: false,
-    masterToggleBusy: false,
-    autostart: {
-      normalShortcutEnabled: false,
-      anyShortcutEnabled: false,
-      patchedShortcuts: [],
-      shortcuts: [],
-      sidecarAutoStartsOnBoot: true,
-      autoRestoreLastSettings: true,
-      backupPath: '',
-      configPath: '',
-      busy: false,
-      bannerDismissed: false,
-    },
-    stats: {},
-    mediaOrigin: '',
-    pid: 0,
-    version: PLUGIN_VERSION,
-    hostPolarity: detectInitialHostPolarity(),
-
-    // Library UI state
-    searchQuery: '',
-    libScope: 'all', // 'all' | 'favorites' | 'workshop' | 'local'
-    batchMode: false,
-    batchSelected: new Set(),
-    uploading: false,
-    dragDepth: 0,
-    virtualWindow: { start: 0, end: 96, padTop: 0, padBottom: 0, cols: 3 },
-
-    // Slide-over drawers ('playlist' | 'inspector' | 'hidden' | 'fs' | null)
-    drawer: null,
-    inspectWallpaperId: '',
-    playlistDraft: {
-      editingId: '',
-      name: '',
-      order: 'random',
-      trigger: 'interval',
-      interval: 15,
-      pickedIds: new Set(),
-    },
-    presetDraft: {
-      name: '',
-      description: '',
-    },
-    fsBrowser: {
-      targetKind: 'uploadDir', // 'uploadDir' | 'cacheDir' | 'addCustomFolder'
-      current: '',
-      parent: '',
-      quickRoots: [],
-      entries: [],
-      loading: false,
-      manualPath: '',
-    },
-
-    // 2-step inline confirmation (never window.confirm / alert)
-    armedConfirm: null, // { key, timer }
-    toasts: [],
-
-    // Progressive-disclosure per-component tint drawer state (at most 1 open)
-    expandedTintComp: '',
-
-    // Auto-update status, banner & post-update reconnect overlay state
-    update: {
-      checking: false,
-      applying: false,
-      checked: false,
-      hasUpdate: false,
-      currentVersion: PLUGIN_VERSION,
-      latestVersion: null,
-      latestTag: null,
-      releaseUrl: 'https://github.com/azwosile/agy-wallpaper-prism/releases',
-      publishedAt: null,
-      changelog: '',
-      changelogSummary: '',
-      offline: false,
-      rateLimited: false,
-      checkedAt: null,
-      canSelfUpdate: true,
-      isGitCheckout: false,
-      isSymlink: false,
-      disabledReason: '',
-      notesOpen: false,
-      error: '',
-      standaloneRestartNeeded: false,
-      dismissedVersion: (() => {
-        try {
-          return window.localStorage?.getItem('prism.dismissedUpdateVersion') || '';
-        } catch {
-          return '';
-        }
-      })(),
-      reconnect: {
-        active: false,
-        timedOut: false,
-        targetVersion: '',
-        attempts: 0,
-        maxAttempts: 24,
-        sawDown: false,
-        prevPid: 0,
-      },
-    },
-  };
-
-  const CONFIG_THROTTLE_MS = 60;
-  const accentMemCache = new Map();
-  let configDebounceTimer = null;
-  let configFlushInFlight = false;
-  let configFlushPending = false;
-  let lastConfigFlushAt = 0;
-  let pendingConfigPatch = {};
-  let currentStageMediaSig = '';
-  let slideshowTimer = null;
-  let statusPollTimer = null;
-  let studioEventSource = null;
-  let studioLastSseAt = 0;
-  let studioSyncPollTimer = null;
-  let externalSyncInFlight = false;
-  let updateReconnectTimer = null;
-  let updateBootCheckTimer = null;
-
-  function curLocale() {
-    return resolveLocale(store.config.language);
-  }
-
-  function tr(key, params = null) {
-    return t(key, params, curLocale());
-  }
-
-  function trWithFallback(key, zhFallback, enFallback) {
-    const val = tr(key);
-    if (val && val !== key) return val;
-    return curLocale() === 'zh' ? zhFallback : enFallback;
-  }
-
-  function getMasterToggleLabel(enabled) {
-    return enabled
-      ? trWithFallback('topbar.skinToggleOn', '已启用', 'Enabled')
-      : trWithFallback('topbar.skinToggleOff', '已禁用', 'Disabled');
-  }
-
-  function getMasterToggleHint(enabled) {
-    return enabled
-      ? trWithFallback(
-          'topbar.skinToggleHintOn',
-          '点击一键禁用棱镜皮肤与壁纸（还原宿主默认外观）',
-          'Click to disable Prism skin & wallpaper',
-        )
-      : trWithFallback(
-          'topbar.skinToggleHintOff',
-          '点击一键启用棱镜皮肤与壁纸',
-          'Click to enable Prism skin & wallpaper',
-        );
-  }
-
-  function tx(extraKey) {
-    const loc = curLocale();
-    return EXTRA_COPY[loc]?.[extraKey] ?? EXTRA_COPY.en[extraKey] ?? extraKey;
-  }
-
-  function esc(val) {
-    return String(val ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function formatBytes(bytes) {
-    const n = Number(bytes);
-    if (!Number.isFinite(n) || n <= 0) return '';
-    if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
-    return `${(n / (1024 * 1024)).toFixed(n >= 100 * 1024 * 1024 ? 0 : 1)} MB`;
-  }
-
-  function showToast(message, tone = 'info', durationMs = 3600) {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    store.toasts.push({ id, message: String(message), tone });
-    if (store.toasts.length > 4) store.toasts.shift();
-    renderToastStack();
-    setTimeout(() => {
-      store.toasts = store.toasts.filter((x) => x.id !== id);
-      renderToastStack();
-    }, durationMs);
-  }
-
-  function setArmedConfirm(key) {
-    if (store.armedConfirm?.timer) {
-      clearTimeout(store.armedConfirm.timer);
-    }
-    if (!key) {
-      store.armedConfirm = null;
-      renderActiveSurface();
-      return;
-    }
-    const timer = setTimeout(() => {
-      if (store.armedConfirm?.key === key) {
-        store.armedConfirm = null;
-        renderActiveSurface();
-      }
-    }, 6000);
-    store.armedConfirm = { key, timer };
-    renderActiveSurface();
-  }
-
-  function getActiveId() {
-    return store.activeItem?.id || store.config.activeWallpaperId || store.config.wallpaperId || '';
-  }
-
-  function getEffectiveConfig() {
-    return resolveEffectiveConfig(store.config, getActiveId());
-  }
-
-  function getResolvedPolarity(eff = getEffectiveConfig()) {
-    if (eff.themeMode === 'light') return 'light';
-    if (eff.themeMode === 'dark') return 'dark';
-    return store.hostPolarity === 'light' ? 'light' : 'dark';
-  }
-
-  function hasPerWallpaperPin(wallpaperId = getActiveId()) {
-    if (!wallpaperId) return false;
-    const ov = store.config.perWallpaperOverrides?.[wallpaperId];
-    return Boolean(ov && typeof ov === 'object' && Object.keys(ov).length > 0);
-  }
-
-  function isHostAttached(hs = store.hostStatus) {
-    if (!hs || typeof hs !== 'object') return false;
-    return Boolean(
-      hs.phase === 'attached' ||
-        Number(hs.attachedCount) > 0 ||
-        hs.attached === true ||
-        hs.cdpConnected === true,
-    );
-  }
-
-  function resolvePreviewVideoUrl(item) {
-    if (!item || typeof item !== 'object') return '';
-    if (item.kind === 'video') {
-      return item.mediaUrl || item.videoUrl || '';
-    }
-    if (
-      item.kind === 'scene' &&
-      (item.sceneMode === 'video' || item.sceneMode === 'scene-video' || Boolean(item.sceneVideoUrl))
-    ) {
-      return item.sceneVideoUrl || item.mediaUrl || '';
-    }
-    return '';
-  }
+  let delegationBound = false;
 
   // ==========================================================================
-  // < 16ms Zero-Reflow CSS Custom Property & Mini-Preview Sync
+  // Helpers: Visible Presets, Snapshot Payload & Surgical UI Refresh
   // ==========================================================================
-  function clampNum(v, min, max) {
-    return Math.min(max, Math.max(min, v));
+  function getVisiblePresets() {
+    const deleted = store.config.deletedFactoryPresets || [];
+    const list = store.presets?.length ? store.presets : FACTORY_PRESETS;
+    return list.filter((p) => p && !deleted.includes(p.id));
   }
 
-  function parseRgbTriplet(trip, fallback = [14, 14, 17]) {
-    const parts = String(trip || '').split(',').map((s) => Number(s.trim()));
-    if (parts.length >= 3 && parts.slice(0, 3).every((n) => Number.isFinite(n))) {
-      return [
-        clampNum(Math.round(parts[0]), 0, 255),
-        clampNum(Math.round(parts[1]), 0, 255),
-        clampNum(Math.round(parts[2]), 0, 255),
-      ];
-    }
-    return fallback;
-  }
-
-  function mixRgbArr(a, b, w) {
-    const tW = clampNum(Number(w) || 0, 0, 1);
-    return [
-      Math.round(a[0] + (b[0] - a[0]) * tW),
-      Math.round(a[1] + (b[1] - a[1]) * tW),
-      Math.round(a[2] + (b[2] - a[2]) * tW),
-    ];
-  }
-
-  function relLumRgb(rgb) {
-    const lin = (c) => {
-      const n = clampNum(c, 0, 255) / 255;
-      return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
-    };
-    return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
-  }
-
-  function contrastRatioRgb(rgbA, rgbB) {
-    const l1 = relLumRgb(rgbA);
-    const l2 = relLumRgb(rgbB);
-    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
-  }
-
-  function enforceContrastFloorRgb(rgb, fgRgb, isLight, minRatio = 4.5) {
-    if (contrastRatioRgb(rgb, fgRgb) >= minRatio) return rgb;
-    const anchor = isLight ? [255, 255, 255] : [0, 0, 0];
-    let lo = 0;
-    let hi = 1;
-    let best = anchor;
-    for (let step = 0; step < 12; step++) {
-      const mid = (lo + hi) * 0.5;
-      const cand = mixRgbArr(rgb, anchor, mid);
-      if (contrastRatioRgb(cand, fgRgb) >= minRatio) {
-        best = cand;
-        hi = mid;
-      } else {
-        lo = mid;
-      }
-    }
-    return best;
-  }
-
-  function adaptCustomTintRgb(hexStr, isLight, contrastFloor) {
-    const rgb = parseRgbTriplet(hexToRgbTriplet(hexStr, '14, 14, 17'));
-    if (!contrastFloor) return rgb;
-    const [h, s, l] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
-    if (!isLight && l > 0.24) {
-      return hslToRgb(h, Math.min(s, 0.65), clampNum(0.06 + (1 - l) * 0.18, 0.04, 0.24));
-    }
-    if (isLight && l < 0.74) {
-      return hslToRgb(h, Math.min(s, 0.45), clampNum(0.96 - l * 0.22, 0.74, 0.96));
-    }
-    return rgb;
-  }
-
-  function applyToneShiftRgb(rgb, tone, isLight) {
-    const n = clampNum(Number(tone) || 0, -100, 100);
-    if (n === 0) return rgb;
-    if (!isLight) {
-      return n < 0
-        ? mixRgbArr(rgb, [0, 0, 0], Math.abs(n) / 100)
-        : mixRgbArr(rgb, [92, 98, 114], (n / 100) * 0.85);
-    }
-    return n < 0
-      ? mixRgbArr(rgb, [176, 186, 202], (Math.abs(n) / 100) * 0.85)
-      : mixRgbArr(rgb, [255, 255, 255], n / 100);
-  }
-
-  function buildSimBackdrop(px, isLight, isNested = false) {
-    const r = Math.round(clampNum(Number(px) || 0, 0, 64));
-    if (r <= 0) return 'none';
-    const sat = isNested
-      ? Math.round(100 + Math.min(15, r * 0.25))
-      : isLight
-        ? Math.round(125 + Math.min(65, r * 1.45))
-        : Math.round(115 + Math.min(65, r * 1.35));
-    return `blur(${r}px) saturate(${sat}%)`;
-  }
-
-  function resolveSimComponentSurface(comp, eff, tokens, isLight) {
-    const baseRgb = parseRgbTriplet(tokens.baseRgb, [14, 14, 17]);
-    const shadeRgb = parseRgbTriplet(tokens.shadeRgb, [9, 9, 11]);
-    const tint1Rgb = parseRgbTriplet(tokens.tint1Rgb, [20, 20, 24]);
-    const popRgb = parseRgbTriplet(tokens.popoverRgb, [22, 22, 28]);
-    const wallTintRgb = parseRgbTriplet(tokens.wallTintRgb, [102, 157, 246]);
-    const fgRgb = parseRgbTriplet(hexToRgbTriplet(tokens.fg, isLight ? '15, 23, 42' : '242, 242, 245'));
-    const sbBaseRgb =
-      !isLight && (shadeRgb[0] + shadeRgb[1] + shadeRgb[2] > baseRgb[0] + baseRgb[1] + baseRgb[2])
-        ? baseRgb
-        : shadeRgb;
-
-    const entry = eff.surfaceTints?.[comp] || DEFAULT_SURFACE_TINT_ENTRY;
-    const bounds = SURFACE_TINT_BOUNDS[comp] || { minOpacity: 0, maxOpacity: 0.98 };
-    const wallMix = Number(eff.wallTintMix || 0);
-    const defaultRgb =
-      comp === 'topbar' || comp === 'sidebar'
-        ? sbBaseRgb
-        : comp === 'workspace' || comp === 'rightPane'
-          ? baseRgb
-          : comp === 'popover'
-            ? popRgb
-            : tint1Rgb;
-    const wallWeight =
-      comp === 'popover'
-        ? wallMix * 0.4
-        : comp === 'composer' || comp === 'card'
-          ? wallMix
-          : wallMix * 0.75;
-
-    const contrastOn = eff.contrastFloor !== false;
-    const hasTint = Boolean(entry.tint);
-    const toneVal = Number(entry.tone) || 0;
-    const hasToneOrTint = hasTint || toneVal !== 0;
-
-    let rgb = hasTint ? adaptCustomTintRgb(entry.tint, isLight, contrastOn) : defaultRgb;
-    rgb = applyToneShiftRgb(rgb, toneVal, isLight);
-    const preMixRgb = hasToneOrTint && contrastOn ? enforceContrastFloorRgb(rgb, fgRgb, isLight, 4.5) : rgb;
-    let finalRgb = hasTint ? preMixRgb : mixRgbArr(preMixRgb, wallTintRgb, wallWeight);
-    if (hasToneOrTint && contrastOn) {
-      finalRgb = enforceContrastFloorRgb(finalRgb, fgRgb, isLight, 4.5);
-    }
-
-    const solidChrome = eff.glassSurfaces === false;
-    let alpha;
-    if (solidChrome && comp !== 'popover') {
-      alpha = 1;
-    } else if (entry.opacity !== null && entry.opacity !== undefined) {
-      alpha = clampNum(Number(entry.opacity), bounds.minOpacity, bounds.maxOpacity);
-    } else {
-      alpha = resolveComponentDefaultAlpha(comp, eff, isLight);
-    }
-
-    return {
-      rgb: finalRgb,
-      alpha,
-      rgba: `rgba(${finalRgb[0]}, ${finalRgb[1]}, ${finalRgb[2]}, ${alpha.toFixed(3)})`,
-    };
-  }
-
-  function syncOpticalCssVars() {
+  function buildSnapshotConfigPatch(includeWallpaper = false) {
     const eff = getEffectiveConfig();
-    const polarity = getResolvedPolarity(eff);
-    const isLight = polarity === 'light';
-    const tokens = resolveSchemeTokens(eff, polarity);
-    const root = document.documentElement;
-
-    root.dataset.prismTheme = polarity;
-    root.dataset.prismScheme = eff.colorScheme;
-    root.dataset.prismCorners = eff.cornerStyle;
-    root.lang = curLocale() === 'en' ? 'en' : 'zh-CN';
-
-    root.style.setProperty('--prism-accent', tokens.accent);
-    root.style.setProperty('--prism-accent-rgb', tokens.accentRgb);
-    root.style.setProperty('--prism-accent-fg', tokens.accentFg);
-    root.style.setProperty('--prism-wall-tint-rgb', tokens.wallTintRgb);
-    root.style.setProperty('--prism-wall-tint-mix', `${Math.round((eff.wallTintMix || 0) * 1000) / 10}%`);
-
-    // Resolve all 7 glass component surfaces once so both swatches & 21:9 preview stay 1:1 live
-    const compSurfaces = {};
-    for (const comp of SURFACE_TINT_COMPONENTS) {
-      compSurfaces[comp] = resolveSimComponentSurface(comp, eff, tokens, isLight);
-      root.style.setProperty(`--sim-${comp}-bg`, compSurfaces[comp].rgba);
-    }
-
-    const stage = document.getElementById('prism-mini-stage');
-    const hub = document.getElementById('prism-mini-hub');
-    if (!stage || !hub) return;
-
-    const fitCss = eff.fit === 'center' ? 'none' : eff.fit;
-    // Issue #10: Zero blur overscale jitter (1.0x constant scale; edge-clamped .mini-blur-veil handles mediaBlur!)
-    const totalScale = (eff.layerScale || 100) / 100;
-    const mediaBlurSimPx = Math.round((eff.mediaBlur || 0) * 0.45 * 10) / 10;
-    const scrimCol = eff.scrimColor && eff.scrimColor !== 'auto' ? eff.scrimColor : `rgb(${tokens.shadeRgb})`;
-    const scrimAlpha = isLight && (!eff.scrimColor || eff.scrimColor === 'auto') && eff.scrimOpacity > 0
-      ? Math.min(0.94, 0.16 + eff.scrimOpacity * 0.78)
-      : eff.scrimOpacity;
-
-    const vigBg = isLight
-      ? 'radial-gradient(ellipse 58% 66% at 50% 48%, rgba(255,255,255,0.28) 0%, rgba(244,247,251,0.14) 62%, rgba(232,238,246,0.32) 100%)'
-      : 'radial-gradient(ellipse 58% 66% at 50% 48%, rgba(9,9,11,0.04) 0%, rgba(9,9,11,0.16) 62%, rgba(9,9,11,0.34) 100%)';
-
-    let extraFilter = '';
-    if (eff.filterPreset === 'grayscale') extraFilter = ' grayscale(100%)';
-    else if (eff.filterPreset === 'sepia') extraFilter = ' sepia(65%)';
-    else if (eff.filterPreset === 'vivid') extraFilter = ' saturate(135%) contrast(108%)';
-    else if (eff.filterPreset === 'warm') extraFilter = ' sepia(22%) saturate(118%)';
-    else if (eff.filterPreset === 'cool') extraFilter = ' hue-rotate(12deg) saturate(110%)';
-    else if (eff.filterPreset === 'darken') extraFilter = ' brightness(80%)';
-    else if (eff.filterPreset === 'brighten') extraFilter = ' brightness(118%)';
-    else if (eff.filterPreset === 'contrast') extraFilter = ' contrast(125%)';
-
-    stage.style.setProperty('--sim-fit', fitCss);
-    stage.style.setProperty('--sim-pos', `${eff.layerPosX}% ${eff.layerPosY}%`);
-    stage.style.setProperty('--sim-media-opacity', String(eff.mediaOpacity));
-    stage.style.setProperty('--sim-media-blur', `${mediaBlurSimPx}px`);
-    stage.style.setProperty('--sim-media-blur-filter', mediaBlurSimPx > 0 ? `blur(${mediaBlurSimPx}px)` : 'none');
-    stage.style.setProperty('--sim-media-blur-display', mediaBlurSimPx > 0 ? 'block' : 'none');
-    stage.style.setProperty('--sim-media-brightness', `${eff.mediaBrightness}%`);
-    stage.style.setProperty('--sim-media-contrast', `${eff.mediaContrast}%`);
-    stage.style.setProperty('--sim-media-saturate', `${eff.mediaSaturate}%`);
-    stage.style.setProperty('--sim-scale-total', totalScale.toFixed(3));
-    stage.style.setProperty('--sim-flip', eff.flip ? '-1' : '1');
-    stage.style.setProperty('--sim-scrim-color', scrimCol);
-    stage.style.setProperty('--sim-scrim-opacity', scrimAlpha.toFixed(3));
-    stage.style.setProperty('--sim-vignette-bg', vigBg);
-    stage.style.setProperty('--sim-vignette-opacity', eff.vignette ? (isLight ? '0.36' : '0.44') : '0');
-    stage.style.setProperty('--sim-grain-alpha', String(eff.grainAlpha));
-
-    const mediaEl = stage.querySelector('.mini-media-el');
-    if (mediaEl) {
-      mediaEl.style.filter = `brightness(var(--sim-media-brightness, 100%)) contrast(var(--sim-media-contrast, 100%)) saturate(var(--sim-media-saturate, 105%))${extraFilter}`;
-      if (mediaEl.tagName === 'VIDEO') {
-        if (Math.abs(mediaEl.playbackRate - (eff.playbackRate || 1)) > 0.02) {
-          mediaEl.playbackRate = eff.playbackRate || 1;
-        }
-        if ((eff.paused || document.hidden) && !mediaEl.paused) {
-          mediaEl.pause();
-        } else if (!eff.paused && !document.hidden && mediaEl.paused) {
-          mediaEl.play().catch(() => {});
-        }
+    const out = {};
+    for (const k of Object.keys(DEFAULT_CONFIG)) {
+      if (
+        k === 'accentCache' ||
+        k === 'extractedAccent' ||
+        k === 'rotationGroups' ||
+        k === 'favorites' ||
+        k === 'hiddenIds' ||
+        k === 'userProps' ||
+        k === 'perWallpaperOverrides' ||
+        k === 'frameVariants' ||
+        k === 'sceneLiveFailures' ||
+        k === 'deletedFactoryPresets' ||
+        k === 'uploadDir' ||
+        k === 'cacheDir' ||
+        k === 'customFolders' ||
+        k === 'activeProfilePresetId'
+      ) {
+        continue;
       }
-    }
-
-    // Simulated Workbench Islands Geometry & Two-Tier Glass Hierarchy (Req #2, #3, #4)
-    const isIslands = eff.layoutMode === 'islands';
-    hub.dataset.layout = eff.layoutMode;
-    hub.dataset.topbarStyle = eff.topbarStyle || 'pills';
-    const baseR = eff.cornerStyle === 'sharp' ? 4 : eff.cornerStyle === 'soft' ? 12 : 8;
-    const mapSidebarR = (raw) => {
-      if (!isIslands) return '0px';
-      if (raw === 'auto' || raw === 'native') return `${baseR}px`;
-      const n = Number(raw);
-      return Number.isFinite(n) ? `${Math.round(n * 0.65)}px` : `${baseR}px`;
-    };
-
-    const g = eff.glassSurfaces ? eff.glassOpacity : 0.96;
-    const blurPx = eff.glassSurfaces ? Math.round((eff.glassBlur || 0) * 0.85) : 0;
-    const rawSbBlur = eff.sidebarBlur !== null && eff.sidebarBlur !== undefined ? eff.sidebarBlur : eff.glassBlur;
-    const sbBlurPx = eff.glassSurfaces ? Math.round((rawSbBlur || 0) * 0.85) : 0;
-    const compBlurPx = eff.glassSurfaces && eff.glassBlur > 0
-      ? Math.min(58, Math.round((eff.glassBlur + 4) * 0.85))
-      : 0;
-    const codeBlurPx = eff.glassSurfaces && eff.codeReadabilityMode === 'frosted' && blurPx > 0
-      ? Math.max(4, Math.round(blurPx * 0.85))
-      : 0;
-
-    const floorAlpha = eff.contrastFloor ? (isLight ? 0.84 : 0.72) : 0.44;
-    let editorBg = `rgba(${tokens.tint1Rgb}, ${Math.max(floorAlpha, g * 0.78).toFixed(3)})`;
-    let codeBackdrop = 'none';
-    if (eff.codeReadabilityMode === 'solid') {
-      editorBg = `rgb(${tokens.tint1Rgb})`;
-    } else if (eff.codeReadabilityMode === 'frosted') {
-      editorBg = `rgba(${tokens.tint1Rgb}, ${Math.max(floorAlpha, g * 0.85).toFixed(3)})`;
-      codeBackdrop = buildSimBackdrop(codeBlurPx, isLight, true);
-    }
-
-    const chatBackdrop = buildSimBackdrop(blurPx, isLight, false);
-    const topbarBackdrop = buildSimBackdrop(blurPx, isLight, false);
-    const sidebarBackdrop = buildSimBackdrop(sbBlurPx, isLight, false);
-    const composerBackdrop = buildSimBackdrop(compBlurPx, isLight, true);
-
-    const borderCss = eff.borders === 'off'
-      ? '1px solid transparent'
-      : eff.borders === 'subtle'
-        ? `1px solid rgba(${tokens.ptRgb}, 0.06)`
-        : `1px solid rgba(${tokens.ptRgb}, 0.14)`;
-
-    const shadowCss = isIslands && eff.shadows
-      ? `inset 0 1px 0 ${isLight ? 'rgba(255,255,255,0.86)' : 'rgba(255,255,255,0.09)'}, 0 6px 16px rgba(0,0,0,${isLight ? '0.12' : '0.38'})`
-      : 'none';
-
-    hub.style.setProperty('--sim-pad', isIslands ? `${Math.max(2, Math.round(eff.workspacePad * 0.75))}px` : '0px');
-    hub.style.setProperty('--sim-gap', isIslands ? `${Math.max(0, Math.round(eff.islandGap * 0.75))}px` : '0px');
-    hub.style.setProperty('--sim-r-island', isIslands ? `${baseR}px` : '0px');
-    hub.style.setProperty('--sim-r-topbar', isIslands ? `${Math.max(4, baseR - 2)}px` : '0px');
-    hub.style.setProperty('--sim-r-left', mapSidebarR(eff.leftSidebarRadius));
-    hub.style.setProperty('--sim-r-right', mapSidebarR(eff.rightSidebarRadius));
-    hub.style.setProperty('--sim-r-card', `${Math.max(3, baseR - 3)}px`);
-    hub.style.setProperty('--sim-topbar-bg', compSurfaces.topbar.rgba);
-    hub.style.setProperty('--sim-sidebar-bg', compSurfaces.sidebar.rgba);
-    hub.style.setProperty('--sim-chat-bg', compSurfaces.workspace.rgba);
-    hub.style.setProperty('--sim-right-pane-bg', compSurfaces.rightPane.rgba);
-    hub.style.setProperty('--sim-composer-bg', compSurfaces.composer.rgba);
-    hub.style.setProperty('--sim-card-bg', compSurfaces.card.rgba);
-    hub.style.setProperty('--sim-popover-bg', compSurfaces.popover.rgba);
-    hub.style.setProperty('--sim-topbar-backdrop', topbarBackdrop);
-    hub.style.setProperty('--sim-sidebar-backdrop', sidebarBackdrop);
-    hub.style.setProperty('--sim-chat-backdrop', chatBackdrop);
-    hub.style.setProperty('--sim-composer-backdrop', composerBackdrop);
-    hub.style.setProperty('--sim-code-backdrop', codeBackdrop);
-    hub.style.setProperty('--sim-sidebar-blur', `${sbBlurPx}px`);
-    hub.style.setProperty('--sim-editor-bg', editorBg);
-    hub.style.setProperty('--sim-code-blur', codeBackdrop);
-    hub.style.setProperty('--sim-blur', `${blurPx}px`);
-    hub.style.setProperty('--sim-blur-lg', `${compBlurPx}px`);
-    hub.style.setProperty('--sim-border', borderCss);
-    hub.style.setProperty('--sim-shadow', shadowCss);
-    hub.style.setProperty('--sim-caret', eff.caretColor || tokens.accent);
-
-    const hudLayout = document.getElementById('mini-hud-layout');
-    const hudAccent = document.getElementById('mini-hud-accent');
-    if (hudLayout) {
-      hudLayout.textContent = isIslands ? `ISLANDS · ${eff.islandGap}px` : 'FLUSH';
-    }
-    if (hudAccent) {
-      hudAccent.textContent = `${eff.colorScheme.toUpperCase()} · ${tokens.accent.toUpperCase()}`;
-    }
-  }
-
-  function releaseExistingPreviewVideo(wrap) {
-    const oldVid = wrap?.querySelector('video');
-    if (oldVid) {
-      try {
-        oldVid.pause();
-        oldVid.removeAttribute('src');
-        oldVid.load();
-      } catch {
-        // ignore decoder teardown issues
+      if ((k === 'activeWallpaperId' || k === 'wallpaperId' || k === 'kind') && !includeWallpaper) {
+        continue;
       }
-      oldVid.remove();
+      if (k in eff) out[k] = eff[k];
     }
-  }
-
-  // Mount or update the media node inside the 21:9 mini-preview without flicker or resetting active video
-  function syncMiniPreviewMedia() {
-    const wrap = document.getElementById('mini-media-layer');
-    if (!wrap) return;
-    const item = store.activeItem || store.items.find((x) => x.id === getActiveId()) || null;
-    const videoUrl = resolvePreviewVideoUrl(item);
-    const eff = getEffectiveConfig();
-
-    if (item?.schemeColor) {
-      const col = weColorToHex(item.schemeColor);
-      if (col) {
-        wrap.style.background = `radial-gradient(circle at 30% 35%, ${col}88, transparent 60%), linear-gradient(135deg, ${col}44, #0a0c14)`;
-      }
-    }
-
-    // Persistent <video> fast path: never recreate or reset src when URL is unchanged!
-    if (videoUrl) {
-      const existingVid = wrap.querySelector('video#prism-preview-video');
-      if (existingVid && existingVid.dataset.mediaSrc === videoUrl) {
-        syncOpticalCssVars();
-        maybeExtractWallpaperAccent(item);
-        return;
-      }
-
-      if (slideshowTimer) {
-        clearInterval(slideshowTimer);
-        slideshowTimer = null;
-      }
-      releaseExistingPreviewVideo(wrap);
-      wrap.innerHTML = '';
-      currentStageMediaSig = `video|${item.id}|${videoUrl}`;
-
-      let posterImg = null;
-      if (item.thumbUrl) {
-        posterImg = document.createElement('img');
-        posterImg.className = 'mini-poster-overlay';
-        posterImg.alt = '';
-        posterImg.onerror = () => posterImg.remove();
-        posterImg.src = item.thumbUrl;
-        wrap.appendChild(posterImg);
-      }
-
-      const vid = document.createElement('video');
-      vid.id = 'prism-preview-video';
-      vid.className = 'mini-media-el';
-      // Mandatory Chromium muted-autoplay properties set BEFORE assigning src
-      vid.defaultMuted = true;
-      vid.muted = true;
-      vid.playsInline = true;
-      vid.autoplay = true;
-      vid.loop = true;
-      vid.preload = 'auto';
-      vid.setAttribute('muted', '');
-      vid.setAttribute('playsinline', '');
-      vid.setAttribute('autoplay', '');
-      vid.setAttribute('loop', '');
-      vid.playbackRate = eff.playbackRate || 1;
-      vid.dataset.mediaSrc = videoUrl;
-
-      const hidePoster = () => {
-        if (posterImg) posterImg.classList.add('is-hidden');
-      };
-      const ensurePlaying = () => {
-        if (!getEffectiveConfig().paused && !document.hidden && vid.paused) {
-          vid.play().catch(() => {});
-        }
-      };
-
-      vid.addEventListener('loadedmetadata', ensurePlaying);
-      vid.addEventListener('canplay', ensurePlaying);
-      vid.addEventListener('loadeddata', hidePoster);
-      vid.addEventListener('playing', hidePoster);
-      vid.addEventListener('timeupdate', () => {
-        if (vid.__effectiveEnd > 0 && !vid.seeking && vid.currentTime >= vid.__effectiveEnd) {
-          vid.currentTime = 0;
-          ensurePlaying();
-        }
-      });
-
-      wrap.appendChild(vid);
-      vid.src = videoUrl;
-      ensurePlaying();
-
-      syncOpticalCssVars();
-      maybeExtractWallpaperAccent(item);
-      return;
-    }
-
-    const sig = item ? `${item.id}|${item.kind}|${item.mediaUrl || ''}|${item.thumbUrl || ''}|${item.slidesUrl || ''}` : 'none';
-    if (sig === currentStageMediaSig && wrap.children.length > 0) {
-      syncOpticalCssVars();
-      return;
-    }
-    currentStageMediaSig = sig;
-    if (slideshowTimer) {
-      clearInterval(slideshowTimer);
-      slideshowTimer = null;
-    }
-    releaseExistingPreviewVideo(wrap);
-    wrap.innerHTML = '';
-
-    if (!item) {
-      syncOpticalCssVars();
-      return;
-    }
-
-    if (item.kind === 'slideshow' && (item.slidesUrl || Array.isArray(item.slides))) {
-      const img = document.createElement('img');
-      img.className = 'mini-media-el';
-      img.alt = item.title || 'Slideshow';
-      img.src = item.slides?.[0] || item.thumbUrl || item.mediaUrl || '';
-      wrap.appendChild(img);
-      const startCycle = (urls, intervalSec) => {
-        if (urls.length > 0) {
-          let idx = 0;
-          img.src = urls[0];
-          if (urls.length > 1) {
-            const sec = Math.max(4, eff.pictureSlideSeconds || intervalSec || 12);
-            slideshowTimer = setInterval(() => {
-              if (getEffectiveConfig().paused || document.hidden) return;
-              idx = (idx + 1) % urls.length;
-              img.src = urls[idx];
-            }, sec * 1000);
-          }
-        }
-      };
-      if (Array.isArray(item.slides) && item.slides.length > 0) {
-        startCycle(item.slides, Math.round((item.slideIntervalMs || 12000) / 1000));
-      } else if (item.slidesUrl) {
-        const reqId = item.id;
-        apiJson(item.slidesUrl)
-          .then((manifest) => {
-            if (getActiveId() !== reqId) return;
-            const urls = Array.isArray(manifest?.slides)
-              ? manifest.slides.map((s) => (typeof s === 'string' ? s : s?.url)).filter(Boolean)
-              : [];
-            startCycle(urls, manifest?.intervalSec || 12);
-          })
-          .catch(() => {});
-      }
-    } else {
-      const src = (item.kind === 'image' ? item.mediaUrl || item.thumbUrl : item.thumbUrl || item.mediaUrl) || '';
-      if (src) {
-        const img = document.createElement('img');
-        img.className = 'mini-media-el';
-        img.alt = item.title || 'Wallpaper';
-        img.onerror = () => img.remove();
-        img.src = src;
-        wrap.appendChild(img);
-      }
-    }
-
-    syncOpticalCssVars();
-    maybeExtractWallpaperAccent(item);
-  }
-
-  // ==========================================================================
-  // 32x32 Offscreen Canvas Chroma-Weighted Histogram Accent Extractor
-  // ==========================================================================
-  function rgbToHsl(r, g, b) {
-    const rn = r / 255;
-    const gn = g / 255;
-    const bn = b / 255;
-    const max = Math.max(rn, gn, bn);
-    const min = Math.min(rn, gn, bn);
-    const l = (max + min) / 2;
-    if (max === min) return [0, 0, l];
-    const d = max - min;
-    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    let h = 0;
-    if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
-    else if (max === gn) h = ((bn - rn) / d + 2) / 6;
-    else h = ((rn - gn) / d + 4) / 6;
-    return [h * 360, s, l];
-  }
-
-  function hslToRgb(h, s, l) {
-    const hn = (((h % 360) + 360) % 360) / 360;
-    if (s === 0) {
-      const v = Math.round(l * 255);
-      return [v, v, v];
-    }
-    const hue2rgb = (p, q, tVal) => {
-      let tt = tVal;
-      if (tt < 0) tt += 1;
-      if (tt > 1) tt -= 1;
-      if (tt < 1 / 6) return p + (q - p) * 6 * tt;
-      if (tt < 1 / 2) return q;
-      if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
-      return p;
-    };
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    const p = 2 * l - q;
-    return [
-      Math.round(hue2rgb(p, q, hn + 1 / 3) * 255),
-      Math.round(hue2rgb(p, q, hn) * 255),
-      Math.round(hue2rgb(p, q, hn - 1 / 3) * 255),
-    ];
-  }
-
-  function rgbToHex(r, g, b) {
-    const hex = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
-    return `#${hex(r)}${hex(g)}${hex(b)}`;
-  }
-
-  function weColorToHex(raw) {
-    if (!raw || typeof raw !== 'string') return '';
-    const trimmed = raw.trim();
-    if (/^#[0-9a-f]{3,6}$/i.test(trimmed)) return trimmed;
-    const parts = trimmed.split(/[\s,]+/).map(Number);
-    if (parts.length >= 3 && parts.every((n) => Number.isFinite(n))) {
-      const isNormalized = parts[0] <= 1 && parts[1] <= 1 && parts[2] <= 1;
-      const scale = isNormalized ? 255 : 1;
-      return rgbToHex(parts[0] * scale, parts[1] * scale, parts[2] * scale);
-    }
-    return '';
-  }
-
-  function hexToWeColor(hex) {
-    const trip = hexToRgbTriplet(hex, '102, 157, 246').split(',').map((s) => Number(s.trim()));
-    return trip.map((v) => (v / 255).toFixed(4)).join(' ');
-  }
-
-  function computeHistogramAccentFromImageData(data, wallpaperId) {
-    const buckets = Array.from({ length: 24 }, () => ({ w: 0, hSin: 0, hCos: 0, sSum: 0 }));
-    for (let i = 0; i < data.length; i += 4) {
-      const a = data[i + 3];
-      if (a < 128) continue;
-      const [h, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
-      if (l < 0.12 || l > 0.90 || s < 0.16) continue;
-      const weight = s * Math.max(0.05, 1 - Math.abs(l - 0.5) * 1.4);
-      const bIdx = Math.min(23, Math.floor(h / 15));
-      const rad = (h * Math.PI) / 180;
-      buckets[bIdx].w += weight;
-      buckets[bIdx].hSin += Math.sin(rad) * weight;
-      buckets[bIdx].hCos += Math.cos(rad) * weight;
-      buckets[bIdx].sSum += s * weight;
-    }
-
-    let best = buckets[0];
-    for (const b of buckets) {
-      if (b.w > best.w) best = b;
-    }
-
-    if (best.w <= 0.01) {
-      return {
-        wallpaperId,
-        darkHex: '#D4D7E0',
-        lightHex: '#475569',
-        tintRgb: '148, 163, 184',
-      };
-    }
-
-    let winH = (Math.atan2(best.hSin, best.hCos) * 180) / Math.PI;
-    if (winH < 0) winH += 360;
-    const avgS = Math.min(0.84, Math.max(0.52, best.sSum / best.w));
-    const [dr, dg, db] = hslToRgb(winH, avgS, 0.68);
-    const [lr, lg, lb] = hslToRgb(winH, avgS, 0.44);
-    const [trR, trG, trB] = hslToRgb(winH, 0.45, 0.50);
-
-    return {
-      wallpaperId,
-      darkHex: rgbToHex(dr, dg, db),
-      lightHex: rgbToHex(lr, lg, lb),
-      tintRgb: `${trR}, ${trG}, ${trB}`,
-    };
-  }
-
-  function syncExtractedSwatchesInDom() {
-    const html = renderExtractedSwatchesHtml();
-    const readout = document.getElementById('prism-extracted-readout');
-    if (readout) readout.innerHTML = html;
-    const railChips = document.getElementById('rail-extracted-chips');
-    if (railChips) railChips.innerHTML = html;
-  }
-
-  function applyExtractedAccentResult(extracted, persistToServer = true) {
-    if (!extracted || !extracted.wallpaperId) return;
-    accentMemCache.set(extracted.wallpaperId, extracted);
-    if (extracted.wallpaperId !== getActiveId()) return;
-    const cur = store.config.extractedAccent;
-    const alreadyInCache = Boolean(store.config.accentCache?.[extracted.wallpaperId]?.darkHex === extracted.darkHex);
-    if (cur && cur.wallpaperId === extracted.wallpaperId && cur.darkHex === extracted.darkHex) {
-      syncExtractedSwatchesInDom();
-      return;
-    }
-    const nextCache = { ...(store.config.accentCache || {}), [extracted.wallpaperId]: extracted };
-    store.config = sanitizeConfig({ extractedAccent: extracted, accentCache: nextCache }, store.config);
-    syncOpticalCssVars();
-    syncExtractedSwatchesInDom();
-    if (persistToServer && !alreadyInCache) {
-      queueConfigPatch({ extractedAccent: extracted, accentCache: nextCache }, false, false);
-    } else if (persistToServer) {
-      queueConfigPatch({ extractedAccent: extracted }, false, false);
-    }
-  }
-
-  function maybeExtractWallpaperAccent(item) {
-    if (!item || !item.id) return;
-    const curExt = store.config.extractedAccent;
-    if (curExt && curExt.wallpaperId === item.id && curExt.darkHex) {
-      accentMemCache.set(item.id, curExt);
-      syncExtractedSwatchesInDom();
-      return;
-    }
-    const cached = accentMemCache.get(item.id) || store.config.accentCache?.[item.id];
-    if (cached && cached.darkHex) {
-      applyExtractedAccentResult({ ...cached, wallpaperId: item.id }, !store.config.accentCache?.[item.id]);
-      return;
-    }
-    const srcUrl = item.thumbUrl || (item.kind === 'image' ? item.mediaUrl : '');
-    if (!srcUrl) {
-      const fallbackHex = weColorToHex(item.schemeColor);
-      if (fallbackHex) {
-        const trip = hexToRgbTriplet(fallbackHex).split(',').map((s) => Number(s.trim()));
-        const [h, s] = rgbToHsl(trip[0], trip[1], trip[2]);
-        const sat = Math.min(0.84, Math.max(0.52, s || 0.6));
-        const [dr, dg, db] = hslToRgb(h, sat, 0.68);
-        const [lr, lg, lb] = hslToRgb(h, sat, 0.44);
-        const [trR, trG, trB] = hslToRgb(h, 0.45, 0.50);
-        applyExtractedAccentResult({
-          wallpaperId: item.id,
-          darkHex: rgbToHex(dr, dg, db),
-          lightHex: rgbToHex(lr, lg, lb),
-          tintRgb: `${trR}, ${trG}, ${trB}`,
-        });
-      }
-      return;
-    }
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const cvs = document.createElement('canvas');
-        cvs.width = 32;
-        cvs.height = 32;
-        const ctx = cvs.getContext('2d', { willReadFrequently: true });
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0, 32, 32);
-        const imgData = ctx.getImageData(0, 0, 32, 32).data;
-        const extracted = computeHistogramAccentFromImageData(imgData, item.id);
-        applyExtractedAccentResult(extracted);
-      } catch {
-        // Ignore CORS-tainted canvas if external URL
-      }
-    };
-    img.src = srcUrl;
-  }
-
-  // ==========================================================================
-  // Server State Ingestion & Debounced Config Mutation
-  // ==========================================================================
-  function ingestServerState(payload) {
-    if (!payload || typeof payload !== 'object') return;
-    const s = payload.state && typeof payload.state === 'object' ? payload.state : payload;
-
-    if (s.config && typeof s.config === 'object') {
-      store.config = sanitizeConfig(s.config, store.config);
-    }
-    if (typeof s.skinEnabled === 'boolean') {
-      store.skinEnabled = s.skinEnabled;
-      store.config = sanitizeConfig({ skinEnabled: s.skinEnabled }, store.config);
-    } else {
-      store.skinEnabled = Boolean(store.config.skinEnabled);
-    }
-    if ('activeItem' in s) {
-      store.activeItem = s.activeItem || null;
-    } else if (store.config.activeWallpaperId && store.items.length > 0) {
-      store.activeItem = store.items.find((x) => x.id === store.config.activeWallpaperId) || store.activeItem;
-    }
-    if (Array.isArray(s.presets) && s.presets.length > 0) {
-      store.presets = s.presets;
-    }
-    if (s.hostStatus && typeof s.hostStatus === 'object') {
-      store.hostStatus = { ...store.hostStatus, ...s.hostStatus };
-    }
-    const canarySrc =
-      (s.canary && typeof s.canary === 'object' ? s.canary : null) ||
-      (s.hostStatus?.canary && typeof s.hostStatus.canary === 'object' ? s.hostStatus.canary : null);
-    if (canarySrc) {
-      const nextState = CANARY_STATES.includes(canarySrc.state) ? canarySrc.state : (store.canary.state || 'idle');
-      store.canary = {
-        ...store.canary,
-        ...canarySrc,
-        state: nextState,
-        trippedReason: String(canarySrc.trippedReason || ''),
-      };
-    }
-    if (typeof s.sessionAwake === 'boolean') {
-      store.sessionAwake = s.sessionAwake;
-    } else if (typeof s.hostStatus?.sessionAwake === 'boolean') {
-      store.sessionAwake = s.hostStatus.sessionAwake;
-    }
-    const autoSrc = (s.autostart && typeof s.autostart === 'object' ? s.autostart : null) || {};
-    const hsSrc = (s.hostStatus && typeof s.hostStatus === 'object' ? s.hostStatus : null) || {};
-    if (
-      'normalShortcutEnabled' in s ||
-      'normalShortcutEnabled' in autoSrc ||
-      'normalShortcutEnabled' in hsSrc
-    ) {
-      store.autostart.normalShortcutEnabled = Boolean(
-        s.normalShortcutEnabled ?? autoSrc.normalShortcutEnabled ?? hsSrc.normalShortcutEnabled,
-      );
-    }
-    if ('anyShortcutEnabled' in s || 'anyShortcutEnabled' in autoSrc || 'anyShortcutEnabled' in hsSrc) {
-      store.autostart.anyShortcutEnabled = Boolean(
-        s.anyShortcutEnabled ?? autoSrc.anyShortcutEnabled ?? hsSrc.anyShortcutEnabled ?? store.autostart.normalShortcutEnabled,
-      );
-    }
-    const patchedList = s.patchedShortcuts ?? autoSrc.patchedShortcuts ?? hsSrc.patchedShortcuts;
-    if (Array.isArray(patchedList)) {
-      store.autostart.patchedShortcuts = patchedList;
-    }
-    const scList = autoSrc.shortcuts ?? s.shortcuts ?? hsSrc.shortcuts;
-    if (Array.isArray(scList)) {
-      store.autostart.shortcuts = scList;
-    }
-    if ('sidecarAutoStartsOnBoot' in s || 'sidecarAutoStartsOnBoot' in autoSrc || 'sidecarAutoStartsOnBoot' in hsSrc) {
-      store.autostart.sidecarAutoStartsOnBoot = Boolean(
-        s.sidecarAutoStartsOnBoot ?? autoSrc.sidecarAutoStartsOnBoot ?? hsSrc.sidecarAutoStartsOnBoot ?? true,
-      );
-    }
-    if ('autoRestoreLastSettings' in s || 'autoRestoreLastSettings' in autoSrc || 'autoRestoreLastSettings' in hsSrc) {
-      store.autostart.autoRestoreLastSettings = Boolean(
-        s.autoRestoreLastSettings ?? autoSrc.autoRestoreLastSettings ?? hsSrc.autoRestoreLastSettings ?? true,
-      );
-    }
-    if (autoSrc.backupPath || s.backupPath) {
-      store.autostart.backupPath = String(autoSrc.backupPath || s.backupPath);
-    }
-    if (autoSrc.configPath || s.configPath) {
-      store.autostart.configPath = String(autoSrc.configPath || s.configPath);
-    }
-    if (s.stats && typeof s.stats === 'object') {
-      store.stats = { ...store.stats, ...s.stats };
-    }
-    if (typeof s.mediaOrigin === 'string') store.mediaOrigin = s.mediaOrigin;
-    if (typeof s.pid === 'number') store.pid = s.pid;
-    if (typeof s.version === 'string') {
-      store.version = s.version;
-      store.update.currentVersion = s.version;
-    }
-    const updSrc =
-      (s.updateStatus && typeof s.updateStatus === 'object' ? s.updateStatus : null) ||
-      (s.updateSummary && typeof s.updateSummary === 'object' ? s.updateSummary : null) ||
-      (s.update && typeof s.update === 'object' ? s.update : null);
-    if (updSrc) {
-      ingestUpdateStatus(updSrc, { fromBootstrap: true });
-    }
-  }
-
-  function sanitizeExternalReleaseUrl(rawUrl) {
-    const fallback = 'https://github.com/azwosile/agy-wallpaper-prism/releases';
-    const str = String(rawUrl || '').trim();
-    if (!str) return fallback;
-    try {
-      const u = new URL(str);
-      if (u.protocol === 'https:') return u.toString();
-    } catch {
-      // ignore invalid URL
-    }
-    return fallback;
-  }
-
-  function ingestUpdateStatus(data, { fromBootstrap = false } = {}) {
-    if (!data || typeof data !== 'object') return;
-    const u = store.update;
-    if (typeof data.currentVersion === 'string' && data.currentVersion) {
-      u.currentVersion = data.currentVersion;
-    }
-    if ('latestVersion' in data) u.latestVersion = data.latestVersion || null;
-    if ('latestTag' in data) u.latestTag = data.latestTag || null;
-    if (typeof data.hasUpdate === 'boolean') u.hasUpdate = data.hasUpdate;
-    else if (typeof data.updateAvailable === 'boolean') u.hasUpdate = data.updateAvailable;
-    if (typeof data.releaseUrl === 'string' && data.releaseUrl) {
-      u.releaseUrl = sanitizeExternalReleaseUrl(data.releaseUrl);
-    }
-    if ('publishedAt' in data) u.publishedAt = data.publishedAt || null;
-    if (typeof data.changelog === 'string') u.changelog = data.changelog;
-    else if (typeof data.releaseNotes === 'string') u.changelog = data.releaseNotes;
-    if (typeof data.changelogSummary === 'string') u.changelogSummary = data.changelogSummary;
-    else if (!u.changelogSummary && typeof data.releaseNotes === 'string') u.changelogSummary = data.releaseNotes.split('\n')[0] || '';
-    if (typeof data.offline === 'boolean') u.offline = data.offline;
-    if (typeof data.rateLimited === 'boolean') u.rateLimited = data.rateLimited;
-    if ('checkedAt' in data && data.checkedAt) u.checkedAt = data.checkedAt;
-    const envObj = data.installEnv && typeof data.installEnv === 'object' ? data.installEnv : null;
-    if (typeof data.canSelfUpdate === 'boolean') u.canSelfUpdate = data.canSelfUpdate;
-    else if (typeof data.canAutoUpdate === 'boolean') u.canSelfUpdate = data.canAutoUpdate;
-    else if (envObj && typeof envObj.canSelfUpdate === 'boolean') u.canSelfUpdate = envObj.canSelfUpdate;
-    else if (envObj && typeof envObj.canAutoUpdate === 'boolean') u.canSelfUpdate = envObj.canAutoUpdate;
-    if (envObj && typeof envObj.isGitCheckout === 'boolean') u.isGitCheckout = envObj.isGitCheckout;
-    if (envObj && typeof envObj.isSymlink === 'boolean') u.isSymlink = envObj.isSymlink;
-    const reason = data.disabledReason || data.blockReason || envObj?.disabledReason || envObj?.blockReason || '';
-    if (reason || envObj) u.disabledReason = String(reason);
-    if (!fromBootstrap || data.checkedAt || data.latestVersion) {
-      u.checked = true;
-    }
-  }
-
-  function mergeSurfaceTintsPatch(baseTints, incomingTints) {
-    if (incomingTints === null) return null;
-    if (!incomingTints || typeof incomingTints !== 'object' || Array.isArray(incomingTints)) {
-      return baseTints;
-    }
-    const out = baseTints && typeof baseTints === 'object' && !Array.isArray(baseTints) ? { ...baseTints } : {};
-    for (const [comp, val] of Object.entries(incomingTints)) {
-      if (val === null) {
-        out[comp] = null;
-      } else if (val && typeof val === 'object' && !Array.isArray(val)) {
-        const prev = out[comp] && typeof out[comp] === 'object' ? out[comp] : {};
-        out[comp] = { ...prev, ...val };
+    if (includeWallpaper) {
+      const aid = getActiveId();
+      if (aid) {
+        out.activeWallpaperId = aid;
+        out.wallpaperId = aid;
       }
     }
     return out;
   }
 
-  function mergeConfigPatches(prevPatch, nextPatch) {
-    const merged = { ...(prevPatch || {}), ...(nextPatch || {}) };
-    if (prevPatch && nextPatch && 'surfaceTints' in prevPatch && 'surfaceTints' in nextPatch) {
-      merged.surfaceTints = mergeSurfaceTintsPatch(prevPatch.surfaceTints, nextPatch.surfaceTints);
+  function refreshPresetsSurfacesSurgically() {
+    const grid = document.getElementById('prism-presets-grid');
+    if (grid) {
+      grid.innerHTML = renderPresetsGridHtml();
     }
-    if (nextPatch && 'sidebarOpacity' in nextPatch && nextPatch.surfaceTints !== null) {
-      const nextSbHasOp = Boolean(
-        nextPatch.surfaceTints &&
-        typeof nextPatch.surfaceTints === 'object' &&
-        (nextPatch.surfaceTints.sidebar === null ||
-          (nextPatch.surfaceTints.sidebar &&
-            typeof nextPatch.surfaceTints.sidebar === 'object' &&
-            'opacity' in nextPatch.surfaceTints.sidebar)),
-      );
-      if (!nextSbHasOp && 'surfaceTints' in merged && merged.surfaceTints !== null) {
-        merged.surfaceTints = mergeSurfaceTintsPatch(merged.surfaceTints, { sidebar: { opacity: nextPatch.sidebarOpacity } });
-      }
+    const skinBar = document.getElementById('prism-skin-pin-bar');
+    if (skinBar && store.activeTab === 'skin') {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = renderSkinTopActionBarHtml();
+      const fresh = tmp.firstElementChild;
+      if (fresh) skinBar.replaceWith(fresh);
     }
-    if (
-      prevPatch &&
-      nextPatch &&
-      prevPatch.perWallpaperOverrides &&
-      nextPatch.perWallpaperOverrides &&
-      typeof prevPatch.perWallpaperOverrides === 'object' &&
-      typeof nextPatch.perWallpaperOverrides === 'object'
-    ) {
-      const ovs = { ...prevPatch.perWallpaperOverrides };
-      for (const [wid, ov] of Object.entries(nextPatch.perWallpaperOverrides)) {
-        if (ov && typeof ov === 'object' && ovs[wid] && typeof ovs[wid] === 'object') {
-          const nextOv = { ...ovs[wid], ...ov };
-          if ('surfaceTints' in ovs[wid] && 'surfaceTints' in ov) {
-            nextOv.surfaceTints = mergeSurfaceTintsPatch(ovs[wid].surfaceTints, ov.surfaceTints);
-          }
-          if ('sidebarOpacity' in ov && ov.surfaceTints !== null) {
-            const ovSbHasOp = Boolean(
-              ov.surfaceTints &&
-              typeof ov.surfaceTints === 'object' &&
-              (ov.surfaceTints.sidebar === null ||
-                (ov.surfaceTints.sidebar &&
-                  typeof ov.surfaceTints.sidebar === 'object' &&
-                  'opacity' in ov.surfaceTints.sidebar)),
-            );
-            if (!ovSbHasOp && 'surfaceTints' in nextOv && nextOv.surfaceTints !== null) {
-              nextOv.surfaceTints = mergeSurfaceTintsPatch(nextOv.surfaceTints, { sidebar: { opacity: ov.sidebarOpacity } });
-            }
-          }
-          ovs[wid] = nextOv;
-        } else {
-          ovs[wid] = ov;
-        }
-      }
-      merged.perWallpaperOverrides = ovs;
-    }
-    return merged;
+    updateLeftRailPanels();
   }
 
-  function buildConfigPatchForKey(patch) {
-    const activeId = getActiveId();
-    if (!activeId || !hasPerWallpaperPin(activeId)) {
-      return patch;
+  function renderToastStack() {
+    const host = document.getElementById('prism-toast-host');
+    if (!host) return;
+    host.innerHTML = store.toasts
+      .map(
+        (item) => `
+      <div class="prism-toast" data-tone="${esc(item.tone)}">
+        <span>${item.tone === 'ok' ? '✓' : item.tone === 'warn' ? '⚠' : item.tone === 'danger' ? '✕' : '◆'}</span>
+        <span>${esc(item.message)}</span>
+      </div>
+    `,
+      )
+      .join('');
+  }
+
+  function syncMediaHealthHost() {
+    const host = document.getElementById('prism-media-health-host');
+    if (host) {
+      host.innerHTML = renderMediaHealthAlertsHtml();
     }
-    const globalPart = {};
-    const ovPart = { ...(store.config.perWallpaperOverrides?.[activeId] || {}) };
-    const clearingAllTints = patch.surfaceTints === null;
-    let touchedOv = false;
-    for (const [k, v] of Object.entries(patch)) {
-      if (PER_WALLPAPER_OVERRIDE_KEYS.includes(k)) {
-        if (k === 'surfaceTints') {
-          ovPart.surfaceTints = mergeSurfaceTintsPatch(ovPart.surfaceTints, v);
-          if (v === null) {
-            ovPart.sidebarOpacity = null;
-          } else if (v && typeof v === 'object') {
-            if (v.sidebar === null) {
-              ovPart.sidebarOpacity = null;
-            } else if (v.sidebar && typeof v.sidebar === 'object' && 'opacity' in v.sidebar) {
-              ovPart.sidebarOpacity = v.sidebar.opacity;
-            }
-          }
-        } else {
-          ovPart[k] = v;
-          if (k === 'sidebarOpacity' && !clearingAllTints && !(ovPart.surfaceTints === null && v === null)) {
-            ovPart.surfaceTints = mergeSurfaceTintsPatch(ovPart.surfaceTints, { sidebar: { opacity: v } });
-          }
-        }
-        touchedOv = true;
+  }
+
+  function updateTopStatusIndicators() {
+    const masterBtn = document.getElementById('prism-master-toggle-btn');
+    const masterTxt = document.getElementById('prism-master-toggle-text');
+    if (masterBtn) {
+      const enabledStr = store.skinEnabled ? 'true' : 'false';
+      const busyStr = store.masterToggleBusy ? 'true' : 'false';
+      masterBtn.setAttribute('aria-checked', enabledStr);
+      masterBtn.dataset.enabled = enabledStr;
+      masterBtn.setAttribute('aria-busy', busyStr);
+      masterBtn.dataset.busy = busyStr;
+      masterBtn.title = getMasterToggleHint(store.skinEnabled);
+    }
+    if (masterTxt) {
+      masterTxt.textContent = getMasterToggleLabel(store.skinEnabled);
+    }
+
+    const pill = document.getElementById('prism-top-status-pill');
+    const txt = document.getElementById('prism-top-status-text');
+    const attached = isHostAttached();
+    const canaryTripped = store.canary?.state === 'tripped';
+    const isManualSleeping = !canaryTripped && store.config.startupMode === 'manual' && !store.sessionAwake;
+    if (pill && txt) {
+      const ready = Boolean(store.autostart.normalShortcutEnabled);
+      if (canaryTripped) {
+        pill.dataset.status = 'tripped';
+        txt.textContent = tr('canary.state.tripped');
+      } else if (isManualSleeping) {
+        pill.dataset.status = 'manual';
+        txt.textContent = tr('host.startup.manual');
       } else {
-        globalPart[k] = v;
-      }
-    }
-    if (!touchedOv) return patch;
-    return {
-      ...globalPart,
-      perWallpaperOverrides: {
-        ...(store.config.perWallpaperOverrides || {}),
-        [activeId]: ovPart,
-      },
-    };
-  }
-
-  function applyLocalPatch(rawPatch, routeThroughPin = true) {
-    const patch = routeThroughPin ? buildConfigPatchForKey(rawPatch) : rawPatch;
-    store.config = sanitizeConfig(patch, store.config);
-    if ('skinEnabled' in patch) store.skinEnabled = Boolean(patch.skinEnabled);
-    syncOpticalCssVars();
-    return patch;
-  }
-
-  function queueConfigPatch(rawPatch, immediate = false, routeThroughPin = true) {
-    const patch = applyLocalPatch(rawPatch, routeThroughPin);
-    pendingConfigPatch = mergeConfigPatches(pendingConfigPatch, patch);
-    if (immediate) {
-      if (configDebounceTimer) {
-        clearTimeout(configDebounceTimer);
-        configDebounceTimer = null;
-      }
-      void flushConfigPatch();
-      return;
-    }
-    const elapsed = Date.now() - lastConfigFlushAt;
-    if (!configFlushInFlight && elapsed >= CONFIG_THROTTLE_MS) {
-      if (configDebounceTimer) {
-        clearTimeout(configDebounceTimer);
-        configDebounceTimer = null;
-      }
-      void flushConfigPatch();
-      return;
-    }
-    if (!configDebounceTimer) {
-      const delay = Math.max(16, CONFIG_THROTTLE_MS - Math.max(0, elapsed));
-      configDebounceTimer = setTimeout(() => {
-        configDebounceTimer = null;
-        void flushConfigPatch();
-      }, delay);
-    }
-  }
-
-  async function flushConfigPatch() {
-    if (configDebounceTimer) {
-      clearTimeout(configDebounceTimer);
-      configDebounceTimer = null;
-    }
-    if (configFlushInFlight) {
-      configFlushPending = true;
-      return;
-    }
-    if (!pendingConfigPatch || Object.keys(pendingConfigPatch).length === 0) return;
-
-    configFlushInFlight = true;
-    try {
-      while (pendingConfigPatch && Object.keys(pendingConfigPatch).length > 0) {
-        configFlushPending = false;
-        const patch = pendingConfigPatch;
-        pendingConfigPatch = {};
-        lastConfigFlushAt = Date.now();
-        const res = await apiJson('/api/config', { method: 'POST', body: { patch } });
-        if (Object.keys(pendingConfigPatch).length === 0 && !configFlushPending) {
-          ingestServerState(res);
-          syncOpticalCssVars();
-          syncSurfaceTintsHeaderInDom();
-          updateTopStatusIndicators();
+        pill.dataset.status = !store.skinEnabled ? 'off' : attached ? 'attached' : 'standby';
+        if (store.isPopoutMode) {
+          txt.textContent = !store.skinEnabled
+            ? tr('status.skinOff')
+            : attached
+              ? tr('editor.liveLinkedBadge')
+              : tr('status.standby');
+        } else {
+          txt.textContent = !store.skinEnabled
+            ? tr('status.skinOff')
+            : attached
+              ? tr('status.connected')
+              : ready
+                ? `${tr('status.standby')} · ✓`
+                : tr('status.standby');
         }
       }
-    } catch (err) {
-      showToast(err.message || 'Failed to save config', 'danger');
-    } finally {
-      configFlushInFlight = false;
-      if (Object.keys(pendingConfigPatch).length > 0 || configFlushPending) {
-        configFlushPending = false;
-        void flushConfigPatch();
-      }
     }
+
+    const bannerHost = document.getElementById('prism-autostart-banner-host');
+    if (bannerHost) {
+      bannerHost.innerHTML = renderAutostartBannerHtml();
+    }
+    const railCdp = document.getElementById('rail-cdp-chip');
+    if (railCdp) {
+      railCdp.className = `prism-chip ${attached ? 'is-active' : ''}`;
+      railCdp.textContent = attached
+        ? curLocale() === 'zh'
+          ? '● CDP 已连接'
+          : '● CDP Attached'
+        : curLocale() === 'zh'
+          ? '◌ CDP 待机'
+          : '◌ CDP Standby';
+    }
+    syncMediaHealthHost();
   }
 
   // ==========================================================================
-  // Safe WE project.json Properties Normalizer & Condition Evaluator
+  // D8 Minimal Left Rail (0 duplicate optical sliders, 0 extracted accent chips)
   // ==========================================================================
-  function stripHtml(str) {
-    return String(str ?? '')
-      .replace(/<br\s*\/?>/gi, ' ')
-      .replace(/<[^>]+>/g, '')
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/&amp;/gi, '&')
-      .replace(/&lt;/gi, '<')
-      .replace(/&gt;/gi, '>')
-      .replace(/&quot;/gi, '"')
-      .trim();
-  }
-
-  function normalizeWeProperties(rawProps) {
-    if (!rawProps) return [];
-    const entries = Array.isArray(rawProps)
-      ? rawProps.map((p, idx) => [p?.key || p?.name || `prop_${idx}`, p])
-      : typeof rawProps === 'object'
-        ? Object.entries(rawProps)
-        : [];
-
-    const list = [];
-    for (const [key, prop] of entries) {
-      if (!prop || typeof prop !== 'object') continue;
-      let label = prop.text ?? prop.label ?? key;
-      if (label && typeof label === 'object') {
-        label = curLocale() === 'zh'
-          ? (label['zh-chs'] || label['zh-cht'] || label.zh || label['en-us'] || label.en || key)
-          : (label['en-us'] || label.en || label['zh-chs'] || key);
-      }
-      label = stripHtml(label) || key;
-      const type = String(prop.type || 'textinput').toLowerCase();
-      const options = Array.isArray(prop.options)
-        ? prop.options.map((o) => {
-            let oLabel = o?.label ?? o?.text ?? String(o?.value ?? '');
-            if (oLabel && typeof oLabel === 'object') {
-              oLabel = curLocale() === 'zh'
-                ? (oLabel['zh-chs'] || oLabel['en-us'] || String(o?.value ?? ''))
-                : (oLabel['en-us'] || oLabel['zh-chs'] || String(o?.value ?? ''));
-            }
-            return { label: stripHtml(oLabel), value: o?.value };
-          })
-        : [];
-
-      list.push({
-        key: String(key),
-        label,
-        type,
-        defaultValue: prop.value,
-        min: Number.isFinite(Number(prop.min)) ? Number(prop.min) : 0,
-        max: Number.isFinite(Number(prop.max)) ? Number(prop.max) : 100,
-        step: Number.isFinite(Number(prop.step)) && Number(prop.step) > 0
-          ? Number(prop.step)
-          : prop.fraction
-            ? 0.01
-            : 1,
-        options,
-        condition: typeof prop.condition === 'string' ? prop.condition.trim() : '',
-        order: Number.isFinite(Number(prop.order)) ? Number(prop.order) : 9999,
-      });
-    }
-
-    list.sort((a, b) => (a.order !== b.order ? a.order - b.order : a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-    return list;
-  }
-
-  // Zero-eval safe boolean condition parser for WE `condition` expressions
-  function evaluateWeCondition(expr, valuesMap) {
-    if (!expr || typeof expr !== 'string') return true;
-    const tokens = [];
-    const re = /\s*(==|!=|<=|>=|&&|\|\||[()!<>]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|-?\d+(?:\.\d+)?|[A-Za-z0-9_$.]+)\s*/g;
-    let m;
-    while ((m = re.exec(expr)) !== null) {
-      tokens.push(m[1]);
-    }
-    if (tokens.length === 0) return true;
-
-    let pos = 0;
-    const peek = () => tokens[pos];
-    const next = () => tokens[pos++];
-
-    function resolveAtom(tok) {
-      if (tok === undefined) return false;
-      if (tok === 'true') return true;
-      if (tok === 'false') return false;
-      if ((tok.startsWith('"') && tok.endsWith('"')) || (tok.startsWith("'") && tok.endsWith("'"))) {
-        return tok.slice(1, -1);
-      }
-      if (/^-?\d+(?:\.\d+)?$/.test(tok)) return Number(tok);
-      const cleanKey = tok.endsWith('.value') ? tok.slice(0, -6) : tok;
-      return valuesMap[cleanKey];
-    }
-
-    function parsePrimary() {
-      const tok = peek();
-      if (tok === '(') {
-        next();
-        const val = parseOr();
-        if (peek() === ')') next();
-        return val;
-      }
-      if (tok === '!') {
-        next();
-        return !parsePrimary();
-      }
-      return resolveAtom(next());
-    }
-
-    function parseCompare() {
-      let left = parsePrimary();
-      const op = peek();
-      if (op === '==' || op === '!=' || op === '<=' || op === '>=' || op === '<' || op === '>') {
-        next();
-        const right = parsePrimary();
-        // Loose numeric/string comparison matching WE behavior
-        const lStr = String(left);
-        const rStr = String(right);
-        const lNum = Number(left);
-        const rNum = Number(right);
-        const bothNum = typeof left !== 'boolean' && typeof right !== 'boolean' && Number.isFinite(lNum) && Number.isFinite(rNum) && lStr !== '' && rStr !== '';
-        if (op === '==') return bothNum ? lNum === rNum : left === right || lStr === rStr;
-        if (op === '!=') return bothNum ? lNum !== rNum : left !== right && lStr !== rStr;
-        if (op === '<') return lNum < rNum;
-        if (op === '>') return lNum > rNum;
-        if (op === '<=') return lNum <= rNum;
-        if (op === '>=') return lNum >= rNum;
-      }
-      return Boolean(left);
-    }
-
-    function parseAnd() {
-      let val = parseCompare();
-      while (peek() === '&&') {
-        next();
-        const rhs = parseCompare();
-        val = Boolean(val) && Boolean(rhs);
-      }
-      return val;
-    }
-
-    function parseOr() {
-      let val = parseAnd();
-      while (peek() === '||') {
-        next();
-        const rhs = parseAnd();
-        val = Boolean(val) || Boolean(rhs);
-      }
-      return val;
-    }
-
-    try {
-      return Boolean(parseOr());
-    } catch {
-      return true;
-    }
-  }
-
-  // ==========================================================================
-  // Library Filtering, Counts & Virtualized Window Calculation
-  // ==========================================================================
-  function computeLibraryModel() {
-    const playable = store.items.filter((it) => it && it.kind !== 'application');
-    const hiddenSet = new Set(store.config.hiddenIds || []);
-    const favSet = new Set(store.config.favorites || []);
-    const kindSet = new Set(store.config.typeFilter?.length ? store.config.typeFilter : LIBRARY_KINDS);
-    const ratingSet = new Set(store.config.contentRatingFilter?.length ? store.config.contentRatingFilter : CONTENT_RATINGS);
-    const q = store.searchQuery.trim().toLowerCase();
-
-    const kindCounts = Object.fromEntries(LIBRARY_KINDS.map((k) => [k, 0]));
-    const ratingCounts = Object.fromEntries(CONTENT_RATINGS.map((r) => [r, 0]));
-    let favCount = 0;
-    let hiddenCount = 0;
-    let workshopCount = 0;
-    let localCount = 0;
-
-    const visibleItems = [];
-    const hiddenItems = [];
-
-    for (const it of playable) {
-      if (hiddenSet.has(it.id)) {
-        hiddenCount++;
-        hiddenItems.push(it);
-        continue;
-      }
-      if (favSet.has(it.id)) favCount++;
-      if (it.source === 'workshop') workshopCount++;
-      if (it.source === 'upload' || it.source === 'local') localCount++;
-
-      const k = LIBRARY_KINDS.includes(it.kind) ? it.kind : 'image';
-      const r = CONTENT_RATINGS.includes(it.contentRating) ? it.contentRating : 'unrated';
-      kindCounts[k] = (kindCounts[k] || 0) + 1;
-      ratingCounts[r] = (ratingCounts[r] || 0) + 1;
-
-      if (store.libScope === 'favorites' && !favSet.has(it.id)) continue;
-      if (store.libScope === 'workshop' && it.source !== 'workshop') continue;
-      if (store.libScope === 'local' && it.source !== 'upload' && it.source !== 'local') continue;
-      if (!kindSet.has(k)) continue;
-      if (!ratingSet.has(r)) continue;
-
-      if (q) {
-        const hay = `${it.title || ''} ${(it.tags || []).join(' ')} ${it.workshopId || ''} ${it.source || ''} ${it.kind || ''}`.toLowerCase();
-        if (!hay.includes(q)) continue;
-      }
-      visibleItems.push(it);
-    }
-
-    return {
-      totalPlayable: playable.length,
-      visibleItems,
-      hiddenItems,
-      kindCounts,
-      ratingCounts,
-      favCount,
-      hiddenCount,
-      workshopCount,
-      localCount,
-      favSet,
-      hiddenSet,
-      kindSet,
-      ratingSet,
-    };
-  }
-
-  function computeVirtualSlice(totalCount) {
-    if (totalCount <= 120) {
-      return { start: 0, end: totalCount, padTop: 0, padBottom: 0 };
-    }
-    const scroller = document.getElementById('prism-tab-scroll');
-    const viewW = scroller ? scroller.clientWidth - 28 : window.innerWidth - 32;
-    const isWide = window.innerWidth >= 840;
-    const cols = isWide ? Math.max(2, Math.floor((viewW + 11) / 206)) : window.innerWidth >= 480 ? 3 : 2;
-    const isCompact = store.config.pickerLayout === 'fixed';
-    const rowH = isCompact ? 136 : Math.round((viewW / cols) * 0.625) + 46;
-    const totalRows = Math.ceil(totalCount / cols);
-    const scrollTop = scroller ? Math.max(0, scroller.scrollTop - 160) : 0;
-    const viewH = scroller ? scroller.clientHeight : 720;
-
-    const firstRow = Math.max(0, Math.floor(scrollTop / rowH) - 3);
-    const visibleRows = Math.ceil(viewH / rowH) + 6;
-    const lastRow = Math.min(totalRows, firstRow + visibleRows);
-
-    return {
-      start: firstRow * cols,
-      end: Math.min(totalCount, lastRow * cols),
-      padTop: firstRow * rowH,
-      padBottom: Math.max(0, (totalRows - lastRow) * rowH),
-    };
-  }
-
-  // ==========================================================================
-  // Reusable Tactile Control Renderers
-  // ==========================================================================
-  function sliderMeta(val, min, max, decimals = 0, suffix = '') {
-    const pct = max > min ? Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100)) : 0;
-    const numTxt = decimals > 0 ? Number(val).toFixed(decimals) : String(Math.round(Number(val)));
-    return { pct: pct.toFixed(1), display: `${numTxt}${suffix}` };
-  }
-
-  function renderSliderRow({
-    key,
-    label,
-    value,
-    defaultValue,
-    min,
-    max,
-    step = 1,
-    scale = 1,
-    decimals = 0,
-    suffix = '',
-    dblResetFraming = false,
-    nullable = false,
-    nullableFallbackKey = '',
-    fallbackValue = null,
-    comp = '',
-    resetAction = 'reset-key',
-  }) {
-    const uiMin = min * scale;
-    const uiMax = max * scale;
-    const uiStep = step * scale;
-    if (nullable || nullableFallbackKey) {
-      const isAuto = value === null || value === undefined;
-      const resolvedVal = isAuto ? Number(fallbackValue) : Number(value);
-      const uiVal = resolvedVal * scale;
-      const isDirty = !isAuto;
-      const { pct, display: rawDisplay } = sliderMeta(uiVal, uiMin, uiMax, decimals, suffix);
-      const display = isAuto ? tr('glass.followMainFmt', { val: rawDisplay }) : rawDisplay;
-      const fallbackAttr = nullableFallbackKey ? ` data-fallback-key="${esc(nullableFallbackKey)}"` : '';
-      const compAttr = comp ? ` data-comp="${esc(comp)}"` : '';
-      const resetAttrs =
-        resetAction === 'reset-surface-comp' && comp
-          ? `data-action="reset-surface-comp" data-comp="${esc(comp)}"`
-          : `data-action="reset-key" data-key="${esc(key)}"`;
-
-      return `
-      <div class="prism-slider-row" data-slider-key="${esc(key)}" data-dirty="${isDirty ? 'true' : 'false'}"
-           data-nullable="true"${fallbackAttr}${compAttr}
-           data-scale="${scale}" data-min="${uiMin}" data-max="${uiMax}" data-step="${uiStep}"
-           data-decimals="${decimals}" data-suffix="${esc(suffix)}" data-default="${Number(defaultValue)}">
-        <span class="prism-slider-label" ${dblResetFraming ? `data-dblreset="true" title="${esc(tx('dblClickFramingHint'))}"` : ''}>${esc(label)}</span>
-        <span class="prism-slider-val" data-action="edit-slider-val" title="Click to enter exact value">${esc(display)}</span>
-        <button type="button" class="prism-reset-btn" ${resetAttrs} title="${esc(tr('common.reset'))}">↺</button>
-        <input type="range" class="prism-range" data-config-slider="${esc(key)}"
-               min="${uiMin}" max="${uiMax}" step="${uiStep}" value="${uiVal}"
-               style="--prism-pct:${pct}%" />
-      </div>
-    `;
-    }
-
-    const uiVal = Number(value) * scale;
-    const uiDef = Number(defaultValue) * scale;
-    const isDirty = Math.abs(uiVal - uiDef) > uiStep * 0.25;
-    const { pct, display } = sliderMeta(uiVal, uiMin, uiMax, decimals, suffix);
-
-    return `
-      <div class="prism-slider-row" data-slider-key="${esc(key)}" data-dirty="${isDirty ? 'true' : 'false'}"
-           data-scale="${scale}" data-min="${uiMin}" data-max="${uiMax}" data-step="${uiStep}"
-           data-decimals="${decimals}" data-suffix="${esc(suffix)}" data-default="${Number(defaultValue)}">
-        <span class="prism-slider-label" ${dblResetFraming ? `data-dblreset="true" title="${esc(tx('dblClickFramingHint'))}"` : ''}>${esc(label)}</span>
-        <span class="prism-slider-val" data-action="edit-slider-val" title="Click to enter exact value">${esc(display)}</span>
-        <button type="button" class="prism-reset-btn" data-action="reset-key" data-key="${esc(key)}" title="${esc(tr('common.reset'))}">↺</button>
-        <input type="range" class="prism-range" data-config-slider="${esc(key)}"
-               min="${uiMin}" max="${uiMax}" step="${uiStep}" value="${uiVal}"
-               style="--prism-pct:${pct}%" />
-      </div>
-    `;
-  }
-
-  function renderSwitchRow({ key, label, hint = '', checked }) {
-    return `
-      <div class="prism-ctl-row">
-        <div class="prism-ctl-label">
-          <span class="prism-ctl-name">${esc(label)}</span>
-          ${hint ? `<span class="prism-ctl-hint">${esc(hint)}</span>` : ''}
-        </div>
-        <button type="button" role="switch" class="prism-switch" aria-checked="${checked ? 'true' : 'false'}"
-                data-action="toggle-bool" data-key="${esc(key)}"></button>
-      </div>
-    `;
-  }
-
-  function renderSegRow({ key, label, value, options }) {
-    return `
-      <div class="prism-ctl-row">
-        <div class="prism-ctl-label">
-          <span class="prism-ctl-name">${esc(label)}</span>
-        </div>
-        <div class="prism-seg">
-          ${options
-            .map(
-              (o) => `
-            <button type="button" class="prism-seg-btn ${String(value) === String(o.value) ? 'is-active' : ''}"
-                    data-action="set-enum" data-key="${esc(key)}" data-val="${esc(o.value)}">${esc(o.label)}</button>
-          `,
-            )
-            .join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  function renderConfirmRow({ confirmKey, label, hint = '', btnLabel, danger = false, action, payload = '' }) {
-    const armed = store.armedConfirm?.key === confirmKey;
-    return `
-      <div class="prism-confirm-row" data-armed="${armed ? 'true' : 'false'}">
-        <div class="prism-ctl-label">
-          <span class="prism-ctl-name">${esc(label)}</span>
-          ${hint ? `<span class="prism-ctl-hint">${esc(hint)}</span>` : ''}
-        </div>
-        <div class="prism-confirm-actions">
-          ${
-            armed
-              ? `
-            <button type="button" class="prism-btn prism-btn-sm prism-btn-danger"
-                    data-action="${esc(action)}" data-confirm-exec="${esc(confirmKey)}" data-payload="${esc(payload)}">✓ ${esc(tr('host.confirmPrompt'))}</button>
-            <button type="button" class="prism-btn prism-btn-sm" data-action="cancel-confirm">${esc(tr('host.cancel'))}</button>
-          `
-              : `
-            <button type="button" class="prism-btn prism-btn-sm ${danger ? 'prism-btn-danger' : ''}"
-                    data-action="arm-confirm" data-confirm-key="${esc(confirmKey)}">${esc(btnLabel)}</button>
-          `
-          }
-        </div>
-      </div>
-    `;
-  }
-
-  function renderScenePresetsHtml(eff) {
-    const icons = { crystal: '✦', islands: '❖', focus: '◐', eco: '🍃' };
-    const subsZh = { crystal: '64% 高透光感', islands: '76% 均衡磨砂', focus: '柔焦护眼阅读', eco: '静帧零模糊' };
-    const subsEn = { crystal: '64% airy acrylic', islands: '76% balanced glass', focus: 'Soft reading veil', eco: 'Paused 0-blur' };
-    const isZh = curLocale() === 'zh';
-
-    return `
-      <div class="prism-scene-grid">
-        ${SCENE_PRESET_IDS.map((id) => {
-          const p = SCENE_PRESETS[id];
-          const active = eff.preset === id;
-          return `
-            <button type="button" class="prism-scene-card ${active ? 'is-active' : ''}"
-                    data-action="apply-scene-preset" data-preset="${esc(id)}">
-              <div class="prism-scene-head">
-                <span>${icons[id] || '◆'} ${esc(isZh ? p.nameZh : p.nameEn)}</span>
-                ${active ? '<span style="color:var(--prism-accent)">●</span>' : ''}
-              </div>
-              <div class="prism-scene-sub">${esc(isZh ? subsZh[id] : subsEn[id])}</div>
-            </button>
-          `;
-        }).join('')}
-      </div>
-    `;
-  }
-
-  function renderExtractedSwatchesHtml() {
-    const ext = store.config.extractedAccent;
-    if (!ext) {
-      return `<span class="prism-ctl-hint">${esc(curLocale() === 'zh' ? '等待壁纸缩略图采样…' : 'Sampling active wallpaper chroma…')}</span>`;
-    }
-    return `
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="prism-chip" style="cursor:default">
-          <span class="prism-accent-dot" style="background:${esc(ext.darkHex)}"></span>
-          <span>Dark ${esc(ext.darkHex)}</span>
-        </span>
-        <span class="prism-chip" style="cursor:default">
-          <span class="prism-accent-dot" style="background:${esc(ext.lightHex)}"></span>
-          <span>Light ${esc(ext.lightHex)}</span>
-        </span>
-        <span class="prism-chip" style="cursor:default">
-          <span class="prism-accent-dot" style="background:rgb(${esc(ext.tintRgb)})"></span>
-          <span>Tint rgb(${esc(ext.tintRgb)})</span>
-        </span>
-      </div>
-    `;
-  }
-
-  // ==========================================================================
-  // Tab 1: Library Renderer
-  // ==========================================================================
-  function renderWallpaperCardHtml(item, activeId, favSet) {
-    const isActive = item.id === activeId;
-    const isFav = favSet.has(item.id);
-    const isPicked = store.batchMode && store.batchSelected.has(item.id);
-    const hasPin = hasPerWallpaperPin(item.id);
-    const thumb = item.thumbUrl || (item.kind === 'image' ? item.mediaUrl : '');
-    const bgFallback = weColorToHex(item.schemeColor) || '#1a2236';
-
-    return `
-      <article class="prism-wall-card ${isActive ? 'is-active' : ''} ${isPicked ? 'is-batch-selected' : ''}"
-               tabindex="0" data-action="card-click" data-id="${esc(item.id)}">
-        <div class="prism-wall-thumb" style="background:linear-gradient(135deg, ${esc(bgFallback)}66, rgba(12,14,22,0.95))">
-          ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="${esc(item.title || 'Wallpaper')}" onerror="this.remove()" />` : ''}
-          <div class="prism-card-top-left">
-            ${isActive ? `<span class="prism-active-pill">✓ ${esc(curLocale() === 'zh' ? '当前' : 'Active')}</span>` : ''}
-            ${store.batchMode ? `<span class="prism-fmt-tag">${isPicked ? '☑' : '☐'}</span>` : ''}
-          </div>
-          <div class="prism-card-top-right ${isFav || hasPin ? 'has-pinned' : ''}">
-            <button type="button" class="prism-card-act ${isFav ? 'is-fav' : ''}"
-                    data-action="toggle-fav" data-id="${esc(item.id)}" title="${esc(tr('lib.favorites'))}">★</button>
-            <button type="button" class="prism-card-act"
-                    data-action="open-inspector" data-id="${esc(item.id)}" title="${esc(tr('lib.inspector'))}">⚙</button>
-            <button type="button" class="prism-card-act"
-                    data-action="hide-item" data-id="${esc(item.id)}" title="${esc(tr('lib.hideOne'))}">🙈</button>
-          </div>
-          <div class="prism-card-bottom-badges">
-            <span class="prism-fmt-tag">${esc(tr(`kind.${item.kind}`) || item.kind)}</span>
-            ${item.resolution ? `<span class="prism-fmt-tag">${esc(item.resolution)}</span>` : ''}
-          </div>
-        </div>
-        <div class="prism-wall-info">
-          <span class="prism-wall-title" title="${esc(item.title || item.id)}">${esc(item.title || item.id)}</span>
-          <span class="prism-wall-sub">${esc(item.source === 'workshop' ? 'WS' : item.source === 'upload' ? 'UP' : 'LOC')}</span>
-        </div>
-      </article>
-    `;
-  }
-
-  function renderLibraryGridHtml(model = computeLibraryModel()) {
-    const activeId = getActiveId();
-    if (model.visibleItems.length === 0) {
-      return `
-        <div class="prism-empty-state">
-          <div style="font-size:22px;opacity:0.65">❖</div>
-          <div>${esc(tr('lib.empty'))}</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
-            <button type="button" class="prism-btn prism-btn-primary" data-action="trigger-upload">+ ${esc(tr('lib.upload'))}</button>
-            <button type="button" class="prism-btn" data-action="refresh-library">↻ ${esc(tr('lib.refresh'))}</button>
-          </div>
-        </div>
-      `;
-    }
-
-    const vSlice = computeVirtualSlice(model.visibleItems.length);
-    store.virtualWindow = vSlice;
-    const slice = model.visibleItems.slice(vSlice.start, vSlice.end);
-    const density = store.config.pickerLayout === 'fixed' ? 'compact' : 'gallery';
-
-    return `
-      <div class="prism-grid-viewport" style="padding-top:${vSlice.padTop}px;padding-bottom:${vSlice.padBottom}px">
-        <div class="prism-wall-grid" data-density="${density}">
-          ${slice.map((it) => renderWallpaperCardHtml(it, activeId, model.favSet)).join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  function renderLibraryTab() {
-    const model = computeLibraryModel();
+  function renderTransportBarHtml() {
+    const eff = getEffectiveConfig();
+    const item = store.activeItem || store.items.find((x) => x.id === getActiveId());
     const activeGroup = (store.config.rotationGroups || []).find((g) => g.id === store.config.rotationGroupId);
+    const playlistLabel = store.config.rotationEnabled
+      ? activeGroup
+        ? `↻ ${activeGroup.name}`
+        : `↻ ${store.config.rotationInterval}m`
+      : tr('transport.playlistNone');
+    const volPct = Math.round((eff.volume ?? 0.5) * 100);
+    const isFav = item && (store.config.favorites || []).includes(item.id);
 
     return `
-      <div class="prism-card" style="display:flex;flex-direction:column;gap:9px">
-        <div class="prism-lib-toolbar">
-          <div class="prism-search-box">
-            <span class="prism-search-icon">⌕</span>
-            <input id="prism-lib-search" type="text" class="prism-search-input"
-                   placeholder="${esc(tr('lib.searchPlaceholder'))}" value="${esc(store.searchQuery)}" />
-            ${store.searchQuery ? `<button type="button" class="prism-search-clear" data-action="clear-search">✕</button>` : ''}
-          </div>
-          <button type="button" class="prism-btn prism-btn-primary" data-action="trigger-upload">
-            ${store.uploading ? '⏳' : '＋'} ${esc(store.uploading ? tx('uploadBusy') : tr('lib.upload'))}
-          </button>
-          <button type="button" class="prism-btn" data-action="open-drawer" data-drawer="playlist">
-            ↻ ${esc(tr('lib.playlists'))}${activeGroup ? ` · ${esc(activeGroup.name)}` : ''}
-          </button>
-          <button type="button" class="prism-btn" data-action="open-inspector" data-id="${esc(getActiveId())}">
-            ⚙ ${esc(tx('inspectorBtn'))}
-          </button>
-          <button type="button" class="prism-btn" data-action="refresh-library" title="${esc(tr('lib.refresh'))}">↻</button>
-        </div>
-
-        <!-- Scope, Favorites, Hidden & Batch Row -->
-        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;align-items:center">
-          <div class="prism-filter-group">
-            <button type="button" class="prism-chip ${store.libScope === 'all' ? 'is-active' : ''}" data-action="set-lib-scope" data-scope="all">
-              ${esc(tx('scopeAll'))} <span class="prism-chip-count">${model.totalPlayable - model.hiddenCount}</span>
-            </button>
-            <button type="button" class="prism-chip ${store.libScope === 'favorites' ? 'is-active' : ''}" data-action="set-lib-scope" data-scope="favorites">
-              ★ ${esc(tr('lib.favorites'))} <span class="prism-chip-count">${model.favCount}</span>
-            </button>
-            <button type="button" class="prism-chip ${store.libScope === 'workshop' ? 'is-active' : ''}" data-action="set-lib-scope" data-scope="workshop">
-              ${esc(tx('scopeWorkshop'))} <span class="prism-chip-count">${model.workshopCount}</span>
-            </button>
-            <button type="button" class="prism-chip ${store.libScope === 'local' ? 'is-active' : ''}" data-action="set-lib-scope" data-scope="local">
-              ${esc(tx('scopeLocal'))} <span class="prism-chip-count">${model.localCount}</span>
-            </button>
-            <button type="button" class="prism-chip" data-action="open-drawer" data-drawer="hidden">
-              🙈 ${esc(tr('lib.hidden'))} <span class="prism-chip-count">${model.hiddenCount}</span>
-            </button>
-          </div>
-
-          <div class="prism-filter-group">
-            ${
-              store.batchMode
-                ? `
-              <button type="button" class="prism-btn prism-btn-sm" data-action="batch-hide">${esc(tx('batchHide'))} (${store.batchSelected.size})</button>
-              <button type="button" class="prism-btn prism-btn-sm prism-btn-primary" data-action="batch-to-playlist">${esc(tx('batchPlaylist'))}</button>
-              <button type="button" class="prism-btn prism-btn-sm" data-action="toggle-batch">${esc(tx('batchClear'))}</button>
-            `
-                : `
-              <button type="button" class="prism-chip" data-action="toggle-batch">☑ ${esc(tx('batchMode'))}</button>
-              <button type="button" class="prism-chip" data-action="toggle-density">
-                ${esc(store.config.pickerLayout === 'fixed' ? tx('densityGrid') : tx('densityCompact'))}
-              </button>
-            `
-            }
-          </div>
-        </div>
-
-        <!-- Multi-Select Format & Content Rating Chips (with Non-Empty Guard) -->
-        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-top:4px;border-top:1px solid var(--prism-border-hairline)">
-          <div class="prism-filter-group">
-            <span class="prism-filter-label">TYPE</span>
-            ${LIBRARY_KINDS.map((k) => `
-              <button type="button" class="prism-chip ${model.kindSet.has(k) ? 'is-active' : ''}"
-                      data-action="toggle-kind-chip" data-kind="${esc(k)}">
-                ${esc(tr(`kind.${k}`))} <span class="prism-chip-count">${model.kindCounts[k] || 0}</span>
-              </button>
-            `).join('')}
-          </div>
-          <div class="prism-filter-group">
-            <span class="prism-filter-label">RATING</span>
-            ${CONTENT_RATINGS.map((r) => `
-              <button type="button" class="prism-chip ${model.ratingSet.has(r) ? 'is-active' : ''}"
-                      data-action="toggle-rating-chip" data-rating="${esc(r)}">
-                ${esc(tr(`rating.${r}`))} <span class="prism-chip-count">${model.ratingCounts[r] || 0}</span>
-              </button>
-            `).join('')}
-          </div>
-        </div>
+      <div class="prism-now-meta">
+        <span class="prism-kind-badge">${esc(item ? tr(`kind.${item.kind}`) || item.kind : 'PRISM')}</span>
+        <span class="prism-now-title" title="${esc(item?.title || 'Obsidian Prism Aurora')}">${esc(item?.title || 'Obsidian Prism Aurora')}</span>
+        ${!store.skinEnabled ? `<span class="prism-chip" style="cursor:default">${esc(tr('transport.disabledTag'))}</span>` : ''}
       </div>
-
-      <div id="prism-lib-grid-host">
-        ${renderLibraryGridHtml(model)}
+      <div class="prism-transport-ctls">
+        <button type="button" class="prism-icon-btn" data-action="step-playlist" data-dir="-1" title="${esc(tr('transport.prev'))}">⏮</button>
+        <button type="button" class="prism-icon-btn ${!eff.paused ? 'is-active' : ''}" data-action="toggle-pause"
+                title="${esc(eff.paused ? tr('transport.play') : tr('transport.pause'))}">${eff.paused ? '▶' : '⏸'}</button>
+        <button type="button" class="prism-icon-btn" data-action="step-playlist" data-dir="1" title="${esc(tr('transport.next'))}">⏭</button>
+        <button type="button" class="prism-icon-btn ${!eff.muted ? 'is-active' : ''}" data-action="toggle-mute"
+                title="${esc(eff.muted ? tr('transport.unmute') : tr('transport.mute'))}">${eff.muted ? '🔇' : '🔊'}</button>
+        <div class="prism-vol-inline">
+          <input type="range" class="prism-range" min="0" max="100" step="5" value="${volPct}"
+                 style="--prism-pct:${volPct}%" data-config-slider="volume" data-inline-vol="true" />
+        </div>
+        ${
+          item
+            ? `<button type="button" class="prism-icon-btn ${isFav ? 'is-active' : ''}"
+                       data-action="toggle-fav" data-id="${esc(item.id)}" title="${esc(tr('lib.favorites'))}">★</button>`
+            : ''
+        }
+        <button type="button" class="prism-playlist-pill" data-enabled="${store.config.rotationEnabled ? 'true' : 'false'}"
+                data-action="open-drawer" data-drawer="playlist" title="${esc(tr('lib.playlists'))}">
+          ${esc(playlistLabel)}
+        </button>
       </div>
     `;
   }
 
-  // ==========================================================================
-  // Tab 2: Prism Skin (Style Settings Core) Renderer
-  // ==========================================================================
-  function renderSkinPinBarHtml() {
-    const activeId = getActiveId();
-    const activeItem = store.activeItem || store.items.find((x) => x.id === activeId);
-    const pinned = hasPerWallpaperPin(activeId);
-    const isZh = curLocale() === 'zh';
-
-    return `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:8px;min-width:0">
-          <span class="prism-kind-badge">${esc(activeItem ? tr(`kind.${activeItem.kind}`) || activeItem.kind : 'SKIN')}</span>
-          <strong style="font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-            ${esc(activeItem?.title || (isZh ? '全局棱镜玻璃外观' : 'Global Prism Skin'))}
-          </strong>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          ${
-            activeId
-              ? `
-            <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;cursor:pointer">
-              <span>📌 ${esc(tr('lib.pinOverride'))}</span>
-              <button type="button" role="switch" class="prism-switch" aria-checked="${pinned ? 'true' : 'false'}"
-                      data-action="toggle-pin-override"></button>
-            </label>
-          `
-              : ''
-          }
-          <button type="button" class="prism-btn prism-btn-sm" data-action="open-inspector" data-id="${esc(activeId)}">
-            ⚙ ${esc(tx('inspectorBtn'))}
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderPrismSkinTab() {
+  function renderRailExtrasHtml() {
     const eff = getEffectiveConfig();
     const isZh = curLocale() === 'zh';
-    const polarity = getResolvedPolarity(eff);
-
-    const visiblePresets = (store.presets?.length ? store.presets : FACTORY_PRESETS).filter(
-      (p) => !(store.config.deletedFactoryPresets || []).includes(p.id),
-    );
+    const activeId = getActiveId();
+    const item = store.activeItem || store.items.find((x) => x.id === activeId);
+    const attached = isHostAttached();
+    const queueSlots = computeQuickQueueItems(4);
+    const visiblePresets = getVisiblePresets();
+    const activePresetId = store.config.activeProfilePresetId || '';
+    const isDirty = isCurrentStateDirtyFromPreset(eff);
+    const busy = Boolean(store.profileOpBusy);
+    const rotEnabled = Boolean(store.config.rotationEnabled);
+    const rotMode = !rotEnabled
+      ? 'off'
+      : store.config.rotationTrigger === 'videoEnd'
+        ? 'videoEnd'
+        : store.config.rotationOrder === 'sequence'
+          ? 'sequence'
+          : 'random';
 
     return `
-      <!-- Per-Wallpaper Optical Memory Top Bar (Scene Presets live exclusively in Left Rail) -->
-      <div id="prism-skin-pin-bar" class="prism-card" style="padding:9px 12px">
-        ${renderSkinPinBarHtml()}
+      <!-- 1. Optical Scene Presets Card (4 Presets) -->
+      <div id="prism-rail-scene-card" class="prism-card" style="display:flex;flex-direction:column;gap:7px;padding:10px 12px">
+        <span class="prism-section-tag">✦ ${esc(tr('preset.sceneTitle'))}</span>
+        ${renderScenePresetsHtml(eff)}
       </div>
 
-      <!-- Whole-Profile Snapshots Manager -->
-      <details class="prism-section" open>
-        <summary>
-          <div class="prism-section-title-wrap">
-            <span class="prism-section-chevron">▶</span>
-            <span>${esc(tr('preset.profileTitle'))}</span>
-          </div>
-          <div style="display:flex;gap:5px">
-            <button type="button" class="prism-btn prism-btn-sm" data-action="trigger-preset-import">📥 ${esc(tr('preset.import'))}</button>
-          </div>
-        </summary>
-        <div class="prism-section-body">
-          <div class="prism-swatch-grid" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr))">
+      <!-- 2. D8 Minimal Profile Switcher & Active Wallpaper Metadata (ZERO duplicate optical sliders) -->
+      <div id="prism-rail-profile-card" class="prism-card prism-rail-profile-card prism-rail-desktop-only">
+        <div class="prism-rail-profile-head">
+          <span class="prism-section-tag">❖ ${esc(tr('preset.switcherLabel'))}</span>
+          ${isDirty ? `<span class="prism-dirty-badge">${esc(tx('dirtyBadge'))}</span>` : ''}
+        </div>
+
+        <div class="prism-rail-preset-row">
+          <select class="prism-select" data-action="quick-switch-profile-preset"
+                  aria-label="${esc(tr('preset.switcherLabel'))}" ${busy ? 'disabled' : ''}>
+            ${
+              !visiblePresets.some((p) => p.id === activePresetId)
+                ? `<option value="" selected disabled>${esc(isZh ? '自定义 / 未命名' : 'Custom / Unsaved')}</option>`
+                : ''
+            }
             ${visiblePresets
               .map((p) => {
-                const isAct = store.config.activeProfilePresetId === p.id;
+                const isAct = p.id === activePresetId;
                 const pName = isZh ? p.name : p.nameEn || p.name;
-                const pDesc = isZh ? p.description || '' : p.descriptionEn || p.description || '';
-                const delKey = `del-preset:${p.id}`;
-                const armed = store.armedConfirm?.key === delKey;
-                return `
-                  <div class="prism-card" style="padding:8px 10px;display:flex;flex-direction:column;gap:5px;border-color:${isAct ? 'var(--prism-accent)' : 'var(--prism-border-card)'}">
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-                      <strong style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(pName)}</strong>
-                      ${isAct ? '<span style="color:var(--prism-accent);font-size:11px">●</span>' : ''}
-                    </div>
-                    ${pDesc ? `<div style="font-size:10.5px;color:var(--prism-fg-muted);line-height:1.3">${esc(pDesc)}</div>` : ''}
-                    <div style="display:flex;gap:4px;margin-top:auto;padding-top:4px;flex-wrap:wrap">
-                      <button type="button" class="prism-btn prism-btn-sm ${isAct ? 'prism-btn-primary' : ''}"
-                              data-action="apply-profile-preset" data-id="${esc(p.id)}">${esc(tr('common.apply'))}</button>
-                      <button type="button" class="prism-btn prism-btn-sm"
-                              data-action="export-profile-preset" data-id="${esc(p.id)}">${esc(tr('preset.export'))}</button>
-                      ${
-                        armed
-                          ? `<button type="button" class="prism-btn prism-btn-sm prism-btn-danger" data-action="delete-profile-preset" data-payload="${esc(p.id)}">✓</button>
-                             <button type="button" class="prism-btn prism-btn-sm" data-action="cancel-confirm">✕</button>`
-                          : `<button type="button" class="prism-btn prism-btn-sm" data-action="arm-confirm" data-confirm-key="${esc(delKey)}">🗑</button>`
-                      }
-                    </div>
-                  </div>
-                `;
+                return `<option value="${esc(p.id)}" ${isAct ? 'selected' : ''}>${esc(pName)}${isAct && isDirty ? ` · ${tx('dirtyBadge')}` : ''}</option>`;
               })
               .join('')}
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--prism-border-hairline)">
-            <input id="prism-preset-name-in" type="text" class="prism-input" style="flex:1 1 140px"
-                   placeholder="${esc(tx('savePresetPlaceholder'))}" value="${esc(store.presetDraft.name)}" />
-            <input id="prism-preset-desc-in" type="text" class="prism-input" style="flex:1 1 160px"
-                   placeholder="${esc(tx('savePresetDescPlaceholder'))}" value="${esc(store.presetDraft.description)}" />
-            <button type="button" class="prism-btn prism-btn-primary" data-action="save-profile-preset">💾 ${esc(tr('preset.save'))}</button>
-          </div>
+          </select>
+          <button type="button" class="prism-btn prism-btn-sm" data-action="open-drawer" data-drawer="presets" ${busy ? 'disabled' : ''}>
+            ${esc(tr('preset.manageBtn'))}
+          </button>
         </div>
-      </details>
 
-      <div class="prism-settings-columns">
-        <!-- Section 1: Layout & Concentric Island Geometry -->
-        <details class="prism-section" open>
-          <summary>
-            <div class="prism-section-title-wrap">
-              <span class="prism-section-chevron">▶</span>
-              <span>${esc(tr('layout.title'))}</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="layoutMode,islandGap,workspacePad,cornerStyle,leftSidebarRadius,rightSidebarRadius,borders,shadows,topbarStyle,transparentWindowControls,hideWelcomeLogo">↺</button>
-          </summary>
-          <div class="prism-section-body">
-            ${renderSegRow({
-              key: 'layoutMode',
-              label: tr('layout.mode'),
-              value: eff.layoutMode,
-              options: [
-                { value: 'islands', label: tr('layout.islands') },
-                { value: 'flush', label: tr('layout.flush') },
-              ],
-            })}
-            ${renderSliderRow({
-              key: 'islandGap',
-              label: tr('layout.islandGap'),
-              value: eff.islandGap,
-              defaultValue: DEFAULT_CONFIG.islandGap,
-              min: 0,
-              max: 20,
-              step: 1,
-              suffix: ' px',
-            })}
-            ${renderSliderRow({
-              key: 'workspacePad',
-              label: tr('layout.workspacePad'),
-              value: eff.workspacePad,
-              defaultValue: DEFAULT_CONFIG.workspacePad,
-              min: 0,
-              max: 20,
-              step: 1,
-              suffix: ' px',
-            })}
-            ${renderSegRow({
-              key: 'cornerStyle',
-              label: tr('layout.cornerStyle'),
-              value: eff.cornerStyle,
-              options: CORNER_STYLES.map((c) => ({ value: c, label: tr(`layout.${c}`) })),
-            })}
-            ${renderSegRow({
-              key: 'leftSidebarRadius',
-              label: tr('layout.leftSidebarRadius'),
-              value: eff.leftSidebarRadius,
-              options: SIDEBAR_RADII.map((r) => ({ value: r, label: r === 'auto' ? 'Auto' : r === 'native' ? 'Native' : `${r}px` })),
-            })}
-            ${renderSegRow({
-              key: 'rightSidebarRadius',
-              label: tr('layout.rightSidebarRadius'),
-              value: eff.rightSidebarRadius,
-              options: SIDEBAR_RADII.map((r) => ({ value: r, label: r === 'auto' ? 'Auto' : r === 'native' ? 'Native' : `${r}px` })),
-            })}
-            ${renderSegRow({
-              key: 'borders',
-              label: tr('layout.borders'),
-              value: eff.borders,
-              options: BORDER_MODES.map((b) => ({ value: b, label: tr(`layout.borders.${b}`) })),
-            })}
-            ${renderSwitchRow({
-              key: 'shadows',
-              label: tr('layout.shadows'),
-              checked: eff.shadows,
-            })}
-            ${renderSegRow({
-              key: 'topbarStyle',
-              label: tr('layout.topbarStyle'),
-              value: eff.topbarStyle || DEFAULT_CONFIG.topbarStyle || 'pills',
-              options: TOPBAR_STYLES.map((s) => ({ value: s, label: tr(`layout.topbarStyle.${s}`) })),
-            })}
-            ${renderSwitchRow({
-              key: 'transparentWindowControls',
-              label: tr('layout.transparentWindowControls'),
-              hint: tr('layout.transparentWindowControlsHint'),
-              checked: eff.transparentWindowControls !== false,
-            })}
-            ${renderSwitchRow({
-              key: 'hideWelcomeLogo',
-              label: tr('layout.hideWelcomeLogo'),
-              hint: tr('layout.hideWelcomeLogoHint'),
-              checked: Boolean(eff.hideWelcomeLogo),
-            })}
+        <div class="prism-rail-meta-chips">
+          <span class="prism-chip" style="cursor:default">${esc(item ? tr(`kind.${item.kind}`) || item.kind : 'PRISM')}</span>
+          ${item?.resolution ? `<span class="prism-chip" style="cursor:default">${esc(item.resolution)}</span>` : ''}
+          ${item?.fileSize ? `<span class="prism-chip" style="cursor:default">${esc(formatBytes(item.fileSize))}</span>` : ''}
+          ${item?.workshopId ? `<span class="prism-chip" style="cursor:default">WS #${esc(item.workshopId)}</span>` : ''}
+        </div>
+
+        <div class="prism-rail-quick-actions">
+          <button type="button" class="prism-btn prism-btn-sm prism-btn-primary" data-action="open-visual-editor">
+            ${esc(tr('editor.openBtn'))}
+          </button>
+          ${
+            activeId
+              ? `<button type="button" class="prism-btn prism-btn-sm" data-action="open-inspector" data-id="${esc(activeId)}">
+                   ⚙ ${esc(tx('inspectorBtn'))}
+                 </button>`
+              : ''
+          }
+        </div>
+      </div>
+
+      <!-- 3. Playlist Queue & Smart Power Dock (flex: 1 1 auto keeps railContentFillRatio >= 0.80) -->
+      <div id="prism-rail-dock-card" class="prism-card prism-rail-dock-card prism-rail-desktop-only">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+            <span class="prism-section-tag">${esc(isZh ? '轮播队列与节能状态' : 'Playlist Queue & Smart Power')}</span>
+            <button type="button" class="prism-btn prism-btn-sm" data-action="open-drawer" data-drawer="playlist">
+              ↻ ${esc(tr('lib.playlists'))}
+            </button>
           </div>
-        </details>
 
-        <!-- Section 2: 8 Paired Color Schemes & Dynamic Wallpaper Accent -->
-        <details class="prism-section" open>
-          <summary>
-            <div class="prism-section-title-wrap">
-              <span class="prism-section-chevron">▶</span>
-              <span>${esc(tr('scheme.title'))}</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="themeMode,themeFollow,colorScheme,accentMode,customAccent,wallTintMix">↺</button>
-          </summary>
-          <div class="prism-section-body">
-            ${renderSegRow({
-              key: 'themeMode',
-              label: tr('scheme.themeMode'),
-              value: eff.themeMode,
-              options: THEME_MODES.map((m) => ({ value: m, label: tr(`scheme.theme.${m}`) })),
-            })}
-            ${renderSwitchRow({
-              key: 'themeFollow',
-              label: tr('scheme.themeFollow'),
-              checked: eff.themeFollow,
-            })}
-
-            <div style="padding:6px 0;border-top:1px solid var(--prism-border-hairline)">
-              <div class="prism-ctl-name" style="margin-bottom:6px">${esc(tr('scheme.colorScheme'))}</div>
-              <div class="prism-swatch-grid">
-                ${COLOR_SCHEME_IDS.map((sid) => {
-                  const sc = COLOR_SCHEMES[sid];
-                  const active = eff.colorScheme === sid;
+          ${
+            queueSlots.length > 0
+              ? `
+            <div class="prism-rail-queue-strip">
+              ${queueSlots
+                .map((qIt) => {
+                  const rawThumb = qIt.thumbUrl || (qIt.kind === 'image' ? qIt.mediaUrl : '');
+                  const qThumb = rawThumb ? withStaticPreviewParam(rawThumb) : '';
+                  const qAct = qIt.id === activeId;
                   return `
-                    <button type="button" class="prism-swatch-card ${active ? 'is-active' : ''}"
-                            data-action="set-enum" data-key="colorScheme" data-val="${esc(sid)}">
-                      <span class="prism-swatch-dots">
-                        <span style="background:${esc(sc.swatchDark)}"></span>
-                        <span style="background:${esc(sc.swatchLight)}"></span>
-                        <span style="background:${esc(sc.swatchAccent)}"></span>
-                      </span>
-                      <span class="prism-swatch-name">${esc(isZh ? sc.nameZh.split(' ')[0] : sc.nameEn)}</span>
+                    <button type="button" class="prism-rail-qslot ${qAct ? 'is-active' : ''}"
+                            data-action="card-click" data-id="${esc(qIt.id)}" title="${esc(qIt.title || qIt.id)}">
+                      <div class="prism-rail-qslot-thumb">
+                        ${qThumb ? `<img loading="lazy" decoding="async" src="${esc(qThumb)}" alt="" onerror="this.remove()" />` : ''}
+                      </div>
+                      <span class="prism-rail-qslot-title">${esc(qIt.title || qIt.id)}</span>
                     </button>
                   `;
-                }).join('')}
-              </div>
-            </div>
-
-            <div style="padding:6px 0;border-top:1px solid var(--prism-border-hairline);display:flex;flex-direction:column;gap:6px">
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <span class="prism-ctl-name">${esc(tr('scheme.accentMode'))}</span>
-                ${
-                  eff.accentMode === 'custom'
-                    ? `<label style="display:inline-flex;align-items:center;gap:5px">
-                        <input type="color" class="prism-color-input" data-action="set-color-key" data-key="customAccent" value="${esc(eff.customAccent || '#669DF6')}" />
-                        <span style="font-family:var(--prism-font-mono);font-size:11px">${esc(eff.customAccent)}</span>
-                      </label>`
-                    : ''
-                }
-              </div>
-              <div class="prism-accent-strip">
-                ${ACCENT_MODES.map((am) => {
-                  let dotColor = COLOR_SCHEMES[eff.colorScheme]?.[polarity]?.accent || '#669DF6';
-                  if (am === 'dynamic' && eff.extractedAccent) {
-                    dotColor = polarity === 'light' ? eff.extractedAccent.lightHex : eff.extractedAccent.darkHex;
-                  } else if (ACCENT_PRESETS[am]) {
-                    dotColor = polarity === 'light' ? ACCENT_PRESETS[am].light : ACCENT_PRESETS[am].dark;
-                  } else if (am === 'custom') {
-                    dotColor = eff.customAccent || '#669DF6';
-                  }
-                  return `
-                    <button type="button" class="prism-accent-chip ${eff.accentMode === am ? 'is-active' : ''}"
-                            data-action="set-enum" data-key="accentMode" data-val="${esc(am)}">
-                      <span class="prism-accent-dot" style="background:${esc(dotColor)}"></span>
-                      <span>${esc(tr(`scheme.accent.${am}`))}</span>
-                    </button>
-                  `;
-                }).join('')}
-              </div>
-              <div style="font-size:10.5px;color:var(--prism-fg-muted);padding-top:2px">${esc(tx('extractedTitle'))}</div>
-              <div id="prism-extracted-readout">${renderExtractedSwatchesHtml()}</div>
-            </div>
-
-            ${renderSliderRow({
-              key: 'wallTintMix',
-              label: tr('scheme.wallTintMix'),
-              value: eff.wallTintMix,
-              defaultValue: DEFAULT_CONFIG.wallTintMix,
-              min: 0,
-              max: 0.18,
-              step: 0.005,
-              scale: 100,
-              decimals: 1,
-              suffix: ' %',
-            })}
-          </div>
-        </details>
-
-        <!-- Section 3: Glass & Readability Guardrails -->
-        <details class="prism-section" open>
-          <summary>
-            <div class="prism-section-title-wrap">
-              <span class="prism-section-chevron">▶</span>
-              <span>${esc(tr('glass.title'))}</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="glassSurfaces,glassOpacity,glassBlur,sidebarOpacity,sidebarBlur,surfaceTints,glassFidelity,chatGlassFidelity,codeReadabilityMode,contrastFloor,caretColor">↺</button>
-          </summary>
-          <div class="prism-section-body">
-            ${renderSwitchRow({
-              key: 'glassSurfaces',
-              label: tr('glass.surfaces'),
-              checked: eff.glassSurfaces,
-            })}
-            ${renderSliderRow({
-              key: 'glassOpacity',
-              label: tr('glass.opacity'),
-              value: eff.glassOpacity,
-              defaultValue: DEFAULT_CONFIG.glassOpacity,
-              min: 0.15,
-              max: 0.98,
-              step: 0.01,
-              scale: 100,
-              decimals: 0,
-              suffix: ' %',
-            })}
-            ${renderSliderRow({
-              key: 'glassBlur',
-              label: tr('glass.blur'),
-              value: eff.glassBlur,
-              defaultValue: DEFAULT_CONFIG.glassBlur,
-              min: 0,
-              max: 64,
-              step: 1,
-              suffix: ' px',
-            })}
-            <div class="prism-ctl-hint" style="margin-top:-2px">${esc(tr('glass.blurHint'))}</div>
-            <div class="prism-blur-stops" role="group" aria-label="${esc(tr('glass.blur'))}">
-              ${[0, 8, 18, 36, 56]
-                .map((px) => {
-                  const isAct = Math.round(Number(eff.glassBlur ?? DEFAULT_CONFIG.glassBlur)) === px;
-                  return `<button type="button" class="prism-blur-stop-chip ${isAct ? 'is-active' : ''}" data-action="set-num" data-key="glassBlur" data-val="${px}">${esc(tr(`glass.blurStop.${px}`))}</button>`;
                 })
                 .join('')}
             </div>
-            ${renderSliderRow({
-              key: 'sidebarBlur',
-              label: tr('glass.sidebarBlur'),
-              value: eff.sidebarBlur,
-              defaultValue: DEFAULT_CONFIG.glassBlur,
-              min: 0,
-              max: 64,
-              step: 1,
-              suffix: ' px',
-              nullable: true,
-              nullableFallbackKey: 'glassBlur',
-              fallbackValue: eff.glassBlur,
-            })}
-            ${(() => {
-              const isLight = polarity === 'light';
-              const curatedSwatches = [
-                { hex: '#0E0E11', key: 'glass.comp.swatchObsidian' },
-                { hex: '#141B2D', key: 'glass.comp.swatchMidnight' },
-                { hex: '#1C1917', key: 'glass.comp.swatchCarbon' },
-                { hex: '#231C35', key: 'glass.comp.swatchIris' },
-                { hex: '#2B3445', key: 'glass.comp.swatchSlate' },
-              ];
-              const tintsMap = eff.surfaceTints && typeof eff.surfaceTints === 'object' ? eff.surfaceTints : DEFAULT_SURFACE_TINTS;
-              const isCompCustomized = (cId) => {
-                const ent = tintsMap[cId] || DEFAULT_SURFACE_TINT_ENTRY;
-                const op = cId === 'sidebar' ? (eff.sidebarOpacity ?? ent.opacity ?? null) : (ent.opacity ?? null);
-                const tone = Number(ent.tone || 0);
-                const tint = typeof ent.tint === 'string' ? ent.tint.trim() : '';
-                return op !== null || tone !== 0 || tint !== '';
-              };
-              const customCount = SURFACE_TINT_COMPONENTS.filter(isCompCustomized).length;
-              return `
-                <div class="prism-surface-tints-box" data-testid="prism-surface-tints-box">
-                  <div class="prism-surface-tints-head">
-                    <div class="prism-surface-tints-title-wrap">
-                      <span class="prism-surface-tints-title">${esc(tr('glass.comp.title'))}</span>
-                      <span class="prism-surface-tints-badge ${customCount > 0 ? 'is-custom' : ''}">${esc(customCount > 0 ? tr('glass.comp.customCount', { n: customCount }) : tr('glass.comp.allAuto'))}</span>
-                    </div>
-                    <button type="button" class="prism-btn prism-btn-sm" data-action="reset-all-surface-tints" ${customCount === 0 ? 'disabled' : ''}>
-                      ↺ ${esc(tr('glass.comp.resetAll'))}
-                    </button>
-                  </div>
-                  <div class="prism-ctl-hint">${esc(tr('glass.comp.hint'))}</div>
-                  <div class="prism-comp-list">
-                    ${SURFACE_TINT_COMPONENTS.map((comp) => {
-                      const bounds = SURFACE_TINT_BOUNDS[comp] || { minOpacity: 0, maxOpacity: 0.98 };
-                      const ent = tintsMap[comp] || DEFAULT_SURFACE_TINT_ENTRY;
-                      const isSidebar = comp === 'sidebar';
-                      const compOp = isSidebar
-                        ? (eff.sidebarOpacity !== null && eff.sidebarOpacity !== undefined ? eff.sidebarOpacity : (ent.opacity ?? null))
-                        : (ent.opacity ?? null);
-                      const compTone = Math.max(-100, Math.min(100, Math.round(Number(ent.tone || 0))));
-                      const compTint = typeof ent.tint === 'string' && /^#[0-9a-f]{6}$/i.test(ent.tint) ? ent.tint.toUpperCase() : '';
-                      const hasTintOrTone = compTone !== 0 || compTint !== '';
-                      const isOpen = store.expandedTintComp === comp;
-                      const defAlpha = resolveComponentDefaultAlpha(comp, eff, isLight);
-                      const tonePct = ((compTone + 100) / 200) * 100;
-                      const sliderHtml = renderSliderRow({
-                        key: isSidebar ? 'sidebarOpacity' : `surfaceTints.${comp}.opacity`,
-                        label: tr(`glass.comp.${comp}`),
-                        value: compOp,
-                        defaultValue: defAlpha,
-                        min: bounds.minOpacity,
-                        max: bounds.maxOpacity,
-                        step: 0.01,
-                        scale: 100,
-                        decimals: 0,
-                        suffix: ' %',
-                        nullable: true,
-                        nullableFallbackKey: comp === 'popover' ? '' : 'glassOpacity',
-                        comp,
-                        fallbackValue: defAlpha,
-                        resetAction: isSidebar ? 'reset-key' : 'reset-surface-comp',
-                      });
-                      return `
-                        <div class="prism-comp-item ${isOpen ? 'is-open' : ''}" data-comp-row="${esc(comp)}">
-                          <div class="prism-comp-main">
-                            <button type="button" class="prism-comp-swatch-btn ${isOpen ? 'is-open' : ''}"
-                                    aria-expanded="${isOpen ? 'true' : 'false'}"
-                                    data-action="toggle-comp-tint-drawer" data-comp="${esc(comp)}"
-                                    title="${esc(tr('glass.comp.swatchTip'))}">
-                              <span class="prism-comp-swatch-fill" style="background:var(--sim-${esc(comp)}-bg)"></span>
-                              ${hasTintOrTone ? '<span class="prism-comp-swatch-dot" aria-hidden="true"></span>' : ''}
-                            </button>
-                            <div class="prism-comp-slider-wrap">${sliderHtml}</div>
-                          </div>
-                          ${
-                            isOpen
-                              ? `
-                            <div class="prism-comp-drawer" data-comp-drawer="${esc(comp)}">
-                              <div class="prism-tint-tone-row">
-                                <div class="prism-tint-tone-head">
-                                  <span class="prism-tint-sub-label">${esc(tr('glass.comp.tone'))}</span>
-                                  <div class="prism-tint-tone-right">
-                                    <span class="prism-tint-tone-val">${compTone > 0 ? `+${compTone}` : compTone}</span>
-                                    <button type="button" class="prism-reset-btn" data-action="reset-surface-tone" data-comp="${esc(comp)}"
-                                            data-tone-dirty="${compTone !== 0 ? 'true' : 'false'}" title="${esc(tr('common.reset'))}">↺</button>
-                                  </div>
-                                </div>
-                                <input type="range" class="prism-range" data-surface-tone="${esc(comp)}"
-                                       min="-100" max="100" step="1" value="${compTone}"
-                                       style="--prism-pct:${tonePct.toFixed(1)}%" />
-                                <div class="prism-tint-tone-ticks">
-                                  <span>${esc(tr('glass.comp.toneDeeper'))}</span>
-                                  <span>${esc(tr('glass.comp.toneNeutral'))}</span>
-                                  <span>${esc(tr('glass.comp.toneLighter'))}</span>
-                                </div>
-                              </div>
-                              <div class="prism-tint-color-row">
-                                <span class="prism-tint-sub-label">${esc(tr('glass.comp.tint'))}</span>
-                                <div class="prism-tint-color-ctls">
-                                  <input type="color" class="prism-color-input" data-action="set-surface-tint" data-comp="${esc(comp)}"
-                                         value="${esc(compTint || '#1E2430')}" />
-                                  ${curatedSwatches
-                                    .map(
-                                      (sw) => `
-                                    <button type="button" class="prism-tint-quick-swatch ${compTint === sw.hex ? 'is-active' : ''}"
-                                            style="background:${sw.hex}"
-                                            data-action="pick-surface-tint" data-comp="${esc(comp)}" data-hex="${sw.hex}"
-                                            title="${esc(tr(sw.key))} (${sw.hex})"></button>
-                                  `,
-                                    )
-                                    .join('')}
-                                  <button type="button" class="prism-btn prism-btn-sm ${!compTint ? 'prism-btn-primary' : ''}"
-                                          data-action="clear-surface-tint" data-comp="${esc(comp)}">
-                                    ${esc(tr('glass.comp.tintAuto'))}
-                                  </button>
-                                </div>
-                              </div>
-                              <div class="prism-ctl-hint">${esc(tr('glass.comp.tintGuardHint'))}</div>
-                            </div>
-                          `
-                              : ''
-                          }
-                        </div>
-                      `;
-                    }).join('')}
-                  </div>
-                </div>
-              `;
-            })()}
-            ${renderSliderRow({
-              key: 'glassFidelity',
-              label: tr('glass.fidelity'),
-              value: eff.glassFidelity,
-              defaultValue: DEFAULT_CONFIG.glassFidelity,
-              min: 0,
-              max: 100,
-              step: 1,
-              suffix: ' %',
-            })}
-            ${renderSliderRow({
-              key: 'chatGlassFidelity',
-              label: tr('glass.chatFidelity'),
-              value: eff.chatGlassFidelity,
-              defaultValue: DEFAULT_CONFIG.chatGlassFidelity,
-              min: 0,
-              max: 100,
-              step: 1,
-              suffix: ' %',
-            })}
-            ${renderSegRow({
-              key: 'codeReadabilityMode',
-              label: tr('glass.codeMode'),
-              value: eff.codeReadabilityMode,
-              options: CODE_READABILITY_MODES.map((m) => ({ value: m, label: tr(`glass.code.${m}`) })),
-            })}
-            ${renderSwitchRow({
-              key: 'contrastFloor',
-              label: tr('glass.contrastFloor'),
-              checked: eff.contrastFloor,
-            })}
-            <div class="prism-ctl-row">
-              <div class="prism-ctl-label">
-                <span class="prism-ctl-name">${esc(tr('glass.caretColor'))}</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <input type="color" class="prism-color-input" data-action="set-color-key" data-key="caretColor"
-                       value="${esc(/^#[0-9a-f]{6}$/i.test(eff.caretColor) ? eff.caretColor : '#669DF6')}" />
-                <button type="button" class="prism-btn prism-btn-sm ${!eff.caretColor ? 'prism-btn-primary' : ''}"
-                        data-action="set-enum" data-key="caretColor" data-val="">Auto</button>
-              </div>
-            </div>
-          </div>
-        </details>
-
-        <!-- Section 4: Media Optics & Optional Extensions -->
-        <details class="prism-section" open>
-          <summary>
-            <div class="prism-section-title-wrap">
-              <span class="prism-section-chevron">▶</span>
-              <span>${esc(tr('optics.title'))}</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="scrimOpacity,scrimColor,vignette,mediaOpacity,mediaBlur,mediaBrightness,mediaContrast,mediaSaturate,grainAlpha,filterPreset">↺</button>
-          </summary>
-          <div class="prism-section-body">
-            ${renderSliderRow({
-              key: 'scrimOpacity',
-              label: tr('optics.scrimOpacity'),
-              value: eff.scrimOpacity,
-              defaultValue: DEFAULT_CONFIG.scrimOpacity,
-              min: 0,
-              max: 0.92,
-              step: 0.01,
-              scale: 100,
-              decimals: 0,
-              suffix: ' %',
-            })}
-            ${renderSwitchRow({
-              key: 'vignette',
-              label: tr('optics.vignette'),
-              checked: eff.vignette,
-            })}
-            ${renderSliderRow({
-              key: 'mediaOpacity',
-              label: tr('optics.mediaOpacity'),
-              value: eff.mediaOpacity,
-              defaultValue: DEFAULT_CONFIG.mediaOpacity,
-              min: 0.05,
-              max: 1.0,
-              step: 0.01,
-              scale: 100,
-              decimals: 0,
-              suffix: ' %',
-            })}
-            ${renderSliderRow({
-              key: 'mediaBlur',
-              label: tr('optics.mediaBlur'),
-              value: eff.mediaBlur,
-              defaultValue: DEFAULT_CONFIG.mediaBlur,
-              min: 0,
-              max: 64,
-              step: 1,
-              suffix: ' px',
-            })}
-            ${renderSliderRow({
-              key: 'mediaBrightness',
-              label: tr('optics.mediaBrightness'),
-              value: eff.mediaBrightness,
-              defaultValue: DEFAULT_CONFIG.mediaBrightness,
-              min: 40,
-              max: 160,
-              step: 1,
-              suffix: ' %',
-            })}
-            ${renderSliderRow({
-              key: 'mediaContrast',
-              label: tr('optics.mediaContrast'),
-              value: eff.mediaContrast,
-              defaultValue: DEFAULT_CONFIG.mediaContrast,
-              min: 50,
-              max: 150,
-              step: 1,
-              suffix: ' %',
-            })}
-            ${renderSliderRow({
-              key: 'mediaSaturate',
-              label: tr('optics.mediaSaturate'),
-              value: eff.mediaSaturate,
-              defaultValue: DEFAULT_CONFIG.mediaSaturate,
-              min: 0,
-              max: 200,
-              step: 1,
-              suffix: ' %',
-            })}
-            ${renderSliderRow({
-              key: 'grainAlpha',
-              label: tr('optics.grainAlpha'),
-              value: eff.grainAlpha,
-              defaultValue: DEFAULT_CONFIG.grainAlpha,
-              min: 0,
-              max: 0.15,
-              step: 0.002,
-              scale: 100,
-              decimals: 1,
-              suffix: ' %',
-            })}
-            <div class="prism-ctl-row">
-              <span class="prism-ctl-name">${esc(tx('filterPreset'))}</span>
-              <select class="prism-input" data-action="select-enum" data-key="filterPreset">
-                ${FILTER_PRESETS.map((fp) => `<option value="${esc(fp)}" ${eff.filterPreset === fp ? 'selected' : ''}>${esc(fp)}</option>`).join('')}
-              </select>
-            </div>
-          </div>
-        </details>
-
-        <!-- Section 5: Optional Interactive Visual Extensions -->
-        <details class="prism-section span-full" open>
-          <summary>
-            <div class="prism-section-title-wrap">
-              <span class="prism-section-chevron">▶</span>
-              <span>${esc(tr('ext.title'))}</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="fxEnabled,parallaxEnabled,parallaxStrength">↺</button>
-          </summary>
-          <div class="prism-section-body">
-            ${renderSwitchRow({
-              key: 'fxEnabled',
-              label: tr('ext.fxEnabled'),
-              checked: eff.fxEnabled,
-            })}
-            ${renderSwitchRow({
-              key: 'parallaxEnabled',
-              label: tr('ext.parallaxEnabled'),
-              checked: eff.parallaxEnabled,
-            })}
-            ${
-              eff.parallaxEnabled
-                ? renderSliderRow({
-                    key: 'parallaxStrength',
-                    label: tr('ext.parallaxStrength'),
-                    value: eff.parallaxStrength,
-                    defaultValue: DEFAULT_CONFIG.parallaxStrength,
-                    min: 0,
-                    max: 40,
-                    step: 1,
-                    suffix: ' px',
-                  })
-                : ''
-            }
-          </div>
-        </details>
-      </div>
-    `;
-  }
-
-  // ==========================================================================
-  // Tab 3: Playback & Engine Renderer
-  // ==========================================================================
-  function renderPlaybackTab() {
-    const eff = getEffectiveConfig();
-
-    return `
-      <div class="prism-settings-columns">
-        <!-- Switch Transitions & Slideshow -->
-        <details class="prism-section" open>
-          <summary>
-            <div class="prism-section-title-wrap">
-              <span class="prism-section-chevron">▶</span>
-              <span>${esc(tr('play.transitions'))}</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="switchTransition,switchTransitionDir,switchTransitionSpeed,pictureSlideSeconds">↺</button>
-          </summary>
-          <div class="prism-section-body">
-            ${renderSegRow({
-              key: 'switchTransition',
-              label: tr('play.transitionType'),
-              value: eff.switchTransition,
-              options: SWITCH_TRANSITIONS.map((st) => ({ value: st, label: st.toUpperCase() })),
-            })}
-            ${renderSegRow({
-              key: 'switchTransitionDir',
-              label: tr('play.transitionDir'),
-              value: eff.switchTransitionDir,
-              options: SWITCH_DIRECTIONS.map((d) => ({ value: d, label: d.toUpperCase() })),
-            })}
-            ${renderSegRow({
-              key: 'switchTransitionSpeed',
-              label: tr('play.transitionSpeed'),
-              value: eff.switchTransitionSpeed,
-              options: SWITCH_SPEEDS.map((sp) => ({ value: sp, label: sp })),
-            })}
-            ${renderSliderRow({
-              key: 'pictureSlideSeconds',
-              label: tx('slideInterval'),
-              value: eff.pictureSlideSeconds,
-              defaultValue: DEFAULT_CONFIG.pictureSlideSeconds,
-              min: 0,
-              max: 600,
-              step: 5,
-              suffix: ' s',
-            })}
-          </div>
-        </details>
-
-        <!-- Video Speed, FPS Cap & Scene WebGL Engine -->
-        <details class="prism-section" open>
-          <summary>
-            <div class="prism-section-title-wrap">
-              <span class="prism-section-chevron">▶</span>
-              <span>${esc(tr('tab.playback'))}</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="playbackRate,fpsCap,sceneLive,sceneLiveFps,sceneAutoQuality,interactiveWeb">↺</button>
-          </summary>
-          <div class="prism-section-body">
-            ${renderSliderRow({
-              key: 'playbackRate',
-              label: tr('play.speed'),
-              value: eff.playbackRate,
-              defaultValue: DEFAULT_CONFIG.playbackRate,
-              min: 0.5,
-              max: 2.0,
-              step: 0.05,
-              decimals: 2,
-              suffix: '×',
-            })}
-            <div class="prism-ctl-row">
-              <span class="prism-ctl-hint">Quick Speed</span>
-              <div class="prism-seg">
-                ${[0.5, 0.75, 1, 1.25, 1.5, 2].map((r) => `
-                  <button type="button" class="prism-seg-btn ${Math.abs(eff.playbackRate - r) < 0.02 ? 'is-active' : ''}"
-                          data-action="set-num" data-key="playbackRate" data-val="${r}">${r}×</button>
-                `).join('')}
-              </div>
-            </div>
-            ${renderSegRow({
-              key: 'fpsCap',
-              label: tr('play.fpsCap'),
-              value: eff.fpsCap,
-              options: [
-                { value: 0, label: tr('play.fpsUnlimited') },
-                { value: 60, label: '60 FPS' },
-                { value: 30, label: '30 FPS' },
-              ],
-            })}
-            ${renderSwitchRow({
-              key: 'sceneLive',
-              label: tr('play.sceneLive'),
-              checked: eff.sceneLive,
-            })}
-            ${renderSegRow({
-              key: 'sceneLiveFps',
-              label: tr('play.sceneFps'),
-              value: eff.sceneLiveFps,
-              options: [
-                { value: 15, label: '15 FPS' },
-                { value: 30, label: '30 FPS' },
-                { value: 60, label: '60 FPS' },
-              ],
-            })}
-            ${renderSwitchRow({
-              key: 'sceneAutoQuality',
-              label: tr('play.sceneAutoQuality'),
-              checked: eff.sceneAutoQuality,
-            })}
-            ${renderSwitchRow({
-              key: 'interactiveWeb',
-              label: tx('interactiveWeb'),
-              checked: eff.interactiveWeb,
-            })}
-          </div>
-        </details>
-
-        <!-- Free Framing & Alignment (dblclick resets X/Y/Scale) -->
-        <details class="prism-section" open>
-          <summary>
-            <div class="prism-section-title-wrap">
-              <span class="prism-section-chevron">▶</span>
-              <span>${esc(tr('optics.fit'))} &amp; Free Framing</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="fit,flip,layerPosX,layerPosY,layerScale">↺</button>
-          </summary>
-          <div class="prism-section-body">
-            ${renderSegRow({
-              key: 'fit',
-              label: tr('optics.fit'),
-              value: eff.fit,
-              options: FIT_MODES.map((f) => ({ value: f, label: tr(`optics.fit.${f}`) })),
-            })}
-            ${renderSwitchRow({
-              key: 'flip',
-              label: tr('optics.flip'),
-              checked: eff.flip,
-            })}
-            ${renderSliderRow({
-              key: 'layerPosX',
-              label: tr('optics.posX'),
-              value: eff.layerPosX,
-              defaultValue: DEFAULT_CONFIG.layerPosX,
-              min: 0,
-              max: 100,
-              step: 1,
-              suffix: ' %',
-              dblResetFraming: true,
-            })}
-            ${renderSliderRow({
-              key: 'layerPosY',
-              label: tr('optics.posY'),
-              value: eff.layerPosY,
-              defaultValue: DEFAULT_CONFIG.layerPosY,
-              min: 0,
-              max: 100,
-              step: 1,
-              suffix: ' %',
-              dblResetFraming: true,
-            })}
-            ${renderSliderRow({
-              key: 'layerScale',
-              label: tr('optics.scale'),
-              value: eff.layerScale,
-              defaultValue: DEFAULT_CONFIG.layerScale,
-              min: 50,
-              max: 150,
-              step: 1,
-              suffix: ' %',
-              dblResetFraming: true,
-            })}
-            <div class="prism-ctl-hint">${esc(tx('dblClickFramingHint'))}</div>
-          </div>
-        </details>
-
-        <!-- Audio, Auto-Pause Lifecycle & Windows Desktop Sync -->
-        <details class="prism-section" open>
-          <summary>
-            <div class="prism-section-title-wrap">
-              <span class="prism-section-chevron">▶</span>
-              <span>${esc(tr('play.autoPause'))}</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm"
-                    data-action="reset-module" data-keys="muted,volume,pauseOnHidden,pauseOnBlur,pauseOnBattery,pauseOnFullscreen,desktopSync">↺</button>
-          </summary>
-          <div class="prism-section-body">
-            <div class="prism-ctl-row">
-              <span class="prism-ctl-name">${esc(eff.muted ? tr('transport.mute') : tr('transport.unmute'))}</span>
-              <button type="button" class="prism-btn prism-btn-sm ${!eff.muted ? 'prism-btn-primary' : ''}" data-action="toggle-mute">
-                ${eff.muted ? '🔇' : '🔊'} ${esc(eff.muted ? tr('transport.unmute') : tr('transport.mute'))}
-              </button>
-            </div>
-            ${renderSliderRow({
-              key: 'volume',
-              label: tr('play.volume'),
-              value: eff.volume,
-              defaultValue: DEFAULT_CONFIG.volume,
-              min: 0,
-              max: 1,
-              step: 0.05,
-              scale: 100,
-              decimals: 0,
-              suffix: ' %',
-            })}
-            ${renderSwitchRow({
-              key: 'pauseOnHidden',
-              label: tr('play.pauseOnHidden'),
-              checked: eff.pauseOnHidden,
-            })}
-            ${renderSwitchRow({
-              key: 'pauseOnBlur',
-              label: tr('play.pauseOnBlur'),
-              checked: eff.pauseOnBlur,
-            })}
-            ${renderSwitchRow({
-              key: 'pauseOnBattery',
-              label: tr('play.pauseOnBattery'),
-              checked: eff.pauseOnBattery,
-            })}
-            ${renderSwitchRow({
-              key: 'pauseOnFullscreen',
-              label: tr('play.pauseOnFullscreen'),
-              checked: eff.pauseOnFullscreen,
-            })}
-            ${renderSwitchRow({
-              key: 'desktopSync',
-              label: tr('play.desktopSync'),
-              checked: eff.desktopSync,
-            })}
-          </div>
-        </details>
-      </div>
-    `;
-  }
-
-  // ==========================================================================
-  // Tab 4: Host & System Renderer
-  // ==========================================================================
-  function renderSystemTab() {
-    const hs = store.hostStatus || {};
-    const attached = isHostAttached(hs);
-    const port = hs.cdpPort || hs.port || store.config.debugPort || DEFAULT_DEBUG_PORT;
-    const auto = store.autostart;
-    const normalReady = Boolean(auto.normalShortcutEnabled);
-    const startupMode = STARTUP_MODES.includes(store.config.startupMode) ? store.config.startupMode : 'gentle-auto';
-    const bootDelaySec = Math.min(5.0, Math.max(0.5, Number(store.config.liveBootDelay ?? DEFAULT_CONFIG.liveBootDelay ?? 1.5)));
-    const canaryState = CANARY_STATES.includes(store.canary?.state) ? store.canary.state : 'idle';
-    const canaryStateLabel = tr(`canary.state.${canaryState}`);
-    const canaryDotColor =
-      canaryState === 'healthy'
-        ? 'var(--prism-ok)'
-        : canaryState === 'tripped'
-          ? 'var(--prism-danger)'
-          : canaryState === 'arming'
-            ? 'var(--prism-warn)'
-            : 'var(--prism-fg-faint)';
-
-    const startupCards = [
-      {
-        id: 'gentle-auto',
-        title: tr('host.startup.gentleAuto'),
-        badge: Math.abs(bootDelaySec - 1.5) < 0.04
-          ? tr('host.startup.gentleAutoBadge')
-          : `${curLocale() === 'zh' ? '延迟' : 'Delay'} · ${bootDelaySec.toFixed(1)}s`,
-        desc: tr('host.startup.gentleAutoDesc'),
-      },
-      {
-        id: 'manual',
-        title: tr('host.startup.manual'),
-        badge: '',
-        desc: tr('host.startup.manualDesc'),
-      },
-      {
-        id: 'static-css',
-        title: tr('host.startup.staticCss'),
-        badge: '',
-        desc: tr('host.startup.staticCssDesc'),
-      },
-    ];
-
-    const defaultBaseDataDir = store.stats.dataDir || '~/.gemini/antigravity/sidecar_data/agy-wallpaper-prism/prism_studio/data';
-    const shortcutsList = Array.isArray(auto.shortcuts) && auto.shortcuts.length > 0
-      ? auto.shortcuts
-      : (auto.patchedShortcuts || []).map((p) => ({
-          path: p,
-          name: String(p).split(/[\\/]/).pop() || p,
-          location: 'desktop',
-          hasDebugPort: true,
-          debugPort: port,
-          backedUp: true,
-        }));
-    const model = computeLibraryModel();
-
-    return `
-      <!-- v2.0.0 Startup Strategy, Boot Delay, Canary Circuit-Breaker & Panic Shortcut Card -->
-      <div id="prism-startup-safety-card" class="prism-card" style="display:flex;flex-direction:column;gap:11px;${canaryState === 'tripped' ? 'border-color:rgba(var(--prism-danger-rgb),0.55)' : ''}">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="prism-status-dot" style="background:${canaryDotColor}"></span>
-            <strong style="font-size:13px">${esc(tr('host.startupTitle'))}</strong>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span id="prism-canary-badge" class="prism-canary-badge" data-canary-state="${esc(canaryState)}" title="${esc(store.canary?.trippedReason || '')}">
-              <span>${esc(tr('canary.badgeLabel'))}:</span>
-              <strong>${esc(canaryStateLabel)}</strong>
-            </span>
-            ${
-              canaryState === 'tripped'
-                ? `<button type="button" class="prism-btn prism-btn-sm prism-btn-danger-solid" data-action="reset-canary" ${store.canaryBusy ? 'disabled' : ''}>
-                     ${esc(tr('canary.resetAndWake'))}
-                   </button>`
-                : startupMode === 'manual' && !store.sessionAwake
-                  ? `<button type="button" class="prism-btn prism-btn-sm prism-btn-primary" data-action="wake-skin" ${store.wakeBusy ? 'disabled' : ''}>
-                       ${esc(tr('host.wakeNow'))}
-                     </button>`
-                  : ''
-            }
-          </div>
-        </div>
-
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <span class="prism-ctl-name">${esc(tr('host.startupMode'))}</span>
-          <div class="prism-startup-grid" role="radiogroup" aria-label="${esc(tr('host.startupMode'))}">
-            ${startupCards
-              .map(
-                (sc) => `
-              <button type="button" role="radio" aria-checked="${startupMode === sc.id ? 'true' : 'false'}"
-                      class="prism-startup-card ${startupMode === sc.id ? 'is-active' : ''}"
-                      data-startup-card="${esc(sc.id)}"
-                      data-action="set-enum" data-key="startupMode" data-val="${esc(sc.id)}">
-                <div class="prism-startup-card-top">
-                  <span class="prism-startup-card-title">
-                    <span class="prism-startup-radio" aria-hidden="true"></span>
-                    <span>${esc(sc.title)}</span>
-                  </span>
-                  ${sc.badge ? `<span class="prism-startup-badge">[${esc(sc.badge)}]</span>` : ''}
-                </div>
-                <span class="prism-startup-card-desc">${esc(sc.desc)}</span>
-              </button>
-            `,
-              )
-              .join('')}
-          </div>
-        </div>
-
-        <div style="display:flex;flex-direction:column;gap:3px;padding-top:4px;border-top:1px solid var(--prism-border-hairline);${startupMode === 'manual' ? 'opacity:0.68' : ''}">
-          ${renderSliderRow({
-            key: 'liveBootDelay',
-            label: tr('host.liveBootDelay'),
-            value: bootDelaySec,
-            defaultValue: DEFAULT_CONFIG.liveBootDelay,
-            min: 0.5,
-            max: 5.0,
-            step: 0.1,
-            scale: 1,
-            decimals: 1,
-            suffix: 's',
-          })}
-          <span id="prism-boot-delay-hint" class="prism-ctl-hint">
-            ${esc(tr('host.liveBootDelayHint', { sec: bootDelaySec.toFixed(1) }))}
-          </span>
-        </div>
-
-        <div id="prism-panic-shortcut-callout" class="prism-panic-callout">
-          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 220px">
-            <strong style="font-size:12px;color:var(--prism-fg)">🛡 ${esc(tr('host.panicShortcutTitle'))}</strong>
-            <span style="color:var(--prism-fg-2);line-height:1.4">${esc(tr('host.panicShortcutHint'))}</span>
-          </div>
-          <div class="prism-kbd-group">
-            <kbd class="prism-kbd">Ctrl+Alt+Shift+R</kbd>
-            <span style="color:var(--prism-fg-muted);font-size:11px">/</span>
-            <kbd class="prism-kbd">4× Esc</kbd>
-          </div>
-        </div>
-      </div>
-
-      <!-- v2.1.0 Software Update & One-Click Self-Update Card -->
-      ${(() => {
-        const u = store.update;
-        const curVer = u.currentVersion || store.version || '2.1.0';
-        const updDotColor = u.error
-          ? 'var(--prism-danger)'
-          : u.hasUpdate
-            ? 'var(--prism-accent)'
-            : u.offline
-              ? 'var(--prism-warn)'
-              : u.checked
-                ? 'var(--prism-ok)'
-                : 'var(--prism-fg-faint)';
-        const hasNotes = Boolean(u.changelog || u.changelogSummary);
-        return `
-          <div id="prism-update-card" class="prism-card" style="display:flex;flex-direction:column;gap:10px;${u.hasUpdate ? 'border-color:rgba(var(--prism-accent-rgb),0.45)' : ''}">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-              <div style="display:flex;align-items:center;gap:8px">
-                <span class="prism-status-dot" style="background:${updDotColor}"></span>
-                <strong style="font-size:13px">${esc(tr('update.cardTitle'))}</strong>
-              </div>
-              <span class="prism-kind-badge">v${esc(curVer)}</span>
-            </div>
-
-            <div class="prism-kv-grid">
-              <div class="prism-kv-box">
-                <span class="prism-kv-k">${esc(tr('update.currentVersion'))}</span>
-                <span class="prism-kv-v">v${esc(curVer)}</span>
-              </div>
-              <div class="prism-kv-box">
-                <span class="prism-kv-k">${esc(tr('update.latestVersion'))}</span>
-                <span class="prism-kv-v">${esc(u.latestVersion ? `v${u.latestVersion}` : (u.offline ? tr('update.offline') : '—'))}</span>
-              </div>
-              <div class="prism-kv-box">
-                <span class="prism-kv-k">${esc(tr('update.lastChecked'))}</span>
-                <span class="prism-kv-v">${esc(formatUpdateTimestamp(u.checkedAt))}</span>
-              </div>
-              <div class="prism-kv-box">
-                <span class="prism-kv-k">${esc(curLocale() === 'zh' ? '安装模式' : 'Install Mode')}</span>
-                <span class="prism-kv-v">${esc(u.canSelfUpdate ? tr('update.installModePlugin') : tr('update.installModeGit'))}</span>
-              </div>
-            </div>
-
-            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-              <button id="prism-update-check-btn" type="button" class="prism-btn prism-btn-sm"
-                      data-action="check-update" ${u.checking || u.applying ? 'disabled' : ''}>
-                ${u.checking ? `<span class="prism-spinner" aria-hidden="true"></span> ${esc(tr('update.checking'))}` : `↻ ${esc(tr('update.checkBtn'))}`}
-              </button>
-              ${
-                u.hasUpdate && u.latestVersion
-                  ? u.canSelfUpdate
-                    ? `<button type="button" class="prism-btn prism-btn-sm prism-btn-primary"
-                               data-action="apply-update" ${u.applying ? 'disabled' : ''}>
-                         ${u.applying ? `<span class="prism-spinner" aria-hidden="true"></span> ${esc(tr('update.applying'))}` : `⬆ ${esc(tr('update.applyBtn'))}`}
-                       </button>`
-                    : `<span class="prism-update-dev-badge">${esc(tr('update.gitDevHint'))}</span>`
-                  : ''
-              }
-              ${
-                hasNotes
-                  ? `<button type="button" class="prism-link-btn" data-action="toggle-update-notes">
-                       ${esc(tr('update.notesToggle'))} ${u.notesOpen ? '▴' : '▾'}
-                     </button>`
-                  : ''
-              }
-              <a class="prism-link-btn" href="${esc(sanitizeExternalReleaseUrl(u.releaseUrl))}" target="_blank" rel="noopener noreferrer">
-                ${esc(tr('update.viewRelease'))}
-              </a>
-            </div>
-
-            ${
-              u.error
-                ? `<div class="prism-update-error-line"><span>${esc(tr('update.failedPrefix'))}: ${esc(u.error)}</span>${u.canSelfUpdate && u.hasUpdate ? `<button type="button" class="prism-btn prism-btn-sm" data-action="apply-update">${esc(tr('update.retryBtn'))}</button>` : ''}</div>`
-                : u.standaloneRestartNeeded
-                  ? `<div class="prism-update-info-line">${esc(tr('update.standaloneRestartHint'))}</div>`
-                  : u.checked && !u.hasUpdate && !u.offline && !u.checking
-                    ? `<div class="prism-autorestore-strip"><span style="color:var(--prism-ok);font-weight:700">✓</span><span>${esc(tr('update.upToDate', { version: curVer }))}</span></div>`
-                    : u.offline && !u.checking
-                      ? `<div class="prism-ctl-hint">◌ ${esc(tr('update.offline'))}</div>`
-                      : ''
-            }
-            ${u.notesOpen && hasNotes ? `<pre class="prism-update-notes">${esc(u.changelog || u.changelogSummary)}</pre>` : ''}
-          </div>
-        `;
-      })()}
-
-      <!-- Normal Shortcut Auto-Load & Cold-Boot Auto-Restore Card -->
-      <div id="prism-autostart-card" class="prism-card" style="display:flex;flex-direction:column;gap:10px;border-color:${normalReady ? 'rgba(var(--prism-ok-rgb),0.45)' : 'rgba(var(--prism-warn-rgb),0.45)'}">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="prism-status-dot" style="background:${normalReady ? 'var(--prism-ok)' : 'var(--prism-warn)'}"></span>
-            <strong style="font-size:13px">${esc(tr('host.autostartTitle'))}</strong>
-          </div>
-          <span class="prism-kind-badge" style="color:${normalReady ? 'var(--prism-ok)' : 'var(--prism-warn)'};border-color:${normalReady ? 'rgba(var(--prism-ok-rgb),0.45)' : 'rgba(var(--prism-warn-rgb),0.45)'};background:${normalReady ? 'rgba(var(--prism-ok-rgb),0.14)' : 'rgba(var(--prism-warn-rgb),0.14)'}">
-            ${normalReady ? '✓ AUTOSTART READY' : '◌ PENDING'}
-          </span>
-        </div>
-
-        <div style="font-size:12px;color:var(--prism-fg-2);line-height:1.45">
-          ${esc(normalReady ? tr('host.autostartReady') : tr('host.autostartPending'))}
-        </div>
-
-        <div id="prism-autorestore-badge" class="prism-autorestore-strip">
-          <span style="color:${startupMode === 'manual' ? 'var(--prism-accent)' : 'var(--prism-ok)'};font-weight:700">${startupMode === 'manual' ? '❖' : '✓'}</span>
-          <span>${esc(startupMode === 'manual' ? tr('host.startup.manualDesc') : tr('host.autoRestoreReady'))}</span>
-        </div>
-
-        ${
-          shortcutsList.length > 0
-            ? `
-          <div class="prism-shortcut-list">
-            ${shortcutsList
-              .map(
-                (sc) => `
-              <div class="prism-shortcut-item">
-                <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1">
-                  <span class="prism-fmt-tag">${esc(sc.location || 'shortcut')}</span>
-                  <span class="prism-shortcut-path" title="${esc(sc.path)}">${esc(sc.path || sc.name)}</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
-                  ${
-                    sc.hasDebugPort
-                      ? `<span class="prism-chip" style="border-color:rgba(var(--prism-ok-rgb),0.45);color:var(--prism-ok);cursor:default">✓ :${esc(sc.debugPort || port)}</span>`
-                      : `<span class="prism-chip" style="cursor:default">Stock</span>`
-                  }
-                  ${sc.backedUp ? `<span class="prism-chip" style="cursor:default">Backup ✓</span>` : ''}
-                </div>
-              </div>
-            `,
-              )
-              .join('')}
-          </div>
-        `
-            : ''
-        }
-
-        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-          ${
-            !normalReady
-              ? `
-            <button type="button" class="prism-btn prism-btn-primary" data-action="set-autostart" data-enabled="true" ${auto.busy ? 'disabled' : ''}>
-              ⚡ ${esc(tr('host.enableAutostart'))}
-            </button>
           `
-              : `
-            <button type="button" class="prism-btn" data-action="set-autostart" data-enabled="true" ${auto.busy ? 'disabled' : ''}>
-              ✓ ${esc(curLocale() === 'zh' ? '重新校验并同步快捷方式' : 'Re-verify Normal Shortcuts')}
-            </button>
-          `
-          }
-          <button type="button" class="prism-btn" data-action="refresh-autostart">↻ ${esc(curLocale() === 'zh' ? '刷新自启检测' : 'Check Shortcuts')}</button>
-        </div>
-
-        ${
-          normalReady || (auto.patchedShortcuts && auto.patchedShortcuts.length > 0)
-            ? renderConfirmRow({
-                confirmKey: 'autostart:disable',
-                label: tr('host.disableAutostart'),
-                btnLabel: tr('host.disableAutostart'),
-                action: 'exec-disable-autostart',
-              })
-            : ''
-        }
-      </div>
-
-      <!-- Live CDP Host Connection Card -->
-      <div class="prism-card" style="display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="prism-status-dot" style="background:${attached ? 'var(--prism-ok)' : 'var(--prism-warn)'}"></span>
-            <strong style="font-size:13px">${esc(tr('host.title'))}</strong>
-          </div>
-          <span class="prism-kind-badge">${esc(attached ? tr('status.connected') : tr('status.standby'))}</span>
-        </div>
-
-        <div class="prism-kv-grid">
-          <div class="prism-kv-box">
-            <span class="prism-kv-k">CDP State</span>
-            <span class="prism-kv-v">${attached ? 'Attached' : 'Standby'} (:${esc(port)})</span>
-          </div>
-          <div class="prism-kv-box">
-            <span class="prism-kv-k">Skin Gate</span>
-            <span class="prism-kv-v">${store.skinEnabled ? tr('status.skinOn') : tr('status.skinOff')}</span>
-          </div>
-          <div class="prism-kv-box">
-            <span class="prism-kv-k">Media Server</span>
-            <span class="prism-kv-v">${esc(store.mediaOrigin || hs.mediaOrigin || '127.0.0.1')}</span>
-          </div>
-          <div class="prism-kv-box">
-            <span class="prism-kv-k">Sidecar Engine</span>
-            <span class="prism-kv-v">v${esc(store.version)}${store.pid ? ` · PID ${store.pid}` : ''}</span>
-          </div>
-        </div>
-
-        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-          <button type="button" class="prism-btn" data-action="create-shortcut">
-            🔗 ${esc(tr('host.createShortcut'))}
-          </button>
-          ${
-            !store.skinEnabled
-              ? `<button type="button" class="prism-btn prism-btn-primary" data-action="enable-skin">✦ ${esc(tx('skinReapply'))}</button>`
               : ''
           }
-          <button type="button" class="prism-btn" data-action="refresh-status">↻ Poll Status</button>
-        </div>
 
-        ${renderSegRow({
-          key: 'triggerMode',
-          label: tr('host.triggerMode'),
-          value: store.config.triggerMode,
-          options: [
-            { value: 'both', label: tr('host.trigger.both') },
-            { value: 'pill', label: tr('host.trigger.pill') },
-            { value: 'corner', label: tr('host.trigger.corner') },
-            { value: 'shortcut-only', label: tr('host.trigger.shortcut') },
-          ],
-        })}
-
-        ${renderSwitchRow({
-          key: 'transparentWindowControls',
-          label: tr('layout.transparentWindowControls'),
-          hint: tr('layout.transparentWindowControlsHint'),
-          checked: store.config.transparentWindowControls !== false,
-        })}
-      </div>
-
-      <div class="prism-settings-columns">
-        <!-- Storage Paths & Server-Side Folder Browser -->
-        <div class="prism-card" style="display:flex;flex-direction:column;gap:8px">
-          <strong style="font-size:12.5px">${esc(tr('host.storageTitle'))}</strong>
-
-          <div class="prism-ctl-row">
-            <div class="prism-ctl-label">
-              <span class="prism-ctl-name">${esc(tr('host.uploadDir'))}</span>
-              <span class="prism-ctl-hint" style="word-break:break-all">${esc(store.config.uploadDir || store.stats.uploadDir || `${defaultBaseDataDir}/uploads`)}</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm" data-action="open-fs-browser" data-kind="uploadDir">📂 ${esc(tr('host.browse'))}</button>
-          </div>
-
-          <div class="prism-ctl-row">
-            <div class="prism-ctl-label">
-              <span class="prism-ctl-name">${esc(tr('host.cacheDir'))}</span>
-              <span class="prism-ctl-hint" style="word-break:break-all">${esc(store.config.cacheDir || store.stats.cacheDir || `${defaultBaseDataDir}/cache`)}</span>
-            </div>
-            <button type="button" class="prism-btn prism-btn-sm" data-action="open-fs-browser" data-kind="cacheDir">📂 ${esc(tr('host.browse'))}</button>
-          </div>
-
-          <div style="padding-top:6px;border-top:1px solid var(--prism-border-hairline);display:flex;flex-direction:column;gap:6px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <span class="prism-ctl-name">${esc(tr('host.customFolders'))}</span>
-              <button type="button" class="prism-btn prism-btn-sm prism-btn-primary" data-action="open-fs-browser" data-kind="addCustomFolder">
-                ＋ ${esc(tx('addFolder'))}
-              </button>
-            </div>
-            ${
-              (store.config.customFolders || []).length === 0
-                ? `<span class="prism-ctl-hint">${esc(tx('noCustomFolders'))}</span>`
-                : (store.config.customFolders || [])
-                    .map((folder, idx) =>
-                      renderConfirmRow({
-                        confirmKey: `rm-folder:${idx}`,
-                        label: folder,
-                        btnLabel: tx('removeFolder'),
-                        danger: true,
-                        action: 'remove-custom-folder',
-                        payload: folder,
-                      }),
-                    )
-                    .join('')
-            }
+          <div class="prism-seg" style="width:100%;justify-content:space-between">
+            ${[
+              { m: 'off', zh: '单张', en: 'Single' },
+              { m: 'sequence', zh: '顺序', en: 'Seq' },
+              { m: 'random', zh: '随机', en: 'Shuffle' },
+              { m: 'videoEnd', zh: '播完换张', en: 'VideoEnd' },
+            ]
+              .map(
+                (opt) => `
+              <button type="button" class="prism-seg-btn ${rotMode === opt.m ? 'is-active' : ''}" style="flex:1"
+                      data-action="quick-rot-mode" data-mode="${opt.m}">${esc(isZh ? opt.zh : opt.en)}</button>
+            `,
+              )
+              .join('')}
           </div>
         </div>
 
-        <!-- Library Telemetry & Stats -->
-        <div class="prism-card" style="display:flex;flex-direction:column;gap:8px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <strong style="font-size:12.5px">Library Telemetry</strong>
-            <button type="button" class="prism-btn prism-btn-sm" data-action="refresh-library">↻ ${esc(tr('lib.refresh'))}</button>
-          </div>
-          <div class="prism-kv-grid">
-            <div class="prism-kv-box">
-              <span class="prism-kv-k">${esc(tx('statsTotal'))}</span>
-              <span class="prism-kv-v">${model.totalPlayable}</span>
-            </div>
-            <div class="prism-kv-box">
-              <span class="prism-kv-k">${esc(tx('statsWorkshop'))}</span>
-              <span class="prism-kv-v">${model.workshopCount}</span>
-            </div>
-            <div class="prism-kv-box">
-              <span class="prism-kv-k">${esc(tx('statsUploads'))}</span>
-              <span class="prism-kv-v">${model.localCount}</span>
-            </div>
-            <div class="prism-kv-box">
-              <span class="prism-kv-k">${esc(tx('statsSteam'))}</span>
-              <span class="prism-kv-v">${esc(store.stats.steamRoot || (store.stats.steamFound ? 'Detected' : 'Local Mode'))}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 3-Tier Non-Destructive Reset + Restore Host Default (Zero window.confirm!) -->
-        <div class="prism-card span-full" style="display:flex;flex-direction:column;gap:7px">
-          <strong style="font-size:12.5px">${esc(tr('host.dangerTitle'))}</strong>
-          ${renderConfirmRow({
-            confirmKey: 'reset:skin',
-            label: tr('host.resetSkin'),
-            btnLabel: '↺ Skin',
-            action: 'exec-reset-scope',
-            payload: 'skin',
-          })}
-          ${renderConfirmRow({
-            confirmKey: 'reset:optics',
-            label: tr('host.resetOptics'),
-            btnLabel: '↺ Optics',
-            action: 'exec-reset-scope',
-            payload: 'optics',
-          })}
-          ${renderConfirmRow({
-            confirmKey: 'reset:playback',
-            label: tr('host.resetPlayback'),
-            btnLabel: '↺ Playback',
-            action: 'exec-reset-scope',
-            payload: 'playback',
-          })}
-          ${renderConfirmRow({
-            confirmKey: 'reset:all',
-            label: tr('host.resetAll'),
-            btnLabel: '↺ Reset All',
-            danger: true,
-            action: 'exec-reset-scope',
-            payload: 'all',
-          })}
-          ${renderConfirmRow({
-            confirmKey: 'restore:host',
-            label: tr('host.restoreSkin'),
-            btnLabel: tr('host.restoreSkin'),
-            danger: true,
-            action: 'exec-restore-host',
-          })}
+        <div class="prism-rail-power-footer">
+          <button type="button" class="prism-chip ${eff.pauseOnHidden ? 'is-active' : ''}"
+                  data-action="toggle-bool" data-key="pauseOnHidden">
+            🌙 ${esc(isZh ? '最小化暂停' : 'Min-Pause')}
+          </button>
+          <button type="button" class="prism-chip ${eff.pauseOnBlur ? 'is-active' : ''}"
+                  data-action="toggle-bool" data-key="pauseOnBlur">
+            👁 ${esc(isZh ? '失焦暂停' : 'Blur-Pause')}
+          </button>
+          <button id="rail-cdp-chip" type="button" class="prism-chip ${attached ? 'is-active' : ''}"
+                  data-action="switch-tab" data-tab="system">
+            ${esc(attached ? (isZh ? '● CDP 已连接' : '● CDP Attached') : isZh ? '◌ CDP 待机' : '◌ CDP Standby')}
+          </button>
+          <span class="prism-chip" style="cursor:default">⌨ Ctrl+Alt+W</span>
         </div>
       </div>
     `;
   }
 
+  function updateLeftRailPanels() {
+    const transportHost = document.getElementById('prism-transport-host');
+    if (transportHost) transportHost.innerHTML = renderTransportBarHtml();
+    const railExtras = document.getElementById('prism-rail-extras');
+    if (railExtras) railExtras.innerHTML = renderRailExtrasHtml();
+    syncMediaHealthHost();
+  }
+
   // ==========================================================================
-  // Slide-Over Drawers: Playlist CRUD, Wallpaper Inspector, Hidden, FS Browser
+  // Slide-Over Drawers: All 5 Drawers Preserved (hidden, playlist, inspector, fs, presets)
+  // Guards verify-all.mjs:L4336-L4360 drawer interior click & child <span> close!
   // ==========================================================================
   function renderDrawerHtml() {
     if (!store.drawer) return '';
+
+    if (store.drawer === 'presets') {
+      return renderPresetsManagerDrawerHtml();
+    }
 
     if (store.drawer === 'hidden') {
       const model = computeLibraryModel();
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer">
+          <aside class="prism-drawer agy-prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">🙈 ${esc(tr('lib.hidden'))} (${model.hiddenItems.length})</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -3514,17 +507,18 @@ function bootPrismStudioApp() {
                 model.hiddenItems.length === 0
                   ? `<div class="prism-empty-state">${esc(curLocale() === 'zh' ? '当前没有已隐藏的壁纸' : 'No hidden wallpapers')}</div>`
                   : model.hiddenItems
-                      .map(
-                        (it) => `
+                      .map((it) => {
+                        const thumb = it.thumbUrl ? withStaticPreviewParam(it.thumbUrl) : '';
+                        return `
                     <div class="prism-confirm-row">
                       <div style="display:flex;align-items:center;gap:8px;min-width:0">
-                        ${it.thumbUrl ? `<img src="${esc(it.thumbUrl)}" alt="" onerror="this.remove()" style="width:42px;height:28px;object-fit:cover;border-radius:4px" />` : ''}
+                        ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="" onerror="this.remove()" style="width:42px;height:28px;object-fit:cover;border-radius:4px" />` : ''}
                         <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.title || it.id)}</span>
                       </div>
                       <button type="button" class="prism-btn prism-btn-sm" data-action="unhide-item" data-id="${esc(it.id)}">${esc(tr('lib.restoreOne'))}</button>
                     </div>
-                  `,
-                      )
+                  `;
+                      })
                       .join('')
               }
             </div>
@@ -3546,10 +540,11 @@ function bootPrismStudioApp() {
       const model = computeLibraryModel();
       const d = store.playlistDraft;
       const intervals = [1, 5, 15, 30, 60, 120, 360, 1440];
+      const isZh = curLocale() === 'zh';
 
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer">
+          <aside class="prism-drawer agy-prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">↻ ${esc(tr('lib.playlists'))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -3562,7 +557,7 @@ function bootPrismStudioApp() {
               })}
               ${renderSegRow({
                 key: 'rotationOrder',
-                label: 'Order',
+                label: tx('orderLabel'),
                 value: store.config.rotationOrder,
                 options: [
                   { value: 'sequence', label: tr('playlist.order.sequence') },
@@ -3571,7 +566,7 @@ function bootPrismStudioApp() {
               })}
               ${renderSegRow({
                 key: 'rotationTrigger',
-                label: 'Trigger',
+                label: tx('triggerLabel'),
                 value: store.config.rotationTrigger,
                 options: [
                   { value: 'interval', label: tr('playlist.trigger.interval') },
@@ -3602,10 +597,9 @@ function bootPrismStudioApp() {
                   : ''
               }
 
-              <!-- Saved Playlists + WE Import -->
               <div style="padding-top:8px;border-top:1px solid var(--prism-border-hairline);display:flex;flex-direction:column;gap:6px">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">
-                  <strong style="font-size:12px">Playlists (${groups.length})</strong>
+                  <strong style="font-size:12px">${esc(tx('playlistsLabel'))} (${groups.length})</strong>
                   <div style="display:flex;gap:4px">
                     <button type="button" class="prism-btn prism-btn-sm" data-action="import-we-playlist">📥 ${esc(tr('playlist.importWe'))}</button>
                     <button type="button" class="prism-btn prism-btn-sm" data-action="new-playlist-draft">＋ ${esc(tr('playlist.new'))}</button>
@@ -3639,37 +633,23 @@ function bootPrismStudioApp() {
                   .join('')}
               </div>
 
-              <!-- Playlist Editor + Card Multi-Select -->
               <div style="padding-top:8px;border-top:1px solid var(--prism-border-hairline);display:flex;flex-direction:column;gap:7px">
                 <div style="display:flex;gap:6px;align-items:center">
                   <input id="prism-pl-name-in" type="text" class="prism-input" style="flex:1"
                          placeholder="${esc(tx('playlistNamePlaceholder'))}" value="${esc(d.name)}" />
-                  <span class="prism-chip">${d.pickedIds.size} picked</span>
+                  <span class="prism-chip">${d.pickedIds.size} ${esc(isZh ? '已选' : 'picked')}</span>
                 </div>
                 <div style="display:flex;gap:5px">
-                  <button type="button" class="prism-btn prism-btn-sm" data-action="pl-pick-all">Select Visible</button>
-                  <button type="button" class="prism-btn prism-btn-sm" data-action="pl-pick-clear">Clear</button>
+                  <button type="button" class="prism-btn prism-btn-sm" data-action="pl-pick-all">${esc(tx('selectVisible'))}</button>
+                  <button type="button" class="prism-btn prism-btn-sm" data-action="pl-pick-clear">${esc(tx('clearBtn'))}</button>
                 </div>
-                <div class="prism-mini-picker-grid">
-                  ${model.visibleItems
-                    .slice(0, 180)
-                    .map((it) => {
-                      const picked = d.pickedIds.has(it.id);
-                      const thumb = it.thumbUrl || (it.kind === 'image' ? itemMediaThumb(it) : '');
-                      return `
-                        <div class="prism-mini-pick-item ${picked ? 'is-picked' : ''}"
-                             data-action="toggle-pl-pick" data-id="${esc(it.id)}">
-                          ${thumb ? `<img loading="lazy" src="${esc(thumb)}" alt="" onerror="this.remove()" />` : `<div style="aspect-ratio:16/10;background:rgba(var(--prism-accent-rgb),0.18)"></div>`}
-                          <div class="prism-mini-pick-name">${picked ? '✓ ' : ''}${esc(it.title || it.id)}</div>
-                        </div>
-                      `;
-                    })
-                    .join('')}
+                <div id="prism-drawer-picker-grid" class="prism-mini-picker-grid" data-virtual-picker="drawer">
+                  ${renderPlaylistPickerGridHtml(model.visibleItems, d.pickedIds)}
                 </div>
               </div>
             </div>
             <div class="prism-drawer-foot">
-              <button type="button" class="prism-btn prism-btn-primary" data-action="save-playlist-draft">💾 Save Playlist</button>
+              <button type="button" class="prism-btn prism-btn-primary" data-action="save-playlist-draft">${esc(tx('savePlaylist'))}</button>
               <button type="button" class="prism-btn" data-action="close-drawer">${esc(tr('common.close'))}</button>
             </div>
           </aside>
@@ -3680,9 +660,7 @@ function bootPrismStudioApp() {
     if (store.drawer === 'inspector') {
       const targetId = store.inspectWallpaperId || getActiveId();
       const item = store.items.find((x) => x.id === targetId) || store.activeItem;
-      if (!item) {
-        return '';
-      }
+      if (!item) return '';
       const propsList = normalizeWeProperties(item.properties);
       const savedUserProps = store.config.userProps?.[item.id] || {};
       const valuesMap = {};
@@ -3695,7 +673,7 @@ function bootPrismStudioApp() {
 
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer">
+          <aside class="prism-drawer agy-prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">⚙ ${esc(tr('lib.inspector'))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -3738,7 +716,6 @@ function bootPrismStudioApp() {
                 }
               </div>
 
-              <!-- WE project.json Properties with Live Condition Evaluation -->
               <div class="prism-card" style="display:flex;flex-direction:column;gap:6px">
                 <strong style="font-size:12.5px">${esc(tx('wePropsTitle'))}</strong>
                 ${
@@ -3775,7 +752,7 @@ function bootPrismStudioApp() {
                             return `
                               <div class="prism-ctl-row">
                                 <span class="prism-ctl-name">${esc(p.label)}</span>
-                                <select class="prism-input" data-action="we-prop-combo" data-wid="${esc(item.id)}" data-prop="${esc(p.key)}">
+                                <select class="prism-select" data-action="we-prop-combo" data-wid="${esc(item.id)}" data-prop="${esc(p.key)}">
                                   ${p.options
                                     .map(
                                       (o, oi) => `
@@ -3828,7 +805,7 @@ function bootPrismStudioApp() {
       const fb = store.fsBrowser;
       return `
         <div class="prism-drawer-backdrop" data-action="backdrop-close">
-          <aside class="prism-drawer">
+          <aside class="prism-drawer agy-prism-drawer">
             <div class="prism-drawer-head">
               <span class="prism-drawer-title">📂 ${esc(tr('host.browse'))}</span>
               <button type="button" class="prism-icon-btn" data-action="close-drawer">✕</button>
@@ -3892,821 +869,9 @@ function bootPrismStudioApp() {
     return '';
   }
 
-  function itemMediaThumb(it) {
-    return it.thumbUrl || it.mediaUrl || '';
-  }
-
   // ==========================================================================
-  // Shell Mount & Surgical Partial Updates
+  // Shell Mounting (Full Aux Pane Shell + Standalone Popout 3-Pane IDE Shell)
   // ==========================================================================
-  function renderToastStack() {
-    const host = document.getElementById('prism-toast-host');
-    if (!host) return;
-    host.innerHTML = store.toasts
-      .map(
-        (item) => `
-      <div class="prism-toast" data-tone="${esc(item.tone)}">
-        <span>${item.tone === 'ok' ? '✓' : item.tone === 'warn' ? '⚠' : item.tone === 'danger' ? '✕' : '◆'}</span>
-        <span>${esc(item.message)}</span>
-      </div>
-    `,
-      )
-      .join('');
-  }
-
-  function formatUpdateTimestamp(ts) {
-    if (!ts) return '—';
-    try {
-      const d = new Date(ts);
-      if (Number.isNaN(d.getTime())) return '—';
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    } catch {
-      return '—';
-    }
-  }
-
-  function renderUpdateBannerHtml() {
-    const u = store.update;
-    const curVer = u.currentVersion || store.version || '2.1.0';
-    const hasFreshUpdate = Boolean(u.hasUpdate && u.latestVersion && u.dismissedVersion !== u.latestVersion);
-    const shouldShow = hasFreshUpdate || u.applying || Boolean(u.error) || u.standaloneRestartNeeded;
-    if (!shouldShow) return '';
-
-    const hasNotes = Boolean(u.changelog || u.changelogSummary);
-    const deltaLabel = u.latestVersion
-      ? tr('update.versionDelta', { from: curVer, to: u.latestVersion })
-      : `v${curVer}`;
-
-    return `
-      <div id="prism-update-banner" class="prism-update-banner" data-tone="${u.error ? 'update-error' : 'update'}" role="status">
-        <div class="prism-update-banner-row">
-          <div class="prism-update-banner-main">
-            <span class="prism-status-dot" style="background:${u.error ? 'var(--prism-danger)' : 'var(--prism-accent)'};flex-shrink:0"></span>
-            <strong class="prism-update-title">${esc(tr('update.bannerTitle', { version: u.latestVersion || curVer }))}</strong>
-            <span class="prism-update-delta">${esc(deltaLabel)}</span>
-            ${
-              u.changelogSummary && !u.notesOpen
-                ? `<span class="prism-update-summary" title="${esc(u.changelogSummary)}">${esc(u.changelogSummary)}</span>`
-                : ''
-            }
-          </div>
-          <div class="prism-update-actions">
-            ${
-              u.hasUpdate && u.latestVersion
-                ? u.canSelfUpdate
-                  ? `<button id="prism-update-apply-btn" type="button" class="prism-btn prism-btn-sm prism-btn-primary"
-                             data-action="apply-update" ${u.applying ? 'disabled' : ''}>
-                       ${u.applying ? `<span class="prism-spinner" aria-hidden="true"></span> ${esc(tr('update.applying'))}` : `⬆ ${esc(tr('update.applyBtn'))}`}
-                     </button>`
-                  : `<span class="prism-update-dev-badge">${esc(tr('update.gitDevHint'))}</span>`
-                : ''
-            }
-            ${
-              hasNotes
-                ? `<button type="button" class="prism-link-btn" data-action="toggle-update-notes">
-                     ${esc(tr('update.notesToggle'))} ${u.notesOpen ? '▴' : '▾'}
-                   </button>`
-                : ''
-            }
-            <a class="prism-link-btn" href="${esc(sanitizeExternalReleaseUrl(u.releaseUrl))}" target="_blank" rel="noopener noreferrer">
-              ${esc(tr('update.viewRelease'))}
-            </a>
-            ${
-              !u.applying
-                ? `<button type="button" class="prism-icon-btn" style="width:22px;height:22px"
-                           data-action="dismiss-update-banner" title="${esc(tr('update.dismiss'))}">✕</button>`
-                : ''
-            }
-          </div>
-        </div>
-        ${
-          u.error
-            ? `<div class="prism-update-error-line">
-                 <span>${esc(tr('update.failedPrefix'))}: ${esc(u.error)}</span>
-                 ${u.canSelfUpdate && u.hasUpdate ? `<button type="button" class="prism-btn prism-btn-sm" data-action="apply-update">${esc(tr('update.retryBtn'))}</button>` : ''}
-               </div>`
-            : ''
-        }
-        ${
-          u.standaloneRestartNeeded
-            ? `<div class="prism-update-info-line">${esc(tr('update.standaloneRestartHint'))}</div>`
-            : ''
-        }
-        ${u.notesOpen && hasNotes ? `<pre class="prism-update-notes">${esc(u.changelog || u.changelogSummary)}</pre>` : ''}
-      </div>
-    `;
-  }
-
-  function renderUpdateReconnectOverlay() {
-    const host = document.getElementById('prism-update-reconnect-host');
-    if (!host) return;
-    const rec = store.update.reconnect;
-    if (!rec.active) {
-      host.innerHTML = '';
-      return;
-    }
-    const targetVer = rec.targetVersion || store.update.latestVersion || store.version || PLUGIN_VERSION;
-    const phase = rec.timedOut ? 'timeout' : 'polling';
-    host.innerHTML = `
-      <div id="prism-update-reconnect-modal" class="prism-update-reconnect-backdrop agy-prism-reconnect-overlay"
-           role="dialog" aria-modal="true" translate="no" data-no-translate="true" data-ag-no-i18n="1">
-        <div class="prism-update-reconnect-card agy-prism-dialog" data-phase="${phase}">
-          ${
-            !rec.timedOut
-              ? `
-            <div class="prism-update-reconnect-icon">
-              <span class="prism-spinner prism-spinner-lg" aria-hidden="true"></span>
-            </div>
-            <strong class="prism-update-reconnect-title">${esc(tr('update.restartingTitle', { version: targetVer }))}</strong>
-            <p id="prism-update-reconnect-desc" class="prism-update-reconnect-desc">${esc(tr('update.restartingDesc', { attempts: Math.max(1, rec.attempts) }))}</p>
-            <span id="prism-update-reconnect-progress" class="prism-chip" style="cursor:default">${rec.attempts} / ${rec.maxAttempts}</span>
-          `
-              : `
-            <div class="prism-update-reconnect-icon">✓</div>
-            <strong class="prism-update-reconnect-title">${esc(tr('update.reconnectTimeoutTitle', { version: targetVer }))}</strong>
-            <p class="prism-update-reconnect-desc">${esc(tr('update.reconnectTimeoutDesc'))}</p>
-            <div class="prism-update-reconnect-actions">
-              <button type="button" class="prism-btn prism-btn-primary" data-action="reload-studio-pane">
-                ↻ ${esc(tr('update.reloadPaneBtn'))}
-              </button>
-              <button type="button" class="prism-btn" data-action="retry-update-reconnect">
-                ${esc(tr('update.retryReconnectBtn'))}
-              </button>
-              <button type="button" class="prism-btn" data-action="close-update-reconnect">
-                ${esc(tr('common.close'))}
-              </button>
-            </div>
-          `
-          }
-        </div>
-      </div>
-    `;
-  }
-
-  async function fetchUpdateStatus(force = false) {
-    if (store.update.checking) return;
-    store.update.checking = true;
-    if (force) {
-      store.update.error = '';
-    }
-    updateTopStatusIndicators();
-    if (store.activeTab === 'system') renderActiveSurface();
-
-    try {
-      const url = force ? '/api/update/status?force=1' : '/api/update/status';
-      const data = await apiJson(url);
-      ingestUpdateStatus(data, { fromBootstrap: false });
-      if (force && store.update.hasUpdate && store.update.latestVersion && store.update.dismissedVersion === store.update.latestVersion) {
-        store.update.dismissedVersion = '';
-        try {
-          window.localStorage?.removeItem('prism.dismissedUpdateVersion');
-        } catch {
-          // ignore storage restrictions
-        }
-      }
-      if (force && !store.update.hasUpdate && !store.update.offline) {
-        showToast(tr('update.upToDate', { version: store.update.currentVersion || store.version || PLUGIN_VERSION }), 'ok', 3200);
-      }
-    } catch (err) {
-      store.update.offline = true;
-      store.update.checked = true;
-      if (force) {
-        showToast(err?.message || tr('update.offline'), 'warn', 3800);
-      }
-    } finally {
-      store.update.checking = false;
-      updateTopStatusIndicators();
-      if (store.activeTab === 'system') renderActiveSurface();
-    }
-  }
-
-  function startUpdateReconnectPolling(targetVersion = '') {
-    if (updateReconnectTimer) {
-      clearTimeout(updateReconnectTimer);
-      updateReconnectTimer = null;
-    }
-    disconnectStudioEvents();
-    const rec = store.update.reconnect;
-    rec.active = true;
-    rec.targetVersion = targetVersion || store.update.latestVersion || '';
-    rec.attempts = 0;
-    rec.maxAttempts = 24;
-    rec.sawDown = false;
-    rec.timedOut = false;
-    const prevPid = store.pid || 0;
-    renderUpdateReconnectOverlay();
-
-    const probeOnce = async () => {
-      if (!store.update.reconnect.active) return;
-      rec.attempts += 1;
-      const progEl = document.getElementById('prism-update-reconnect-progress');
-      if (progEl) progEl.textContent = `${rec.attempts} / ${rec.maxAttempts}`;
-      const descEl = document.getElementById('prism-update-reconnect-desc');
-      if (descEl) descEl.textContent = tr('update.restartingDesc', { attempts: Math.max(1, rec.attempts) });
-
-      try {
-        const res = await apiFetch('/api/healthz', { cache: 'no-store' });
-        if (!res.ok) {
-          rec.sawDown = true;
-        } else {
-          const data = await res.json().catch(() => null);
-          const versionMatched = Boolean(rec.targetVersion && data?.version === rec.targetVersion);
-          const pidChanged = Boolean(prevPid && data?.pid && data.pid !== prevPid);
-          const recoveredAfterDrop = Boolean(data?.ok && rec.sawDown && rec.attempts >= 2);
-          if (data?.ok && (versionMatched || pidChanged || recoveredAfterDrop)) {
-            updateReconnectTimer = null;
-            window.location.reload();
-            return;
-          }
-        }
-      } catch {
-        rec.sawDown = true;
-      }
-
-      if (rec.attempts >= rec.maxAttempts) {
-        updateReconnectTimer = null;
-        rec.timedOut = true;
-        renderUpdateReconnectOverlay();
-        return;
-      }
-      updateReconnectTimer = setTimeout(() => {
-        void probeOnce();
-      }, 900);
-    };
-
-    updateReconnectTimer = setTimeout(() => {
-      void probeOnce();
-    }, 900);
-  }
-
-  async function executeApplyUpdate() {
-    const u = store.update;
-    if (u.applying || !u.canSelfUpdate) return;
-    u.applying = true;
-    u.error = '';
-    u.standaloneRestartNeeded = false;
-    updateTopStatusIndicators();
-    if (store.activeTab === 'system') renderActiveSurface();
-
-    try {
-      const payload = {};
-      if (u.latestTag) payload.targetTag = u.latestTag;
-      if (u.latestVersion) payload.expectedVersion = u.latestVersion;
-      const res = await apiJson('/api/update/apply', {
-        method: 'POST',
-        body: payload,
-      });
-      u.applying = false;
-      const toVer = res.updatedTo || res.toVersion || u.latestVersion || '';
-      if (res.alreadyUpToDate) {
-        u.hasUpdate = false;
-        showToast(tr('update.upToDate', { version: u.currentVersion || store.version || PLUGIN_VERSION }), 'ok', 3400);
-        updateTopStatusIndicators();
-        if (store.activeTab === 'system') renderActiveSurface();
-        return;
-      }
-      if (res.willRestart) {
-        startUpdateReconnectPolling(toVer);
-        return;
-      }
-      u.hasUpdate = false;
-      u.standaloneRestartNeeded = true;
-      showToast(tr('update.standaloneRestartHint'), 'ok', 5600);
-      updateTopStatusIndicators();
-      if (store.activeTab === 'system') renderActiveSurface();
-    } catch (err) {
-      u.applying = false;
-      if (err?.code === 'ERR_GIT_DEV_CHECKOUT' || err?.code === 'ERR_SYMLINK_PLUGIN_ROOT') {
-        u.canSelfUpdate = false;
-        if (err.code === 'ERR_GIT_DEV_CHECKOUT') u.isGitCheckout = true;
-        if (err.code === 'ERR_SYMLINK_PLUGIN_ROOT') u.isSymlink = true;
-        u.error = err.code === 'ERR_GIT_DEV_CHECKOUT' ? tr('update.gitDevHint') : (err?.message || tr('update.gitDevHint'));
-      } else {
-        u.error = err?.message || String(err);
-      }
-      updateTopStatusIndicators();
-      if (store.activeTab === 'system') renderActiveSurface();
-    }
-  }
-
-  function renderAutostartBannerHtml() {
-    const out = [];
-    const updateBanner = renderUpdateBannerHtml();
-    if (updateBanner) out.push(updateBanner);
-    const canaryTripped = store.canary?.state === 'tripped';
-    const isManualSleeping = !canaryTripped && store.config.startupMode === 'manual' && !store.sessionAwake;
-
-    if (canaryTripped) {
-      out.push(`
-        <div id="prism-canary-tripped-banner" class="prism-autostart-banner prism-safety-banner" data-tone="tripped" role="alert">
-          <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;flex:1 1 260px">
-            <span class="prism-status-dot" style="background:var(--prism-danger);margin-top:4px;flex-shrink:0"></span>
-            <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
-              <strong style="font-size:12px;color:var(--prism-danger)">${esc(tr('canary.trippedBannerTitle'))}</strong>
-              <span style="color:var(--prism-fg-2);line-height:1.4">${esc(tr('canary.trippedBannerDesc'))}${store.canary.trippedReason ? ` (${esc(store.canary.trippedReason)})` : ''}</span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-            <button id="prism-canary-reset-btn" type="button" class="prism-btn prism-btn-sm prism-btn-danger-solid"
-                    data-action="reset-canary" ${store.canaryBusy ? 'disabled' : ''}>
-              ${esc(tr('canary.resetAndWake'))}
-            </button>
-          </div>
-        </div>
-      `);
-    } else if (isManualSleeping) {
-      out.push(`
-        <div id="prism-manual-wake-banner" class="prism-autostart-banner prism-safety-banner" data-tone="manual-wake">
-          <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 240px">
-            <span class="prism-status-dot" style="background:var(--prism-accent);flex-shrink:0"></span>
-            <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;min-width:0">
-              <strong style="font-size:12px;color:var(--prism-fg)">${esc(tr('host.wakeBannerTitle'))}</strong>
-              <span style="color:var(--prism-fg-2)">${esc(tr('host.wakeBannerDesc'))}</span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-            <button id="prism-manual-wake-btn" type="button" class="prism-btn prism-btn-sm prism-btn-primary"
-                    data-action="wake-skin" ${store.wakeBusy ? 'disabled' : ''}>
-              ${esc(tr('host.wakeNow'))}
-            </button>
-          </div>
-        </div>
-      `);
-    }
-
-    const attached = isHostAttached();
-    if (!canaryTripped && !isManualSleeping && !attached && !store.autostart.bannerDismissed) {
-      const ready = Boolean(store.autostart.normalShortcutEnabled);
-      out.push(`
-        <div class="prism-autostart-banner" data-tone="${ready ? 'ready' : 'pending'}">
-          <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 220px">
-            <span class="prism-status-dot" style="background:${ready ? 'var(--prism-ok)' : 'var(--prism-warn)'}"></span>
-            <span style="overflow:hidden;text-overflow:ellipsis">${esc(ready ? tr('host.autostartReady') : tr('host.autostartPending'))}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-            ${
-              !ready
-                ? `<button type="button" class="prism-btn prism-btn-sm prism-btn-primary"
-                           data-action="set-autostart" data-enabled="true" ${store.autostart.busy ? 'disabled' : ''}>
-                     ⚡ ${esc(tr('host.enableAutostart'))}
-                   </button>`
-                : `<button type="button" class="prism-btn prism-btn-sm" data-action="switch-tab" data-tab="system">
-                     ✓ ${esc(curLocale() === 'zh' ? '查看自启详情' : 'Details')}
-                   </button>`
-            }
-            <button type="button" class="prism-icon-btn" style="width:22px;height:22px"
-                    data-action="dismiss-autostart-banner" title="${esc(tr('common.close'))}">✕</button>
-          </div>
-        </div>
-      `);
-    }
-
-    return out.join('');
-  }
-
-  function updateTopStatusIndicators() {
-    const masterBtn = document.getElementById('prism-master-toggle-btn');
-    const masterTxt = document.getElementById('prism-master-toggle-text');
-    if (masterBtn) {
-      const enabledStr = store.skinEnabled ? 'true' : 'false';
-      const busyStr = store.masterToggleBusy ? 'true' : 'false';
-      masterBtn.setAttribute('aria-checked', enabledStr);
-      masterBtn.dataset.enabled = enabledStr;
-      masterBtn.setAttribute('aria-busy', busyStr);
-      masterBtn.dataset.busy = busyStr;
-      masterBtn.title = getMasterToggleHint(store.skinEnabled);
-    }
-    if (masterTxt) {
-      masterTxt.textContent = getMasterToggleLabel(store.skinEnabled);
-    }
-    const pill = document.getElementById('prism-top-status-pill');
-    const txt = document.getElementById('prism-top-status-text');
-    const attached = isHostAttached();
-    const canaryTripped = store.canary?.state === 'tripped';
-    const isManualSleeping = !canaryTripped && store.config.startupMode === 'manual' && !store.sessionAwake;
-    if (pill && txt) {
-      const ready = Boolean(store.autostart.normalShortcutEnabled);
-      if (canaryTripped) {
-        pill.dataset.status = 'tripped';
-        txt.textContent = tr('canary.state.tripped');
-      } else if (isManualSleeping) {
-        pill.dataset.status = 'manual';
-        txt.textContent = tr('host.startup.manual');
-      } else {
-        pill.dataset.status = !store.skinEnabled ? 'off' : attached ? 'attached' : 'standby';
-        txt.textContent = !store.skinEnabled
-          ? tr('status.skinOff')
-          : attached
-            ? tr('status.connected')
-            : ready
-              ? `${tr('status.standby')} · ✓`
-              : tr('status.standby');
-      }
-    }
-    const bannerHost = document.getElementById('prism-autostart-banner-host');
-    if (bannerHost) {
-      bannerHost.innerHTML = renderAutostartBannerHtml();
-    }
-    const railCdp = document.getElementById('rail-cdp-chip');
-    if (railCdp) {
-      railCdp.className = `prism-chip ${attached ? 'is-active' : ''}`;
-      railCdp.textContent = attached
-        ? (curLocale() === 'zh' ? '● CDP 已连接' : '● CDP Attached')
-        : (curLocale() === 'zh' ? '◌ CDP 待机' : '◌ CDP Standby');
-    }
-  }
-
-  function renderTransportBarHtml() {
-    const eff = getEffectiveConfig();
-    const item = store.activeItem || store.items.find((x) => x.id === getActiveId());
-    const activeGroup = (store.config.rotationGroups || []).find((g) => g.id === store.config.rotationGroupId);
-    const playlistLabel = store.config.rotationEnabled
-      ? activeGroup
-        ? `↻ ${activeGroup.name}`
-        : `↻ ${store.config.rotationInterval}m`
-      : tr('transport.playlistNone');
-    const volPct = Math.round((eff.volume ?? 0.5) * 100);
-    const isFav = item && (store.config.favorites || []).includes(item.id);
-
-    return `
-      <div class="prism-now-meta">
-        <span class="prism-kind-badge">${esc(item ? tr(`kind.${item.kind}`) || item.kind : 'PRISM')}</span>
-        <span class="prism-now-title" title="${esc(item?.title || 'Obsidian Prism Aurora')}">${esc(item?.title || 'Obsidian Prism Aurora')}</span>
-      </div>
-      <div class="prism-transport-ctls">
-        <button type="button" class="prism-icon-btn" data-action="step-playlist" data-dir="-1" title="${esc(tr('transport.prev'))}">⏮</button>
-        <button type="button" class="prism-icon-btn ${!eff.paused ? 'is-active' : ''}" data-action="toggle-pause"
-                title="${esc(eff.paused ? tr('transport.play') : tr('transport.pause'))}">${eff.paused ? '▶' : '⏸'}</button>
-        <button type="button" class="prism-icon-btn" data-action="step-playlist" data-dir="1" title="${esc(tr('transport.next'))}">⏭</button>
-        <button type="button" class="prism-icon-btn ${!eff.muted ? 'is-active' : ''}" data-action="toggle-mute"
-                title="${esc(eff.muted ? tr('transport.unmute') : tr('transport.mute'))}">${eff.muted ? '🔇' : '🔊'}</button>
-        <div class="prism-vol-inline">
-          <input type="range" class="prism-range" min="0" max="100" step="5" value="${volPct}"
-                 style="--prism-pct:${volPct}%" data-config-slider="volume" data-inline-vol="true" />
-        </div>
-        ${
-          item
-            ? `<button type="button" class="prism-icon-btn ${isFav ? 'is-active' : ''}"
-                       data-action="toggle-fav" data-id="${esc(item.id)}" title="${esc(tr('lib.favorites'))}">★</button>`
-            : ''
-        }
-        <button type="button" class="prism-playlist-pill" data-enabled="${store.config.rotationEnabled ? 'true' : 'false'}"
-                data-action="open-drawer" data-drawer="playlist" title="${esc(tr('lib.playlists'))}">
-          ${esc(playlistLabel)}
-        </button>
-      </div>
-    `;
-  }
-
-  function computeQuickQueueItems(limit = 4) {
-    const hiddenSet = new Set(store.config.hiddenIds || []);
-    const playable = store.items.filter((it) => it && it.kind !== 'application' && !hiddenSet.has(it.id));
-    if (playable.length === 0) return [];
-    const byId = new Map(playable.map((it) => [it.id, it]));
-    const activeGroup = (store.config.rotationGroups || []).find((g) => g.id === store.config.rotationGroupId);
-
-    const out = [];
-    const pushUnique = (it) => {
-      if (it && !out.some((x) => x.id === it.id) && out.length < limit) out.push(it);
-    };
-
-    if (activeGroup && Array.isArray(activeGroup.wallpaperIds)) {
-      for (const wid of activeGroup.wallpaperIds) {
-        pushUnique(byId.get(wid));
-      }
-    }
-    for (const fid of store.config.favorites || []) {
-      pushUnique(byId.get(fid));
-    }
-    const activeId = getActiveId();
-    const actIdx = Math.max(0, playable.findIndex((x) => x.id === activeId));
-    for (let i = 0; i < playable.length && out.length < limit; i++) {
-      pushUnique(playable[(actIdx + i) % playable.length]);
-    }
-    return out;
-  }
-
-  function renderRailExtrasHtml() {
-    const eff = getEffectiveConfig();
-    const isZh = curLocale() === 'zh';
-    const activeId = getActiveId();
-    const item = store.activeItem || store.items.find((x) => x.id === activeId);
-    const attached = isHostAttached();
-    const queueSlots = computeQuickQueueItems(4);
-    const rotEnabled = Boolean(store.config.rotationEnabled);
-    const rotMode = !rotEnabled
-      ? 'off'
-      : store.config.rotationTrigger === 'videoEnd'
-        ? 'videoEnd'
-        : store.config.rotationOrder === 'sequence'
-          ? 'sequence'
-          : 'random';
-
-    return `
-      <!-- 1. Canonical Scene Presets Card (Single Instance Across Studio) -->
-      <div id="prism-rail-scene-card" class="prism-card" style="display:flex;flex-direction:column;gap:7px;padding:10px 12px">
-        <span class="prism-section-tag">✦ ${esc(tr('preset.sceneTitle'))}</span>
-        ${renderScenePresetsHtml(eff)}
-      </div>
-
-      <!-- 2. Active Media Telemetry & Quick Optics Card -->
-      <div id="prism-rail-optics-card" class="prism-card prism-rail-optics-card prism-rail-desktop-only">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
-          <span class="prism-section-tag">${esc(isZh ? '当前壁纸详情与光学速调' : 'Active Media & Quick Optics')}</span>
-          ${
-            activeId
-              ? `<button type="button" class="prism-btn prism-btn-sm" data-action="open-inspector" data-id="${esc(activeId)}">⚙ ${esc(tx('inspectorBtn'))}</button>`
-              : ''
-          }
-        </div>
-
-        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">
-          <span class="prism-chip" style="cursor:default">${esc(item ? tr(`kind.${item.kind}`) || item.kind : 'PRISM')}</span>
-          ${item?.resolution ? `<span class="prism-chip" style="cursor:default">${esc(item.resolution)}</span>` : ''}
-          ${item?.fileSize ? `<span class="prism-chip" style="cursor:default">${esc(formatBytes(item.fileSize))}</span>` : ''}
-          ${item?.workshopId ? `<span class="prism-chip" style="cursor:default">WS #${esc(item.workshopId)}</span>` : ''}
-        </div>
-
-        <div id="rail-extracted-chips">${renderExtractedSwatchesHtml()}</div>
-
-        ${renderSegRow({
-          key: 'fit',
-          label: isZh ? '填充' : 'Fit',
-          value: eff.fit,
-          options: [
-            { value: 'cover', label: 'Cover' },
-            { value: 'contain', label: 'Contain' },
-            { value: 'fill', label: 'Fill' },
-          ],
-        })}
-
-        ${renderSliderRow({
-          key: 'glassOpacity',
-          label: tr('glass.opacity'),
-          value: eff.glassOpacity,
-          defaultValue: DEFAULT_CONFIG.glassOpacity,
-          min: 0.15,
-          max: 0.98,
-          step: 0.01,
-          scale: 100,
-          decimals: 0,
-          suffix: ' %',
-        })}
-        ${renderSliderRow({
-          key: 'glassBlur',
-          label: tr('glass.blur'),
-          value: eff.glassBlur,
-          defaultValue: DEFAULT_CONFIG.glassBlur,
-          min: 0,
-          max: 64,
-          step: 1,
-          suffix: ' px',
-        })}
-        ${renderSliderRow({
-          key: 'sidebarOpacity',
-          label: tr('glass.sidebarOpacity'),
-          value: eff.sidebarOpacity,
-          defaultValue: resolveComponentDefaultAlpha('sidebar', eff, getResolvedPolarity(eff) === 'light'),
-          min: 0,
-          max: 0.98,
-          step: 0.01,
-          scale: 100,
-          decimals: 0,
-          suffix: ' %',
-          nullable: true,
-          nullableFallbackKey: 'glassOpacity',
-          comp: 'sidebar',
-          fallbackValue: resolveComponentDefaultAlpha('sidebar', eff, getResolvedPolarity(eff) === 'light'),
-        })}
-        ${renderSliderRow({
-          key: 'scrimOpacity',
-          label: isZh ? '背景压暗遮罩' : 'Contrast Scrim',
-          value: eff.scrimOpacity,
-          defaultValue: DEFAULT_CONFIG.scrimOpacity,
-          min: 0,
-          max: 0.92,
-          step: 0.01,
-          scale: 100,
-          decimals: 0,
-          suffix: ' %',
-        })}
-        ${renderSliderRow({
-          key: 'mediaBlur',
-          label: isZh ? '壁纸柔焦模糊' : 'Wallpaper Blur',
-          value: eff.mediaBlur,
-          defaultValue: DEFAULT_CONFIG.mediaBlur,
-          min: 0,
-          max: 64,
-          step: 1,
-          suffix: ' px',
-        })}
-      </div>
-
-      <!-- 3. Playlist Queue & Smart Power Dock (flex: 1 fills bottom of Left Rail) -->
-      <div id="prism-rail-dock-card" class="prism-card prism-rail-dock-card prism-rail-desktop-only">
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
-            <span class="prism-section-tag">${esc(isZh ? '轮播队列与节能状态' : 'Playlist Queue & Smart Power')}</span>
-            <button type="button" class="prism-btn prism-btn-sm" data-action="open-drawer" data-drawer="playlist">
-              ↻ ${esc(tr('lib.playlists'))}
-            </button>
-          </div>
-
-          ${
-            queueSlots.length > 0
-              ? `
-            <div class="prism-rail-queue-strip">
-              ${queueSlots
-                .map((qIt) => {
-                  const qThumb = qIt.thumbUrl || (qIt.kind === 'image' ? qIt.mediaUrl : '');
-                  const qAct = qIt.id === activeId;
-                  return `
-                    <button type="button" class="prism-rail-qslot ${qAct ? 'is-active' : ''}"
-                            data-action="card-click" data-id="${esc(qIt.id)}" title="${esc(qIt.title || qIt.id)}">
-                      <div class="prism-rail-qslot-thumb">
-                        ${qThumb ? `<img loading="lazy" src="${esc(qThumb)}" alt="" onerror="this.remove()" />` : ''}
-                      </div>
-                      <span class="prism-rail-qslot-title">${esc(qIt.title || qIt.id)}</span>
-                    </button>
-                  `;
-                })
-                .join('')}
-            </div>
-          `
-              : ''
-          }
-
-          <div class="prism-seg" style="width:100%;justify-content:space-between">
-            ${[
-              { m: 'off', zh: '单张', en: 'Single' },
-              { m: 'sequence', zh: '顺序', en: 'Seq' },
-              { m: 'random', zh: '随机', en: 'Shuffle' },
-              { m: 'videoEnd', zh: '播完换张', en: 'VideoEnd' },
-            ]
-              .map(
-                (opt) => `
-              <button type="button" class="prism-seg-btn ${rotMode === opt.m ? 'is-active' : ''}" style="flex:1"
-                      data-action="quick-rot-mode" data-mode="${opt.m}">${esc(isZh ? opt.zh : opt.en)}</button>
-            `,
-              )
-              .join('')}
-          </div>
-        </div>
-
-        <div class="prism-rail-power-footer">
-          <button type="button" class="prism-chip ${eff.pauseOnHidden ? 'is-active' : ''}"
-                  data-action="toggle-bool" data-key="pauseOnHidden">
-            🌙 ${esc(isZh ? '最小化暂停' : 'Min-Pause')}
-          </button>
-          <button type="button" class="prism-chip ${eff.pauseOnBlur ? 'is-active' : ''}"
-                  data-action="toggle-bool" data-key="pauseOnBlur">
-            👁 ${esc(isZh ? '失焦暂停' : 'Blur-Pause')}
-          </button>
-          <button id="rail-cdp-chip" type="button" class="prism-chip ${attached ? 'is-active' : ''}"
-                  data-action="switch-tab" data-tab="system">
-            ${esc(attached ? (isZh ? '● CDP 已连接' : '● CDP Attached') : (isZh ? '◌ CDP 待机' : '◌ CDP Standby'))}
-          </button>
-          <span class="prism-chip" style="cursor:default">⌨ Ctrl+Alt+W</span>
-        </div>
-      </div>
-    `;
-  }
-
-  function updateLeftRailPanels() {
-    const transportHost = document.getElementById('prism-transport-host');
-    if (transportHost) transportHost.innerHTML = renderTransportBarHtml();
-    const railExtras = document.getElementById('prism-rail-extras');
-    if (railExtras) railExtras.innerHTML = renderRailExtrasHtml();
-    const skinPinBar = document.getElementById('prism-skin-pin-bar');
-    if (skinPinBar) skinPinBar.innerHTML = renderSkinPinBarHtml();
-  }
-
-  function patchActiveCardsInPlace(nextActiveId) {
-    const activeLabel = curLocale() === 'zh' ? '当前' : 'Active';
-    document.querySelectorAll('.prism-wall-card.is-active').forEach((card) => {
-      if (card instanceof HTMLElement && card.dataset.id !== nextActiveId) {
-        card.classList.remove('is-active');
-        card.querySelector('.prism-active-pill')?.remove();
-      }
-    });
-    document.querySelectorAll('.prism-wall-card').forEach((card) => {
-      if (card instanceof HTMLElement && card.dataset.id === nextActiveId) {
-        card.classList.add('is-active');
-        const tl = card.querySelector('.prism-card-top-left');
-        if (tl && !tl.querySelector('.prism-active-pill')) {
-          const badge = document.createElement('span');
-          badge.className = 'prism-active-pill';
-          badge.textContent = `✓ ${activeLabel}`;
-          tl.prepend(badge);
-        }
-      }
-    });
-    document.querySelectorAll('.prism-rail-qslot').forEach((slot) => {
-      if (slot instanceof HTMLElement) {
-        slot.classList.toggle('is-active', slot.dataset.id === nextActiveId);
-      }
-    });
-  }
-
-  function syncPairedSlidersInDom(sliderKey, rawVal, sourceInput = null) {
-    document.querySelectorAll(`input[data-config-slider="${sliderKey}"]`).forEach((el) => {
-      if (!(el instanceof HTMLInputElement) || el === sourceInput) return;
-      if (el.dataset.inlineVol === 'true') {
-        const volUi = Math.round(rawVal * 100);
-        el.value = String(volUi);
-        el.style.setProperty('--prism-pct', `${volUi}%`);
-        return;
-      }
-      const row = el.closest('.prism-slider-row');
-      const scale = Number(row?.dataset.scale || 1);
-      const decimals = Number(row?.dataset.decimals || 0);
-      const suffix = row?.dataset.suffix || '';
-      const defRaw = Number(row?.dataset.default ?? 0);
-      const min = Number(el.min);
-      const max = Number(el.max);
-      const uiVal = rawVal * scale;
-      const pct = max > min ? Math.max(0, Math.min(100, ((uiVal - min) / (max - min)) * 100)) : 0;
-      el.value = String(uiVal);
-      el.style.setProperty('--prism-pct', `${pct.toFixed(1)}%`);
-      if (row instanceof HTMLElement) {
-        const valSpan = row.querySelector('.prism-slider-val');
-        if (valSpan) {
-          valSpan.textContent = `${decimals > 0 ? uiVal.toFixed(decimals) : Math.round(uiVal)}${suffix}`;
-        }
-        row.dataset.dirty = row.dataset.nullable === 'true' ? 'true' : (Math.abs(rawVal - defRaw) > 0.001 ? 'true' : 'false');
-      }
-    });
-  }
-
-  function syncNullableFollowersInDom(fallbackKey, fallbackRawVal) {
-    document
-      .querySelectorAll(`.prism-slider-row[data-nullable="true"][data-fallback-key="${fallbackKey}"]`)
-      .forEach((fRow) => {
-        if (!(fRow instanceof HTMLElement) || fRow.dataset.dirty === 'true') return;
-        const comp = fRow.dataset.comp || '';
-        if (comp === 'popover') return;
-        const fInput = fRow.querySelector('input.prism-range');
-        if (!(fInput instanceof HTMLInputElement)) return;
-        let targetRaw = fallbackRawVal;
-        if (fallbackKey === 'glassOpacity' && comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
-          const effNext = { ...getEffectiveConfig(), glassOpacity: fallbackRawVal };
-          targetRaw = resolveComponentDefaultAlpha(comp, effNext, getResolvedPolarity(effNext) === 'light');
-        }
-        const fScale = Number(fRow.dataset.scale || 1);
-        const fDecimals = Number(fRow.dataset.decimals || 0);
-        const fSuffix = fRow.dataset.suffix || '';
-        const fMin = Number(fInput.min);
-        const fMax = Number(fInput.max);
-        const fUiVal = Math.max(fMin, Math.min(fMax, targetRaw * fScale));
-        const { pct: fPct, display: rawDisp } = sliderMeta(fUiVal, fMin, fMax, fDecimals, fSuffix);
-        fInput.value = String(fUiVal);
-        fInput.style.setProperty('--prism-pct', `${fPct}%`);
-        const fValSpan = fRow.querySelector('.prism-slider-val');
-        if (fValSpan) {
-          fValSpan.textContent = tr('glass.followMainFmt', { val: rawDisp });
-        }
-      });
-  }
-
-  function syncSurfaceTintsHeaderInDom() {
-    const box = document.querySelector('.prism-surface-tints-box');
-    if (!box) return;
-    const eff = getEffectiveConfig();
-    const tintsMap = eff.surfaceTints && typeof eff.surfaceTints === 'object' ? eff.surfaceTints : DEFAULT_SURFACE_TINTS;
-    let customCount = 0;
-    for (const comp of SURFACE_TINT_COMPONENTS) {
-      const ent = tintsMap[comp] || DEFAULT_SURFACE_TINT_ENTRY;
-      const op = comp === 'sidebar' ? (eff.sidebarOpacity ?? ent.opacity ?? null) : (ent.opacity ?? null);
-      const tone = Number(ent.tone || 0);
-      const tint = typeof ent.tint === 'string' ? ent.tint.trim() : '';
-      if (op !== null || tone !== 0 || tint !== '') customCount += 1;
-
-      const rowItem = box.querySelector(`.prism-comp-item[data-comp-row="${comp}"]`);
-      const swatchBtn = rowItem?.querySelector('.prism-comp-swatch-btn');
-      if (swatchBtn) {
-        const hasTintOrTone = tone !== 0 || tint !== '';
-        const existingDot = swatchBtn.querySelector('.prism-comp-swatch-dot');
-        if (hasTintOrTone && !existingDot) {
-          const dot = document.createElement('span');
-          dot.className = 'prism-comp-swatch-dot';
-          dot.setAttribute('aria-hidden', 'true');
-          swatchBtn.appendChild(dot);
-        } else if (!hasTintOrTone && existingDot) {
-          existingDot.remove();
-        }
-      }
-    }
-    const badge = box.querySelector('.prism-surface-tints-badge');
-    if (badge) {
-      badge.textContent = customCount > 0 ? tr('glass.comp.customCount', { n: customCount }) : tr('glass.comp.allAuto');
-      badge.classList.toggle('is-custom', customCount > 0);
-    }
-    const resetAllBtn = box.querySelector('[data-action="reset-all-surface-tints"]');
-    if (resetAllBtn instanceof HTMLButtonElement) {
-      resetAllBtn.disabled = customCount === 0;
-    }
-  }
-
   function renderActiveTabContentHtml() {
     if (store.activeTab === 'skin') return renderPrismSkinTab();
     if (store.activeTab === 'playback') return renderPlaybackTab();
@@ -4714,15 +879,136 @@ function bootPrismStudioApp() {
     return renderLibraryTab();
   }
 
-  // Re-renders dynamic controls, tabs, transport, and drawers while keeping #prism-mini-stage video uninterrupted!
+  let disposeCanvasPanZoom = null;
+
+  function clearCanvasPanZoomBinding() {
+    if (typeof disposeCanvasPanZoom === 'function') {
+      const fn = disposeCanvasPanZoom;
+      disposeCanvasPanZoom = null;
+      try {
+        fn();
+      } catch {
+        // ignore pan/zoom cleanup errors
+      }
+    }
+  }
+
+  function rebindCanvasPanZoom() {
+    clearCanvasPanZoomBinding();
+    disposeCanvasPanZoom = attachCanvasPanZoom();
+  }
+
+  function renderVisualEditorHost() {
+    const host = document.getElementById('prism-visual-editor-host');
+    if (!host) return;
+    if (!store.editorModalOpen) {
+      clearCanvasPanZoomBinding();
+      if (host.innerHTML) host.innerHTML = '';
+      return;
+    }
+    const prevInspScroll = document.getElementById('prism-ve-inspector-pane')?.scrollTop || 0;
+    host.innerHTML = renderVisualEditorModalHtml();
+    const insp = document.getElementById('prism-ve-inspector-pane');
+    if (insp) insp.scrollTop = prevInspScroll;
+    rebindCanvasPanZoom();
+    syncVisualCanvasZoomTransform();
+  }
+
+  function capturePreservedFocus() {
+    const el = document.activeElement;
+    if (!el || !el.id || !PRESERVE_FOCUS_IDS.includes(el.id)) return null;
+    return {
+      id: el.id,
+      selStart: el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.selectionStart : null,
+      selEnd: el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.selectionEnd : null,
+    };
+  }
+
+  function restorePreservedFocus(snap) {
+    if (!snap) return;
+    const el = document.getElementById(snap.id);
+    if (!el) return;
+    el.focus();
+    if (
+      (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
+      snap.selStart !== null &&
+      snap.selEnd !== null
+    ) {
+      try {
+        el.setSelectionRange(snap.selStart, snap.selEnd);
+      } catch {
+        // ignore non-text input selection errors
+      }
+    }
+  }
+
+  function bindVirtualPickerScrollListeners() {
+    document.querySelectorAll('.prism-mini-picker-grid[data-virtual-picker]').forEach((el) => {
+      if (!(el instanceof HTMLElement) || el.dataset.vscrollBound === '1') return;
+      el.dataset.vscrollBound = '1';
+      let ticking = false;
+      el.addEventListener(
+        'scroll',
+        () => {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(() => {
+            ticking = false;
+            const model = computeLibraryModel();
+            if (model.visibleItems.length > 24) {
+              el.innerHTML = renderPlaylistPickerGridHtml(model.visibleItems, store.playlistDraft.pickedIds, el);
+            }
+          });
+        },
+        { passive: true },
+      );
+    });
+  }
+
+  function mountPopoutShell() {
+    const app = document.getElementById('app');
+    if (!app) return;
+    app.classList.add('agy-prism-visual-editor');
+    app.dataset.prismMode = 'visual-editor';
+    app.innerHTML = renderVisualEditorPopoutShellHtml();
+    app.dataset.prismReady = 'true';
+    rebindCanvasPanZoom();
+    syncVisualCanvasZoomTransform();
+    syncMiniPreviewMedia();
+    syncOpticalCssVars();
+    renderToastStack();
+  }
+
   function renderActiveSurface() {
     const app = document.getElementById('app');
     if (!app) return;
+
+    if (store.isPopoutMode) {
+      const prevInspScroll = document.getElementById('prism-ve-inspector-pane')?.scrollTop || 0;
+      const prevTreeScroll = document.querySelector('.prism-ve-tree-pane')?.scrollTop || 0;
+      const focusSnap = capturePreservedFocus();
+      app.classList.add('agy-prism-visual-editor');
+      app.innerHTML = renderVisualEditorPopoutShellHtml();
+      app.dataset.prismReady = 'true';
+      const insp = document.getElementById('prism-ve-inspector-pane');
+      if (insp) insp.scrollTop = prevInspScroll;
+      const tree = document.querySelector('.prism-ve-tree-pane');
+      if (tree) tree.scrollTop = prevTreeScroll;
+      restorePreservedFocus(focusSnap);
+      rebindCanvasPanZoom();
+      syncVisualCanvasZoomTransform();
+      syncMiniPreviewMedia();
+      syncOpticalCssVars();
+      renderToastStack();
+      return;
+    }
 
     if (!document.getElementById('prism-mini-stage')) {
       mountFullShell();
       return;
     }
+
+    const focusSnap = capturePreservedFocus();
 
     const brandSub = document.getElementById('prism-brand-sub');
     if (brandSub) brandSub.textContent = tr('app.subtitle');
@@ -4731,12 +1017,7 @@ function bootPrismStudioApp() {
     if (langBtn) langBtn.textContent = `🌐 ${tr('app.langToggle')}`;
 
     updateTopStatusIndicators();
-
-    const transportHost = document.getElementById('prism-transport-host');
-    if (transportHost) transportHost.innerHTML = renderTransportBarHtml();
-
-    const railExtras = document.getElementById('prism-rail-extras');
-    if (railExtras) railExtras.innerHTML = renderRailExtrasHtml();
+    updateLeftRailPanels();
 
     const tabsHost = document.getElementById('prism-tabs-bar');
     if (tabsHost) {
@@ -4761,33 +1042,35 @@ function bootPrismStudioApp() {
 
     const scroller = document.getElementById('prism-tab-scroll');
     const prevScroll = scroller ? scroller.scrollTop : 0;
-    const activeFocusedId = document.activeElement?.id || '';
-    const selStart = document.activeElement?.selectionStart ?? null;
 
     if (scroller) {
       scroller.innerHTML = renderActiveTabContentHtml();
       scroller.scrollTop = prevScroll;
-    }
-
-    if (activeFocusedId === 'prism-lib-search') {
-      const searchEl = document.getElementById('prism-lib-search');
-      if (searchEl) {
-        searchEl.focus();
-        if (selStart !== null) searchEl.setSelectionRange(selStart, selStart);
-      }
+      attachLibraryThumbHoverController(scroller);
     }
 
     const drawerHost = document.getElementById('prism-drawer-host');
-    if (drawerHost) drawerHost.innerHTML = renderDrawerHtml();
+    if (drawerHost) {
+      const prevDrawerScroll = drawerHost.querySelector('.prism-drawer-body')?.scrollTop || 0;
+      drawerHost.innerHTML = renderDrawerHtml();
+      const nextBody = drawerHost.querySelector('.prism-drawer-body');
+      if (nextBody && prevDrawerScroll > 0) nextBody.scrollTop = prevDrawerScroll;
+    }
 
+    renderVisualEditorHost();
     renderUpdateReconnectOverlay();
+    bindVirtualPickerScrollListeners();
+    restorePreservedFocus(focusSnap);
     syncMiniPreviewMedia();
     syncOpticalCssVars();
+    syncRegionBadgesInDom();
   }
 
   function mountFullShell() {
     const app = document.getElementById('app');
     if (!app) return;
+    const eff = getEffectiveConfig();
+    const skinAttr = store.skinEnabled ? 'true' : 'false';
 
     app.innerHTML = `
       <header class="prism-topbar">
@@ -4799,9 +1082,10 @@ function bootPrismStudioApp() {
           </div>
         </div>
         <div class="prism-topbar-actions">
+          ${renderSaveStatusPillHtml()}
           <button id="prism-master-toggle-btn" type="button" class="prism-master-toggle"
-                  role="switch" aria-checked="${store.skinEnabled ? 'true' : 'false'}"
-                  data-enabled="${store.skinEnabled ? 'true' : 'false'}"
+                  role="switch" aria-checked="${skinAttr}"
+                  data-enabled="${skinAttr}"
                   data-action="toggle-skin-master"
                   title="${esc(getMasterToggleHint(store.skinEnabled))}">
             <span class="prism-master-toggle-dot"></span>
@@ -4820,41 +1104,45 @@ function bootPrismStudioApp() {
       <div id="prism-autostart-banner-host"></div>
 
       <div class="prism-workspace">
-        <!-- Sticky 21:9 Live Workbench Island Mini-Preview & Left Rail on >=840px -->
+        <!-- Sticky 21:9 Live Workbench Island Mini-Preview & D8 Minimal Left Rail on >=840px -->
         <section class="prism-stage-dock prism-left-rail" aria-label="${esc(tr('preview.label'))}">
-          <div class="prism-preview-card">
-            <div id="prism-mini-stage" class="prism-mini-stage prism-preview-stage">
+          <div class="prism-preview-card" data-skin-enabled="${skinAttr}">
+            <div id="prism-mini-stage" class="prism-mini-stage prism-preview-stage" data-skin-enabled="${skinAttr}">
               <div id="mini-media-layer" class="mini-media-layer"></div>
               <div class="mini-blur-veil"></div>
               <div class="mini-scrim"></div>
               <div class="mini-vignette"></div>
               <div class="mini-grain"></div>
 
-              <!-- Simulated Antigravity 2.0 Hub Islands -->
-              <div id="prism-mini-hub" class="mini-hub-shell" data-layout="islands" data-topbar-style="pills">
+              <!-- Layer 5: Clickable Simulated Antigravity 2.0 Hub Islands -->
+              <div id="prism-mini-hub" class="mini-hub-shell" data-layout="${esc(eff.layoutMode)}" data-topbar-style="${esc(eff.topbarStyle)}">
                 <div class="mini-topbar">
-                  <div class="mini-topbar-pill">
+                  <div class="mini-topbar-pill" data-jump-region="topbar" data-action="jump-to-region" data-region="topbar" title="${esc(tr('region.topbar'))}">
                     <span class="mini-bar" style="width:45%"></span>
                     <span class="mini-bar" style="width:28%"></span>
                   </div>
-                  <div class="mini-wco-pill"><span></span><span></span><span></span></div>
+                  <div class="mini-wco-pill" data-jump-region="wco" data-action="jump-to-region" data-region="wco" title="${esc(tr('region.wco'))}">
+                    <span></span><span></span><span></span>
+                  </div>
                 </div>
 
-                <div class="mini-island mini-sidebar">
+                <div class="mini-island mini-sidebar" data-jump-region="sidebar" data-action="jump-to-region" data-region="sidebar" title="${esc(tr('region.sidebar'))}">
                   <div class="mini-dots"><span></span><span></span><span></span></div>
                   <div class="mini-nav-row is-active"><span class="mini-bar" style="width:70%"></span></div>
                   <div class="mini-nav-row"><span class="mini-bar" style="width:52%"></span></div>
                   <div class="mini-nav-row"><span class="mini-bar" style="width:60%"></span></div>
                 </div>
 
-                <div class="mini-island mini-center">
+                <div class="mini-island mini-center" data-jump-region="workspace" data-action="jump-to-region" data-region="workspace" title="${esc(tr('region.workspace'))}">
                   <div style="display:flex;flex-direction:column;gap:3px">
-                    <div class="mini-bubble"><span class="mini-bubble-line"></span></div>
-                    <div class="mini-code-card">
+                    <div class="mini-bubble" data-jump-region="card" data-action="jump-to-region" data-region="card" title="${esc(tr('region.card'))}">
+                      <span class="mini-bubble-line"></span>
+                    </div>
+                    <div class="mini-code-card" data-jump-region="card" data-action="jump-to-region" data-region="card">
                       <span class="mini-code-kw">const</span> prism = <span class="mini-code-fn">glassSkin</span>({ mode: <span class="mini-code-str">'islands'</span> });
                     </div>
                   </div>
-                  <div class="mini-composer">
+                  <div class="mini-composer" data-jump-region="composer" data-action="jump-to-region" data-region="composer" title="${esc(tr('region.composer'))}">
                     <div class="mini-composer-input">
                       <span class="mini-caret"></span>
                       <span>Ask Antigravity…</span>
@@ -4866,22 +1154,43 @@ function bootPrismStudioApp() {
                   </div>
                 </div>
 
-                <div class="mini-island mini-aux">
+                <div class="mini-island mini-aux" data-jump-region="rightPane" data-action="jump-to-region" data-region="rightPane" title="${esc(tr('region.rightPane'))}">
                   <div class="mini-bar" style="width:58%;margin-bottom:2px"></div>
                   <div class="mini-nav-row is-active"><span class="mini-bar" style="width:76%"></span></div>
                   <div class="mini-nav-row"><span class="mini-bar" style="width:64%"></span></div>
                 </div>
               </div>
 
+              <!-- Layer 6: Skin Disabled Native Overlay (z-index: 6 < .mini-hud-badges z-index: 8) -->
+              <div class="mini-disabled-overlay" aria-hidden="${store.skinEnabled ? 'true' : 'false'}">
+                <span class="mini-disabled-label">${esc(tr('preview.disabledTitle'))}</span>
+                <button type="button" class="prism-btn prism-btn-sm prism-btn-primary" data-action="enable-skin">
+                  ${esc(tr('preview.disabledReenable'))}
+                </button>
+              </div>
+
+              <!-- Layer 8: HUD Badges, Eco Live Media Toggle & Visual Editor Entry -->
               <div class="mini-hud-badges">
                 <span id="mini-hud-layout" class="mini-hud-tag">ISLANDS · 8px</span>
                 <span id="mini-hud-accent" class="mini-hud-tag">PRISM</span>
+                <button id="mini-hud-live-btn" type="button" class="mini-hud-tag mini-hud-toggle-btn"
+                        data-action="toggle-preview-live"
+                        data-live="${eff.previewLiveMedia ? 'true' : 'false'}"
+                        title="${esc(tr('preview.liveToggleHint'))}">
+                  ${esc(eff.previewLiveMedia ? tr('preview.liveOn') : tr('preview.liveOff'))}
+                </button>
+                <button id="mini-hud-editor-btn" type="button" class="mini-hud-tag mini-hud-toggle-btn"
+                        data-action="open-visual-editor"
+                        title="${esc(tx('editorOpenModalHint'))}">
+                  🎨 ${esc(tx('editorZoomEdit'))}
+                </button>
               </div>
             </div>
 
             <div id="prism-transport-host" class="prism-transport-bar"></div>
           </div>
 
+          <div id="prism-media-health-host"></div>
           <div id="prism-rail-extras" class="prism-rail-extras"></div>
         </section>
 
@@ -4892,6 +1201,8 @@ function bootPrismStudioApp() {
         </main>
       </div>
 
+      <!-- All Overlays Strictly Inside #app.agy-prism-root with Non-<body> agy-prism-* Isolation Classes (#15) -->
+      <div id="prism-visual-editor-host" class="agy-prism-visual-editor"></div>
       <div id="prism-drawer-host" class="agy-prism-drawer-host"></div>
       <div id="prism-update-reconnect-host" class="agy-prism-reconnect-host"></div>
       <div id="prism-drop-host" class="agy-prism-drop-host"></div>
@@ -4905,29 +1216,78 @@ function bootPrismStudioApp() {
     app.dataset.prismReady = 'true';
     renderActiveSurface();
 
+    // Virtual scroll + capture-phase <details data-region> toggle persistence on #prism-tab-scroll
     const scroller = document.getElementById('prism-tab-scroll');
     if (scroller) {
       let ticking = false;
-      scroller.addEventListener('scroll', () => {
-        if (store.activeTab !== 'library' || ticking) return;
-        ticking = true;
-        requestAnimationFrame(() => {
-          ticking = false;
-          const model = computeLibraryModel();
-          if (model.visibleItems.length > 120) {
-            const nextWin = computeVirtualSlice(model.visibleItems.length);
-            if (nextWin.start !== store.virtualWindow.start || nextWin.end !== store.virtualWindow.end) {
-              const gridHost = document.getElementById('prism-lib-grid-host');
-              if (gridHost) gridHost.innerHTML = renderLibraryGridHtml(model);
+      scroller.addEventListener(
+        'scroll',
+        () => {
+          if (store.activeTab !== 'library' || ticking) return;
+          ticking = true;
+          requestAnimationFrame(() => {
+            ticking = false;
+            const model = computeLibraryModel();
+            if (model.visibleItems.length > VIRTUAL_SCROLL_THRESHOLD) {
+              const nextWin = computeVirtualSlice(model.visibleItems.length);
+              if (nextWin.start !== store.virtualWindow.start || nextWin.end !== store.virtualWindow.end) {
+                const gridHost = document.getElementById('prism-lib-grid-host');
+                if (gridHost) gridHost.innerHTML = renderLibraryGridHtml(model);
+              }
             }
+          });
+        },
+        { passive: true },
+      );
+
+      // Capture-phase toggle listener because `<details>` toggle event does NOT bubble
+      scroller.addEventListener(
+        'toggle',
+        (ev) => {
+          const det = ev.target;
+          if (!(det instanceof HTMLDetailsElement)) return;
+          const rid = det.dataset.region;
+          if (!rid || (!REGION_UI_ORDER.includes(rid) && !REGION_IDS.includes(rid))) return;
+          setRegionOpen(rid, det.open);
+          const toggleAllBtn = document.querySelector('[data-action="toggle-all-regions"]');
+          if (toggleAllBtn) {
+            toggleAllBtn.textContent = hasAnyRegionOpen() ? tr('region.collapseAll') : tr('region.expandAll');
           }
-        });
-      });
+        },
+        true,
+      );
+
+      attachLibraryThumbHoverController(scroller);
+    }
+
+    // IntersectionObserver on #prism-mini-stage to pause preview media when scrolled off-screen
+    const miniStage = document.getElementById('prism-mini-stage');
+    if (miniStage && typeof window.IntersectionObserver === 'function') {
+      try {
+        if (store.runtime.miniStageObserver) {
+          store.runtime.miniStageObserver.disconnect();
+        }
+        const io = new window.IntersectionObserver(
+          (entries) => {
+            const ent = entries[entries.length - 1];
+            const inView = Boolean(ent && ent.isIntersecting);
+            if (inView !== store.runtime.isMiniStageInViewport) {
+              store.runtime.isMiniStageInViewport = inView;
+              syncMiniPreviewMedia();
+            }
+          },
+          { threshold: 0.05 },
+        );
+        io.observe(miniStage);
+        store.runtime.miniStageObserver = io;
+      } catch {
+        store.runtime.isMiniStageInViewport = true;
+      }
     }
   }
 
   // ==========================================================================
-  // File Upload (Drag & Drop + Picker up to 512 MB + SHA-256 Duplicate Toast)
+  // Domain Actions: Upload, Library, Wallpaper, Master Toggle, Snapshots, Update
   // ==========================================================================
   async function uploadFiles(fileList) {
     const files = Array.from(fileList || []);
@@ -4975,9 +1335,6 @@ function bootPrismStudioApp() {
     renderActiveSurface();
   }
 
-  // ==========================================================================
-  // High-Level Domain Actions
-  // ==========================================================================
   async function reloadLibrary(refresh = true) {
     try {
       const data = await apiJson(`/api/library?refresh=${refresh ? 1 : 0}`);
@@ -5014,54 +1371,279 @@ function bootPrismStudioApp() {
     }
   }
 
+  // #2 Coalescing Master Skin Toggle Queue (never drops rapid clicks; unified with exec-restore-host)
   async function executeSkinToggle(nextEnabled) {
-    if (store.masterToggleBusy) return;
-    const prevEnabled = store.skinEnabled;
     const targetEnabled = Boolean(nextEnabled);
+    if (store.masterToggleBusy) {
+      store.runtime.pendingToggleTarget = targetEnabled;
+      return;
+    }
+    const prevEnabled = store.skinEnabled;
     store.masterToggleBusy = true;
     store.skinEnabled = targetEnabled;
     store.config = sanitizeConfig({ skinEnabled: targetEnabled }, store.config);
     updateTopStatusIndicators();
+    syncOpticalCssVars();
+    syncMiniPreviewMedia();
+    updateLeftRailPanels();
+
+    let succeeded = false;
     try {
       const res = await apiJson('/api/skin/toggle', {
         method: 'POST',
         body: { enabled: targetEnabled },
+        timeoutMs: 8000,
       });
-      ingestServerState(res);
-      if (typeof res?.skinEnabled === 'boolean' && typeof res?.state?.skinEnabled !== 'boolean') {
-        store.skinEnabled = res.skinEnabled;
-        store.config = sanitizeConfig({ skinEnabled: res.skinEnabled }, store.config);
-      }
-      if (targetEnabled && res?.state?.sessionAwake === undefined && res?.sessionAwake === undefined) {
-        store.sessionAwake = true;
-      }
-      store.masterToggleBusy = false;
-      syncOpticalCssVars();
-      updateTopStatusIndicators();
-      if (store.activeTab === 'system') {
-        renderActiveSurface();
-      }
-      if (targetEnabled) {
-        ensureStandbyStatusPoll();
+      succeeded = true;
+      if (store.runtime.pendingToggleTarget === null || store.runtime.pendingToggleTarget === targetEnabled) {
+        ingestServerState(res);
+        if (typeof res?.skinEnabled === 'boolean' && typeof res?.state?.skinEnabled !== 'boolean') {
+          store.skinEnabled = res.skinEnabled;
+          store.config = sanitizeConfig({ skinEnabled: res.skinEnabled }, store.config);
+        }
+        if (targetEnabled && res?.state?.sessionAwake === undefined && res?.sessionAwake === undefined) {
+          store.sessionAwake = true;
+        }
       }
       showToast(
         store.skinEnabled ? tx('skinToggleToastOn') : tx('skinToggleToastOff'),
         store.skinEnabled ? 'ok' : 'info',
-        3200,
+        3000,
       );
     } catch (err) {
-      store.skinEnabled = prevEnabled;
-      store.config = sanitizeConfig({ skinEnabled: prevEnabled }, store.config);
-      store.masterToggleBusy = false;
-      syncOpticalCssVars();
-      updateTopStatusIndicators();
-      if (store.activeTab === 'system') {
-        renderActiveSurface();
+      if (store.runtime.pendingToggleTarget === null || store.runtime.pendingToggleTarget === targetEnabled) {
+        store.skinEnabled = prevEnabled;
+        store.config = sanitizeConfig({ skinEnabled: prevEnabled }, store.config);
       }
       showToast(err.message || (targetEnabled ? 'Enable failed' : 'Disable failed'), 'danger');
+    } finally {
+      store.masterToggleBusy = false;
+      const queued = store.runtime.pendingToggleTarget;
+      store.runtime.pendingToggleTarget = null;
+      syncOpticalCssVars();
+      syncMiniPreviewMedia();
+      updateLeftRailPanels();
+      updateTopStatusIndicators();
+      if (store.activeTab === 'system' || store.editorModalOpen || store.isPopoutMode) {
+        renderActiveSurface();
+      }
+      if (store.skinEnabled) ensureStandbyStatusPoll();
+      if (queued !== null && (!succeeded || queued !== store.skinEnabled)) {
+        void executeSkinToggle(queued);
+      }
     }
   }
 
+  // D4 Named Snapshot Operations (protected by store.profileOpBusy mutex + surgical #prism-presets-grid updates)
+  async function applyProfilePreset(presetId) {
+    if (!presetId || store.profileOpBusy) return;
+    store.profileOpBusy = true;
+    refreshPresetsSurfacesSurgically();
+    try {
+      await flushConfigPatch({ flush: true });
+      const res = await apiJson('/api/preset/apply', {
+        method: 'POST',
+        body: { presetId },
+        timeoutMs: 8000,
+      });
+      ingestServerState(res, { forceConfig: true });
+      if (Array.isArray(res.presets)) store.presets = res.presets;
+      if (res.wallpaperFallback) {
+        showToast(tr('preset.wallpaperMissingToast'), 'warn', 4400);
+      }
+      syncMiniPreviewMedia();
+      syncOpticalCssVars();
+      renderActiveSurface();
+    } catch (err) {
+      showToast(err.message || 'Failed to apply preset', 'danger');
+    } finally {
+      store.profileOpBusy = false;
+      refreshPresetsSurfacesSurgically();
+    }
+  }
+
+  async function saveNewProfilePreset() {
+    if (store.profileOpBusy) return;
+    const nameIn = document.getElementById('prism-preset-name-in');
+    const descIn = document.getElementById('prism-preset-desc-in');
+    const wallCb = document.getElementById('prism-preset-include-wall');
+    if (nameIn instanceof HTMLInputElement) store.presetDraft.name = nameIn.value;
+    if (descIn instanceof HTMLInputElement) store.presetDraft.description = descIn.value;
+    if (wallCb instanceof HTMLInputElement) store.presetDraft.includeWallpaper = wallCb.checked;
+
+    const userCount = getVisiblePresets().filter((p) => !p.builtin).length;
+    const name = store.presetDraft.name.trim() || tr('preset.defaultNameFmt', { n: userCount + 1 });
+    const description = store.presetDraft.description.trim();
+    const includeWallpaper = Boolean(store.presetDraft.includeWallpaper);
+
+    store.profileOpBusy = true;
+    refreshPresetsSurfacesSurgically();
+    try {
+      await flushConfigPatch({ flush: true });
+      const patch = buildSnapshotConfigPatch(includeWallpaper);
+      const res = await apiJson('/api/presets/save', {
+        method: 'POST',
+        body: { name, description, patch, includeWallpaper, mode: 'create' },
+        timeoutMs: 8000,
+      });
+      ingestServerState(res);
+      if (Array.isArray(res.presets)) store.presets = res.presets;
+      store.presetDraft = { name: '', description: '', includeWallpaper: false };
+      if (nameIn instanceof HTMLInputElement) nameIn.value = '';
+      if (descIn instanceof HTMLInputElement) descIn.value = '';
+      if (wallCb instanceof HTMLInputElement) wallCb.checked = false;
+      showToast(tx('presetSaved'), 'ok');
+    } catch (err) {
+      showToast(err.message || 'Failed to save preset', 'danger');
+    } finally {
+      store.profileOpBusy = false;
+      refreshPresetsSurfacesSurgically();
+    }
+  }
+
+  async function overwriteProfilePreset(presetId) {
+    if (!presetId || store.profileOpBusy) return;
+    const target = getVisiblePresets().find((p) => p.id === presetId);
+    if (!target) return;
+    if (target.builtin) {
+      showToast(tr('preset.factoryReadOnly'), 'warn');
+      return;
+    }
+    setArmedConfirm(null);
+    store.profileOpBusy = true;
+    refreshPresetsSurfacesSurgically();
+    try {
+      await flushConfigPatch({ flush: true });
+      const includeWallpaper = Boolean(
+        target.includesWallpaper ||
+          target.includeWallpaper ||
+          target.wallpaperId ||
+          target.patch?.activeWallpaperId ||
+          target.patch?.wallpaperId,
+      );
+      const patch = buildSnapshotConfigPatch(includeWallpaper);
+      const res = await apiJson('/api/presets/save', {
+        method: 'POST',
+        body: {
+          id: target.id,
+          name: target.name,
+          description: target.description || '',
+          patch,
+          includeWallpaper,
+          mode: 'overwrite',
+        },
+        timeoutMs: 8000,
+      });
+      ingestServerState(res);
+      if (Array.isArray(res.presets)) store.presets = res.presets;
+      showToast(tr('preset.overwrittenToast'), 'ok');
+    } catch (err) {
+      showToast(err.message || 'Failed to overwrite preset', 'danger');
+    } finally {
+      store.profileOpBusy = false;
+      refreshPresetsSurfacesSurgically();
+    }
+  }
+
+  async function commitRenamePreset(presetId) {
+    if (!presetId || store.profileOpBusy) return;
+    const inEl = document.getElementById('prism-preset-rename-in');
+    const nextName = (inEl instanceof HTMLInputElement ? inEl.value : store.presetRenameDraft || '').trim();
+    if (!nextName) return;
+    store.profileOpBusy = true;
+    refreshPresetsSurfacesSurgically();
+    try {
+      const res = await apiJson('/api/presets/rename', {
+        method: 'POST',
+        body: { id: presetId, name: nextName },
+        timeoutMs: 8000,
+      });
+      ingestServerState(res);
+      if (Array.isArray(res.presets)) store.presets = res.presets;
+      store.presetRenameTargetId = '';
+      store.presetRenameDraft = '';
+      showToast(tr('preset.renamedToast'), 'ok');
+    } catch (err) {
+      showToast(err.message || 'Rename preset failed', 'danger');
+    } finally {
+      store.profileOpBusy = false;
+      refreshPresetsSurfacesSurgically();
+    }
+  }
+
+  async function duplicateProfilePreset(presetId) {
+    if (!presetId || store.profileOpBusy) return;
+    store.profileOpBusy = true;
+    refreshPresetsSurfacesSurgically();
+    try {
+      const res = await apiJson('/api/presets/duplicate', {
+        method: 'POST',
+        body: { id: presetId },
+        timeoutMs: 8000,
+      });
+      ingestServerState(res);
+      if (Array.isArray(res.presets)) store.presets = res.presets;
+      showToast(tr('preset.duplicatedToast'), 'ok');
+    } catch (err) {
+      showToast(err.message || 'Duplicate preset failed', 'danger');
+    } finally {
+      store.profileOpBusy = false;
+      refreshPresetsSurfacesSurgically();
+    }
+  }
+
+  async function deleteProfilePreset(presetId) {
+    if (!presetId || store.profileOpBusy) return;
+    setArmedConfirm(null);
+    store.profileOpBusy = true;
+    refreshPresetsSurfacesSurgically();
+    try {
+      const res = await apiJson('/api/presets/delete', {
+        method: 'POST',
+        body: { id: presetId },
+        timeoutMs: 8000,
+      });
+      ingestServerState(res);
+      if (Array.isArray(res.presets)) store.presets = res.presets;
+    } catch (err) {
+      showToast(err.message || 'Delete preset failed', 'danger');
+    } finally {
+      store.profileOpBusy = false;
+      refreshPresetsSurfacesSurgically();
+    }
+  }
+
+  // Dual-Mode Visual Appearance Editor Actions
+  async function closeVisualEditorModal() {
+    if (!store.editorModalOpen) return;
+    store.editorModalOpen = false;
+    store.editorMode = store.isPopoutMode ? 'popout' : 'none';
+    clearCanvasPanZoomBinding();
+    const host = document.getElementById('prism-visual-editor-host');
+    if (host) {
+      releaseExistingPreviewVideo(host);
+      host.innerHTML = '';
+    }
+    await flushConfigPatch({ flush: true, keepalive: true });
+    renderActiveSurface();
+  }
+
+  async function openPopoutVisualEditor() {
+    try {
+      await flushConfigPatch({ flush: true, keepalive: true });
+      const region = REGION_IDS.includes(store.selectedRegion) ? store.selectedRegion : 'sidebar';
+      await apiJson('/api/studio/popout', {
+        method: 'POST',
+        body: { mode: 'visual-editor', region },
+        timeoutMs: 8000,
+      });
+      showToast(tr('editor.popoutOpening'), 'ok', 3200);
+    } catch (err) {
+      showToast(err?.message || tr('editor.popoutFailed'), 'warn', 4800);
+    }
+  }
+
+  // FS Browser, WE Properties & Auto-Update Actions
   async function openFsBrowser(kind) {
     const startPath =
       kind === 'uploadDir'
@@ -5115,14 +1697,302 @@ function bootPrismStudioApp() {
     }
   }
 
+  async function fetchUpdateStatus(force = false) {
+    if (store.update.checking) return;
+    store.update.checking = true;
+    if (force) store.update.error = '';
+    updateTopStatusIndicators();
+    if (store.activeTab === 'system') renderActiveSurface();
+
+    try {
+      const url = force ? '/api/update/status?force=1' : '/api/update/status';
+      const data = await apiJson(url);
+      ingestUpdateStatus(data, { fromBootstrap: false });
+      if (
+        force &&
+        store.update.hasUpdate &&
+        store.update.latestVersion &&
+        store.update.dismissedVersion === store.update.latestVersion
+      ) {
+        store.update.dismissedVersion = '';
+        try {
+          window.localStorage?.removeItem('prism.dismissedUpdateVersion');
+        } catch {
+          // ignore storage restrictions
+        }
+      }
+      if (force && !store.update.hasUpdate && !store.update.offline) {
+        showToast(
+          tr('update.upToDate', { version: store.update.currentVersion || store.version || PLUGIN_VERSION }),
+          'ok',
+          3200,
+        );
+      }
+    } catch (err) {
+      store.update.offline = true;
+      store.update.checked = true;
+      if (force) {
+        showToast(err?.message || tr('update.offline'), 'warn', 3800);
+      }
+    } finally {
+      store.update.checking = false;
+      updateTopStatusIndicators();
+      if (store.activeTab === 'system') renderActiveSurface();
+    }
+  }
+
+  function startUpdateReconnectPolling(targetVersion = '') {
+    const rt = store.runtime;
+    if (rt.updateReconnectTimer) {
+      clearTimeout(rt.updateReconnectTimer);
+      rt.updateReconnectTimer = null;
+    }
+    disconnectStudioEvents();
+    const rec = store.update.reconnect;
+    rec.active = true;
+    rec.targetVersion = targetVersion || store.update.latestVersion || '';
+    rec.attempts = 0;
+    rec.maxAttempts = 24;
+    rec.sawDown = false;
+    rec.timedOut = false;
+    const prevPid = store.pid || 0;
+    renderUpdateReconnectOverlay();
+
+    const probeOnce = async () => {
+      if (!store.update.reconnect.active) return;
+      rec.attempts += 1;
+      const progEl = document.getElementById('prism-update-reconnect-progress');
+      if (progEl) progEl.textContent = `${rec.attempts} / ${rec.maxAttempts}`;
+      const descEl = document.getElementById('prism-update-reconnect-desc');
+      if (descEl) descEl.textContent = tr('update.restartingDesc', { attempts: Math.max(1, rec.attempts) });
+
+      try {
+        const res = await apiFetch('/api/healthz', { cache: 'no-store' });
+        if (!res.ok) {
+          rec.sawDown = true;
+        } else {
+          const data = await res.json().catch(() => null);
+          const versionMatched = Boolean(rec.targetVersion && data?.version === rec.targetVersion);
+          const pidChanged = Boolean(prevPid && data?.pid && data.pid !== prevPid);
+          const recoveredAfterDrop = Boolean(data?.ok && rec.sawDown && rec.attempts >= 2);
+          if (data?.ok && (versionMatched || pidChanged || recoveredAfterDrop)) {
+            rt.updateReconnectTimer = null;
+            window.location.reload();
+            return;
+          }
+        }
+      } catch {
+        rec.sawDown = true;
+      }
+
+      if (rec.attempts >= rec.maxAttempts) {
+        rt.updateReconnectTimer = null;
+        rec.timedOut = true;
+        renderUpdateReconnectOverlay();
+        return;
+      }
+      rt.updateReconnectTimer = setTimeout(() => {
+        void probeOnce();
+      }, 900);
+    };
+
+    rt.updateReconnectTimer = setTimeout(() => {
+      void probeOnce();
+    }, 900);
+  }
+
+  async function executeApplyUpdate() {
+    const u = store.update;
+    if (u.applying || !u.canSelfUpdate) return;
+    u.applying = true;
+    u.error = '';
+    u.standaloneRestartNeeded = false;
+    updateTopStatusIndicators();
+    if (store.activeTab === 'system') renderActiveSurface();
+
+    try {
+      const payload = {};
+      if (u.latestTag) payload.targetTag = u.latestTag;
+      if (u.latestVersion) payload.expectedVersion = u.latestVersion;
+      const res = await apiJson('/api/update/apply', { method: 'POST', body: payload, timeoutMs: 30000 });
+      u.applying = false;
+      const toVer = res.updatedTo || res.toVersion || u.latestVersion || '';
+      if (res.alreadyUpToDate) {
+        u.hasUpdate = false;
+        showToast(tr('update.upToDate', { version: u.currentVersion || store.version || PLUGIN_VERSION }), 'ok', 3400);
+        updateTopStatusIndicators();
+        if (store.activeTab === 'system') renderActiveSurface();
+        return;
+      }
+      if (res.willRestart) {
+        startUpdateReconnectPolling(toVer);
+        return;
+      }
+      u.hasUpdate = false;
+      u.standaloneRestartNeeded = true;
+      showToast(tr('update.standaloneRestartHint'), 'ok', 5600);
+      updateTopStatusIndicators();
+      if (store.activeTab === 'system') renderActiveSurface();
+    } catch (err) {
+      u.applying = false;
+      if (err?.code === 'ERR_GIT_DEV_CHECKOUT' || err?.code === 'ERR_SYMLINK_PLUGIN_ROOT') {
+        u.canSelfUpdate = false;
+        if (err.code === 'ERR_GIT_DEV_CHECKOUT') u.isGitCheckout = true;
+        if (err.code === 'ERR_SYMLINK_PLUGIN_ROOT') u.isSymlink = true;
+        u.error = err.code === 'ERR_GIT_DEV_CHECKOUT' ? tr('update.gitDevHint') : err?.message || tr('update.gitDevHint');
+      } else {
+        u.error = err?.message || String(err);
+      }
+      updateTopStatusIndicators();
+      if (store.activeTab === 'system') renderActiveSurface();
+    }
+  }
+
   // ==========================================================================
-  // Delegated Event Listeners (Zero Memory Leaks, Zero Lost Slider Capture)
+  // Unified Region/Slider Patch Builder & Surgical In-Place WCAG Refresh
+  // ==========================================================================
+  function syncWcagBlocksInDom() {
+    const blocks = document.querySelectorAll('.prism-color-wcag-block[data-region]');
+    if (!blocks.length) return;
+    const eff = getEffectiveConfig();
+    const isLight = getResolvedPolarity(eff) === 'light';
+    const tokens = resolveSchemeTokens(eff, isLight ? 'light' : 'dark');
+    for (const block of blocks) {
+      if (!(block instanceof HTMLElement)) continue;
+      const rid = block.dataset.region;
+      if (!rid || !REGION_IDS.includes(rid)) continue;
+      const entry = eff.regions?.[rid] || {};
+      const wcag = evaluateRegionFgContrast(rid, eff, tokens, isLight);
+      const tpl = document.createElement('template');
+      tpl.innerHTML = renderColorPickerWithWcag({
+        key: `regions.${rid}.fontColor`,
+        region: rid,
+        label: '',
+        value: entry.fontColor || '',
+        allowRaw: Boolean(entry.allowRawFontColor),
+        wcag,
+        eff,
+        tokens,
+        isLight,
+        showWcag: true,
+        showAllowRaw: false,
+        showCodeHint: false,
+      });
+      for (const old of block.querySelectorAll('.prism-wcag-row, .prism-low-opacity-hint')) {
+        old.remove();
+      }
+      const anchor = block.querySelector('.prism-fg-color-top');
+      const nextRow = tpl.content.querySelector('.prism-wcag-row');
+      const nextHint = tpl.content.querySelector('.prism-low-opacity-hint');
+      if (anchor) {
+        if (nextHint) anchor.insertAdjacentElement('afterend', nextHint);
+        if (nextRow) anchor.insertAdjacentElement('afterend', nextRow);
+      } else {
+        if (nextHint) block.prepend(nextHint);
+        if (nextRow) block.prepend(nextRow);
+      }
+    }
+  }
+
+  function buildPatchForSliderKey(sliderKey, rawVal) {
+    if (sliderKey === 'volume' && rawVal > 0 && getEffectiveConfig().muted) {
+      return { volume: rawVal, muted: false, audioEnabled: true };
+    }
+    if (sliderKey === 'sidebarOpacity') {
+      return { sidebarOpacity: rawVal, regions: { sidebar: { opacity: rawVal } } };
+    }
+    if (sliderKey === 'sidebarBlur') {
+      return { sidebarBlur: rawVal, regions: { sidebar: { blur: rawVal } } };
+    }
+    if (sliderKey === 'sidebarFontSize') {
+      return { sidebarFontSize: rawVal, regions: { sidebar: { fontSize: rawVal } } };
+    }
+    if (sliderKey.startsWith('regions.')) {
+      const [, rid, prop] = sliderKey.split('.');
+      if (rid && prop && REGION_IDS.includes(rid)) {
+        const val = prop === 'tone' || prop === 'blur' || prop === 'radius' || prop === 'fontSize'
+          ? rawVal === null ? null : Math.round(rawVal)
+          : rawVal;
+        const patch = { preset: 'custom', regions: { [rid]: { [prop]: val } } };
+        const isPinned = hasPerWallpaperPin(getActiveId());
+        if (rid === 'sidebar' && prop === 'radius') {
+          if (!isPinned) patch.leftSidebarRadius = val === null ? 'auto' : String(val);
+        } else if (rid === 'rightPane' && prop === 'radius') {
+          if (!isPinned) patch.rightSidebarRadius = val === null ? 'auto' : String(val);
+        } else if (rid === 'sidebar' && prop === 'opacity') {
+          patch.sidebarOpacity = val;
+        } else if (rid === 'sidebar' && prop === 'blur') {
+          patch.sidebarBlur = val;
+        } else if (rid === 'sidebar' && prop === 'fontSize') {
+          patch.sidebarFontSize = val;
+        }
+        return patch;
+      }
+    }
+    if (sliderKey.startsWith('surfaceTints.')) {
+      const [, comp, prop = 'opacity'] = sliderKey.split('.');
+      if (comp && REGION_IDS.includes(comp)) {
+        return { preset: 'custom', regions: { [comp]: { [prop]: rawVal } } };
+      }
+    }
+    return { [sliderKey]: rawVal };
+  }
+
+  // ==========================================================================
+  // Delegated Event Listeners (Anti-Swallow Guard, IME Guard, Zero Leaks)
   // ==========================================================================
   function attachEventDelegation() {
+    if (delegationBound) return;
     const app = document.getElementById('app');
     if (!app) return;
+    delegationBound = true;
 
-    // 1. Live <16ms Slider Dragging (`input`)
+    const releasePointerHold = () => {
+      const rt = store.runtime;
+      if (rt.pointerHoldSafetyTimer) {
+        clearTimeout(rt.pointerHoldSafetyTimer);
+        rt.pointerHoldSafetyTimer = null;
+      }
+      if (!rt.pointerDownInsideScroller) return;
+      rt.pointerDownInsideScroller = false;
+      if (rt.deferredExternalSnapshot) {
+        const snap = rt.deferredExternalSnapshot;
+        rt.deferredExternalSnapshot = null;
+        // Delay to next macrotask so current click event dispatches cleanly before any DOM update!
+        setTimeout(() => {
+          applyExternalStateSnapshot(snap);
+        }, 0);
+      }
+    };
+
+    app.addEventListener('pointerdown', (e) => {
+      if (
+        e.target instanceof Element &&
+        e.target.closest('#prism-tab-scroll, .prism-drawer, #prism-visual-editor-host')
+      ) {
+        const rt = store.runtime;
+        rt.pointerDownInsideScroller = true;
+        if (rt.pointerHoldSafetyTimer) clearTimeout(rt.pointerHoldSafetyTimer);
+        rt.pointerHoldSafetyTimer = setTimeout(releasePointerHold, 5000);
+      }
+    });
+    window.addEventListener('pointerup', releasePointerHold);
+    window.addEventListener('pointercancel', releasePointerHold);
+    window.addEventListener('blur', releasePointerHold);
+
+    app.addEventListener('compositionstart', () => {
+      store.runtime.imeComposing = true;
+    });
+    app.addEventListener('compositionend', () => {
+      store.runtime.imeComposing = false;
+      if (store.runtime.deferredExternalSnapshot) {
+        const snap = store.runtime.deferredExternalSnapshot;
+        store.runtime.deferredExternalSnapshot = null;
+        setTimeout(() => applyExternalStateSnapshot(snap), 0);
+      }
+    });
+
+    // 1. Live <16ms Input / Slider Dragging
     app.addEventListener('input', (e) => {
       const tEl = e.target;
       if (!(tEl instanceof HTMLElement)) return;
@@ -5133,7 +2003,6 @@ function bootPrismStudioApp() {
         if (gridHost) gridHost.innerHTML = renderLibraryGridHtml();
         return;
       }
-
       if (tEl.id === 'prism-preset-name-in' && tEl instanceof HTMLInputElement) {
         store.presetDraft.name = tEl.value;
         return;
@@ -5142,8 +2011,17 @@ function bootPrismStudioApp() {
         store.presetDraft.description = tEl.value;
         return;
       }
+      if (tEl.id === 'prism-preset-rename-in' && tEl instanceof HTMLInputElement) {
+        store.presetRenameDraft = tEl.value;
+        return;
+      }
       if (tEl.id === 'prism-pl-name-in' && tEl instanceof HTMLInputElement) {
         store.playlistDraft.name = tEl.value;
+        return;
+      }
+      if (tEl.id === 'prism-fs-path-in' && tEl instanceof HTMLInputElement) {
+        store.fsBrowser.manualPath = tEl.value;
+        store.fsBrowser.current = tEl.value;
         return;
       }
 
@@ -5157,9 +2035,10 @@ function bootPrismStudioApp() {
 
         if (tEl.dataset.inlineVol === 'true') {
           const vNorm = Math.round(uiVal) / 100;
-          const patch = vNorm > 0 && getEffectiveConfig().muted
-            ? { volume: vNorm, muted: false, audioEnabled: true }
-            : { volume: vNorm };
+          const patch =
+            vNorm > 0 && getEffectiveConfig().muted
+              ? { volume: vNorm, muted: false, audioEnabled: true }
+              : { volume: vNorm };
           syncPairedSlidersInDom('volume', vNorm, tEl);
           queueConfigPatch(patch, false);
           return;
@@ -5177,7 +2056,8 @@ function bootPrismStudioApp() {
           if (valSpan) {
             valSpan.textContent = `${decimals > 0 ? uiVal.toFixed(decimals) : Math.round(uiVal)}${suffix}`;
           }
-          row.dataset.dirty = row.dataset.nullable === 'true' ? 'true' : (Math.abs(rawVal - defRaw) > 0.001 ? 'true' : 'false');
+          row.dataset.dirty =
+            row.dataset.nullable === 'true' ? 'true' : Math.abs(rawVal - defRaw) > 0.001 ? 'true' : 'false';
         }
         if (sliderKey === 'liveBootDelay') {
           const delayHint = document.getElementById('prism-boot-delay-hint');
@@ -5187,50 +2067,31 @@ function bootPrismStudioApp() {
         }
 
         syncPairedSlidersInDom(sliderKey, rawVal, tEl);
-        if (sliderKey.startsWith('surfaceTints.')) {
-          const comp = sliderKey.split('.')[1];
-          if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
-            queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { opacity: rawVal } } }, false, true);
-            syncSurfaceTintsHeaderInDom();
-          }
-          return;
+        const patch = buildPatchForSliderKey(sliderKey, rawVal);
+        queueConfigPatch(patch, false, sliderKey !== 'liveBootDelay');
+        syncRegionBadgesInDom();
+        if (
+          sliderKey === 'sidebarOpacity' ||
+          sliderKey === 'glassOpacity' ||
+          sliderKey === 'glassFidelity' ||
+          sliderKey === 'chatGlassFidelity' ||
+          sliderKey.endsWith('.opacity') ||
+          sliderKey.endsWith('.tone')
+        ) {
+          syncWcagBlocksInDom();
         }
-        const extraPatch =
-          sliderKey === 'volume' && rawVal > 0 && getEffectiveConfig().muted
-            ? { volume: rawVal, muted: false, audioEnabled: true }
-            : sliderKey === 'sidebarOpacity'
-              ? { sidebarOpacity: rawVal, surfaceTints: { sidebar: { opacity: rawVal } } }
-              : { [sliderKey]: rawVal };
-        queueConfigPatch(extraPatch, false, sliderKey !== 'liveBootDelay');
-        if (sliderKey === 'sidebarOpacity') {
-          syncSurfaceTintsHeaderInDom();
-        }
+
         if (sliderKey === 'glassOpacity' || sliderKey === 'glassBlur') {
           syncNullableFollowersInDom(sliderKey, rawVal);
           if (sliderKey === 'glassBlur') {
             const roundedPx = Math.round(rawVal);
             document.querySelectorAll('.prism-blur-stop-chip').forEach((chip) => {
-              if (chip instanceof HTMLElement) {
+              if (chip instanceof HTMLElement && chip.dataset.action === 'set-num') {
                 chip.classList.toggle('is-active', Number(chip.dataset.val) === roundedPx);
               }
             });
           }
         }
-        return;
-      }
-
-      const toneComp = tEl.dataset.surfaceTone;
-      if (toneComp && SURFACE_TINT_COMPONENTS.includes(toneComp) && tEl instanceof HTMLInputElement) {
-        const tone = Math.max(-100, Math.min(100, Math.round(Number(tEl.value) || 0)));
-        const pct = ((tone + 100) / 200) * 100;
-        tEl.style.setProperty('--prism-pct', `${pct.toFixed(1)}%`);
-        const toneRow = tEl.closest('.prism-tint-tone-row');
-        const valSpan = toneRow?.querySelector('.prism-tint-tone-val');
-        if (valSpan) valSpan.textContent = tone > 0 ? `+${tone}` : String(tone);
-        const resetBtn = toneRow?.querySelector('[data-action="reset-surface-tone"]');
-        if (resetBtn instanceof HTMLElement) resetBtn.dataset.toneDirty = tone !== 0 ? 'true' : 'false';
-        queueConfigPatch({ preset: 'custom', surfaceTints: { [toneComp]: { tone } } }, false, true);
-        syncSurfaceTintsHeaderInDom();
         return;
       }
 
@@ -5247,13 +2108,29 @@ function bootPrismStudioApp() {
       }
     });
 
-    // 2. Commit on `change` (sliders, color pickers, selects, file inputs)
+    // 2. Commit on `change` (sliders, color pickers, selects, checkboxes, file inputs)
     app.addEventListener('change', async (e) => {
       const tEl = e.target;
       if (!(tEl instanceof HTMLElement)) return;
 
-      if (tEl.dataset.configSlider || tEl.dataset.surfaceTone) {
-        void flushConfigPatch();
+      if (tEl.id === 'prism-preset-include-wall' && tEl instanceof HTMLInputElement) {
+        store.presetDraft.includeWallpaper = tEl.checked;
+        return;
+      }
+
+      if (tEl.dataset.configSlider) {
+        const sk = tEl.dataset.configSlider;
+        const affectsWcag =
+          sk === 'sidebarOpacity' ||
+          sk === 'glassOpacity' ||
+          sk === 'glassFidelity' ||
+          sk === 'chatGlassFidelity' ||
+          sk.endsWith('.opacity') ||
+          sk.endsWith('.tone');
+        if (affectsWcag) syncWcagBlocksInDom();
+        void flushConfigPatch().finally(() => {
+          if (affectsWcag) syncWcagBlocksInDom();
+        });
         return;
       }
 
@@ -5266,7 +2143,9 @@ function bootPrismStudioApp() {
       if (tEl.id === 'prism-preset-import-input' && tEl instanceof HTMLInputElement) {
         const file = tEl.files?.[0];
         tEl.value = '';
-        if (!file) return;
+        if (!file || store.profileOpBusy) return;
+        store.profileOpBusy = true;
+        refreshPresetsSurfacesSurgically();
         try {
           const text = await file.text();
           const preset = JSON.parse(text);
@@ -5274,10 +2153,17 @@ function bootPrismStudioApp() {
           ingestServerState(res);
           if (Array.isArray(res.presets)) store.presets = res.presets;
           showToast(tx('presetImported'), 'ok');
-          renderActiveSurface();
         } catch (err) {
           showToast(err.message || 'Invalid preset JSON', 'danger');
+        } finally {
+          store.profileOpBusy = false;
+          refreshPresetsSurfacesSurgically();
         }
+        return;
+      }
+
+      if (tEl.dataset.action === 'quick-switch-profile-preset' && tEl instanceof HTMLSelectElement) {
+        if (tEl.value) await applyProfilePreset(tEl.value);
         return;
       }
 
@@ -5290,12 +2176,53 @@ function bootPrismStudioApp() {
         return;
       }
 
-      if (tEl.dataset.action === 'set-surface-tint' && tEl instanceof HTMLInputElement) {
-        const comp = tEl.dataset.comp;
-        if (comp && SURFACE_TINT_COMPONENTS.includes(comp) && /^#[0-9a-f]{6}$/i.test(tEl.value)) {
-          queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { tint: tEl.value.toUpperCase() } } }, true, true);
+      if (tEl.dataset.action === 'set-region-color' && tEl instanceof HTMLInputElement) {
+        const rid = tEl.dataset.region;
+        const prop = tEl.dataset.prop || 'tint';
+        if (rid && REGION_IDS.includes(rid) && /^#[0-9a-f]{6}$/i.test(tEl.value)) {
+          queueConfigPatch({ preset: 'custom', regions: { [rid]: { [prop]: tEl.value.toUpperCase() } } }, true, true);
           renderActiveSurface();
         }
+        return;
+      }
+
+      if (tEl.dataset.action === 'select-region-font-preset' && tEl instanceof HTMLSelectElement) {
+        const rid = tEl.dataset.region;
+        const preset = CJK_SAFE_FONT_PRESETS.find((p) => p.id === tEl.value);
+        if (rid && REGION_IDS.includes(rid) && preset) {
+          queueConfigPatch({ regions: { [rid]: { fontFamily: preset.value } } }, true, true);
+          renderActiveSurface();
+        }
+        return;
+      }
+
+      if (tEl.dataset.action === 'select-global-font-preset' && tEl instanceof HTMLSelectElement) {
+        const preset = CJK_SAFE_FONT_PRESETS.find((p) => p.id === tEl.value);
+        if (preset) {
+          queueConfigPatch({ globalFontFamily: preset.value }, true, true);
+          renderActiveSurface();
+        }
+        return;
+      }
+
+      if (tEl.dataset.action === 'set-region-font-family' && tEl instanceof HTMLInputElement) {
+        const rid = tEl.dataset.region;
+        if (rid && REGION_IDS.includes(rid)) {
+          const raw = tEl.value.trim();
+          const clean = sanitizeFontFamily(raw);
+          if (raw && !clean) showToast(tx('fontInvalidHint'), 'warn', 3200);
+          queueConfigPatch({ regions: { [rid]: { fontFamily: clean } } }, true, true);
+          renderActiveSurface();
+        }
+        return;
+      }
+
+      if (tEl.dataset.action === 'set-global-font-family' && tEl instanceof HTMLInputElement) {
+        const raw = tEl.value.trim();
+        const clean = sanitizeFontFamily(raw);
+        if (raw && !clean) showToast(tx('fontInvalidHint'), 'warn', 3200);
+        queueConfigPatch({ globalFontFamily: clean }, true, true);
+        renderActiveSurface();
         return;
       }
 
@@ -5369,10 +2296,7 @@ function bootPrismStudioApp() {
       if (!actEl) return;
       const action = actEl.dataset.action;
 
-      if (
-        actEl.closest('.prism-card-top-right') &&
-        action !== 'card-click'
-      ) {
+      if (actEl.closest('.prism-card-top-right') && action !== 'card-click') {
         e.stopPropagation();
       }
 
@@ -5384,18 +2308,134 @@ function bootPrismStudioApp() {
           break;
         }
         case 'toggle-skin-master': {
-          const nextEnabled = !store.skinEnabled;
-          await executeSkinToggle(nextEnabled);
+          const baseEnabled =
+            store.runtime.pendingToggleTarget !== null ? store.runtime.pendingToggleTarget : store.skinEnabled;
+          await executeSkinToggle(!baseEnabled);
+          break;
+        }
+        case 'retry-config-flush': {
+          void flushConfigPatch({ flush: true });
+          break;
+        }
+        case 'toggle-preview-live': {
+          // Strictly toggles Studio 21:9 preview live media; NEVER touches host `paused`!
+          const nextLive = !getEffectiveConfig().previewLiveMedia;
+          queueConfigPatch({ previewLiveMedia: nextLive }, true, false);
+          syncMiniPreviewMedia();
+          syncOpticalCssVars();
+          if (store.activeTab === 'system') renderActiveSurface();
+          break;
+        }
+        case 'jump-to-region': {
+          e.stopPropagation();
+          const rawRid = actEl.dataset.region || 'sidebar';
+          const accRid = rawRid === 'card' ? 'workspace' : rawRid;
+          store.activeTab = 'skin';
+          setRegionOpen(accRid, true);
+          renderActiveSurface();
+          const det = document.querySelector(`details[data-region="${accRid}"]`);
+          if (det instanceof HTMLElement) {
+            det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+          break;
+        }
+        case 'open-visual-editor': {
+          const rid = actEl.dataset.region;
+          if (rid && REGION_IDS.includes(rid)) {
+            store.selectedRegion = rid;
+          }
+          store.editorModalOpen = true;
+          store.editorMode = 'modal';
+          renderVisualEditorHost();
+          syncMiniPreviewMedia();
+          syncOpticalCssVars();
+          break;
+        }
+        case 'close-visual-editor': {
+          await closeVisualEditorModal();
+          break;
+        }
+        case 'popout-visual-editor': {
+          await openPopoutVisualEditor();
+          break;
+        }
+        case 'select-editor-region': {
+          e.stopPropagation();
+          const rid = actEl.dataset.region;
+          if (rid && REGION_IDS.includes(rid)) {
+            store.selectedRegion = rid;
+            if (store.isPopoutMode) {
+              renderActiveSurface();
+            } else {
+              renderVisualEditorHost();
+              syncMiniPreviewMedia();
+              syncOpticalCssVars();
+            }
+          }
+          break;
+        }
+        case 've-set-preview-theme': {
+          const val = actEl.dataset.val;
+          if (val === 'dark' || val === 'light') {
+            store.canvasPreviewTheme = store.canvasPreviewTheme === val ? null : val;
+            if (store.isPopoutMode) {
+              renderActiveSurface();
+            } else {
+              renderVisualEditorHost();
+              syncOpticalCssVars();
+            }
+          }
+          break;
+        }
+        case 've-toggle-popover': {
+          store.canvasShowPopover = !store.canvasShowPopover;
+          if (store.isPopoutMode) renderActiveSurface();
+          else {
+            renderVisualEditorHost();
+            syncOpticalCssVars();
+          }
+          break;
+        }
+        case 've-toggle-welcome': {
+          store.canvasShowEmptyLogo = !store.canvasShowEmptyLogo;
+          if (store.isPopoutMode) renderActiveSurface();
+          else {
+            renderVisualEditorHost();
+            syncOpticalCssVars();
+          }
+          break;
+        }
+        case 've-zoom-in': {
+          store.canvasZoom = Math.min(2.0, Math.round(((store.canvasZoom || 1) + 0.15) * 100) / 100);
+          syncVisualCanvasZoomTransform();
+          break;
+        }
+        case 've-zoom-out': {
+          store.canvasZoom = Math.max(0.5, Math.round(((store.canvasZoom || 1) - 0.15) * 100) / 100);
+          syncVisualCanvasZoomTransform();
+          break;
+        }
+        case 've-zoom-reset': {
+          store.canvasZoom = 1;
+          store.canvasPanX = 0;
+          store.canvasPanY = 0;
+          syncVisualCanvasZoomTransform();
           break;
         }
         case 'switch-tab': {
           const tab = actEl.dataset.tab;
           if (tab && tab !== store.activeTab) {
+            resetLibraryHoverThumb();
             store.activeTab = tab;
             renderActiveSurface();
             const sc = document.getElementById('prism-tab-scroll');
             if (sc) sc.scrollTop = 0;
           }
+          break;
+        }
+        case 'toggle-all-regions': {
+          setAllRegionsOpen(!hasAnyRegionOpen());
+          renderActiveSurface();
           break;
         }
         case 'edit-slider-val': {
@@ -5420,35 +2460,19 @@ function bootPrismStudioApp() {
             if (committed) return;
             committed = true;
             if (applyChange) {
-              const key = row.dataset.sliderKey;
+              const key = row.dataset.sliderKey || '';
               const rawTxt = numIn.value.trim();
               if (row.dataset.nullable === 'true' && (rawTxt === '' || rawTxt.toLowerCase() === 'auto')) {
-                if (key && key.startsWith('surfaceTints.')) {
-                  const comp = key.split('.')[1];
-                  if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
-                    queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { opacity: null } } }, true, true);
-                  }
-                } else if (key === 'sidebarOpacity') {
-                  queueConfigPatch({ sidebarOpacity: null, surfaceTints: { sidebar: { opacity: null } } }, true);
-                } else if (key) {
-                  queueConfigPatch({ [key]: null }, true);
+                if (key) {
+                  queueConfigPatch(buildPatchForSliderKey(key, null), true, true);
                 }
               } else {
                 const numStr = rawTxt.replace(/[^0-9.-]/g, '');
                 const parsed = numStr === '' ? NaN : Number(numStr);
-                if (Number.isFinite(parsed)) {
+                if (Number.isFinite(parsed) && key) {
                   const clampedUi = Math.max(min, Math.min(max, parsed));
                   const rawVal = clampedUi / scale;
-                  if (key && key.startsWith('surfaceTints.')) {
-                    const comp = key.split('.')[1];
-                    if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
-                      queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { opacity: rawVal } } }, true, true);
-                    }
-                  } else if (key === 'sidebarOpacity') {
-                    queueConfigPatch({ sidebarOpacity: rawVal, surfaceTints: { sidebar: { opacity: rawVal } } }, true);
-                  } else if (key) {
-                    queueConfigPatch({ [key]: rawVal }, true);
-                  }
+                  queueConfigPatch(buildPatchForSliderKey(key, rawVal), true, true);
                 }
               }
             }
@@ -5470,10 +2494,16 @@ function bootPrismStudioApp() {
         case 'reset-key': {
           const key = actEl.dataset.key;
           if (key === 'sidebarOpacity') {
-            queueConfigPatch({ sidebarOpacity: null, surfaceTints: { sidebar: { opacity: null } } }, true);
+            queueConfigPatch({ sidebarOpacity: null, regions: { sidebar: { opacity: null } } }, true, true);
             renderActiveSurface();
           } else if (key === 'sidebarBlur') {
-            queueConfigPatch({ [key]: null }, true);
+            queueConfigPatch({ sidebarBlur: null, regions: { sidebar: { blur: null } } }, true, true);
+            renderActiveSurface();
+          } else if (key === 'sidebarFontSize') {
+            queueConfigPatch({ sidebarFontSize: null, regions: { sidebar: { fontSize: null } } }, true, true);
+            renderActiveSurface();
+          } else if (key === 'globalFontSize') {
+            queueConfigPatch({ globalFontSize: null }, true, true);
             renderActiveSurface();
           } else if (key && key in DEFAULT_CONFIG) {
             queueConfigPatch({ [key]: DEFAULT_CONFIG[key] }, true);
@@ -5481,16 +2511,116 @@ function bootPrismStudioApp() {
           }
           break;
         }
-        case 'reset-module': {
+        case 'reset-region': {
+          // DEF-SE-2: Groups 1-7 <summary> reset button; preventDefault + stopPropagation keeps <details> state intact!
           e.preventDefault();
+          e.stopPropagation();
+          const rid = actEl.dataset.region;
+          if (!rid || !REGION_IDS.includes(rid)) break;
+          const regionsPatch = rid === 'workspace' ? { workspace: null, card: null } : { [rid]: null };
+          const rawExtra = REGION_RESET_EXTRA_KEYS[rid] || {};
+          const isPinned = hasPerWallpaperPin(getActiveId());
+          const extra = isPinned
+            ? Object.fromEntries(Object.entries(rawExtra).filter(([k]) => PER_WALLPAPER_OVERRIDE_KEYS.includes(k)))
+            : rawExtra;
+          queueConfigPatch({ regions: regionsPatch, ...extra }, true, true);
+          renderActiveSurface();
+          break;
+        }
+        case 'reset-all-regions': {
+          queueConfigPatch(
+            { regions: null, surfaceTints: null, sidebarOpacity: null, sidebarBlur: null, sidebarFontSize: null },
+            true,
+            true,
+          );
+          renderActiveSurface();
+          break;
+        }
+        case 'reset-region-prop': {
+          const rid = actEl.dataset.region;
+          const prop = actEl.dataset.prop;
+          if (!rid || !prop || !REGION_IDS.includes(rid)) break;
+          const resetVal = prop === 'tone' ? 0 : prop === 'tint' || prop === 'fontFamily' || prop === 'fontColor' ? '' : prop === 'allowRawFontColor' ? false : null;
+          const patch = { regions: { [rid]: { [prop]: resetVal } } };
+          const isPinned = hasPerWallpaperPin(getActiveId());
+          if (rid === 'sidebar' && prop === 'radius' && !isPinned) patch.leftSidebarRadius = 'auto';
+          if (rid === 'rightPane' && prop === 'radius' && !isPinned) patch.rightSidebarRadius = 'auto';
+          if (rid === 'sidebar' && prop === 'opacity') patch.sidebarOpacity = null;
+          if (rid === 'sidebar' && prop === 'blur') patch.sidebarBlur = null;
+          if (rid === 'sidebar' && prop === 'fontSize') patch.sidebarFontSize = null;
+          queueConfigPatch(patch, true, true);
+          renderActiveSurface();
+          break;
+        }
+        case 'clear-region-prop': {
+          const rid = actEl.dataset.region;
+          const prop = actEl.dataset.prop;
+          if (rid && prop && REGION_IDS.includes(rid)) {
+            queueConfigPatch({ regions: { [rid]: { [prop]: '' } } }, true, true);
+            renderActiveSurface();
+          }
+          break;
+        }
+        case 'set-region-prop': {
+          const rid = actEl.dataset.region;
+          const prop = actEl.dataset.prop;
+          const val = actEl.dataset.val;
+          if (!rid || !prop || !REGION_IDS.includes(rid)) break;
+          let parsedVal = val;
+          if (prop === 'glassEnabled') {
+            parsedVal = val === 'true' ? true : val === 'false' ? false : null;
+          } else if (prop === 'borderStyle') {
+            parsedVal = val === 'auto' || !val ? null : val;
+          }
+          queueConfigPatch({ preset: 'custom', regions: { [rid]: { [prop]: parsedVal } } }, true, true);
+          renderActiveSurface();
+          break;
+        }
+        case 'pick-region-tint':
+        case 'pick-surface-tint': {
+          const rid = actEl.dataset.region || actEl.dataset.comp;
+          const hex = actEl.dataset.hex;
+          if (rid && REGION_IDS.includes(rid) && hex && /^#[0-9a-f]{6}$/i.test(hex)) {
+            queueConfigPatch({ preset: 'custom', regions: { [rid]: { tint: hex.toUpperCase() } } }, true, true);
+            renderActiveSurface();
+          }
+          break;
+        }
+        case 'toggle-region-raw-fg': {
+          const rid = actEl.dataset.region;
+          if (rid && REGION_IDS.includes(rid)) {
+            const cur = Boolean(getEffectiveConfig().regions?.[rid]?.allowRawFontColor);
+            queueConfigPatch({ regions: { [rid]: { allowRawFontColor: !cur } } }, true, true);
+            renderActiveSurface();
+          }
+          break;
+        }
+        case 'reset-surface-comp': {
+          const comp = actEl.dataset.comp;
+          if (comp && REGION_IDS.includes(comp)) {
+            const patch =
+              comp === 'sidebar'
+                ? { preset: 'custom', sidebarOpacity: null, regions: { sidebar: { opacity: null } } }
+                : { preset: 'custom', regions: { [comp]: { opacity: null } } };
+            queueConfigPatch(patch, true, true);
+            renderActiveSurface();
+          }
+          break;
+        }
+        case 'reset-module': {
+          // DEF-SE-2: Group 8 (`global`) & Tab 3 sections; preventDefault + stopPropagation preserves <details.open>!
+          e.preventDefault();
+          e.stopPropagation();
           const keys = (actEl.dataset.keys || '').split(',').filter(Boolean);
           const patch = {};
           for (const k of keys) {
-            if (k === 'sidebarOpacity' || k === 'sidebarBlur') {
+            if (k === 'sidebarOpacity' || k === 'sidebarBlur' || k === 'sidebarFontSize' || k === 'globalFontSize') {
               patch[k] = null;
             } else if (k === 'surfaceTints') {
               patch.surfaceTints = null;
-              store.expandedTintComp = null;
+              store.expandedTintComp = '';
+            } else if (k === 'regions') {
+              patch.regions = null;
             } else if (k in DEFAULT_CONFIG) {
               patch[k] = DEFAULT_CONFIG[k];
             }
@@ -5501,6 +2631,22 @@ function bootPrismStudioApp() {
           }
           break;
         }
+        case 'apply-low-gpu-acrylic': {
+          queueConfigPatch({ glassSurfaces: true, glassBlur: 0, sidebarBlur: null, preset: 'custom' }, true, true);
+          renderActiveSurface();
+          break;
+        }
+        case 'resume-paused-wallpaper': {
+          queueConfigPatch({ paused: false }, true, false);
+          syncMiniPreviewMedia();
+          renderActiveSurface();
+          break;
+        }
+        case 'retry-wallpaper-media': {
+          const aid = getActiveId();
+          if (aid) await applyWallpaperById(aid);
+          break;
+        }
         case 'toggle-bool': {
           const key = actEl.dataset.key;
           if (!key) return;
@@ -5508,7 +2654,10 @@ function bootPrismStudioApp() {
           queueConfigPatch(
             { [key]: !eff[key] },
             true,
-            key !== 'rotationEnabled' && key !== 'themeFollow' && key !== 'transparentWindowControls' && key !== 'hideWelcomeLogo',
+            key !== 'rotationEnabled' &&
+              key !== 'themeFollow' &&
+              key !== 'transparentWindowControls' &&
+              key !== 'hideWelcomeLogo',
           );
           renderActiveSurface();
           break;
@@ -5518,11 +2667,33 @@ function bootPrismStudioApp() {
           const val = actEl.dataset.val ?? '';
           if (!key) return;
           const numCandidate = key === 'fpsCap' || key === 'sceneLiveFps' ? Number(val) : val;
-          const patch = key === 'layoutMode' || key === 'colorScheme' ? { [key]: numCandidate, preset: 'custom' } : { [key]: numCandidate };
+          const isPinned = hasPerWallpaperPin(getActiveId());
+          let patch;
+          if (key === 'leftSidebarRadius' || key === 'rightSidebarRadius') {
+            const rid = key === 'leftSidebarRadius' ? 'sidebar' : 'rightPane';
+            const parsedNum = val === 'auto' || val === 'native' || val === '' ? null : Number(val);
+            patch = {
+              preset: 'custom',
+              regions: { [rid]: { radius: Number.isFinite(parsedNum) ? parsedNum : null } },
+            };
+            if (!isPinned) {
+              patch[key] = val;
+            }
+          } else {
+            patch =
+              key === 'layoutMode' || key === 'colorScheme'
+                ? { [key]: numCandidate, preset: 'custom' }
+                : { [key]: numCandidate };
+          }
           queueConfigPatch(
             patch,
             true,
-            key !== 'triggerMode' && key !== 'rotationOrder' && key !== 'rotationTrigger' && key !== 'startupMode' && key !== 'topbarStyle',
+            key !== 'triggerMode' &&
+              key !== 'rotationOrder' &&
+              key !== 'rotationTrigger' &&
+              key !== 'startupMode' &&
+              key !== 'topbarStyle' &&
+              key !== 'libraryAnimatedThumbs',
           );
           renderActiveSurface();
           break;
@@ -5545,8 +2716,9 @@ function bootPrismStudioApp() {
               applyLocalPatch({ ...sp.patch, skinEnabled: true }, false);
               renderActiveSurface();
               try {
+                await flushConfigPatch({ flush: true });
                 const res = await apiJson('/api/preset/apply', { method: 'POST', body: { presetId: pid } });
-                ingestServerState(res);
+                ingestServerState(res, { forceConfig: true });
                 syncMiniPreviewMedia();
                 renderActiveSurface();
               } catch {
@@ -5558,56 +2730,6 @@ function bootPrismStudioApp() {
               renderActiveSurface();
             }
           }
-          break;
-        }
-        case 'toggle-comp-tint-drawer': {
-          const comp = actEl.dataset.comp;
-          if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
-            store.expandedTintComp = store.expandedTintComp === comp ? null : comp;
-            renderActiveSurface();
-          }
-          break;
-        }
-        case 'reset-surface-comp': {
-          const comp = actEl.dataset.comp;
-          if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
-            const patch = comp === 'sidebar'
-              ? { preset: 'custom', sidebarOpacity: null, surfaceTints: { sidebar: { opacity: null } } }
-              : { preset: 'custom', surfaceTints: { [comp]: { opacity: null } } };
-            queueConfigPatch(patch, true, true);
-            renderActiveSurface();
-          }
-          break;
-        }
-        case 'reset-surface-tone': {
-          const comp = actEl.dataset.comp;
-          if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
-            queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { tone: 0 } } }, true, true);
-            renderActiveSurface();
-          }
-          break;
-        }
-        case 'pick-surface-tint': {
-          const comp = actEl.dataset.comp;
-          const hex = actEl.dataset.hex;
-          if (comp && SURFACE_TINT_COMPONENTS.includes(comp) && hex && /^#[0-9a-f]{6}$/i.test(hex)) {
-            queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { tint: hex.toUpperCase() } } }, true, true);
-            renderActiveSurface();
-          }
-          break;
-        }
-        case 'clear-surface-tint': {
-          const comp = actEl.dataset.comp;
-          if (comp && SURFACE_TINT_COMPONENTS.includes(comp)) {
-            queueConfigPatch({ preset: 'custom', surfaceTints: { [comp]: { tint: '' } } }, true, true);
-            renderActiveSurface();
-          }
-          break;
-        }
-        case 'reset-all-surface-tints': {
-          store.expandedTintComp = null;
-          queueConfigPatch({ surfaceTints: null, sidebarOpacity: null }, true, true);
-          renderActiveSurface();
           break;
         }
         case 'toggle-pin-override':
@@ -5632,6 +2754,7 @@ function bootPrismStudioApp() {
         case 'toggle-pause': {
           const eff = getEffectiveConfig();
           queueConfigPatch({ paused: !eff.paused }, true, false);
+          syncMiniPreviewMedia();
           renderActiveSurface();
           break;
         }
@@ -5672,7 +2795,7 @@ function bootPrismStudioApp() {
           break;
         }
 
-        // Library Interactions
+        // Library Actions
         case 'clear-search': {
           store.searchQuery = '';
           renderActiveSurface();
@@ -5819,6 +2942,13 @@ function bootPrismStudioApp() {
         }
 
         // Drawers & Playlist CRUD
+        case 'open-presets-create': {
+          store.drawer = 'presets';
+          renderActiveSurface();
+          const nameIn = document.getElementById('prism-preset-name-in');
+          if (nameIn instanceof HTMLInputElement) nameIn.focus();
+          break;
+        }
         case 'open-drawer': {
           const dr = actEl.dataset.drawer;
           if (dr === 'playlist' && !store.playlistDraft.name) {
@@ -5858,6 +2988,8 @@ function bootPrismStudioApp() {
           // fall through
         case 'close-drawer': {
           store.drawer = null;
+          store.presetRenameTargetId = '';
+          store.presetRenameDraft = '';
           renderActiveSurface();
           break;
         }
@@ -5998,33 +3130,46 @@ function bootPrismStudioApp() {
           break;
         }
 
-        // Whole-Profile Presets CRUD
+        // Named Snapshots CRUD (D4)
         case 'apply-profile-preset': {
-          const presetId = actEl.dataset.id;
-          if (!presetId) return;
-          try {
-            const res = await apiJson('/api/preset/apply', { method: 'POST', body: { presetId } });
-            ingestServerState(res);
-            syncMiniPreviewMedia();
-            renderActiveSurface();
-          } catch (err) {
-            showToast(err.message || 'Failed to apply preset', 'danger');
-          }
+          await applyProfilePreset(actEl.dataset.id);
           break;
         }
         case 'save-profile-preset': {
-          const name = store.presetDraft.name.trim() || `Custom Prism ${new Date().toLocaleTimeString()}`;
-          const description = store.presetDraft.description.trim();
-          try {
-            const res = await apiJson('/api/presets/save', { method: 'POST', body: { name, description } });
-            ingestServerState(res);
-            if (Array.isArray(res.presets)) store.presets = res.presets;
-            store.presetDraft = { name: '', description: '' };
-            showToast(tx('presetSaved'), 'ok');
-            renderActiveSurface();
-          } catch (err) {
-            showToast(err.message || 'Failed to save preset', 'danger');
+          await saveNewProfilePreset();
+          break;
+        }
+        case 'overwrite-profile-preset': {
+          await overwriteProfilePreset(actEl.dataset.id || actEl.dataset.payload);
+          break;
+        }
+        case 'start-rename-preset': {
+          const id = actEl.dataset.id;
+          const target = getVisiblePresets().find((p) => p.id === id);
+          if (target && !target.builtin) {
+            store.presetRenameTargetId = target.id;
+            store.presetRenameDraft = curLocale() === 'zh' ? target.name : target.nameEn || target.name;
+            refreshPresetsSurfacesSurgically();
+            const renameEl = document.getElementById('prism-preset-rename-in');
+            if (renameEl instanceof HTMLInputElement) {
+              renameEl.focus();
+              renameEl.select();
+            }
           }
+          break;
+        }
+        case 'cancel-rename-preset': {
+          store.presetRenameTargetId = '';
+          store.presetRenameDraft = '';
+          refreshPresetsSurfacesSurgically();
+          break;
+        }
+        case 'commit-rename-preset': {
+          await commitRenamePreset(actEl.dataset.id);
+          break;
+        }
+        case 'duplicate-profile-preset': {
+          await duplicateProfilePreset(actEl.dataset.id);
           break;
         }
         case 'export-profile-preset': {
@@ -6034,13 +3179,21 @@ function bootPrismStudioApp() {
             const data = await apiJson(`/api/presets/export?id=${encodeURIComponent(id)}`);
             const blob = new Blob([JSON.stringify(data.preset || data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
+            store.runtime.tempObjectUrls.add(url);
             const a = document.createElement('a');
             a.href = url;
             a.download = `prism-preset-${id}.json`;
             document.body.appendChild(a);
             a.click();
             a.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 1500);
+            setTimeout(() => {
+              try {
+                URL.revokeObjectURL(url);
+              } catch {
+                // ignore revoke error
+              }
+              store.runtime.tempObjectUrls.delete(url);
+            }, 1500);
           } catch (err) {
             showToast(err.message || 'Export failed', 'danger');
           }
@@ -6052,21 +3205,11 @@ function bootPrismStudioApp() {
           break;
         }
         case 'delete-profile-preset': {
-          const id = actEl.dataset.payload;
-          setArmedConfirm(null);
-          if (!id) return;
-          try {
-            const res = await apiJson('/api/presets/delete', { method: 'POST', body: { id } });
-            ingestServerState(res);
-            if (Array.isArray(res.presets)) store.presets = res.presets;
-            renderActiveSurface();
-          } catch (err) {
-            showToast(err.message || 'Delete preset failed', 'danger');
-          }
+          await deleteProfilePreset(actEl.dataset.payload || actEl.dataset.id);
           break;
         }
 
-        // Host, Shortcut, Storage & 2-Step Inline Confirmations
+        // Host, Shortcut, Storage & 2-Step Confirmations
         case 'arm-confirm': {
           setArmedConfirm(actEl.dataset.confirmKey || null);
           break;
@@ -6146,10 +3289,7 @@ function bootPrismStudioApp() {
           renderActiveSurface();
           try {
             const port = store.config.debugPort || DEFAULT_DEBUG_PORT;
-            const res = await apiJson('/api/host/autostart', {
-              method: 'POST',
-              body: { enabled, port },
-            });
+            const res = await apiJson('/api/host/autostart', { method: 'POST', body: { enabled, port } });
             ingestServerState(res);
             store.autostart.busy = false;
             showToast(tr(enabled ? 'host.autostartEnabledToast' : 'host.autostartDisabledToast'), enabled ? 'ok' : 'info', 5200);
@@ -6246,7 +3386,7 @@ function bootPrismStudioApp() {
           setArmedConfirm(null);
           try {
             const res = await apiJson('/api/config/reset', { method: 'POST', body: { scope } });
-            ingestServerState(res);
+            ingestServerState(res, { forceConfig: true });
             syncMiniPreviewMedia();
             renderActiveSurface();
           } catch (err) {
@@ -6255,15 +3395,9 @@ function bootPrismStudioApp() {
           break;
         }
         case 'exec-restore-host': {
+          // #2 Unified through executeSkinToggle(false) — never bypasses masterToggleBusy or preview sync!
           setArmedConfirm(null);
-          try {
-            const res = await apiJson('/api/skin/restore', { method: 'POST', body: {} });
-            ingestServerState(res);
-            store.skinEnabled = false;
-            renderActiveSurface();
-          } catch (err) {
-            showToast(err.message || 'Restore failed', 'danger');
-          }
+          await executeSkinToggle(false);
           break;
         }
         case 'check-update': {
@@ -6303,9 +3437,9 @@ function bootPrismStudioApp() {
           break;
         }
         case 'close-update-reconnect': {
-          if (updateReconnectTimer) {
-            clearTimeout(updateReconnectTimer);
-            updateReconnectTimer = null;
+          if (store.runtime.updateReconnectTimer) {
+            clearTimeout(store.runtime.updateReconnectTimer);
+            store.runtime.updateReconnectTimer = null;
           }
           store.update.reconnect.active = false;
           renderUpdateReconnectOverlay();
@@ -6317,17 +3451,41 @@ function bootPrismStudioApp() {
       }
     });
 
-    // 5. Keyboard Shortcuts: `/` search focus, `Enter`/`Space` card activation, 2-stage `Escape` unwind
+    // 5. Keyboard Shortcuts: Rename Enter/Esc, Visual Editor Esc, Drawer Esc, `/` search
     window.addEventListener('keydown', (e) => {
+      const activeEl = document.activeElement;
+      if (activeEl instanceof HTMLInputElement && activeEl.id === 'prism-preset-rename-in') {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const pid = activeEl.dataset.presetId || store.presetRenameTargetId;
+          if (pid) void commitRenamePreset(pid);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          store.presetRenameTargetId = '';
+          store.presetRenameDraft = '';
+          refreshPresetsSurfacesSurgically();
+          return;
+        }
+      }
+
       if (e.key === 'Escape') {
         if (store.armedConfirm) {
           e.preventDefault();
           setArmedConfirm(null);
           return;
         }
+        if (store.editorModalOpen) {
+          e.preventDefault();
+          void closeVisualEditorModal();
+          return;
+        }
         if (store.drawer) {
           e.preventDefault();
           store.drawer = null;
+          store.presetRenameTargetId = '';
+          store.presetRenameDraft = '';
           renderActiveSurface();
           return;
         }
@@ -6340,58 +3498,60 @@ function bootPrismStudioApp() {
         }
       }
 
-      const activeTag = document.activeElement?.tagName || '';
+      const activeTag = activeEl?.tagName || '';
       const inEditable = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
 
-      if (e.key === '/' && !inEditable && store.activeTab === 'library') {
+      if (e.key === '/' && !inEditable && !store.isPopoutMode && store.activeTab === 'library') {
         e.preventDefault();
         document.getElementById('prism-lib-search')?.focus();
         return;
       }
 
-      if ((e.key === 'Enter' || e.key === ' ') && document.activeElement?.classList?.contains('prism-wall-card')) {
+      if ((e.key === 'Enter' || e.key === ' ') && activeEl?.classList?.contains('prism-wall-card')) {
         e.preventDefault();
-        document.activeElement.click();
+        activeEl.click();
       }
     });
 
-    // 6. Drag-and-Drop Media Upload Overlay
-    const renderDropOverlay = (visible) => {
-      const dropHost = document.getElementById('prism-drop-host');
-      if (!dropHost) return;
-      dropHost.innerHTML = visible
-        ? `
-        <div class="prism-drop-overlay">
-          <div style="font-size:28px;color:var(--prism-accent)">✦</div>
-          <div style="font-size:14px;font-weight:650">${esc(tr('lib.upload'))}</div>
-          <div style="font-size:12px;color:var(--prism-fg-muted)">${esc(tr('lib.dropHint'))}</div>
-        </div>
-      `
-        : '';
-    };
+    // 6. Drag-and-Drop Media Upload Overlay (Non-Popout Studio)
+    if (!store.isPopoutMode) {
+      const renderDropOverlay = (visible) => {
+        const dropHost = document.getElementById('prism-drop-host');
+        if (!dropHost) return;
+        dropHost.innerHTML = visible
+          ? `
+          <div class="prism-drop-overlay">
+            <div style="font-size:28px;color:var(--prism-accent)">✦</div>
+            <div style="font-size:14px;font-weight:650">${esc(tr('lib.upload'))}</div>
+            <div style="font-size:12px;color:var(--prism-fg-muted)">${esc(tr('lib.dropHint'))}</div>
+          </div>
+        `
+          : '';
+      };
 
-    window.addEventListener('dragenter', (e) => {
-      if (!e.dataTransfer?.types?.includes('Files')) return;
-      e.preventDefault();
-      store.dragDepth++;
-      renderDropOverlay(true);
-    });
-    window.addEventListener('dragover', (e) => {
-      if (!e.dataTransfer?.types?.includes('Files')) return;
-      e.preventDefault();
-    });
-    window.addEventListener('dragleave', (e) => {
-      if (!e.dataTransfer?.types?.includes('Files')) return;
-      store.dragDepth = Math.max(0, store.dragDepth - 1);
-      if (store.dragDepth === 0) renderDropOverlay(false);
-    });
-    window.addEventListener('drop', async (e) => {
-      if (!e.dataTransfer?.files?.length) return;
-      e.preventDefault();
-      store.dragDepth = 0;
-      renderDropOverlay(false);
-      await uploadFiles(e.dataTransfer.files);
-    });
+      window.addEventListener('dragenter', (e) => {
+        if (!e.dataTransfer?.types?.includes('Files')) return;
+        e.preventDefault();
+        store.dragDepth++;
+        renderDropOverlay(true);
+      });
+      window.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer?.types?.includes('Files')) return;
+        e.preventDefault();
+      });
+      window.addEventListener('dragleave', (e) => {
+        if (!e.dataTransfer?.types?.includes('Files')) return;
+        store.dragDepth = Math.max(0, store.dragDepth - 1);
+        if (store.dragDepth === 0) renderDropOverlay(false);
+      });
+      window.addEventListener('drop', async (e) => {
+        if (!e.dataTransfer?.files?.length) return;
+        e.preventDefault();
+        store.dragDepth = 0;
+        renderDropOverlay(false);
+        await uploadFiles(e.dataTransfer.files);
+      });
+    }
 
     // 7. Host Theme PostMessage, Preload CustomEvents & OS Media Query Sync
     const inferPolarityFromCssVars = (vars) => {
@@ -6456,10 +3616,168 @@ function bootPrismStudioApp() {
       if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onMq);
     }
 
+    window.addEventListener(
+      'resize',
+      () => {
+        if (!store.isPopoutMode && store.activeTab === 'library' && store.items.length > VIRTUAL_SCROLL_THRESHOLD) {
+          const gridHost = document.getElementById('prism-lib-grid-host');
+          if (gridHost) gridHost.innerHTML = renderLibraryGridHtml();
+        }
+      },
+      { passive: true },
+    );
+  }
+
+  // ==========================================================================
+  // External State Sync, SSE Partitioning & Tracked Timers
+  // ==========================================================================
+  function applyExternalStateSnapshot(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    const rt = store.runtime;
+    if (
+      store.masterToggleBusy ||
+      store.profileOpBusy ||
+      rt.configDebounceTimer ||
+      rt.configFlushInFlight ||
+      Object.keys(rt.pendingConfigPatch).length > 0
+    ) {
+      return;
+    }
+    if (rt.pointerDownInsideScroller || rt.imeComposing) {
+      rt.deferredExternalSnapshot = payload;
+      return;
+    }
+
+    const wasAttached = isHostAttached();
+    const prevCanaryState = store.canary?.state || 'idle';
+    const prevSkinEnabled = store.skinEnabled;
+    const prevActiveId = getActiveId();
+    const prevSig = externalStateSignature();
+    const prevUpdSig = updateStatusSignature();
+
+    const accepted = ingestServerState(payload);
+    if (!accepted) return;
+
+    const nextActiveId = getActiveId();
+    const nextSig = externalStateSignature();
+    const nextUpdSig = updateStatusSignature();
+    const canaryChanged = (store.canary?.state || 'idle') !== prevCanaryState;
+    const skinChanged = store.skinEnabled !== prevSkinEnabled;
+    const activeChanged = nextActiveId !== prevActiveId;
+    const stateChanged = nextSig !== prevSig;
+    const updateChanged = nextUpdSig !== prevUpdSig;
+
+    updateTopStatusIndicators();
+
+    if (activeChanged || stateChanged) {
+      patchActiveCardsInPlace(nextActiveId);
+      syncMiniPreviewMedia();
+      syncOpticalCssVars();
+      syncRegionBadgesInDom();
+      syncWcagBlocksInDom();
+
+      const activeEl = document.activeElement;
+      const isDraggingRange = activeEl instanceof HTMLInputElement && activeEl.type === 'range';
+      const isEditingField =
+        activeEl instanceof HTMLTextAreaElement ||
+        activeEl instanceof HTMLSelectElement ||
+        (activeEl instanceof HTMLInputElement && activeEl.type !== 'button' && activeEl.type !== 'checkbox');
+
+      if (!isDraggingRange) {
+        if (store.isPopoutMode) {
+          if (!isEditingField) renderActiveSurface();
+        } else {
+          updateLeftRailPanels();
+          if (store.editorModalOpen && !isEditingField) {
+            renderVisualEditorHost();
+          }
+          if (!isEditingField && (store.activeTab === 'skin' || store.activeTab === 'playback')) {
+            const scroller = document.getElementById('prism-tab-scroll');
+            if (scroller) {
+              const prevScroll = scroller.scrollTop;
+              scroller.innerHTML = renderActiveTabContentHtml();
+              scroller.scrollTop = prevScroll;
+              bindVirtualPickerScrollListeners();
+            }
+          }
+        }
+      }
+    }
+
+    if ((!wasAttached && isHostAttached()) || canaryChanged || skinChanged || updateChanged) {
+      if (store.isPopoutMode || store.activeTab === 'system' || store.canary?.state === 'tripped') {
+        renderActiveSurface();
+      }
+    }
+  }
+
+  async function syncExternalStateNow() {
+    const rt = store.runtime;
+    if (rt.externalSyncInFlight || !store.ready || rt.isDormant || !isStudioViewportActive()) return;
+    rt.externalSyncInFlight = true;
+    try {
+      const st = await apiJson('/api/status');
+      applyExternalStateSnapshot(st);
+    } catch {
+      // silent background sync
+    } finally {
+      rt.externalSyncInFlight = false;
+    }
+  }
+
+  // Exact symbol name preserved for verify-all.mjs:L1594-L1598!
+  function disconnectStudioEvents() {
+    const rt = store.runtime;
+    if (rt.studioEventSource) {
+      try {
+        rt.studioEventSource.close();
+      } catch {
+        // ignore SSE close errors
+      }
+      rt.studioEventSource = null;
+    }
+  }
+
+  function connectStudioEvents() {
+    const rt = store.runtime;
+    if (!isStudioViewportActive() || rt.isDormant) {
+      disconnectStudioEvents();
+      return;
+    }
+    if (typeof window.EventSource !== 'function' || rt.studioEventSource) return;
+    try {
+      // Partition Popout SSE (`?channel=popout`) from Aux Pane SSE (bare `/api/events`); NEVER put token in URL
+      const url = store.isPopoutMode ? '/api/events?channel=popout' : '/api/events';
+      const es = new window.EventSource(url);
+      rt.studioEventSource = es;
+      const handleEvent = (ev) => {
+        rt.studioLastSseAt = Date.now();
+        try {
+          const parsed = JSON.parse(ev.data);
+          applyExternalStateSnapshot(parsed);
+        } catch {
+          // ignore malformed SSE frame
+        }
+      };
+      es.addEventListener('state', handleEvent);
+      es.onmessage = handleEvent;
+      es.onerror = () => {
+        if (!isStudioViewportActive() || rt.isDormant) {
+          disconnectStudioEvents();
+        }
+      };
+    } catch {
+      rt.studioEventSource = null;
+    }
+  }
+
+  function ensurePreviewWatchdog() {
+    const rt = store.runtime;
+    if (rt.previewWatchdogTimer || store.isPopoutMode) return;
     let lastPreviewVidT = -1;
     let previewStallTicks = 0;
-    setInterval(() => {
-      if (!isStudioVisible() || getEffectiveConfig().paused) {
+    rt.previewWatchdogTimer = setInterval(() => {
+      if (!shouldPlayStudioPreviewVideo()) {
         lastPreviewVidT = -1;
         previewStallTicks = 0;
         return;
@@ -6484,7 +3802,8 @@ function bootPrismStudioApp() {
           return;
         }
         if (previewStallTicks >= 2) {
-          vid.currentTime = Number.isFinite(dur) && dur > 1.5 && curT < dur - 1.2 ? Math.max(0, curT - 0.035) : 0;
+          vid.currentTime =
+            Number.isFinite(dur) && dur > 1.5 && curT < dur - 1.2 ? Math.max(0, curT - 0.035) : 0;
           vid.play().catch(() => {});
           previewStallTicks = 0;
         }
@@ -6493,296 +3812,41 @@ function bootPrismStudioApp() {
       }
       lastPreviewVidT = curT;
     }, 1250);
-
-    document.addEventListener('visibilitychange', () => {
-      const visible = isStudioVisible();
-      syncStudioMediaForVisibility(visible);
-      if (visible) {
-        void syncExternalStateNow();
-        ensureLiveSyncPoll();
-        if (!isHostAttached()) ensureStandbyStatusPoll();
-      }
-    });
-
-    window.addEventListener('focus', () => {
-      if (isStudioVisible()) {
-        void syncExternalStateNow();
-      }
-    });
-
-    window.addEventListener('resize', () => {
-      if (store.activeTab === 'library' && store.items.length > 120) {
-        const gridHost = document.getElementById('prism-lib-grid-host');
-        if (gridHost) gridHost.innerHTML = renderLibraryGridHtml();
-      }
-    });
-  }
-
-  function externalStateSignature() {
-    const c = store.config || {};
-    const activeId = getActiveId();
-    return JSON.stringify([
-      activeId,
-      store.activeItem?.mediaUrl || '',
-      store.activeItem?.sceneVideoUrl || '',
-      store.skinEnabled,
-      c.paused,
-      c.muted,
-      c.volume,
-      c.rotationEnabled,
-      c.rotationGroupId,
-      c.rotationOrder,
-      c.rotationTrigger,
-      c.rotationInterval,
-      c.preset,
-      c.activeProfilePresetId,
-      c.layoutMode,
-      c.themeMode,
-      c.colorScheme,
-      c.accentMode,
-      c.customAccent,
-      c.glassSurfaces,
-      c.glassOpacity,
-      c.glassBlur,
-      c.sidebarOpacity,
-      c.sidebarBlur,
-      c.surfaceTints,
-      c.topbarStyle,
-      c.hideWelcomeLogo,
-      c.transparentWindowControls,
-      c.cornerStyle,
-      c.leftSidebarRadius,
-      c.rightSidebarRadius,
-      c.islandGap,
-      c.workspacePad,
-      c.codeReadabilityMode,
-      c.borders,
-      c.shadows,
-      c.scrimOpacity,
-      c.mediaBlur,
-      c.vignette,
-      c.pauseOnBlur,
-      activeId ? c.perWallpaperOverrides?.[activeId] || null : null,
-    ]);
-  }
-
-  function updateStatusSignature() {
-    const u = store.update;
-    return JSON.stringify([
-      u.checked,
-      u.hasUpdate,
-      u.currentVersion,
-      u.latestVersion,
-      u.latestTag,
-      u.offline,
-      u.checkedAt,
-      u.canSelfUpdate,
-      u.isGitCheckout,
-      u.isSymlink,
-      u.error,
-    ]);
-  }
-
-  function applyExternalStateSnapshot(payload) {
-    if (!payload || typeof payload !== 'object') return;
-    if (store.masterToggleBusy || configDebounceTimer || configFlushInFlight || Object.keys(pendingConfigPatch).length > 0) {
-      return;
-    }
-    const wasAttached = isHostAttached();
-    const prevCanaryState = store.canary?.state || 'idle';
-    const prevSkinEnabled = store.skinEnabled;
-    const prevActiveId = getActiveId();
-    const prevSig = externalStateSignature();
-    const prevUpdSig = updateStatusSignature();
-
-    ingestServerState(payload);
-
-    const nextActiveId = getActiveId();
-    const nextSig = externalStateSignature();
-    const nextUpdSig = updateStatusSignature();
-    const canaryChanged = (store.canary?.state || 'idle') !== prevCanaryState;
-    const skinChanged = store.skinEnabled !== prevSkinEnabled;
-    const activeChanged = nextActiveId !== prevActiveId;
-    const stateChanged = nextSig !== prevSig;
-    const updateChanged = nextUpdSig !== prevUpdSig;
-
-    updateTopStatusIndicators();
-
-    if (activeChanged || stateChanged) {
-      patchActiveCardsInPlace(nextActiveId);
-      syncMiniPreviewMedia();
-      syncOpticalCssVars();
-      const activeEl = document.activeElement;
-      const isDraggingRange = activeEl instanceof HTMLInputElement && activeEl.type === 'range';
-      const isEditingField =
-        activeEl instanceof HTMLTextAreaElement ||
-        activeEl instanceof HTMLSelectElement ||
-        (activeEl instanceof HTMLInputElement && activeEl.type !== 'button' && activeEl.type !== 'checkbox');
-      if (!isDraggingRange) {
-        updateLeftRailPanels();
-        if (!isEditingField && (store.activeTab === 'skin' || store.activeTab === 'playback')) {
-          const scroller = document.getElementById('prism-tab-scroll');
-          if (scroller) {
-            const prevScroll = scroller.scrollTop;
-            scroller.innerHTML = renderActiveTabContentHtml();
-            scroller.scrollTop = prevScroll;
-          }
-        }
-      }
-    }
-
-    if ((!wasAttached && isHostAttached()) || canaryChanged || skinChanged || updateChanged) {
-      if (store.activeTab === 'system' || store.canary?.state === 'tripped') {
-        renderActiveSurface();
-      }
-    }
-  }
-
-  async function syncExternalStateNow() {
-    if (externalSyncInFlight || !store.ready) return;
-    externalSyncInFlight = true;
-    try {
-      const st = await apiJson('/api/status');
-      applyExternalStateSnapshot(st);
-    } catch {
-      // silent background sync
-    } finally {
-      externalSyncInFlight = false;
-    }
-  }
-
-  function isStudioVisible() {
-    if (document.hidden) return false;
-    try {
-      const w = window.innerWidth || document.documentElement?.clientWidth || 0;
-      const h = window.innerHeight || document.documentElement?.clientHeight || 0;
-      return w > 20 && h > 20;
-    } catch {
-      return true;
-    }
-  }
-
-  function disconnectStudioEvents() {
-    if (studioEventSource) {
-      try { studioEventSource.close(); } catch {}
-      studioEventSource = null;
-    }
-  }
-
-  function syncStudioMediaForVisibility(visible) {
-    try {
-      if (!visible) {
-        for (const vid of document.querySelectorAll('video')) {
-          if (!vid.paused) vid.pause();
-        }
-        return;
-      }
-      if (!getEffectiveConfig().paused) {
-        const previewVid = document.getElementById('prism-preview-video');
-        if (previewVid instanceof HTMLVideoElement && previewVid.paused) {
-          previewVid.play().catch(() => {});
-        }
-      }
-    } catch {
-      // ignore media pause/resume errors
-    }
-  }
-
-  function connectStudioEvents() {
-    if (!isStudioVisible()) {
-      disconnectStudioEvents();
-      return;
-    }
-    if (typeof window.EventSource !== 'function' || studioEventSource) return;
-    try {
-      const tok = new URLSearchParams(window.location.search).get('token') || window.__SIDECAR_BOOT__?.token || '';
-      const url = tok ? `/api/events?token=${encodeURIComponent(tok)}` : '/api/events';
-      const es = new window.EventSource(url);
-      studioEventSource = es;
-      const handleEvent = (ev) => {
-        studioLastSseAt = Date.now();
-        try {
-          const parsed = JSON.parse(ev.data);
-          applyExternalStateSnapshot(parsed);
-        } catch {
-          // ignore malformed event payload
-        }
-      };
-      es.addEventListener('state', handleEvent);
-      es.onmessage = handleEvent;
-      es.onerror = () => {
-        if (!isStudioVisible()) {
-          disconnectStudioEvents();
-        }
-      };
-    } catch {
-      studioEventSource = null;
-    }
-  }
-
-  function installStudioVisibilityGuards() {
-    let wasVisible = isStudioVisible();
-    if (!wasVisible) {
-      syncStudioMediaForVisibility(false);
-    }
-    const reconcile = () => {
-      const visible = isStudioVisible();
-      if (visible === wasVisible) return;
-      wasVisible = visible;
-      if (!visible) {
-        disconnectStudioEvents();
-        syncStudioMediaForVisibility(false);
-      } else {
-        syncStudioMediaForVisibility(true);
-        connectStudioEvents();
-        if (store.ready) void syncExternalStateNow();
-        ensureLiveSyncPoll();
-        if (!isHostAttached()) ensureStandbyStatusPoll();
-      }
-    };
-    document.addEventListener('visibilitychange', reconcile);
-    window.addEventListener('resize', reconcile, { passive: true });
-    window.addEventListener('pagehide', disconnectStudioEvents);
-    if (typeof window.ResizeObserver === 'function' && document.documentElement) {
-      try {
-        const ro = new window.ResizeObserver(reconcile);
-        ro.observe(document.documentElement);
-      } catch {
-        // ignore observer issues
-      }
-    }
   }
 
   function ensureLiveSyncPoll() {
-    if (studioSyncPollTimer) return;
-    studioSyncPollTimer = setInterval(() => {
-      if (!isStudioVisible() || !store.ready) return;
+    const rt = store.runtime;
+    if (rt.studioSyncPollTimer) return;
+    rt.studioSyncPollTimer = setInterval(() => {
+      if (!isStudioViewportActive() || rt.isDormant || !store.ready) return;
       const sseFresh =
-        studioEventSource &&
-        studioEventSource.readyState === 1 &&
-        studioLastSseAt > 0 &&
-        Date.now() - studioLastSseAt < 20_000;
+        rt.studioEventSource &&
+        rt.studioEventSource.readyState === 1 &&
+        rt.studioLastSseAt > 0 &&
+        Date.now() - rt.studioLastSseAt < 20_000;
       if (sseFresh) return;
       void syncExternalStateNow();
     }, 2500);
   }
 
   function ensureStandbyStatusPoll() {
+    const rt = store.runtime;
     const needsCanaryWatch = () => store.canary?.state === 'arming';
-    if (statusPollTimer || (isHostAttached() && !needsCanaryWatch())) return;
-    statusPollTimer = setInterval(async () => {
-      if (!isStudioVisible()) return;
+    if (rt.statusPollTimer || (isHostAttached() && !needsCanaryWatch())) return;
+    rt.statusPollTimer = setInterval(async () => {
+      // Self-cleanup checked BEFORE visibility return so timer never leaks!
       if (isHostAttached() && !needsCanaryWatch()) {
-        clearInterval(statusPollTimer);
-        statusPollTimer = null;
+        clearInterval(rt.statusPollTimer);
+        rt.statusPollTimer = null;
         return;
       }
+      if (!isStudioViewportActive() || rt.isDormant) return;
       try {
         const st = await apiJson('/api/status');
         applyExternalStateSnapshot(st);
         if (isHostAttached() && !needsCanaryWatch()) {
-          clearInterval(statusPollTimer);
-          statusPollTimer = null;
+          clearInterval(rt.statusPollTimer);
+          rt.statusPollTimer = null;
         }
       } catch {
         // silent background poll
@@ -6790,11 +3854,235 @@ function bootPrismStudioApp() {
     }, 2500);
   }
 
+  function clearAllFourBackgroundTimers() {
+    const rt = store.runtime;
+    if (rt.previewWatchdogTimer) {
+      clearInterval(rt.previewWatchdogTimer);
+      rt.previewWatchdogTimer = null;
+    }
+    if (rt.studioSyncPollTimer) {
+      clearInterval(rt.studioSyncPollTimer);
+      rt.studioSyncPollTimer = null;
+    }
+    if (rt.statusPollTimer) {
+      clearInterval(rt.statusPollTimer);
+      rt.statusPollTimer = null;
+    }
+    if (rt.slideshowTimer) {
+      clearInterval(rt.slideshowTimer);
+      rt.slideshowTimer = null;
+    }
+  }
+
   // ==========================================================================
-  // Bootstrap & Standby-Only Host Status Poll (Zero Boot Spawns!)
+  // D6 Layer B: Cold-Start Gate & T+0ms SOFT_SLEEP -> T+5000ms DEEP_SLEEP State Machine
   // ==========================================================================
-  async function init() {
-    mountFullShell();
+  function enterSoftSleep() {
+    const rt = store.runtime;
+    if (rt.isDormant) return;
+    rt.isDormant = true;
+
+    // 1. Flush unsent edits via <2KB fetch keepalive with X-Sidecar-Token
+    flushConfigPatchKeepalive();
+
+    // 2. Disconnect SSE immediately to free Chromium 6-socket origin pool
+    disconnectStudioEvents();
+
+    // 3. Pause all videos & cancel short timers
+    try {
+      for (const vid of document.querySelectorAll('video')) {
+        if (!vid.paused) vid.pause();
+      }
+    } catch {
+      // ignore video pause errors
+    }
+    if (rt.slideshowTimer) {
+      clearInterval(rt.slideshowTimer);
+      rt.slideshowTimer = null;
+    }
+    if (rt.updateBootCheckTimer) {
+      clearTimeout(rt.updateBootCheckTimer);
+      rt.updateBootCheckTimer = null;
+    }
+    resetLibraryHoverThumb();
+
+    // 4. Freeze all CSS animations via html[data-prism-dormant="1"]
+    document.documentElement.dataset.prismDormant = '1';
+
+    // 5. Schedule T+5000ms DEEP_SLEEP
+    if (rt.deepSleepTimer) clearTimeout(rt.deepSleepTimer);
+    rt.deepSleepTimer = setTimeout(() => {
+      rt.deepSleepTimer = null;
+      void enterDeepSleep();
+    }, 5000);
+  }
+
+  async function enterDeepSleep() {
+    const rt = store.runtime;
+    if (isStudioViewportActive() || !rt.isDormant) return;
+
+    await flushConfigPatch({ flush: true, keepalive: true });
+    if (isStudioViewportActive() || !rt.isDormant) return;
+
+    // Snapshot ALL active DOM form inputs directly back into `store.*` (DEF-SE-4(c))
+    const nameIn = document.getElementById('prism-preset-name-in');
+    if (nameIn instanceof HTMLInputElement) store.presetDraft.name = nameIn.value;
+    const descIn = document.getElementById('prism-preset-desc-in');
+    if (descIn instanceof HTMLInputElement) store.presetDraft.description = descIn.value;
+    const wallCb = document.getElementById('prism-preset-include-wall');
+    if (wallCb instanceof HTMLInputElement) store.presetDraft.includeWallpaper = wallCb.checked;
+    const searchIn = document.getElementById('prism-lib-search');
+    if (searchIn instanceof HTMLInputElement) store.searchQuery = searchIn.value;
+    const plNameIn = document.getElementById('prism-pl-name-in');
+    if (plNameIn instanceof HTMLInputElement) store.playlistDraft.name = plNameIn.value;
+    const fsPathIn = document.getElementById('prism-fs-path-in');
+    if (fsPathIn instanceof HTMLInputElement) {
+      store.fsBrowser.manualPath = fsPathIn.value;
+      store.fsBrowser.current = fsPathIn.value;
+    }
+    const renameIn = document.getElementById('prism-preset-rename-in');
+    if (renameIn instanceof HTMLInputElement) store.presetRenameDraft = renameIn.value;
+
+    rt.dormantDraftSnapshot = {
+      scrollerScrollTop: document.getElementById('prism-tab-scroll')?.scrollTop || 0,
+      railScrollTop: document.querySelector('.prism-left-rail')?.scrollTop || 0,
+      activeTab: store.activeTab,
+      drawer: store.drawer,
+      editorModalOpen: store.editorModalOpen,
+      selectedRegion: store.selectedRegion,
+    };
+
+    // Release all preview & modal <video> decoders + pan/zoom bindings + reset media signature
+    clearCanvasPanZoomBinding();
+    releaseExistingPreviewVideo();
+    const veHost = document.getElementById('prism-visual-editor-host');
+    if (veHost) {
+      releaseExistingPreviewVideo(veHost);
+      veHost.innerHTML = '';
+    }
+    rt.currentStageMediaSig = '';
+
+    // Clear ALL 4 background timers
+    clearAllFourBackgroundTimers();
+
+    // Unload #prism-tab-scroll DOM (frees all card thumbnail image decoders)
+    const sc = document.getElementById('prism-tab-scroll');
+    if (sc) sc.innerHTML = '';
+
+    // Revoke all temporary ObjectURLs
+    for (const u of rt.tempObjectUrls) {
+      try {
+        URL.revokeObjectURL(u);
+      } catch {
+        // ignore revoke issues
+      }
+    }
+    rt.tempObjectUrls.clear();
+
+    rt.isDeepDormant = true;
+  }
+
+  function wakeFromSleep() {
+    const rt = store.runtime;
+    if (rt.deepSleepTimer) {
+      clearTimeout(rt.deepSleepTimer);
+      rt.deepSleepTimer = null;
+    }
+    delete document.documentElement.dataset.prismDormant;
+    rt.isDormant = false;
+
+    if (!rt.booted) {
+      void bootHydrateStudioOnce();
+      return;
+    }
+
+    if (rt.isDeepDormant || rt.needsRenderOnWake) {
+      const wasDeep = rt.isDeepDormant;
+      rt.isDeepDormant = false;
+      rt.needsRenderOnWake = false;
+      const snap = rt.dormantDraftSnapshot;
+      renderActiveSurface();
+      if (wasDeep && snap) {
+        const sc = document.getElementById('prism-tab-scroll');
+        if (sc) sc.scrollTop = snap.scrollerScrollTop || 0;
+        const rail = document.querySelector('.prism-left-rail');
+        if (rail) rail.scrollTop = snap.railScrollTop || 0;
+      }
+      ensurePreviewWatchdog();
+    } else {
+      syncMiniPreviewMedia();
+      syncOpticalCssVars();
+    }
+
+    connectStudioEvents();
+    ensureLiveSyncPoll();
+    ensureStandbyStatusPoll();
+    if (store.ready) void syncExternalStateNow();
+  }
+
+  // Exact symbol name preserved for verify-all.mjs:L1594-L1598!
+  function installStudioVisibilityGuards() {
+    let wasActive = isStudioViewportActive();
+    if (!wasActive) {
+      store.runtime.isDormant = true;
+      document.documentElement.dataset.prismDormant = '1';
+    }
+
+    const reconcile = () => {
+      const active = isStudioViewportActive();
+      if (active === wasActive) {
+        if (active && !store.runtime.booted) {
+          void bootHydrateStudioOnce();
+        }
+        return;
+      }
+      wasActive = active;
+      if (!active) {
+        if (store.runtime.booted) {
+          enterSoftSleep();
+        } else {
+          store.runtime.isDormant = true;
+          document.documentElement.dataset.prismDormant = '1';
+        }
+      } else {
+        wakeFromSleep();
+      }
+    };
+
+    document.addEventListener('visibilitychange', reconcile);
+    window.addEventListener('focus', reconcile);
+    window.addEventListener('resize', reconcile, { passive: true });
+    window.addEventListener('pagehide', () => {
+      flushConfigPatchKeepalive();
+      disconnectStudioEvents();
+    });
+
+    if (typeof window.ResizeObserver === 'function' && document.documentElement) {
+      try {
+        const ro = new window.ResizeObserver(reconcile);
+        ro.observe(document.documentElement);
+        store.runtime.rootResizeObserver = ro;
+      } catch {
+        // ignore observer errors
+      }
+    }
+  }
+
+  // ==========================================================================
+  // Idempotent Cold-Start Hydration (0 requests/SSE/timers/videos while hidden!)
+  // ==========================================================================
+  async function bootHydrateStudioOnce() {
+    const rt = store.runtime;
+    if (rt.booted) return;
+    rt.booted = true;
+    rt.isDormant = false;
+    delete document.documentElement.dataset.prismDormant;
+
+    if (store.isPopoutMode) {
+      mountPopoutShell();
+    } else {
+      mountFullShell();
+    }
     attachEventDelegation();
 
     try {
@@ -6811,25 +4099,64 @@ function bootPrismStudioApp() {
         ingestServerState(bootRes);
       }
       store.ready = true;
-      renderActiveSurface();
     } catch {
-      // Offline / mock fallback renders cleanly with zero uncaught errors
       store.ready = true;
-      renderActiveSurface();
     }
 
-    installStudioVisibilityGuards();
+    if (!isStudioViewportActive() || rt.isDormant) {
+      rt.needsRenderOnWake = true;
+      if (!rt.isDormant) enterSoftSleep();
+      return;
+    }
+
+    rt.needsRenderOnWake = false;
+    renderActiveSurface();
+
     connectStudioEvents();
     ensureLiveSyncPoll();
     ensureStandbyStatusPoll();
+    ensurePreviewWatchdog();
 
-    if (updateBootCheckTimer) clearTimeout(updateBootCheckTimer);
-    updateBootCheckTimer = setTimeout(() => {
-      updateBootCheckTimer = null;
-      if (!store.update.checked && !store.update.checking) {
-        void fetchUpdateStatus(false);
+    if (!store.isPopoutMode) {
+      if (rt.updateBootCheckTimer) clearTimeout(rt.updateBootCheckTimer);
+      rt.updateBootCheckTimer = setTimeout(() => {
+        rt.updateBootCheckTimer = null;
+        if (isStudioViewportActive() && !rt.isDormant && !store.update.checked && !store.update.checking) {
+          void fetchUpdateStatus(false);
+        }
+      }, 800);
+    }
+  }
+
+  function init() {
+    registerHooks({
+      renderActiveSurface,
+      renderToastStack,
+      syncOpticalCssVars,
+      syncMiniPreviewMedia,
+      updateTopStatusIndicators,
+      updateLeftRailPanels,
+      syncRegionBadgesInDom,
+    });
+
+    try {
+      const qs = new URLSearchParams(window.location.search || '');
+      const mode = (qs.get('mode') || '').trim().toLowerCase();
+      const region = (qs.get('region') || '').trim();
+      store.isPopoutMode = mode === 'visual-editor';
+      store.editorMode = store.isPopoutMode ? 'popout' : 'none';
+      if (region && REGION_IDS.includes(region)) {
+        store.selectedRegion = region;
       }
-    }, 800);
+    } catch {
+      store.isPopoutMode = false;
+    }
+
+    // Layer B Cold-Start Gate: install visibility guards FIRST; remain COLD_DORMANT when hidden or 0x0!
+    installStudioVisibilityGuards();
+    if (isStudioViewportActive()) {
+      void bootHydrateStudioOnce();
+    }
   }
 
   if (document.readyState === 'loading') {

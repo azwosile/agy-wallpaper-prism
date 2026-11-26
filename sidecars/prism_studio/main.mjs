@@ -2,6 +2,7 @@
 // Unified Authoritative Backend for agy-wallpaper-prism (Sidecar HTTP Server + Passive CDP Bridge).
 // Serves Sidecar Studio UI (0 Agent Tokens) + all /api/* routes + Passive CDP Host Controller.
 
+import { execFile } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
@@ -9,6 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import * as schemaModule from '../../src/shared/schema.mjs';
 import {
   DEFAULT_DEBUG_PORT,
   PER_WALLPAPER_OVERRIDE_KEYS,
@@ -27,6 +29,7 @@ import {
 import { createPrismUpdater, isManagedSidecar } from '../../src/engine/updater.mjs';
 import * as hostModule from '../../src/host/index.mjs';
 import {
+  cleanHostEnv,
   createCanaryController,
   createDebugShortcut,
   createPassiveCdpBridge,
@@ -44,6 +47,56 @@ const PLUGIN_ROOT = resolve(__dirname, '..', '..');
 const INDEX_HTML_PATH = join(__dirname, 'index.html');
 const MAX_JSON_BYTES = 16 * 1024 * 1024;
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+const POPOUT_MODES = new Set(['visual-editor']);
+const FALLBACK_REGION_IDS = Object.freeze([
+  'topbar',
+  'wco',
+  'sidebar',
+  'workspace',
+  'card',
+  'composer',
+  'rightPane',
+  'popover',
+]);
+
+function getValidRegionIdSet() {
+  const list =
+    Array.isArray(schemaModule.REGION_IDS) && schemaModule.REGION_IDS.length > 0
+      ? schemaModule.REGION_IDS
+      : FALLBACK_REGION_IDS;
+  return new Set(list);
+}
+
+function launchSystemBrowserNoShell(targetUrl, { platform = process.platform, openExternalUrl = null } = {}) {
+  if (typeof openExternalUrl === 'function') {
+    return Promise.resolve(openExternalUrl(targetUrl)).then(() => ({ ok: true, launched: true }));
+  }
+  let bin;
+  let args;
+  if (platform === 'win32') {
+    bin = process.env.SystemRoot
+      ? `${process.env.SystemRoot}\\System32\\rundll32.exe`
+      : 'rundll32.exe';
+    args = ['url.dll,FileProtocolHandler', targetUrl];
+  } else if (platform === 'darwin') {
+    bin = 'open';
+    args = [targetUrl];
+  } else {
+    bin = 'xdg-open';
+    args = [targetUrl];
+  }
+  return new Promise((resolveLaunch, rejectLaunch) => {
+    execFile(
+      bin,
+      args,
+      { timeout: 8000, windowsHide: true, env: cleanHostEnv() },
+      (err) => {
+        if (err) rejectLaunch(err);
+        else resolveLaunch({ ok: true, launched: true });
+      },
+    );
+  });
+}
 
 const PRELOAD_SHIM_JS = `window.__agyDomTranslatorInitialized = true;
 (function() {
@@ -74,7 +127,8 @@ const PRELOAD_SHIM_JS = `window.__agyDomTranslatorInitialized = true;
   function secureFetch(url, options) {
     var init = Object.assign({}, options || {});
     var headers = new Headers(init.headers || {});
-    if (token) headers.set('X-Sidecar-Token', token);
+    var effToken = token || (window.__SIDECAR_BOOT__ && window.__SIDECAR_BOOT__.token) || '';
+    if (effToken) headers.set('X-Sidecar-Token', effToken);
     if (init.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
@@ -124,10 +178,20 @@ function buildFallbackStaticCss(skinPayload = {}) {
   ].join('\n');
 }
 
-function injectBootIntoHtml(rawHtml, token = '', conversationId = '') {
+export function injectBootIntoHtml(rawHtml, token = '', conversationId = '', { omitPreloadQueryToken = false } = {}) {
   const bootTag = `<script>window.__SIDECAR_BOOT__=${JSON.stringify({ token, conversationId })};</script>`;
-  let html = rawHtml.includes('</head>') ? rawHtml.replace('</head>', `${bootTag}\n</head>`) : `${bootTag}\n${rawHtml}`;
-  if (token) {
+  const preloadRe = /<script\b[^>]*\bsrc=(["'])\/preload\.js(?:\?[^"']*)?\1[^>]*>/i;
+  let html;
+  if (preloadRe.test(rawHtml)) {
+    html = rawHtml.replace(preloadRe, (m) => `${bootTag}\n  ${m}`);
+  } else if (/<head(?:\s[^>]*)?>/i.test(rawHtml)) {
+    html = rawHtml.replace(/<head(?:\s[^>]*)?>/i, (m) => `${m}\n  ${bootTag}`);
+  } else if (rawHtml.includes('</head>')) {
+    html = rawHtml.replace('</head>', `${bootTag}\n</head>`);
+  } else {
+    html = `${bootTag}\n${rawHtml}`;
+  }
+  if (token && !omitPreloadQueryToken) {
     html = html.replace(/src=(["'])\/preload\.js\1/g, `src=$1/preload.js?token=${encodeURIComponent(token)}$1`);
   }
   return html;
@@ -318,6 +382,60 @@ export async function createPrismStudioServer(options = {}) {
   const resolvedPluginRoot = options.pluginRoot ? resolve(options.pluginRoot) : PLUGIN_ROOT;
   const updaterEnv = options.env || process.env;
   let closed = false;
+  let stateRev = 1;
+  let deferredPushDepth = 0;
+  let lastStudioBroadcastRev = 0;
+  const bumpStateRev = () => {
+    stateRev += 1;
+    return stateRev;
+  };
+  const withDeferredPush = async (fn, { ensureRevBump = false } = {}) => {
+    const startRev = stateRev;
+    deferredPushDepth += 1;
+    try {
+      const res = await fn();
+      if (ensureRevBump && stateRev === startRev) {
+        bumpStateRev();
+      }
+      return res;
+    } finally {
+      deferredPushDepth = Math.max(0, deferredPushDepth - 1);
+    }
+  };
+  const resolveHttpErrStatus = (err, fallback = 400) =>
+    Number.isInteger(err?.statusCode) && err.statusCode >= 400 && err.statusCode < 600
+      ? err.statusCode
+      : fallback;
+
+  const FALLBACK_INDEX_HTML =
+    '<!doctype html><html><body><div id="app">Run node scripts/build.mjs first.</div></body></html>';
+  let cachedIndexHtml = null;
+  let cachedIndexMtimeMs = -1;
+  let cachedIndexSize = -1;
+  const getCachedIndexHtml = () => {
+    try {
+      if (!existsSync(INDEX_HTML_PATH)) {
+        cachedIndexHtml = null;
+        cachedIndexMtimeMs = -1;
+        cachedIndexSize = -1;
+        return FALLBACK_INDEX_HTML;
+      }
+      const st = statSync(INDEX_HTML_PATH);
+      if (
+        cachedIndexHtml !== null &&
+        st.mtimeMs === cachedIndexMtimeMs &&
+        st.size === cachedIndexSize
+      ) {
+        return cachedIndexHtml;
+      }
+      cachedIndexHtml = readFileSync(INDEX_HTML_PATH, 'utf8');
+      cachedIndexMtimeMs = st.mtimeMs;
+      cachedIndexSize = st.size;
+      return cachedIndexHtml;
+    } catch {
+      return cachedIndexHtml || FALLBACK_INDEX_HTML;
+    }
+  };
 
   const engine =
     options.engine ||
@@ -380,6 +498,7 @@ export async function createPrismStudioServer(options = {}) {
     pluginRoot: resolvedPluginRoot,
     onTripSafeMode: async () => {
       localSessionAwake = false;
+      bumpStateRev();
       await engine.updateConfig({ skinEnabled: false });
       await engine.store?.flush?.();
     },
@@ -449,7 +568,7 @@ export async function createPrismStudioServer(options = {}) {
     return lib.items.find((i) => i.id === activeId) || null;
   };
 
-  const buildCanonicalState = async () => {
+  const buildCanonicalState = async ({ includeAutostart = true } = {}) => {
     let config;
     let activeItem = null;
     let presets = [];
@@ -478,8 +597,8 @@ export async function createPrismStudioServer(options = {}) {
     }
 
     const autostart =
-      options.inspectShortcuts === false
-        ? {
+      options.inspectShortcuts === false || !includeAutostart
+        ? cachedAutostart || {
             supported: process.platform === 'win32',
             normalShortcutEnabled: false,
             anyShortcutEnabled: false,
@@ -527,6 +646,7 @@ export async function createPrismStudioServer(options = {}) {
       autoRestoreLastSettings: startupMode !== 'manual',
     };
     return {
+      stateRev,
       config,
       activeItem,
       skinEnabled: config.skinEnabled !== false && canary.state !== 'tripped',
@@ -542,6 +662,7 @@ export async function createPrismStudioServer(options = {}) {
       stats,
       mediaOrigin,
       pluginOrigin: getPluginOrigin(),
+      studioHttpOrigin: boundOrigin,
       pid: process.pid,
       version: PLUGIN_VERSION,
       studioUri: SIDECAR_URI,
@@ -550,13 +671,15 @@ export async function createPrismStudioServer(options = {}) {
     };
   };
 
-  const studioSseClients = new Set();
+  const studioSseClients = new Map(); // ServerResponse -> 'aux' | 'popout'
   const studioSseKeepalives = new Set();
   let studioBroadcastScheduled = false;
   let studioBroadcastPending = false;
+  let studioBroadcastForce = false;
 
-  const broadcastStudioState = async () => {
+  const broadcastStudioState = async ({ force = false } = {}) => {
     if (studioSseClients.size === 0) return;
+    if (force) studioBroadcastForce = true;
     if (studioBroadcastScheduled) {
       studioBroadcastPending = true;
       return;
@@ -565,20 +688,26 @@ export async function createPrismStudioServer(options = {}) {
     try {
       do {
         studioBroadcastPending = false;
+        const doForce = studioBroadcastForce;
+        studioBroadcastForce = false;
         if (studioSseClients.size === 0) break;
         const st = await buildCanonicalState();
+        if (!doForce && st.stateRev === lastStudioBroadcastRev) continue;
         const serialized = `event: state\ndata: ${JSON.stringify(st)}\n\n`;
-        for (const clientRes of [...studioSseClients]) {
+        let wroteAny = false;
+        for (const clientRes of [...studioSseClients.keys()]) {
           if (clientRes.writableEnded || clientRes.destroyed) {
             studioSseClients.delete(clientRes);
             continue;
           }
           try {
             clientRes.write(serialized);
+            wroteAny = true;
           } catch {
             studioSseClients.delete(clientRes);
           }
         }
+        if (wroteAny) lastStudioBroadcastRev = st.stateRev;
       } while (studioBroadcastPending);
     } catch {
       /* best-effort studio sync */
@@ -607,68 +736,200 @@ export async function createPrismStudioServer(options = {}) {
     }
   };
 
-  const PER_WALLPAPER_OVERRIDE_KEY_SET = new Set(PER_WALLPAPER_OVERRIDE_KEYS);
+  const REGION_OPTICAL_KEYS = Object.freeze([
+    'glassEnabled',
+    'blur',
+    'opacity',
+    'tone',
+    'tint',
+    'borderOpacity',
+  ]);
+  const REGION_OPTICAL_RESET_VALUES = Object.freeze({
+    glassEnabled: null,
+    blur: null,
+    opacity: null,
+    tone: 0,
+    tint: '',
+    borderOpacity: null,
+  });
+  const isPlainObj = (x) => Boolean(x && typeof x === 'object' && !Array.isArray(x));
+  const hasOwn = (o, k) => Boolean(o && Object.prototype.hasOwnProperty.call(o, k));
+  const PER_WALLPAPER_OVERRIDE_KEY_SET = new Set([
+    ...PER_WALLPAPER_OVERRIDE_KEYS,
+    'regions',
+    'globalFontSize',
+    'globalFontFamily',
+    'globalFontColor',
+  ]);
+
   const routeRpcConfigPatch = async (rawPatch) => {
-    const patch = rawPatch && typeof rawPatch === 'object' ? { ...rawPatch } : {};
+    const patch = isPlainObj(rawPatch) ? { ...rawPatch } : {};
     if ('perWallpaperOverrides' in patch) return patch;
     const cfg = await engine.getConfig();
     const activeId = String(cfg?.activeWallpaperId || '');
     const existingOv =
-      activeId && cfg?.perWallpaperOverrides && typeof cfg.perWallpaperOverrides[activeId] === 'object'
+      activeId && isPlainObj(cfg?.perWallpaperOverrides) && isPlainObj(cfg.perWallpaperOverrides[activeId])
         ? cfg.perWallpaperOverrides[activeId]
         : null;
     if (!existingOv) return patch;
 
     const nextOv = { ...existingOv };
-    const hasPatchSurfaceTints = Object.prototype.hasOwnProperty.call(patch, 'surfaceTints');
-    const hasPatchSidebarOp = Object.prototype.hasOwnProperty.call(patch, 'sidebarOpacity');
+    const hasPatchRegions = hasOwn(patch, 'regions');
+    const hasPatchRegionsSidebar =
+      hasPatchRegions &&
+      (patch.regions === null || (isPlainObj(patch.regions) && hasOwn(patch.regions, 'sidebar')));
+    const hasPatchSurfaceTints = hasOwn(patch, 'surfaceTints');
+    const hasPatchSidebarOp = hasOwn(patch, 'sidebarOpacity');
+    const hasPatchSidebarBlur = hasOwn(patch, 'sidebarBlur');
     let touchedOv = false;
     const topPatch = {};
-    for (const [k, v] of Object.entries(patch)) {
+
+    // Process `surfaceTints` before `regions` when both exist in the same patch so `regions` wins.
+    const entries = Object.entries(patch).sort(([a], [b]) => {
+      const rank = (k) => (k === 'surfaceTints' ? 1 : k === 'regions' ? 2 : 0);
+      return rank(a) - rank(b);
+    });
+
+    for (const [k, v] of entries) {
       if (PER_WALLPAPER_OVERRIDE_KEY_SET.has(k)) {
-        if (k === 'surfaceTints') {
+        if (k === 'regions') {
+          if (v === null) {
+            nextOv.regions = null;
+            nextOv.surfaceTints = null;
+            if (!hasPatchSidebarOp && 'sidebarOpacity' in nextOv) nextOv.sidebarOpacity = null;
+            if (!hasPatchSidebarBlur && 'sidebarBlur' in nextOv) nextOv.sidebarBlur = null;
+          } else if (isPlainObj(v)) {
+            const prevRegions = isPlainObj(nextOv.regions) ? { ...nextOv.regions } : {};
+            if (isPlainObj(nextOv.surfaceTints)) {
+              for (const [tRid, tVal] of Object.entries(nextOv.surfaceTints)) {
+                if (!hasOwn(prevRegions, tRid) && isPlainObj(tVal)) {
+                  prevRegions[tRid] = { ...tVal };
+                }
+              }
+            }
+            const mergedRegions = { ...prevRegions };
+            let tintsBase = isPlainObj(nextOv.surfaceTints) ? { ...nextOv.surfaceTints } : null;
+            let touchedTints = false;
+            for (const [rid, rVal] of Object.entries(v)) {
+              if (rVal === null) {
+                mergedRegions[rid] = null;
+                if (tintsBase) {
+                  tintsBase[rid] = null;
+                  touchedTints = true;
+                }
+              } else if (isPlainObj(rVal)) {
+                const prevEntry = isPlainObj(prevRegions[rid]) ? prevRegions[rid] : {};
+                mergedRegions[rid] = { ...prevEntry, ...rVal };
+                const optPatch = {};
+                let hasOpt = false;
+                for (const ok of REGION_OPTICAL_KEYS) {
+                  if (hasOwn(rVal, ok)) {
+                    optPatch[ok] = rVal[ok];
+                    hasOpt = true;
+                  }
+                }
+                if (hasOpt) {
+                  if (!tintsBase) tintsBase = {};
+                  const prevT = isPlainObj(tintsBase[rid]) ? tintsBase[rid] : {};
+                  tintsBase[rid] = { ...prevT, ...optPatch };
+                  touchedTints = true;
+                }
+              }
+            }
+            nextOv.regions = mergedRegions;
+            if (touchedTints && tintsBase) nextOv.surfaceTints = tintsBase;
+            if (hasOwn(v, 'sidebar')) {
+              const sbEntry = mergedRegions.sidebar;
+              if (
+                !hasPatchSidebarOp &&
+                'sidebarOpacity' in nextOv &&
+                (v.sidebar === null || (isPlainObj(v.sidebar) && hasOwn(v.sidebar, 'opacity')))
+              ) {
+                nextOv.sidebarOpacity = isPlainObj(sbEntry) ? (sbEntry.opacity ?? null) : null;
+              }
+              if (
+                !hasPatchSidebarBlur &&
+                'sidebarBlur' in nextOv &&
+                (v.sidebar === null || (isPlainObj(v.sidebar) && hasOwn(v.sidebar, 'blur')))
+              ) {
+                nextOv.sidebarBlur = isPlainObj(sbEntry) ? (sbEntry.blur ?? null) : null;
+              }
+            }
+          }
+        } else if (k === 'surfaceTints') {
           if (v === null) {
             nextOv.surfaceTints = null;
-            if ('sidebarOpacity' in nextOv && !hasPatchSidebarOp) nextOv.sidebarOpacity = null;
-          } else if (v && typeof v === 'object' && !Array.isArray(v)) {
-            const prevTints =
-              nextOv.surfaceTints && typeof nextOv.surfaceTints === 'object' && !Array.isArray(nextOv.surfaceTints)
-                ? nextOv.surfaceTints
-                : {};
+            // Hard invariant: SCENE_PRESETS (`surfaceTints: null`) resets only optical 6 keys, preserving non-optical keys in `nextOv.regions`.
+            if (!hasPatchRegions && isPlainObj(nextOv.regions)) {
+              const clearedRegions = { ...nextOv.regions };
+              for (const [rid, rEntry] of Object.entries(clearedRegions)) {
+                if (isPlainObj(rEntry)) {
+                  clearedRegions[rid] = { ...rEntry, ...REGION_OPTICAL_RESET_VALUES };
+                }
+              }
+              nextOv.regions = clearedRegions;
+            }
+            if (!hasPatchSidebarOp && 'sidebarOpacity' in nextOv) nextOv.sidebarOpacity = null;
+            if (!hasPatchSidebarBlur && 'sidebarBlur' in nextOv) nextOv.sidebarBlur = null;
+          } else if (isPlainObj(v)) {
+            const prevTints = isPlainObj(nextOv.surfaceTints) ? nextOv.surfaceTints : {};
             const mergedTints = { ...prevTints };
+            let mergedRegions = isPlainObj(nextOv.regions) ? { ...nextOv.regions } : null;
             for (const [comp, compVal] of Object.entries(v)) {
               if (compVal === null) {
                 mergedTints[comp] = null;
-              } else if (compVal && typeof compVal === 'object' && !Array.isArray(compVal)) {
-                const prevComp = prevTints[comp] && typeof prevTints[comp] === 'object' ? prevTints[comp] : {};
+                if (mergedRegions && isPlainObj(mergedRegions[comp])) {
+                  mergedRegions[comp] = { ...mergedRegions[comp], ...REGION_OPTICAL_RESET_VALUES };
+                }
+              } else if (isPlainObj(compVal)) {
+                const prevComp = isPlainObj(prevTints[comp]) ? prevTints[comp] : {};
                 mergedTints[comp] = { ...prevComp, ...compVal };
+                if (!mergedRegions) mergedRegions = {};
+                const prevR = isPlainObj(mergedRegions[comp]) ? mergedRegions[comp] : {};
+                mergedRegions[comp] = { ...prevR, ...compVal };
               }
             }
             nextOv.surfaceTints = mergedTints;
-            if (Object.prototype.hasOwnProperty.call(v, 'sidebar') && 'sidebarOpacity' in nextOv && !hasPatchSidebarOp) {
+            if (mergedRegions && !hasPatchRegions) {
+              nextOv.regions = mergedRegions;
+            }
+            if (hasOwn(v, 'sidebar')) {
               const sbEntry = mergedTints.sidebar;
-              nextOv.sidebarOpacity = sbEntry && typeof sbEntry === 'object' ? (sbEntry.opacity ?? null) : null;
+              if (
+                !hasPatchSidebarOp &&
+                'sidebarOpacity' in nextOv &&
+                (v.sidebar === null || (isPlainObj(v.sidebar) && hasOwn(v.sidebar, 'opacity')))
+              ) {
+                nextOv.sidebarOpacity = isPlainObj(sbEntry) ? (sbEntry.opacity ?? null) : null;
+              }
+              if (
+                !hasPatchSidebarBlur &&
+                'sidebarBlur' in nextOv &&
+                (v.sidebar === null || (isPlainObj(v.sidebar) && hasOwn(v.sidebar, 'blur')))
+              ) {
+                nextOv.sidebarBlur = isPlainObj(sbEntry) ? (sbEntry.blur ?? null) : null;
+              }
             }
           }
         } else {
           // Preserve explicit `null` (e.g. sidebarBlur: null / sidebarOpacity: null) — NEVER delete the key!
           nextOv[k] = v;
-          if (
-            k === 'sidebarOpacity' &&
-            !hasPatchSurfaceTints &&
-            nextOv.surfaceTints &&
-            typeof nextOv.surfaceTints === 'object' &&
-            !Array.isArray(nextOv.surfaceTints) &&
-            Object.prototype.hasOwnProperty.call(nextOv.surfaceTints, 'sidebar')
-          ) {
-            const prevSb =
-              nextOv.surfaceTints.sidebar && typeof nextOv.surfaceTints.sidebar === 'object'
-                ? nextOv.surfaceTints.sidebar
-                : {};
-            nextOv.surfaceTints = {
-              ...nextOv.surfaceTints,
-              sidebar: { ...prevSb, opacity: v },
-            };
+          if ((k === 'sidebarOpacity' || k === 'sidebarBlur') && !hasPatchSurfaceTints && !hasPatchRegionsSidebar) {
+            const propKey = k === 'sidebarOpacity' ? 'opacity' : 'blur';
+            if (isPlainObj(nextOv.surfaceTints) && hasOwn(nextOv.surfaceTints, 'sidebar')) {
+              const prevSb = isPlainObj(nextOv.surfaceTints.sidebar) ? nextOv.surfaceTints.sidebar : {};
+              nextOv.surfaceTints = {
+                ...nextOv.surfaceTints,
+                sidebar: { ...prevSb, [propKey]: v },
+              };
+            }
+            if (isPlainObj(nextOv.regions) && hasOwn(nextOv.regions, 'sidebar')) {
+              const prevRsb = isPlainObj(nextOv.regions.sidebar) ? nextOv.regions.sidebar : {};
+              nextOv.regions = {
+                ...nextOv.regions,
+                sidebar: { ...prevRsb, [propKey]: v },
+              };
+            }
           }
         }
         touchedOv = true;
@@ -684,19 +945,40 @@ export async function createPrismStudioServer(options = {}) {
     return topPatch;
   };
 
-  const applyAnyPreset = async (presetId) => {
+  const applyAnyPreset = async (presetId, opts = {}) => {
     const id = String(presetId || '').trim();
-    if (!id) throw new Error('Missing presetId');
-    if (SCENE_PRESET_IDS.includes(id)) {
-      await engine.updateConfig({ ...SCENE_PRESETS[id].patch, skinEnabled: true });
-    } else if (typeof engine.applyPreset === 'function') {
-      await engine.applyPreset(id);
-      await engine.updateConfig({ skinEnabled: true });
+    if (!id) throw Object.assign(new Error('Missing presetId'), { statusCode: 400 });
+    const overrideStrategy = opts?.overrideStrategy === 'clear' ? 'clear' : 'sync';
+    let applied = null;
+    await withDeferredPush(
+      async () => {
+        if (typeof engine.applyPreset === 'function') {
+          applied = await engine.applyPreset(id, { overrideStrategy });
+          if (applied?.config?.skinEnabled === false) {
+            await engine.updateConfig({ skinEnabled: true });
+          }
+        } else if (SCENE_PRESET_IDS.includes(id)) {
+          await engine.updateConfig({ ...SCENE_PRESETS[id].patch, skinEnabled: true });
+        } else {
+          throw Object.assign(new Error(`Unknown preset: ${id}`), { statusCode: 404 });
+        }
+      },
+      { ensureRevBump: true },
+    );
+    if (cdpBridge) {
+      await cdpBridge.wake({ forceProbe: false });
+      void broadcastStudioState();
     } else {
-      throw new Error(`Unknown preset: ${id}`);
+      await pushToHost();
     }
-    await pushToHost();
-    return buildCanonicalState();
+    const state = await buildCanonicalState();
+    return {
+      state,
+      preset: applied?.preset || null,
+      overrideSynced: Boolean(applied?.overrideSynced),
+      wallpaperFallback: applied?.wallpaperFallback || null,
+      missingWallpaperId: applied?.wallpaperFallback?.missingId || '',
+    };
   };
 
   const rpcHandlers = {
@@ -704,35 +986,42 @@ export async function createPrismStudioServer(options = {}) {
     'bootstrap.get': () => buildCanonicalState(),
     'library.list': async (params = {}) => normalizeLibrary(Boolean(params.refresh)),
     'config.set': async (params = {}) => {
-      const rawPatch = params.patch && typeof params.patch === 'object' ? params.patch : params;
+      const rawPatch = params.patch && typeof params.patch === 'object' && !Array.isArray(params.patch) ? params.patch : params;
+      const shouldDebounce = params?.flush !== true;
       const patch = await routeRpcConfigPatch(rawPatch);
-      await engine.updateConfig(patch, { debounce: true });
-      await pushToHost();
-      return buildCanonicalState();
+      await withDeferredPush(() => engine.updateConfig(patch, { debounce: shouldDebounce }), { ensureRevBump: true });
+      const state = await buildCanonicalState();
+      void pushToHost();
+      return state;
     },
     'prefs.set': async (params = {}) => {
-      const rawPatch = params.patch && typeof params.patch === 'object' ? params.patch : params;
+      const rawPatch = params.patch && typeof params.patch === 'object' && !Array.isArray(params.patch) ? params.patch : params;
+      const shouldDebounce = params?.flush !== true;
       const patch = await routeRpcConfigPatch(rawPatch);
-      await engine.updateConfig(patch, { debounce: true });
-      await pushToHost();
-      return buildCanonicalState();
+      await withDeferredPush(() => engine.updateConfig(patch, { debounce: shouldDebounce }), { ensureRevBump: true });
+      const state = await buildCanonicalState();
+      void pushToHost();
+      return state;
     },
     'config.reset': async (params = {}) => {
-      await engine.resetConfig(params.scope || 'all');
+      await withDeferredPush(() => engine.resetConfig(params.scope || 'all'), { ensureRevBump: true });
       await pushToHost();
       return buildCanonicalState();
     },
     'prefs.reset': async (params = {}) => {
-      await engine.resetConfig(params.scope || 'all');
+      await withDeferredPush(() => engine.resetConfig(params.scope || 'all'), { ensureRevBump: true });
       await pushToHost();
       return buildCanonicalState();
     },
     'wallpaper.apply': async (params = {}) => {
       const wid = String(params.wallpaperId || params.id || '');
       localSessionAwake = true;
-      await engine.applyWallpaper(wid, { ...(params.patch || {}), skinEnabled: true });
+      await withDeferredPush(
+        () => engine.applyWallpaper(wid, { ...(params.patch || {}), skinEnabled: true }),
+        { ensureRevBump: true },
+      );
       if (cdpBridge) {
-        await cdpBridge.wake();
+        await cdpBridge.wake({ forceProbe: false });
         void broadcastStudioState();
       } else {
         await pushToHost();
@@ -741,18 +1030,22 @@ export async function createPrismStudioServer(options = {}) {
     },
     'playlist.step': async (params = {}) => {
       const dir = Number(params.direction) === -1 ? -1 : 1;
-      await engine.stepPlaylist(dir, String(params.reason || 'rpc'));
+      await withDeferredPush(() => engine.stepPlaylist(dir, String(params.reason || 'rpc')), { ensureRevBump: true });
       await pushToHost();
       return buildCanonicalState();
     },
     'preset.apply': async (params = {}) => {
       localSessionAwake = true;
-      const st = await applyAnyPreset(params.presetId || params.id || params.name);
-      if (cdpBridge) {
-        await cdpBridge.wake();
-        void broadcastStudioState();
-      }
-      return st;
+      const res = await applyAnyPreset(params.presetId || params.id || params.name, {
+        overrideStrategy: params.overrideStrategy,
+      });
+      return {
+        ...res.state,
+        preset: res.preset,
+        overrideSynced: res.overrideSynced,
+        wallpaperFallback: res.wallpaperFallback,
+        missingWallpaperId: res.missingWallpaperId,
+      };
     },
     'accent.save': async (params = {}) => {
       const cfg = await engine.getConfig();
@@ -777,56 +1070,66 @@ export async function createPrismStudioServer(options = {}) {
       }
       const accentCache = { ...(cfg.accentCache || {}) };
       if (wid) accentCache[wid] = entry;
-      await engine.updateConfig({ extractedAccent: entry, accentCache });
+      await withDeferredPush(() => engine.updateConfig({ extractedAccent: entry, accentCache }), { ensureRevBump: true });
       await pushToHost();
       return { ok: true, extractedAccent: entry };
     },
     'skin.restore': async () => {
-      await engine.updateConfig({ skinEnabled: false });
+      await withDeferredPush(() => engine.updateConfig({ skinEnabled: false }), { ensureRevBump: true });
       await pushToHost();
       return buildCanonicalState();
     },
     'skin.panicRestore': async () => {
       localSessionAwake = false;
-      await engine.updateConfig({ skinEnabled: false });
-      await engine.store?.flush?.();
+      await withDeferredPush(async () => {
+        await engine.updateConfig({ skinEnabled: false });
+        await engine.store?.flush?.();
+      }, { ensureRevBump: true });
+      bumpStateRev();
       await pushToHost();
-      return { ok: true, skinEnabled: false, state: await buildCanonicalState() };
+      const state = await buildCanonicalState();
+      return { ok: true, skinEnabled: false, stateRev: state.stateRev, state };
     },
-    'skin.wake': async () => {
+    'skin.wake': async (params = {}) => {
       localSessionAwake = true;
-      await engine.updateConfig({ skinEnabled: true });
+      await withDeferredPush(() => engine.updateConfig({ skinEnabled: true }), { ensureRevBump: true });
+      bumpStateRev();
       if (cdpBridge) {
-        await cdpBridge.wake({ forceProbe: true });
+        await cdpBridge.wake({ forceProbe: params?.forceProbe !== false });
         void broadcastStudioState();
       } else {
         await pushToHost();
       }
       const state = await buildCanonicalState();
-      return { ok: true, sessionAwake: true, state };
+      return { ok: true, sessionAwake: true, stateRev: state.stateRev, state };
     },
     'skin.toggle': async (params = {}) => {
       const curSt = await buildCanonicalState();
       const nextEnabled = typeof params?.enabled === 'boolean' ? params.enabled : !curSt.skinEnabled;
       if (nextEnabled) {
         localSessionAwake = true;
-        if (canaryController.getStatus().state === 'tripped') {
-          if (cdpBridge) await cdpBridge.resetCanary();
-          else canaryController.reset();
-        }
-        await engine.updateConfig({ skinEnabled: true });
+        await withDeferredPush(
+          async () => {
+            if (canaryController.getStatus().state === 'tripped') {
+              if (cdpBridge) await cdpBridge.resetCanary();
+              else canaryController.reset();
+            }
+            await engine.updateConfig({ skinEnabled: true });
+          },
+          { ensureRevBump: true },
+        );
         if (cdpBridge) {
-          await cdpBridge.wake({ forceProbe: true });
+          await cdpBridge.wake({ forceProbe: false });
           void broadcastStudioState();
         } else {
           await pushToHost();
         }
       } else {
-        await engine.updateConfig({ skinEnabled: false });
+        await withDeferredPush(() => engine.updateConfig({ skinEnabled: false }), { ensureRevBump: true });
         await pushToHost();
       }
       const state = await buildCanonicalState();
-      return { ok: true, skinEnabled: nextEnabled, state };
+      return { ok: true, skinEnabled: nextEnabled, stateRev: state.stateRev, state };
     },
     'canary.get': async () => ({ ok: true, canary: cdpBridge ? cdpBridge.getCanary() : canaryController.getStatus() }),
     'canary.healthy': async (params = {}) => {
@@ -842,16 +1145,18 @@ export async function createPrismStudioServer(options = {}) {
       const next = cdpBridge
         ? await cdpBridge.rollbackCanary(reason, targetId)
         : await canaryController.rollback(reason, targetId);
+      bumpStateRev();
       const state = await buildCanonicalState();
-      return { ok: true, canary: next, state };
+      return { ok: true, canary: next, stateRev: state.stateRev, state };
     },
     'canary.reset': async () => {
       localSessionAwake = true;
-      await engine.updateConfig({ skinEnabled: true });
+      await withDeferredPush(() => engine.updateConfig({ skinEnabled: true }), { ensureRevBump: true });
+      bumpStateRev();
       const next = cdpBridge ? await cdpBridge.resetCanary() : canaryController.reset();
       await pushToHost();
       const state = await buildCanonicalState();
-      return { ok: true, canary: next, state };
+      return { ok: true, canary: next, stateRev: state.stateRev, state };
     },
     'autostart.get': async (params = {}) => {
       const cfg = await engine.getConfig();
@@ -866,14 +1171,16 @@ export async function createPrismStudioServer(options = {}) {
         : await disableNormalShortcutAutoLoad({ searchDirs: defaultSearchDirs, dataDir });
       cachedAutostart = res;
       cachedAutostartAt = Date.now();
-      return { ok: res.ok, autostart: res, state: await buildCanonicalState() };
+      bumpStateRev();
+      const state = await buildCanonicalState();
+      return { ok: res.ok, autostart: res, stateRev: state.stateRev, state };
     },
     'studio.open': async () => ({ ok: true, uri: SIDECAR_URI }),
   };
 
   if (options.startCdp !== false && process.env.AGY_PRISM_DISABLE_CDP !== '1') {
     cdpBridge = createPassiveCdpBridge({
-      getEngineState: buildCanonicalState,
+      getEngineState: () => buildCanonicalState({ includeAutostart: false }),
       hostScripts: hostModule,
       rpcHandlers,
       getHostOrigin: () => boundOrigin,
@@ -891,9 +1198,19 @@ export async function createPrismStudioServer(options = {}) {
   }
 
   if (engine.events && typeof engine.events.on === 'function') {
+    engine.events.on('change', () => {
+      bumpStateRev();
+    });
+    engine.events.on('presets', () => {
+      if (deferredPushDepth === 0) {
+        void broadcastStudioState();
+        if (cdpBridge) void cdpBridge.broadcastState({ sseOnly: true }).catch(() => {});
+      }
+    });
     for (const evName of ['skin', 'state', 'wallpaper', 'rotation']) {
       engine.events.on(evName, () => {
-        void pushToHost();
+        if (evName === 'state') bumpStateRev();
+        if (deferredPushDepth === 0) void pushToHost();
       });
     }
   }
@@ -954,9 +1271,12 @@ export async function createPrismStudioServer(options = {}) {
     const pathname = urlObj.pathname;
     const reqOrigin = typeof req.headers.origin === 'string' && req.headers.origin ? req.headers.origin : '*';
 
-    // Strict preflight interception for /api/update/* & /api/healthz BEFORE global wildcard/PNA OPTIONS
+    // Strict preflight interception for /api/update/*, /api/healthz & /api/studio/popout BEFORE global wildcard/PNA OPTIONS
     const isStrictRoute =
-      pathname === '/api/healthz' || pathname === '/api/update' || pathname.startsWith('/api/update/');
+      pathname === '/api/healthz' ||
+      pathname === '/api/update' ||
+      pathname.startsWith('/api/update/') ||
+      pathname === '/api/studio/popout';
     if (req.method === 'OPTIONS' && isStrictRoute) {
       const rawOrigin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
       if (!isAllowedStrictOrigin(rawOrigin)) {
@@ -964,7 +1284,10 @@ export async function createPrismStudioServer(options = {}) {
         return;
       }
       const preflightHeaders = {
-        'Access-Control-Allow-Methods': pathname === '/api/update/apply' ? 'POST, OPTIONS' : 'GET, OPTIONS',
+        'Access-Control-Allow-Methods':
+          pathname === '/api/update/apply' || pathname === '/api/studio/popout'
+            ? 'POST, OPTIONS'
+            : 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, X-Sidecar-Token',
         'Cache-Control': 'no-store',
         'X-Content-Type-Options': 'nosniff',
@@ -984,7 +1307,7 @@ export async function createPrismStudioServer(options = {}) {
         Vary: 'Origin',
         'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, X-Sidecar-Token, X-Prism-Token, Cache-Control, Range, If-Range, If-None-Match',
-        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, ETag, X-Prism-Mse-Mime',
+        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, ETag, X-Prism-Mse-Mime, X-Prism-Animated-Preview',
         'Access-Control-Allow-Private-Network': 'true',
         'Cross-Origin-Resource-Policy': 'cross-origin',
       });
@@ -1015,7 +1338,11 @@ export async function createPrismStudioServer(options = {}) {
           skinEnabled: st.skinEnabled,
           slides: st.activeItem?.slides,
           pluginOrigin: getPluginOrigin(),
+          stateRev: st.stateRev,
         });
+        if (st.stateRev > 0 && skinPayload && typeof skinPayload === 'object' && !Number.isInteger(skinPayload.stateRev)) {
+          skinPayload.stateRev = st.stateRev;
+        }
         const body = `window.__AGY_PRISM_BOOT_PAYLOAD__ = ${JSON.stringify(skinPayload)};\n${hostModule.getHostSkinScript()}\n`;
         res.writeHead(200, { ...hostHeaders, 'Content-Type': 'text/javascript; charset=utf-8' });
         res.end(body);
@@ -1042,6 +1369,7 @@ export async function createPrismStudioServer(options = {}) {
           skinEnabled: st.skinEnabled,
           slides: st.activeItem?.slides,
           pluginOrigin: getPluginOrigin(),
+          stateRev: st.stateRev,
         });
         const css =
           typeof hostModule.buildStaticCssSheet === 'function'
@@ -1082,12 +1410,17 @@ export async function createPrismStudioServer(options = {}) {
           await cdpBridge.registerSseClient(req, res, isInMemory);
         } else {
           const st = await buildCanonicalState();
+          const rev = Number(st.stateRev) || 0;
           const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
             skinEnabled: st.skinEnabled,
             slides: st.activeItem?.slides,
             pluginOrigin: getPluginOrigin(),
+            stateRev: rev,
           });
-          res.write(`retry: 2500\ndata: ${JSON.stringify({ event: 'state', skinVersion: PRISM_DOM.skinVersion, startupMode: st.config.startupMode, skinEnabled: st.skinEnabled, skinPayload, data: st })}\n\n`);
+          if (rev > 0 && skinPayload && typeof skinPayload === 'object' && !Number.isInteger(skinPayload.stateRev)) {
+            skinPayload.stateRev = rev;
+          }
+          res.write(`retry: 2500\ndata: ${JSON.stringify({ event: 'state', stateRev: rev, skinVersion: PRISM_DOM.skinVersion, startupMode: st.config.startupMode, skinEnabled: st.skinEnabled, skinPayload, data: st })}\n\n`);
           res.end();
         }
         return;
@@ -1100,7 +1433,7 @@ export async function createPrismStudioServer(options = {}) {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
         'Access-Control-Allow-Headers': 'Range, If-Range, If-None-Match, Content-Type',
-        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, ETag, X-Prism-Mse-Mime',
+        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, ETag, X-Prism-Mse-Mime, X-Prism-Animated-Preview',
         'Access-Control-Allow-Private-Network': 'true',
         'Cross-Origin-Resource-Policy': 'cross-origin',
       };
@@ -1132,6 +1465,7 @@ export async function createPrismStudioServer(options = {}) {
         'cache-control',
         'etag',
         'x-prism-mse-mime',
+        'x-prism-animated-preview',
       ];
 
       const isInMemory = typeof req.socket?.setNoDelay !== 'function';
@@ -1205,9 +1539,11 @@ export async function createPrismStudioServer(options = {}) {
           }
           finish();
         };
-        req.on('close', abortUpstream);
         req.on('aborted', abortUpstream);
-        res.on('close', abortUpstream);
+        res.on('close', () => {
+          if (!res.writableEnded) abortUpstream();
+          else finish();
+        });
         upReq.on('error', (err) => {
           if (!res.headersSent) {
             sendJson(res, 502, { ok: false, error: `Media proxy upstream error: ${err?.message || String(err)}` }, proxyCors);
@@ -1223,13 +1559,22 @@ export async function createPrismStudioServer(options = {}) {
 
     // Static UI & Preload
     if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
-      const indexHtml = existsSync(INDEX_HTML_PATH)
-        ? readFileSync(INDEX_HTML_PATH, 'utf8')
-        : '<!doctype html><html><body><div id="app">Run node scripts/build.mjs first.</div></body></html>';
+      const indexHtml = getCachedIndexHtml();
+      const modeParam = (urlObj.searchParams.get('mode') || '').trim().toLowerCase();
+      const isVisualEditorMode = modeParam === 'visual-editor';
       const tok = urlObj.searchParams.get('token') || effectiveAuthToken;
       const convId = urlObj.searchParams.get('conversationId') || '';
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(injectBootIntoHtml(indexHtml, tok, convId));
+      const htmlHeaders = {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      };
+      if (isVisualEditorMode) {
+        htmlHeaders['Content-Security-Policy'] = "frame-ancestors 'none'";
+        htmlHeaders['X-Content-Type-Options'] = 'nosniff';
+        htmlHeaders['Referrer-Policy'] = 'no-referrer';
+      }
+      res.writeHead(200, htmlHeaders);
+      res.end(injectBootIntoHtml(indexHtml, tok, convId, { omitPreloadQueryToken: isVisualEditorMode }));
       return;
     }
 
@@ -1271,6 +1616,7 @@ export async function createPrismStudioServer(options = {}) {
       const force = urlObj.searchParams.get('force') === '1' || urlObj.searchParams.get('force') === 'true';
       const status = decorateUpdateStatus(await updater.checkForUpdate({ force }));
       cachedUpdateStatus = status;
+      bumpStateRev();
       void broadcastStudioState();
       const extra = rawOrigin ? { 'Access-Control-Allow-Origin': rawOrigin, Vary: 'Origin' } : {};
       sendStrictJson(res, 200, status, extra);
@@ -1336,6 +1682,7 @@ export async function createPrismStudioServer(options = {}) {
           targetTag: typeof body.targetTag === 'string' ? body.targetTag : '',
         });
         if (!result.willRestart && result.updated) {
+          cachedIndexHtml = null;
           hostModule.getHostSkinScript?.({ reload: true });
           hostModule.getHostPanelScript?.({ reload: true });
         }
@@ -1343,10 +1690,7 @@ export async function createPrismStudioServer(options = {}) {
         const onFlushed = result.willRestart ? () => triggerManagedSelfRestart(result) : null;
         sendStrictJson(res, 200, result, extra, onFlushed);
       } catch (err) {
-        const errStatus =
-          Number.isInteger(err?.statusCode) && err.statusCode >= 400 && err.statusCode < 600
-            ? err.statusCode
-            : 400;
+        const errStatus = resolveHttpErrStatus(err, 400);
         sendStrictJson(
           res,
           errStatus,
@@ -1359,6 +1703,127 @@ export async function createPrismStudioServer(options = {}) {
         );
       } finally {
         updateApplyInFlight = false;
+      }
+      return;
+    }
+
+    // ---- Strict Popout Browser Launch Route (`D3`: zero URL token, strict origin/header/CT, no-shell execFile) ----
+    if (req.method === 'POST' && pathname === '/api/studio/popout') {
+      const rawOrigin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
+      if (!isAllowedStrictOrigin(rawOrigin)) {
+        sendStrictJson(res, 403, { ok: false, code: 'ERR_CSRF_ORIGIN', error: 'Forbidden: disallowed Origin' });
+        return;
+      }
+      if (!validateToken(req, urlObj, { headerOnly: true })) {
+        sendStrictJson(res, 401, {
+          ok: false,
+          code: 'ERR_AUTH_TOKEN_REQUIRED',
+          error: 'Unauthorized: missing or invalid X-Sidecar-Token header',
+        });
+        return;
+      }
+      const rawCt = String(req.headers['content-type'] || '').trim();
+      if (!rawCt.toLowerCase().includes('application/json')) {
+        sendStrictJson(res, 415, {
+          ok: false,
+          code: 'ERR_INVALID_CONTENT_TYPE',
+          error: 'Unsupported Media Type: Content-Type must be application/json',
+        });
+        return;
+      }
+      let rawBodyBuf;
+      try {
+        rawBodyBuf = await readRawBuffer(req, 16 * 1024);
+      } catch (err) {
+        sendStrictJson(res, 413, {
+          ok: false,
+          code: 'ERR_BODY_TOO_LARGE',
+          error: err?.message || 'Request body too large',
+        });
+        return;
+      }
+      let body = {};
+      if (rawBodyBuf.length > 0) {
+        try {
+          const parsed = JSON.parse(rawBodyBuf.toString('utf8'));
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            sendStrictJson(res, 400, { ok: false, code: 'ERR_INVALID_JSON', error: 'Request body must be a JSON object' });
+            return;
+          }
+          body = parsed;
+        } catch (err) {
+          sendStrictJson(res, 400, { ok: false, code: 'ERR_INVALID_JSON', error: `Invalid JSON body: ${err?.message || String(err)}` });
+          return;
+        }
+      }
+      const requestedMode =
+        typeof body.mode === 'string' && body.mode.trim()
+          ? body.mode.trim().toLowerCase()
+          : 'visual-editor';
+      if (!POPOUT_MODES.has(requestedMode)) {
+        sendStrictJson(res, 400, {
+          ok: false,
+          code: 'ERR_INVALID_POPOUT_MODE',
+          error: `Unsupported popout mode: ${requestedMode}`,
+        });
+        return;
+      }
+      let validRegion = '';
+      if (body.region !== undefined && body.region !== null && body.region !== '') {
+        if (typeof body.region !== 'string') {
+          sendStrictJson(res, 400, {
+            ok: false,
+            code: 'ERR_INVALID_REGION',
+            error: 'Region must be a valid region identifier',
+          });
+          return;
+        }
+        const trimmedRegion = body.region.trim();
+        if (!getValidRegionIdSet().has(trimmedRegion)) {
+          sendStrictJson(res, 400, {
+            ok: false,
+            code: 'ERR_INVALID_REGION',
+            error: `Unsupported region: ${trimmedRegion}`,
+          });
+          return;
+        }
+        validRegion = trimmedRegion;
+      }
+      if (!/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(boundOrigin)) {
+        sendStrictJson(res, 503, {
+          ok: false,
+          code: 'ERR_POPOUT_ORIGIN_UNAVAILABLE',
+          error: 'Studio HTTP origin is not ready',
+        });
+        return;
+      }
+      const popoutUrl = `${boundOrigin}/?mode=${requestedMode}${validRegion ? `&region=${validRegion}` : ''}`;
+      const extra = rawOrigin ? { 'Access-Control-Allow-Origin': rawOrigin, Vary: 'Origin' } : {};
+      try {
+        await launchSystemBrowserNoShell(popoutUrl, { openExternalUrl: options.openExternalUrl || null });
+        sendStrictJson(
+          res,
+          200,
+          {
+            ok: true,
+            url: popoutUrl,
+            mode: requestedMode,
+            ...(validRegion ? { region: validRegion } : {}),
+            launched: true,
+          },
+          extra,
+        );
+      } catch (err) {
+        sendStrictJson(
+          res,
+          500,
+          {
+            ok: false,
+            code: 'ERR_POPOUT_LAUNCH_FAILED',
+            error: err?.message || String(err),
+          },
+          extra,
+        );
       }
       return;
     }
@@ -1384,16 +1849,37 @@ export async function createPrismStudioServer(options = {}) {
         res.end();
         return;
       }
+      engine.triggerDeferredScanIfNeeded?.({ delayMs: 250 });
       // Cap concurrent Studio SSE sockets (Chromium HTTP/1.1 allows only 6 sockets/origin;
-      // Antigravity keeps hidden conversation side-pane iframes alive in the DOM).
-      const MAX_STUDIO_SSE = 2;
-      while (studioSseClients.size >= MAX_STUDIO_SSE) {
-        const oldest = studioSseClients.values().next().value;
-        if (!oldest) break;
-        studioSseClients.delete(oldest);
-        try { oldest.end(); } catch {}
+      // partition 2 aux + 2 popout = 4 total so Aux Pane & Popout never evict each other).
+      const MAX_STUDIO_SSE = 4;
+      const MAX_STUDIO_SSE_PER_CHANNEL = 2;
+      const rawCh = (urlObj.searchParams.get('channel') || urlObj.searchParams.get('mode') || '').trim().toLowerCase();
+      const sseChannel = rawCh === 'popout' || rawCh === 'visual-editor' ? 'popout' : 'aux';
+
+      const evictOldest = (filterChannel) => {
+        for (const [clientRes, ch] of studioSseClients.entries()) {
+          if (filterChannel === null || ch === filterChannel) {
+            studioSseClients.delete(clientRes);
+            try { clientRes.end(); } catch {}
+            return true;
+          }
+        }
+        return false;
+      };
+
+      let chCount = 0;
+      for (const ch of studioSseClients.values()) {
+        if (ch === sseChannel) chCount += 1;
       }
-      studioSseClients.add(res);
+      while (chCount >= MAX_STUDIO_SSE_PER_CHANNEL) {
+        if (!evictOldest(sseChannel)) break;
+        chCount -= 1;
+      }
+      while (studioSseClients.size >= MAX_STUDIO_SSE) {
+        if (!evictOldest(null)) break;
+      }
+      studioSseClients.set(res, sseChannel);
       res.write(initialFrame);
       const ka = setInterval(() => {
         try {
@@ -1417,6 +1903,9 @@ export async function createPrismStudioServer(options = {}) {
     }
 
     if (req.method === 'GET' && (pathname === '/api/bootstrap' || pathname === '/api/state')) {
+      if (pathname === '/api/bootstrap') {
+        engine.triggerDeferredScanIfNeeded?.({ delayMs: 250 });
+      }
       sendJson(res, 200, await buildCanonicalState());
       return;
     }
@@ -1436,6 +1925,7 @@ export async function createPrismStudioServer(options = {}) {
       const st = await buildCanonicalState();
       sendJson(res, 200, {
         ok: true,
+        stateRev: st.stateRev,
         config: st.config,
         hostStatus: st.hostStatus,
         autostart: st.autostart,
@@ -1448,6 +1938,7 @@ export async function createPrismStudioServer(options = {}) {
         activeItem: st.activeItem,
         mediaOrigin: st.mediaOrigin,
         pluginOrigin: st.pluginOrigin,
+        studioHttpOrigin: st.studioHttpOrigin,
         pid: process.pid,
         version: PLUGIN_VERSION,
         updateStatus: st.updateStatus,
@@ -1534,17 +2025,23 @@ export async function createPrismStudioServer(options = {}) {
       const body = await readJsonBody(req);
 
       if (pathname === '/api/config') {
-        const patch = body && typeof body.patch === 'object' ? body.patch : body;
-        await engine.updateConfig(patch || {}, { debounce: true });
-        await pushToHost();
-        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        const patch = body && typeof body.patch === 'object' && !Array.isArray(body.patch) ? body.patch : body;
+        const shouldDebounce = body?.flush !== true;
+        await withDeferredPush(
+          () => engine.updateConfig(patch || {}, { debounce: shouldDebounce }),
+          { ensureRevBump: true },
+        );
+        const state = await buildCanonicalState();
+        void pushToHost();
+        sendJson(res, 200, { ok: true, stateRev: state.stateRev, state });
         return;
       }
 
       if (pathname === '/api/config/reset') {
-        await engine.resetConfig(body?.scope || 'all');
+        await withDeferredPush(() => engine.resetConfig(body?.scope || 'all'), { ensureRevBump: true });
         await pushToHost();
-        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, stateRev: state.stateRev, state });
         return;
       }
 
@@ -1552,93 +2049,205 @@ export async function createPrismStudioServer(options = {}) {
         const wallpaperId = String(body?.wallpaperId ?? body?.id ?? '');
         const extraPatch = body?.patch && typeof body.patch === 'object' ? body.patch : {};
         localSessionAwake = true;
-        await engine.applyWallpaper(wallpaperId, { ...extraPatch, skinEnabled: true });
+        await withDeferredPush(
+          () => engine.applyWallpaper(wallpaperId, { ...extraPatch, skinEnabled: true }),
+          { ensureRevBump: true },
+        );
         if (cdpBridge) {
-          await cdpBridge.wake();
+          await cdpBridge.wake({ forceProbe: false });
           void broadcastStudioState();
         } else {
           await pushToHost();
         }
-        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, stateRev: state.stateRev, state });
         return;
       }
 
       if (pathname === '/api/playlist/step') {
         const direction = Number(body?.direction) === -1 ? -1 : 1;
-        await engine.stepPlaylist(direction, String(body?.reason || 'manual'));
+        await withDeferredPush(
+          () => engine.stepPlaylist(direction, String(body?.reason || 'manual')),
+          { ensureRevBump: true },
+        );
         await pushToHost();
-        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, stateRev: state.stateRev, state });
         return;
       }
 
       if (pathname === '/api/preset/apply') {
-        const state = await applyAnyPreset(body?.presetId || body?.id || body?.name);
-        sendJson(res, 200, { ok: true, state });
+        localSessionAwake = true;
+        const appliedRes = await applyAnyPreset(body?.presetId || body?.id || body?.name, {
+          overrideStrategy: body?.overrideStrategy,
+        });
+        sendJson(res, 200, {
+          ok: true,
+          preset: appliedRes.preset,
+          overrideSynced: appliedRes.overrideSynced,
+          wallpaperFallback: appliedRes.wallpaperFallback,
+          missingWallpaperId: appliedRes.missingWallpaperId,
+          stateRev: appliedRes.state.stateRev,
+          state: appliedRes.state,
+        });
         return;
       }
 
       if (pathname === '/api/presets/save') {
-        const saved = await engine.savePreset({
-          name: String(body?.name || 'Custom Preset'),
-          description: String(body?.description || ''),
-        });
+        const rawPatch =
+          body?.patch && typeof body.patch === 'object' && !Array.isArray(body.patch)
+            ? body.patch
+            : null;
+        const saved = await withDeferredPush(
+          () =>
+            engine.savePreset({
+              id: typeof body?.id === 'string' ? body.id.trim() : '',
+              name: typeof body?.name === 'string' ? body.name : '',
+              description: typeof body?.description === 'string' ? body.description : '',
+              patch: rawPatch,
+              includeWallpaper: Boolean(body?.includeWallpaper),
+              mode: body?.mode === 'overwrite' ? 'overwrite' : 'create',
+              commitPatch: body?.commitPatch !== false,
+            }),
+          { ensureRevBump: true },
+        );
         const preset = saved?.preset || saved;
         const state = await buildCanonicalState();
-        sendJson(res, 200, { ok: true, preset, presets: state.presets, state });
+        if (saved?.patchCommitted) {
+          void pushToHost();
+        } else {
+          void broadcastStudioState();
+          if (cdpBridge) void cdpBridge.broadcastState({ sseOnly: true }).catch(() => {});
+        }
+        sendJson(res, 200, {
+          ok: true,
+          preset,
+          presets: state.presets,
+          patchCommitted: Boolean(saved?.patchCommitted),
+          stateRev: state.stateRev,
+          state,
+        });
+        return;
+      }
+
+      if (pathname === '/api/presets/rename') {
+        const id = String(body?.id || '').trim();
+        const name = String(body?.name || '').trim();
+        if (!id || !name) {
+          sendJson(res, 400, { ok: false, error: 'Preset id and name are required' });
+          return;
+        }
+        const renamed = await withDeferredPush(
+          () =>
+            engine.renamePreset({
+              id,
+              name,
+              description: typeof body?.description === 'string' ? body.description : undefined,
+            }),
+          { ensureRevBump: true },
+        );
+        const state = await buildCanonicalState();
+        void broadcastStudioState();
+        if (cdpBridge) void cdpBridge.broadcastState({ sseOnly: true }).catch(() => {});
+        sendJson(res, 200, {
+          ok: true,
+          preset: renamed?.preset || renamed,
+          presets: state.presets,
+          stateRev: state.stateRev,
+          state,
+        });
+        return;
+      }
+
+      if (pathname === '/api/presets/duplicate') {
+        const id = String(body?.id || '').trim();
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'Preset id is required' });
+          return;
+        }
+        const duplicated = await withDeferredPush(
+          () =>
+            engine.duplicatePreset({
+              id,
+              name: typeof body?.name === 'string' ? body.name : '',
+              activate: Boolean(body?.activate),
+            }),
+          { ensureRevBump: true },
+        );
+        const state = await buildCanonicalState();
+        void broadcastStudioState();
+        if (cdpBridge) void cdpBridge.broadcastState({ sseOnly: true }).catch(() => {});
+        sendJson(res, 200, {
+          ok: true,
+          preset: duplicated?.preset || duplicated,
+          presets: state.presets,
+          stateRev: state.stateRev,
+          state,
+        });
         return;
       }
 
       if (pathname === '/api/presets/delete') {
-        await engine.deletePreset(String(body?.id || ''));
+        await withDeferredPush(() => engine.deletePreset(String(body?.id || '')), { ensureRevBump: true });
         const state = await buildCanonicalState();
-        sendJson(res, 200, { ok: true, presets: state.presets, state });
+        void broadcastStudioState();
+        if (cdpBridge) void cdpBridge.broadcastState({ sseOnly: true }).catch(() => {});
+        sendJson(res, 200, { ok: true, presets: state.presets, stateRev: state.stateRev, state });
         return;
       }
 
       if (pathname === '/api/presets/import') {
         const rawPreset = body?.preset && typeof body.preset === 'object' ? body.preset : body;
-        const imported = await engine.importPreset(rawPreset);
+        const imported = await withDeferredPush(() => engine.importPreset(rawPreset), { ensureRevBump: true });
         const preset = imported?.preset || imported;
         const state = await buildCanonicalState();
-        sendJson(res, 200, { ok: true, preset, presets: state.presets, state });
+        void broadcastStudioState();
+        if (cdpBridge) void cdpBridge.broadcastState({ sseOnly: true }).catch(() => {});
+        sendJson(res, 200, { ok: true, preset, presets: state.presets, stateRev: state.stateRev, state });
         return;
       }
 
       if (pathname === '/api/wallpaper/props') {
-        await engine.updateUserProps(String(body?.wallpaperId || ''), body?.props || {});
+        await withDeferredPush(
+          () => engine.updateUserProps(String(body?.wallpaperId || ''), body?.props || {}),
+          { ensureRevBump: true },
+        );
         await pushToHost();
-        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, stateRev: state.stateRev, state });
         return;
       }
 
       if (pathname === '/api/upload/remove') {
         const wid = String(body?.wallpaperId || body?.id || '');
-        await engine.removeUpload(wid);
+        await withDeferredPush(() => engine.removeUpload(wid), { ensureRevBump: true });
         await pushToHost();
         const lib = await normalizeLibrary(true);
-        sendJson(res, 200, { ok: true, items: lib.items, state: await buildCanonicalState() });
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, items: lib.items, stateRev: state.stateRev, state });
         return;
       }
 
       if (pathname === '/api/storage/dir') {
         const kind = String(body?.kind || '');
         const dirPath = String(body?.path || '');
-        await engine.setStorageDir(kind, dirPath);
+        await withDeferredPush(() => engine.setStorageDir(kind, dirPath), { ensureRevBump: true });
         await pushToHost();
         const state = await buildCanonicalState();
-        sendJson(res, 200, { ok: true, config: state.config, state });
+        sendJson(res, 200, { ok: true, config: state.config, stateRev: state.stateRev, state });
         return;
       }
 
       if (pathname === '/api/skin/restore') {
-        await engine.updateConfig({ skinEnabled: false });
+        await withDeferredPush(() => engine.updateConfig({ skinEnabled: false }), { ensureRevBump: true });
         await pushToHost();
-        sendJson(res, 200, { ok: true, state: await buildCanonicalState() });
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, stateRev: state.stateRev, state });
         return;
       }
 
       if (pathname === '/api/skin/wake') {
-        const out = await rpcHandlers['skin.wake']();
+        const out = await rpcHandlers['skin.wake'](body || {});
         sendJson(res, 200, out);
         return;
       }
@@ -1656,6 +2265,7 @@ export async function createPrismStudioServer(options = {}) {
       }
 
       if (pathname === '/api/host/reload') {
+        cachedIndexHtml = null;
         hostModule.getHostSkinScript?.({ reload: true });
         hostModule.getHostPanelScript?.({ reload: true });
         if (cdpBridge?.reloadHostScripts) {
@@ -1682,6 +2292,7 @@ export async function createPrismStudioServer(options = {}) {
         if (enabled && port !== cfg.debugPort) {
           await engine.updateConfig({ debugPort: port });
         }
+        bumpStateRev();
         const state = await buildCanonicalState();
         sendJson(res, 200, {
           ok: Boolean(autostart.ok),
@@ -1691,6 +2302,7 @@ export async function createPrismStudioServer(options = {}) {
           patchedShortcuts: state.patchedShortcuts,
           sidecarAutoStartsOnBoot: true,
           autoRestoreLastSettings: true,
+          stateRev: state.stateRev,
           state,
         });
         return;
@@ -1714,7 +2326,11 @@ export async function createPrismStudioServer(options = {}) {
   server = createServer((req, res) => {
     handleRequest(req, res).catch((err) => {
       if (!res.headersSent) {
-        sendJson(res, 400, { ok: false, error: err?.message || String(err) });
+        sendJson(res, resolveHttpErrStatus(err, 400), {
+          ok: false,
+          ...(err?.code ? { code: err.code } : {}),
+          error: err?.message || String(err),
+        });
       }
     });
   });
@@ -1783,6 +2399,7 @@ export async function createPrismStudioServer(options = {}) {
         .then((st) => {
           if (closed) return;
           cachedUpdateStatus = decorateUpdateStatus(st);
+          bumpStateRev();
           void broadcastStudioState();
         })
         .catch(() => {});
@@ -1813,7 +2430,7 @@ export async function createPrismStudioServer(options = {}) {
     }
     for (const ka of studioSseKeepalives) clearInterval(ka);
     studioSseKeepalives.clear();
-    for (const clientRes of studioSseClients) {
+    for (const clientRes of studioSseClients.keys()) {
       try { clientRes.end(); } catch { /* ignore */ }
     }
     studioSseClients.clear();
@@ -1912,7 +2529,13 @@ export async function createPrismStudioServer(options = {}) {
     try {
       await handleRequest(req, res);
     } catch (err) {
-      if (!res.headersSent) sendJson(res, 400, { ok: false, error: err?.message || String(err) });
+      if (!res.headersSent) {
+        sendJson(res, resolveHttpErrStatus(err, 400), {
+          ok: false,
+          ...(err?.code ? { code: err.code } : {}),
+          error: err?.message || String(err),
+        });
+      }
     }
     return donePromise;
   };
@@ -1947,7 +2570,9 @@ function isMainEntry() {
 }
 
 if (isMainEntry()) {
-  // Clean in-process host script hot-reload (never exits 0 under `restart_policy: "on-failure"`!)
+  const DEV_WATCH_ENABLED = process.env.AGY_PRISM_DEV_WATCH === '1';
+  // Clean in-process host script hot-reload (only enabled in dev mode via AGY_PRISM_DEV_WATCH=1;
+  // never exits 0 under `restart_policy: "on-failure"`!)
   const watchedFiles = [
     join(PLUGIN_ROOT, 'src', 'host', 'wallpaper-inject.js'),
     join(PLUGIN_ROOT, 'src', 'host', 'panel-inject.js'),
@@ -1962,7 +2587,7 @@ if (isMainEntry()) {
       }
     }
   };
-  refreshWatchedMtimes();
+  if (DEV_WATCH_ENABLED) refreshWatchedMtimes();
 
   let watchTimer = null;
   let instance = null;
@@ -1975,7 +2600,7 @@ if (isMainEntry()) {
   };
 
   const startWatchTimer = () => {
-    if (watchTimer) return;
+    if (!DEV_WATCH_ENABLED || watchTimer) return;
     refreshWatchedMtimes();
     watchTimer = setInterval(() => {
       let changed = false;
@@ -1993,7 +2618,7 @@ if (isMainEntry()) {
       if (changed) {
         hostModule.getHostSkinScript?.({ reload: true });
         hostModule.getHostPanelScript?.({ reload: true });
-        void instance?.cdpBridge?.broadcastState?.().catch(() => {});
+        void instance?.cdpBridge?.broadcastState?.({ force: true }).catch(() => {});
       }
     }, 4000);
     watchTimer.unref?.();
@@ -2007,7 +2632,7 @@ if (isMainEntry()) {
     `[prism_studio] listening on ${instance.origin} (media=${instance.engine.getMediaOrigin?.() || 'n/a'}, pid=${process.pid})`,
   );
 
-  startWatchTimer();
+  if (DEV_WATCH_ENABLED) startWatchTimer();
 
   let shuttingDown = false;
   const shutdown = () => {

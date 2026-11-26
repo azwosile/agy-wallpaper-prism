@@ -1,4 +1,4 @@
-// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.1.0).
+// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.2.0).
 //
 // Self-contained ES2020 browser IIFE injected over CDP alongside `wallpaper-inject.js`.
 // Strictly isolated inside `#agy-prism-popover` (`all: initial; position: fixed; z-index: 45`)
@@ -9,7 +9,7 @@
 (function agyPrismPanelMain() {
   'use strict';
 
-  var VERSION = '2.1.0';
+  var VERSION = '2.2.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   try {
@@ -68,7 +68,12 @@
     glassBlur: 16,
     sidebarOpacity: null,
     sidebarBlur: null,
+    regions: null,
     surfaceTints: null,
+    sidebarListStyle: 'capsule',
+    globalFontSize: null,
+    globalFontFamily: '',
+    globalFontColor: '',
     glassFidelity: 92,
     chatGlassFidelity: 90,
     contrastFloor: true,
@@ -88,20 +93,23 @@
     rotationEnabled: false,
     pauseOnHidden: true,
     pauseOnBlur: false,
+    libraryAnimatedThumbs: 'hover',
     triggerMode: 'both',
     language: 'zh',
   };
 
-  var SURFACE_TINT_COMPONENTS = ['topbar', 'sidebar', 'workspace', 'rightPane', 'composer', 'card', 'popover'];
+  var SURFACE_TINT_COMPONENTS = ['topbar', 'wco', 'sidebar', 'workspace', 'card', 'composer', 'rightPane', 'popover'];
   var SURFACE_TINT_BOUNDS = {
     topbar: { min: 0, max: 0.98 },
+    wco: { min: 0, max: 0.98 },
     sidebar: { min: 0, max: 0.98 },
     workspace: { min: 0, max: 0.98 },
-    rightPane: { min: 0, max: 0.98 },
-    composer: { min: 0, max: 0.98 },
     card: { min: 0, max: 0.98 },
+    composer: { min: 0, max: 0.98 },
+    rightPane: { min: 0, max: 0.98 },
     popover: { min: 0.5, max: 0.99 },
   };
+  var REGION_OPTICAL_KEYS = ['glassEnabled', 'blur', 'opacity', 'tone', 'tint', 'borderOpacity'];
   var PER_WALLPAPER_OVERRIDE_KEY_MAP = {
     layoutMode: 1,
     colorScheme: 1,
@@ -111,7 +119,11 @@
     glassBlur: 1,
     sidebarOpacity: 1,
     sidebarBlur: 1,
+    regions: 1,
     surfaceTints: 1,
+    globalFontSize: 1,
+    globalFontFamily: 1,
+    globalFontColor: 1,
     scrimOpacity: 1,
     mediaOpacity: 1,
     mediaBlur: 1,
@@ -299,13 +311,24 @@
       topbar_bar: '整条通栏 Bar',
       compTitle: '各组件玻璃深浅精调',
       compResetAll: '重置全部组件',
-      comp_topbar: '顶部标题栏与胶囊',
+      comp_topbar: '顶部菜单胶囊',
+      comp_wco: '右上角窗口控制胶囊',
+      wcoNeedsTransparent: '请先开启右上角控制按钮透明',
+      wcoDisabledHint: '请先开启上方「右上角窗口按钮透明」以生效',
       comp_sidebar: '左侧边栏与项目导航',
       comp_workspace: '主对话与工作区',
       comp_rightPane: '右侧辅助面板',
       comp_composer: '底部对话输入框',
       comp_card: '消息气泡与卡片',
       comp_popover: '浮窗菜单与快捷面板',
+      sidebarStyleLabel: '侧栏风格',
+      sidebarStyle_capsule: '胶囊',
+      sidebarStyle_underline: '底边',
+      sidebarStyle_accordion: '手风琴',
+      sidebarStyle_tree: '目录树',
+      pausedResumeHint: '已暂停 · 点击恢复',
+      toggleTimeoutErr: '切换超时，已同步宿主最新状态',
+      toggleFailToast: '切换皮肤超时或未连接，已恢复原状态',
       codeLabel: '代码/终端底板',
       code_translucent: '通透',
       code_frosted: '磨砂',
@@ -393,13 +416,24 @@
       topbar_bar: 'Full Bar',
       compTitle: 'Component Glass Depth',
       compResetAll: 'Reset All Components',
-      comp_topbar: 'Topbar & WCO Pills',
+      comp_topbar: 'Topbar Menu Pills',
+      comp_wco: 'Window Control Pill (WCO)',
+      wcoNeedsTransparent: 'Enable transparent window controls first',
+      wcoDisabledHint: 'Enable "Transparent Window Buttons" first',
       comp_sidebar: 'Left Sidebar & Projects',
       comp_workspace: 'Chat & Main Workspace',
       comp_rightPane: 'Right Side / Aux Pane',
       comp_composer: 'Input Composer Box',
       comp_card: 'Message Bubbles & Cards',
       comp_popover: 'Popovers & Quick Prism',
+      sidebarStyleLabel: 'Sidebar Style',
+      sidebarStyle_capsule: 'Capsule',
+      sidebarStyle_underline: 'Underline',
+      sidebarStyle_accordion: 'Accordion',
+      sidebarStyle_tree: 'Tree',
+      pausedResumeHint: 'Paused · Click to resume',
+      toggleTimeoutErr: 'Toggle timed out — synced latest host state',
+      toggleFailToast: 'Skin toggle timed out or disconnected — reverted',
       codeLabel: 'Code & Terminal Backing',
       code_translucent: 'Tint',
       code_frosted: 'Frost',
@@ -475,6 +509,8 @@
     connected: false,
     theme: 'dark',
     updateStatus: null,
+    lastAppliedRev: 0,
+    lastRevEpoch: '',
   };
 
   if (carry && typeof carry === 'object') {
@@ -494,6 +530,10 @@
   var mounted = false;
   var restoreArmed = false;
   var restoreTimer = 0;
+  var toggleSeq = 0;
+  var toggleBusy = false;
+  var pendingToggleTarget = null;
+  var toggleStartRev = 0;
   var patchQueue = {};
   var patchTimer = 0;
   var lastPatchFlushAt = 0;
@@ -517,6 +557,7 @@
   function clearLazyKeepAlive() {
     try {
       if (W.__agyPrismKt) {
+        clearTimeout(W.__agyPrismKt);
         clearInterval(W.__agyPrismKt);
         W.__agyPrismKt = 0;
       }
@@ -571,13 +612,37 @@
     if (n >= 2) n = n / 100;
     return n;
   }
+  function parseNullableBlur(v) {
+    if (v === null || v === undefined || v === '' || v === 'auto') return null;
+    var n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return clamp(Math.round(n), 0, 64);
+  }
   function resolveCompOpFromLayer(layer, compId) {
     if (!layer || typeof layer !== 'object') return { found: false, value: null };
+    var hasReg = Object.prototype.hasOwnProperty.call(layer, 'regions');
+    var reg = hasReg ? layer.regions : undefined;
+    var regResetAll = hasReg && reg === null;
+    var regHasComp =
+      hasReg &&
+      reg &&
+      typeof reg === 'object' &&
+      !Array.isArray(reg) &&
+      Object.prototype.hasOwnProperty.call(reg, compId);
+    var regCompVal = regHasComp ? reg[compId] : undefined;
+    var regTouchedComp =
+      regResetAll ||
+      (regHasComp && regCompVal === null) ||
+      (regHasComp && regCompVal && typeof regCompVal === 'object' && Object.prototype.hasOwnProperty.call(regCompVal, 'opacity'));
+    var regOp =
+      regResetAll || (regHasComp && regCompVal === null)
+        ? null
+        : regHasComp && regCompVal && typeof regCompVal === 'object'
+          ? parseNullableOp(regCompVal.opacity)
+          : null;
+
     var hasSt = Object.prototype.hasOwnProperty.call(layer, 'surfaceTints');
     var st = hasSt ? layer.surfaceTints : undefined;
-    var hasSb = compId === 'sidebar' && Object.prototype.hasOwnProperty.call(layer, 'sidebarOpacity');
-    var sbVal = hasSb ? parseNullableOp(layer.sidebarOpacity) : null;
-
     var stResetAll = hasSt && st === null;
     var stHasComp =
       hasSt &&
@@ -597,19 +662,95 @@
           ? parseNullableOp(stCompVal.opacity)
           : null;
 
+    var hasSb = compId === 'sidebar' && Object.prototype.hasOwnProperty.call(layer, 'sidebarOpacity');
+    var sbVal = hasSb ? parseNullableOp(layer.sidebarOpacity) : null;
+
+    var canonTouched = regTouchedComp || stTouchedComp;
+    var canonResetAll = regResetAll || (stResetAll && !regTouchedComp);
+    var canonOp = regTouchedComp ? regOp : stOp;
+
     if (compId !== 'sidebar') {
-      return stTouchedComp ? { found: true, value: stOp } : { found: false, value: null };
+      return canonTouched ? { found: true, value: canonOp } : { found: false, value: null };
     }
-    if (stTouchedComp && !hasSb) return { found: true, value: stOp };
-    if (hasSb && !stTouchedComp) return { found: true, value: sbVal };
-    if (stTouchedComp && hasSb) {
-      if (stResetAll && sbVal !== null) return { found: true, value: sbVal };
-      return { found: true, value: stOp };
+    if (canonTouched && !hasSb) return { found: true, value: canonOp };
+    if (hasSb && !canonTouched) return { found: true, value: sbVal };
+    if (canonTouched && hasSb) {
+      if (canonResetAll && sbVal !== null) return { found: true, value: sbVal };
+      return { found: true, value: canonOp };
     }
     return { found: false, value: null };
   }
+  function resolveSidebarBlurFromLayer(layer) {
+    if (!layer || typeof layer !== 'object') return { found: false, value: null };
+    var hasReg = Object.prototype.hasOwnProperty.call(layer, 'regions');
+    var reg = hasReg ? layer.regions : undefined;
+    var regResetAll = hasReg && reg === null;
+    var regHasSb =
+      hasReg &&
+      reg &&
+      typeof reg === 'object' &&
+      !Array.isArray(reg) &&
+      Object.prototype.hasOwnProperty.call(reg, 'sidebar');
+    var regSbVal = regHasSb ? reg.sidebar : undefined;
+    var regTouched =
+      regResetAll ||
+      (regHasSb && regSbVal === null) ||
+      (regHasSb && regSbVal && typeof regSbVal === 'object' && Object.prototype.hasOwnProperty.call(regSbVal, 'blur'));
+    var regBlur =
+      regResetAll || (regHasSb && regSbVal === null)
+        ? null
+        : regHasSb && regSbVal && typeof regSbVal === 'object'
+          ? parseNullableBlur(regSbVal.blur)
+          : null;
+
+    var hasSt = Object.prototype.hasOwnProperty.call(layer, 'surfaceTints');
+    var st = hasSt ? layer.surfaceTints : undefined;
+    var stResetAll = hasSt && st === null;
+    var stHasSb =
+      hasSt &&
+      st &&
+      typeof st === 'object' &&
+      !Array.isArray(st) &&
+      Object.prototype.hasOwnProperty.call(st, 'sidebar');
+    var stSbVal = stHasSb ? st.sidebar : undefined;
+    var stTouched =
+      stResetAll ||
+      (stHasSb && stSbVal === null) ||
+      (stHasSb && stSbVal && typeof stSbVal === 'object' && Object.prototype.hasOwnProperty.call(stSbVal, 'blur'));
+    var stBlur =
+      stResetAll || (stHasSb && stSbVal === null)
+        ? null
+        : stHasSb && stSbVal && typeof stSbVal === 'object'
+          ? parseNullableBlur(stSbVal.blur)
+          : null;
+
+    var hasLegacy = Object.prototype.hasOwnProperty.call(layer, 'sidebarBlur');
+    var legacyBlur = hasLegacy ? parseNullableBlur(layer.sidebarBlur) : null;
+
+    var canonTouched = regTouched || stTouched;
+    var canonResetAll = regResetAll || (stResetAll && !regTouched);
+    var canonBlur = regTouched ? regBlur : stBlur;
+
+    if (canonTouched && !hasLegacy) return { found: true, value: canonBlur };
+    if (hasLegacy && !canonTouched) return { found: true, value: legacyBlur };
+    if (canonTouched && hasLegacy) {
+      if (canonResetAll && legacyBlur !== null) return { found: true, value: legacyBlur };
+      return { found: true, value: canonBlur };
+    }
+    return { found: false, value: null };
+  }
+  function readSidebarBlur() {
+    var r1 = resolveSidebarBlurFromLayer(patchQueue);
+    if (r1.found) return r1.value;
+    var r2 = resolveSidebarBlurFromLayer(getActiveOverride());
+    if (r2.found) return r2.value;
+    var r3 = resolveSidebarBlurFromLayer(store.config);
+    if (r3.found) return r3.value;
+    return null;
+  }
   function cfgVal(key) {
     if (key === 'sidebarOpacity') return readComponentOpacity('sidebar');
+    if (key === 'sidebarBlur') return readSidebarBlur();
     if (Object.prototype.hasOwnProperty.call(patchQueue, key)) return patchQueue[key];
     if (PER_WALLPAPER_OVERRIDE_KEY_MAP[key]) {
       var ov = getActiveOverride();
@@ -619,6 +760,74 @@
     }
     if (store.config && store.config[key] !== undefined) return store.config[key];
     return DEFAULTS[key];
+  }
+  function mergeRegionsObj(baseObj, incoming) {
+    if (incoming === null) return null;
+    var out = {};
+    if (baseObj && typeof baseObj === 'object' && !Array.isArray(baseObj)) {
+      for (var bk in baseObj) {
+        if (!Object.prototype.hasOwnProperty.call(baseObj, bk)) continue;
+        var bv = baseObj[bk];
+        out[bk] = bv && typeof bv === 'object' && !Array.isArray(bv) ? Object.assign({}, bv) : bv;
+      }
+    }
+    if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+      for (var ik in incoming) {
+        if (!Object.prototype.hasOwnProperty.call(incoming, ik)) continue;
+        var iv = incoming[ik];
+        if (iv === null) {
+          out[ik] = null;
+        } else if (iv && typeof iv === 'object' && !Array.isArray(iv)) {
+          var prevEnt = out[ik] && typeof out[ik] === 'object' && !Array.isArray(out[ik]) ? out[ik] : {};
+          var nextEnt = Object.assign({}, prevEnt);
+          for (var pk in iv) {
+            if (Object.prototype.hasOwnProperty.call(iv, pk) && iv[pk] !== undefined) {
+              nextEnt[pk] = iv[pk];
+            }
+          }
+          out[ik] = nextEnt;
+        }
+      }
+    }
+    return out;
+  }
+  function stripOpticalFromRegionEntry(ent) {
+    var next = {};
+    if (ent && typeof ent === 'object' && !Array.isArray(ent)) {
+      for (var k in ent) {
+        if (Object.prototype.hasOwnProperty.call(ent, k)) next[k] = ent[k];
+      }
+    }
+    next.glassEnabled = null;
+    next.blur = null;
+    next.opacity = null;
+    next.tone = 0;
+    next.tint = '';
+    next.borderOpacity = null;
+    return next;
+  }
+  function stripOpticalFromRegionsObj(obj) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+    var out = {};
+    for (var k in obj) {
+      if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+      var v = obj[k];
+      out[k] = v && typeof v === 'object' && !Array.isArray(v) ? stripOpticalFromRegionEntry(v) : v;
+    }
+    return out;
+  }
+  function pickOpticalKeys(ent) {
+    if (!ent || typeof ent !== 'object' || Array.isArray(ent)) return null;
+    var out = {};
+    var any = false;
+    for (var i = 0; i < REGION_OPTICAL_KEYS.length; i += 1) {
+      var ok = REGION_OPTICAL_KEYS[i];
+      if (Object.prototype.hasOwnProperty.call(ent, ok) && ent[ok] !== undefined) {
+        out[ok] = ent[ok];
+        any = true;
+      }
+    }
+    return any ? out : null;
   }
   function mergeSurfaceTintsObj(baseObj, incoming) {
     if (incoming === null) return null;
@@ -635,7 +844,7 @@
         if (!Object.prototype.hasOwnProperty.call(incoming, ik)) continue;
         var iv = incoming[ik];
         if (iv === null) {
-          out[ik] = { opacity: null, tone: 0, tint: '' };
+          out[ik] = { opacity: null, tone: 0, tint: '', blur: null, glassEnabled: null, borderOpacity: null };
         } else if (iv && typeof iv === 'object') {
           out[ik] = Object.assign({}, out[ik] && typeof out[ik] === 'object' ? out[ik] : {}, iv);
         }
@@ -669,7 +878,14 @@
     var layoutMode = c.layoutMode === 'flush' ? 'flush' : 'islands';
 
     var alpha;
-    if (comp === 'topbar' || comp === 'sidebar') {
+    if (comp === 'wco') {
+      var tbOp = readComponentOpacity('topbar');
+      if (tbOp !== null && tbOp !== undefined && Number.isFinite(Number(tbOp))) {
+        return Math.round(clamp(Number(tbOp), 0, 0.98) * 1000) / 1000;
+      }
+      var minWcoFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
+      alpha = Math.max(g, minWcoFloor * gf);
+    } else if (comp === 'topbar' || comp === 'sidebar') {
       var minSbFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
       alpha = Math.max(g, minSbFloor * gf);
     } else if (comp === 'workspace' || comp === 'rightPane') {
@@ -749,15 +965,15 @@
     "--pp-mono:'Google Sans Code','JetBrains Mono','Cascadia Code',Consolas,ui-monospace,monospace;",
     '--pp-accent:#669DF6;--pp-accent-fg:#FFFFFF;--pp-r-sheet:14px;--pp-r-card:10px;--pp-r-ctl:7px;--pp-ease:cubic-bezier(.22,1,.36,1);',
     '--pp-bg:var(--prism-surface-quick-panel, rgba(20,20,26,.72));--pp-bg-solid:var(--prism-surface-popover, rgba(20,20,26,.97));--pp-fg:#F2F2F5;--pp-fg2:#C4C4CE;--pp-muted:#8A8A98;--pp-faint:#626270;',
-    '--pp-border:rgba(255,255,255,.09);--pp-border2:rgba(255,255,255,.15);--pp-fill:rgba(255,255,255,.045);--pp-fill2:rgba(255,255,255,.085);',
-    '--pp-hover:rgba(255,255,255,.07);--pp-track:rgba(255,255,255,.14);--pp-spec:rgba(255,255,255,.08);',
-    '--pp-sheen:linear-gradient(172deg,rgba(255,255,255,.045) 0%,rgba(255,255,255,0) 38%);',
-    '--pp-shadow:0 28px 64px -14px rgba(0,0,0,.64),0 2px 8px rgba(0,0,0,.30);--pp-ok:#50A37B;--pp-warn:#F2B84B;--pp-danger:#E5534B;}',
+    '--pp-border:var(--prism-border-popover, rgba(255,255,255,.09));--pp-border2:var(--prism-border-popover, rgba(255,255,255,.15));--pp-fill:rgba(255,255,255,.045);--pp-fill2:rgba(255,255,255,.085);',
+    '--pp-hover:rgba(255,255,255,.07);--pp-track:rgba(255,255,255,.14);--pp-spec:var(--prism-specular-popover, rgba(255,255,255,.08));',
+    '--pp-sheen:var(--prism-sheen-popover, linear-gradient(172deg,rgba(255,255,255,.045) 0%,rgba(255,255,255,0) 38%));',
+    '--pp-shadow:var(--prism-shadow-popover, 0 28px 64px -14px rgba(0,0,0,.64),0 2px 8px rgba(0,0,0,.30));--pp-ok:#50A37B;--pp-warn:#F2B84B;--pp-danger:#E5534B;}',
     '#R[data-theme="light"]{--pp-accent:#2563EB;--pp-bg:var(--prism-surface-quick-panel, rgba(250,251,254,.78));--pp-bg-solid:var(--prism-surface-popover, rgba(252,253,255,.98));--pp-fg:#0F172A;--pp-fg2:#334155;--pp-muted:#5B6B82;--pp-faint:#94A3B8;',
-    '--pp-border:rgba(15,23,42,.10);--pp-border2:rgba(15,23,42,.16);--pp-fill:rgba(15,23,42,.038);--pp-fill2:rgba(15,23,42,.072);',
-    '--pp-hover:rgba(15,23,42,.06);--pp-track:rgba(15,23,42,.14);--pp-spec:rgba(255,255,255,.92);',
-    '--pp-sheen:linear-gradient(172deg,rgba(255,255,255,.72) 0%,rgba(255,255,255,0) 40%);',
-    '--pp-shadow:0 28px 64px -18px rgba(15,23,42,.28),0 2px 8px rgba(15,23,42,.10);--pp-ok:#059669;--pp-warn:#D97706;--pp-danger:#DC2626;}',
+    '--pp-border:var(--prism-border-popover, rgba(15,23,42,.10));--pp-border2:var(--prism-border-popover, rgba(15,23,42,.16));--pp-fill:rgba(15,23,42,.038);--pp-fill2:rgba(15,23,42,.072);',
+    '--pp-hover:rgba(15,23,42,.06);--pp-track:rgba(15,23,42,.14);--pp-spec:var(--prism-specular-popover, rgba(255,255,255,.92));',
+    '--pp-sheen:var(--prism-sheen-popover, linear-gradient(172deg,rgba(255,255,255,.72) 0%,rgba(255,255,255,0) 40%));',
+    '--pp-shadow:var(--prism-shadow-popover, 0 28px 64px -18px rgba(15,23,42,.28),0 2px 8px rgba(15,23,42,.10));--pp-ok:#059669;--pp-warn:#D97706;--pp-danger:#DC2626;}',
     '#R,#R *,#R *::before,#R *::after{box-sizing:border-box;font-family:var(--pp-font);}',
     '#R [hidden]{display:none !important;}',
     '#R button,#R input{margin:0;font:inherit;color:inherit;}',
@@ -774,7 +990,7 @@
     // Main Floating Sheet (384 x max 560px)
     '#R .prism-sheet{position:fixed;left:12px;bottom:48px;width:384px;max-width:calc(100vw - 16px);max-height:560px;display:flex;flex-direction:column;pointer-events:auto;',
     'color:var(--pp-fg);font-size:12.5px;line-height:1.45;-webkit-font-smoothing:antialiased;border-radius:var(--pp-r-sheet);border:1px solid var(--pp-border2);',
-    'background-color:var(--pp-bg) !important;background-image:var(--pp-sheen);backdrop-filter:var(--prism-popover-backdrop, blur(22px) saturate(145%)) !important;-webkit-backdrop-filter:var(--prism-popover-backdrop, blur(22px) saturate(145%)) !important;',
+    'background-color:var(--pp-bg) !important;background-image:var(--pp-sheen);backdrop-filter:var(--prism-quick-panel-backdrop, var(--prism-popover-backdrop, blur(22px) saturate(145%))) !important;-webkit-backdrop-filter:var(--prism-quick-panel-backdrop, var(--prism-popover-backdrop, blur(22px) saturate(145%))) !important;',
     'box-shadow:inset 0 1px 0 var(--pp-spec),var(--pp-shadow);overflow:hidden;opacity:0;visibility:hidden;transform:translateY(8px) scale(.985);',
     'transition:opacity .16s ease,transform .18s var(--pp-ease),visibility 0s linear .18s;}',
     '#R[data-open="true"] .prism-sheet{opacity:1;visibility:visible;transform:none;transition:opacity .16s ease,transform .18s var(--pp-ease),visibility 0s;}',
@@ -787,7 +1003,8 @@
     '#R .pp-conn i{width:5.5px;height:5.5px;border-radius:50%;background:var(--pp-faint);}',
     '#R[data-conn="on"] .pp-conn i{background:var(--pp-ok);}',
     '#R .pp-power-btn{display:inline-flex;align-items:center;gap:4px;height:21px;padding:0 7px;border-radius:999px;font-size:10.5px;font-weight:600;line-height:1;cursor:pointer;flex-shrink:0;white-space:nowrap;',
-    'border:1px solid var(--pp-border2);background:var(--pp-fill);color:var(--pp-muted);transition:background .15s ease,border-color .15s ease,color .15s ease,box-shadow .15s ease;}',
+    'border:1px solid var(--pp-border2);background:var(--pp-fill);color:var(--pp-muted);transition:background .15s ease,border-color .15s ease,color .15s ease,box-shadow .15s ease,opacity .15s ease;}',
+    '#R .pp-power-btn[data-busy="true"]{opacity:.72;}',
     '#R .pp-power-btn:hover{border-color:var(--pp-accent);color:var(--pp-fg);}',
     '#R .pp-power-btn i{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:transparent;border:1.5px solid var(--pp-faint);transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;}',
     '#R .pp-power-btn[aria-checked="true"]{border-color:color-mix(in srgb,var(--pp-ok) 55%,transparent);background:color-mix(in srgb,var(--pp-ok) 16%,transparent);color:var(--pp-fg);box-shadow:0 0 10px -2px color-mix(in srgb,var(--pp-ok) 45%,transparent);}',
@@ -870,6 +1087,8 @@
     '#R .pp-comp-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 5px;border-radius:999px;font-family:var(--pp-mono);font-size:9.5px;font-weight:600;background:color-mix(in srgb,var(--pp-accent) 18%,transparent);color:var(--pp-accent);}',
     '#R .pp-comp-body{padding:0 9px 8px;border-top:1px solid var(--pp-border);display:flex;flex-direction:column;gap:2px;}',
     '#R .pp-comp-reset{width:100%;height:24px;margin-top:6px;font-size:11px;}',
+    '#R .pp-wco-hint{grid-column:1 / -1;font-size:10.5px;color:var(--pp-warn);line-height:1.35;padding-top:2px;}',
+    '#R .pp-srow[data-disabled-hint="true"] .pp-range{opacity:.48;}',
     // Switch Row
     '#R .pp-trow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--pp-border);font-size:12px;}',
     '#R .pp-sw{position:relative;width:34px;height:19px;padding:0;border-radius:99px;border:1px solid var(--pp-border2);background:var(--pp-fill2);cursor:pointer;flex-shrink:0;transition:background .15s,border-color .15s;}',
@@ -894,7 +1113,7 @@
 
   var PILL_CSS =
     '#' + PILL_ID + '{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;margin-left:6px;border-radius:999px;' +
-    'border:1px solid rgba(148,163,184,.24);background:rgba(128,138,158,.10);color:var(--foreground,inherit);' +
+    'border:1px solid var(--prism-border-popover, rgba(148,163,184,.24));background:rgba(128,138,158,.10);color:var(--foreground,inherit);' +
     'font-family:inherit;font-size:11px;font-weight:500;line-height:1;cursor:pointer;user-select:none;white-space:nowrap;' +
     'transition:background .14s ease,border-color .14s ease,opacity .14s ease;-webkit-app-region:no-drag;}\n' +
     '#' + PILL_ID + ':hover{background:rgba(102,157,246,.16);border-color:rgba(102,157,246,.48);}\n' +
@@ -903,13 +1122,29 @@
     '#' + PILL_ID + '[data-skin-enabled="false"] i{background:transparent;border:1.5px solid rgba(148,163,184,.65);}';
 
   // ---------------------------------------------------------------------------
-  // Safe Cross-Scheme Loopback Thumbnail Cache (0ms fetch -> Blob URL on https:)
+  // Safe Cross-Scheme Loopback Thumbnail Cache + IntersectionObserver Lazy Load
   // ---------------------------------------------------------------------------
-  var THUMB_BLOB_CACHE_MAX = 80;
+  var THUMB_BLOB_CACHE_MAX = 48;
   var thumbBlobCache = {};
   var thumbBlobOrder = [];
   var thumbBlobInflight = {};
   var thumbAbortControllers = [];
+  var thumbIo = null;
+  var thumbHoverTimers = [];
+
+  function toStaticThumbUrl(rawUrl) {
+    var url = String(rawUrl || '').trim();
+    if (!url) return '';
+    var hashIdx = url.indexOf('#');
+    var base = hashIdx >= 0 ? url.slice(0, hashIdx) : url;
+    var hash = hashIdx >= 0 ? url.slice(hashIdx) : '';
+    if (!/\/preview\//i.test(base)) return url;
+    var qIdx = base.indexOf('?');
+    if (qIdx >= 0 && /(?:^|&)static=/i.test(base.slice(qIdx + 1))) return url;
+    if (/\.(?:png|jpe?g|svg|bmp|avif)(?:\?|$)/i.test(base)) return url;
+    var sep = qIdx >= 0 ? '&' : '?';
+    return base + sep + 'static=1' + hash;
+  }
 
   function isCrossSchemeLoopbackThumb(url) {
     return Boolean(
@@ -949,7 +1184,20 @@
     }
   }
 
+  function clearThumbObserverTargets() {
+    if (thumbIo && typeof thumbIo.disconnect === 'function') {
+      try {
+        thumbIo.disconnect();
+      } catch (_) {}
+    }
+    for (var i = 0; i < thumbHoverTimers.length; i += 1) {
+      clearTimeout(thumbHoverTimers[i]);
+    }
+    thumbHoverTimers = [];
+  }
+
   function clearThumbBlobCache() {
+    clearThumbObserverTargets();
     for (var i = 0; i < thumbAbortControllers.length; i += 1) {
       try {
         thumbAbortControllers[i].abort();
@@ -972,10 +1220,11 @@
     thumbBlobOrder = [];
   }
 
-  function bindSafeThumb(thumbImg, rawUrl) {
+  function loadSafeThumbNow(thumbImg, rawUrl) {
     if (!thumbImg || !rawUrl) return;
     var url = String(rawUrl).trim();
     if (!url) return;
+    thumbImg.__prismWantUrl = url;
     if (!isCrossSchemeLoopbackThumb(url)) {
       thumbImg.src = url;
       return;
@@ -1019,13 +1268,66 @@
         });
     }
     thumbBlobInflight[url].then(function (blobUrl) {
-      if (destroyed || !thumbImg.parentNode) return;
+      if (destroyed || !thumbImg.parentNode || thumbImg.__prismWantUrl !== url) return;
       if (blobUrl) {
         thumbImg.src = blobUrl;
       } else if (thumbImg.parentNode) {
         thumbImg.parentNode.removeChild(thumbImg);
       }
     });
+  }
+
+  function onThumbIntersect(entries) {
+    if (destroyed || !entries) return;
+    for (var i = 0; i < entries.length; i += 1) {
+      var ent = entries[i];
+      if (!ent || !ent.isIntersecting) continue;
+      var img = ent.target;
+      if (!img) continue;
+      try {
+        if (thumbIo && typeof thumbIo.unobserve === 'function') thumbIo.unobserve(img);
+      } catch (_) {}
+      var targetUrl = (img.dataset && img.dataset.prismThumbUrl) || (img.getAttribute && img.getAttribute('data-prism-thumb-url')) || '';
+      if (targetUrl && img.parentNode) {
+        loadSafeThumbNow(img, targetUrl);
+      }
+    }
+  }
+
+  function ensureThumbObserver() {
+    if (thumbIo) return thumbIo;
+    if (typeof W.IntersectionObserver !== 'function') return null;
+    try {
+      thumbIo = new W.IntersectionObserver(onThumbIntersect, {
+        root: els.body || null,
+        rootMargin: '120px 0px',
+        threshold: 0.01,
+      });
+    } catch (_) {
+      thumbIo = null;
+    }
+    return thumbIo;
+  }
+
+  function bindSafeThumb(thumbImg, rawUrl) {
+    if (!thumbImg || !rawUrl) return;
+    var origUrl = String(rawUrl).trim();
+    if (!origUrl) return;
+    var animMode = String(cfgVal('libraryAnimatedThumbs') || 'hover');
+    var initialUrl = animMode === 'always' ? origUrl : toStaticThumbUrl(origUrl);
+    if (thumbImg.dataset) {
+      thumbImg.dataset.prismThumbUrl = initialUrl;
+      thumbImg.dataset.prismOrigUrl = origUrl;
+    } else if (thumbImg.setAttribute) {
+      thumbImg.setAttribute('data-prism-thumb-url', initialUrl);
+      thumbImg.setAttribute('data-prism-orig-url', origUrl);
+    }
+    var io = ensureThumbObserver();
+    if (io && typeof io.observe === 'function') {
+      io.observe(thumbImg);
+    } else {
+      loadSafeThumbNow(thumbImg, initialUrl);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1081,67 +1383,266 @@
     if (!patch || typeof patch !== 'object') return;
     if (!store.config || typeof store.config !== 'object') store.config = {};
     var activeOv = getActiveOverride();
+    var hasReg = Object.prototype.hasOwnProperty.call(patch, 'regions');
     var hasSt = Object.prototype.hasOwnProperty.call(patch, 'surfaceTints');
-    var hasSb = Object.prototype.hasOwnProperty.call(patch, 'sidebarOpacity');
+    var hasSbOp = Object.prototype.hasOwnProperty.call(patch, 'sidebarOpacity');
+    var hasSbBlur = Object.prototype.hasOwnProperty.call(patch, 'sidebarBlur');
 
+    // 1. Apply scalar/non-region keys first
     for (var k in patch) {
       if (!Object.prototype.hasOwnProperty.call(patch, k)) continue;
+      if (k === 'surfaceTints' || k === 'regions' || k === 'sidebarOpacity' || k === 'sidebarBlur') continue;
       var target = activeOv && PER_WALLPAPER_OVERRIDE_KEY_MAP[k] ? activeOv : store.config;
-      if (k === 'surfaceTints') {
-        if (patch.surfaceTints === null) {
-          patchQueue.surfaceTints = null;
-          target.surfaceTints = null;
-          if (!hasSb) {
-            if (target === store.config || Object.prototype.hasOwnProperty.call(target, 'sidebarOpacity')) {
-              target.sidebarOpacity = null;
-            }
-            if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarOpacity')) patchQueue.sidebarOpacity = null;
+      patchQueue[k] = patch[k];
+      target[k] = patch[k];
+    }
+
+    // 2. Apply surfaceTints (and sync optical keys into regions so regions never shadows surfaceTints)
+    if (hasSt) {
+      var stTarget = activeOv && PER_WALLPAPER_OVERRIDE_KEY_MAP.surfaceTints ? activeOv : store.config;
+      if (patch.surfaceTints === null) {
+        patchQueue.surfaceTints = null;
+        stTarget.surfaceTints = null;
+        if (stTarget.regions && typeof stTarget.regions === 'object') {
+          stTarget.regions = stripOpticalFromRegionsObj(stTarget.regions);
+        }
+        if (patchQueue.regions && typeof patchQueue.regions === 'object') {
+          patchQueue.regions = stripOpticalFromRegionsObj(patchQueue.regions);
+        }
+        if (!hasSbOp) {
+          if (stTarget === store.config || Object.prototype.hasOwnProperty.call(stTarget, 'sidebarOpacity')) {
+            stTarget.sidebarOpacity = null;
           }
-        } else if (patch.surfaceTints && typeof patch.surfaceTints === 'object') {
-          patchQueue.surfaceTints = mergeSurfaceTintsObj(
-            patchQueue.surfaceTints === null ? null : patchQueue.surfaceTints,
-            patch.surfaceTints
-          );
-          target.surfaceTints = mergeSurfaceTintsObj(
-            target.surfaceTints === null ? null : target.surfaceTints,
-            patch.surfaceTints
-          );
-          if (
-            !hasSb &&
-            patch.surfaceTints.sidebar &&
-            typeof patch.surfaceTints.sidebar === 'object' &&
-            Object.prototype.hasOwnProperty.call(patch.surfaceTints.sidebar, 'opacity')
-          ) {
-            if (target === store.config || Object.prototype.hasOwnProperty.call(target, 'sidebarOpacity')) {
-              target.sidebarOpacity = patch.surfaceTints.sidebar.opacity;
-            }
-            if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarOpacity')) {
-              patchQueue.sidebarOpacity = patch.surfaceTints.sidebar.opacity;
-            }
+          if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarOpacity')) {
+            patchQueue.sidebarOpacity = null;
           }
         }
-      } else {
-        patchQueue[k] = patch[k];
-        target[k] = patch[k];
-        if (k === 'sidebarOpacity' && !hasSt) {
-          if (
-            target === store.config ||
-            (target.surfaceTints &&
-              typeof target.surfaceTints === 'object' &&
-              Object.prototype.hasOwnProperty.call(target.surfaceTints, 'sidebar'))
-          ) {
-            target.surfaceTints = mergeSurfaceTintsObj(target.surfaceTints, {
-              sidebar: { opacity: patch.sidebarOpacity },
-            });
+        if (!hasSbBlur) {
+          if (stTarget === store.config || Object.prototype.hasOwnProperty.call(stTarget, 'sidebarBlur')) {
+            stTarget.sidebarBlur = null;
           }
-          if (patchQueue.surfaceTints && typeof patchQueue.surfaceTints === 'object') {
-            patchQueue.surfaceTints = mergeSurfaceTintsObj(patchQueue.surfaceTints, {
-              sidebar: { opacity: patch.sidebarOpacity },
-            });
+          if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarBlur')) {
+            patchQueue.sidebarBlur = null;
+          }
+        }
+      } else if (patch.surfaceTints && typeof patch.surfaceTints === 'object') {
+        patchQueue.surfaceTints = mergeSurfaceTintsObj(
+          patchQueue.surfaceTints === null ? null : patchQueue.surfaceTints,
+          patch.surfaceTints
+        );
+        stTarget.surfaceTints = mergeSurfaceTintsObj(
+          stTarget.surfaceTints === null ? null : stTarget.surfaceTints,
+          patch.surfaceTints
+        );
+        for (var sk in patch.surfaceTints) {
+          if (!Object.prototype.hasOwnProperty.call(patch.surfaceTints, sk)) continue;
+          var sv = patch.surfaceTints[sk];
+          if (sv === null) {
+            if (stTarget.regions && stTarget.regions[sk] && typeof stTarget.regions[sk] === 'object') {
+              stTarget.regions[sk] = stripOpticalFromRegionEntry(stTarget.regions[sk]);
+            }
+            if (patchQueue.regions && patchQueue.regions[sk] && typeof patchQueue.regions[sk] === 'object') {
+              patchQueue.regions[sk] = stripOpticalFromRegionEntry(patchQueue.regions[sk]);
+            }
+            if (sk === 'sidebar') {
+              if (!hasSbOp) {
+                if (stTarget === store.config || Object.prototype.hasOwnProperty.call(stTarget, 'sidebarOpacity')) stTarget.sidebarOpacity = null;
+                if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarOpacity')) patchQueue.sidebarOpacity = null;
+              }
+              if (!hasSbBlur) {
+                if (stTarget === store.config || Object.prototype.hasOwnProperty.call(stTarget, 'sidebarBlur')) stTarget.sidebarBlur = null;
+                if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarBlur')) patchQueue.sidebarBlur = null;
+              }
+            }
+          } else if (sv && typeof sv === 'object') {
+            var optPart = pickOpticalKeys(sv);
+            if (optPart) {
+              var regDelta = {};
+              regDelta[sk] = optPart;
+              stTarget.regions = mergeRegionsObj(stTarget.regions === null ? null : stTarget.regions, regDelta);
+              if (patchQueue.regions && typeof patchQueue.regions === 'object') {
+                patchQueue.regions = mergeRegionsObj(patchQueue.regions, regDelta);
+              }
+            }
+            if (sk === 'sidebar') {
+              if (!hasSbOp && Object.prototype.hasOwnProperty.call(sv, 'opacity')) {
+                if (stTarget === store.config || Object.prototype.hasOwnProperty.call(stTarget, 'sidebarOpacity')) stTarget.sidebarOpacity = sv.opacity;
+                if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarOpacity')) patchQueue.sidebarOpacity = sv.opacity;
+              }
+              if (!hasSbBlur && Object.prototype.hasOwnProperty.call(sv, 'blur')) {
+                if (stTarget === store.config || Object.prototype.hasOwnProperty.call(stTarget, 'sidebarBlur')) stTarget.sidebarBlur = sv.blur;
+                if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarBlur')) patchQueue.sidebarBlur = sv.blur;
+              }
+            }
           }
         }
       }
     }
+
+    // 3. Apply canonical regions deep merge & project optical keys into surfaceTints
+    if (hasReg) {
+      var regTarget = activeOv && PER_WALLPAPER_OVERRIDE_KEY_MAP.regions ? activeOv : store.config;
+      if (patch.regions === null) {
+        patchQueue.regions = null;
+        regTarget.regions = null;
+        if (!hasSt) {
+          patchQueue.surfaceTints = null;
+          regTarget.surfaceTints = null;
+        }
+        if (!hasSbOp) {
+          if (regTarget === store.config || Object.prototype.hasOwnProperty.call(regTarget, 'sidebarOpacity')) regTarget.sidebarOpacity = null;
+          if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarOpacity')) patchQueue.sidebarOpacity = null;
+        }
+        if (!hasSbBlur) {
+          if (regTarget === store.config || Object.prototype.hasOwnProperty.call(regTarget, 'sidebarBlur')) regTarget.sidebarBlur = null;
+          if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarBlur')) patchQueue.sidebarBlur = null;
+        }
+      } else if (patch.regions && typeof patch.regions === 'object') {
+        patchQueue.regions = mergeRegionsObj(
+          patchQueue.regions === null ? null : patchQueue.regions,
+          patch.regions
+        );
+        regTarget.regions = mergeRegionsObj(
+          regTarget.regions === null ? null : regTarget.regions,
+          patch.regions
+        );
+        var projectedSt = null;
+        for (var rk in patch.regions) {
+          if (!Object.prototype.hasOwnProperty.call(patch.regions, rk)) continue;
+          var rv = patch.regions[rk];
+          if (rv === null) {
+            if (!projectedSt) projectedSt = {};
+            projectedSt[rk] = null;
+            if (rk === 'sidebar') {
+              if (!hasSbOp) {
+                if (regTarget === store.config || Object.prototype.hasOwnProperty.call(regTarget, 'sidebarOpacity')) regTarget.sidebarOpacity = null;
+                if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarOpacity')) patchQueue.sidebarOpacity = null;
+              }
+              if (!hasSbBlur) {
+                if (regTarget === store.config || Object.prototype.hasOwnProperty.call(regTarget, 'sidebarBlur')) regTarget.sidebarBlur = null;
+                if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarBlur')) patchQueue.sidebarBlur = null;
+              }
+            }
+          } else if (rv && typeof rv === 'object') {
+            var optKeys = pickOpticalKeys(rv);
+            if (optKeys) {
+              if (!projectedSt) projectedSt = {};
+              projectedSt[rk] = optKeys;
+            }
+            if (rk === 'sidebar') {
+              if (!hasSbOp && Object.prototype.hasOwnProperty.call(rv, 'opacity')) {
+                if (regTarget === store.config || Object.prototype.hasOwnProperty.call(regTarget, 'sidebarOpacity')) regTarget.sidebarOpacity = rv.opacity;
+                if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarOpacity')) patchQueue.sidebarOpacity = rv.opacity;
+              }
+              if (!hasSbBlur && Object.prototype.hasOwnProperty.call(rv, 'blur')) {
+                if (regTarget === store.config || Object.prototype.hasOwnProperty.call(regTarget, 'sidebarBlur')) regTarget.sidebarBlur = rv.blur;
+                if (Object.prototype.hasOwnProperty.call(patchQueue, 'sidebarBlur')) patchQueue.sidebarBlur = rv.blur;
+              }
+            }
+          }
+        }
+        if (projectedSt) {
+          regTarget.surfaceTints = mergeSurfaceTintsObj(
+            regTarget.surfaceTints === null ? null : regTarget.surfaceTints,
+            projectedSt
+          );
+          if (patchQueue.surfaceTints && typeof patchQueue.surfaceTints === 'object') {
+            patchQueue.surfaceTints = mergeSurfaceTintsObj(patchQueue.surfaceTints, projectedSt);
+          }
+        }
+      }
+    }
+
+    // 4. Dual-write sidebarOpacity into regions.sidebar & surfaceTints.sidebar
+    if (hasSbOp) {
+      var sbOpTarget = activeOv && PER_WALLPAPER_OVERRIDE_KEY_MAP.sidebarOpacity ? activeOv : store.config;
+      patchQueue.sidebarOpacity = patch.sidebarOpacity;
+      sbOpTarget.sidebarOpacity = patch.sidebarOpacity;
+      var bulkOptResetNullOp = hasSt && patch.surfaceTints === null && patch.sidebarOpacity === null;
+      var regExplicitSbOp =
+        hasReg &&
+        (patch.regions === null ||
+          (patch.regions &&
+            typeof patch.regions === 'object' &&
+            (patch.regions.sidebar === null ||
+              (patch.regions.sidebar &&
+                typeof patch.regions.sidebar === 'object' &&
+                Object.prototype.hasOwnProperty.call(patch.regions.sidebar, 'opacity')))));
+      var stExplicitSbOp =
+        hasSt &&
+        patch.surfaceTints &&
+        typeof patch.surfaceTints === 'object' &&
+        (patch.surfaceTints.sidebar === null ||
+          (patch.surfaceTints.sidebar &&
+            typeof patch.surfaceTints.sidebar === 'object' &&
+            Object.prototype.hasOwnProperty.call(patch.surfaceTints.sidebar, 'opacity')));
+      if (!bulkOptResetNullOp) {
+        if (!regExplicitSbOp) {
+          sbOpTarget.regions = mergeRegionsObj(sbOpTarget.regions === null ? null : sbOpTarget.regions, {
+            sidebar: { opacity: patch.sidebarOpacity },
+          });
+          if (!(hasSt && patch.surfaceTints === null)) {
+            patchQueue.regions = mergeRegionsObj(patchQueue.regions === null ? null : patchQueue.regions, {
+              sidebar: { opacity: patch.sidebarOpacity },
+            });
+          }
+        }
+        if (!stExplicitSbOp && !(hasSt && patch.surfaceTints === null)) {
+          sbOpTarget.surfaceTints = mergeSurfaceTintsObj(sbOpTarget.surfaceTints === null ? null : sbOpTarget.surfaceTints, {
+            sidebar: { opacity: patch.sidebarOpacity },
+          });
+          patchQueue.surfaceTints = mergeSurfaceTintsObj(patchQueue.surfaceTints === null ? null : patchQueue.surfaceTints, {
+            sidebar: { opacity: patch.sidebarOpacity },
+          });
+        }
+      }
+    }
+
+    // 5. Dual-write sidebarBlur into regions.sidebar & surfaceTints.sidebar
+    if (hasSbBlur) {
+      var sbBlurTarget = activeOv && PER_WALLPAPER_OVERRIDE_KEY_MAP.sidebarBlur ? activeOv : store.config;
+      patchQueue.sidebarBlur = patch.sidebarBlur;
+      sbBlurTarget.sidebarBlur = patch.sidebarBlur;
+      var bulkOptResetNullBlur = hasSt && patch.surfaceTints === null && patch.sidebarBlur === null;
+      var regExplicitSbBlur =
+        hasReg &&
+        (patch.regions === null ||
+          (patch.regions &&
+            typeof patch.regions === 'object' &&
+            (patch.regions.sidebar === null ||
+              (patch.regions.sidebar &&
+                typeof patch.regions.sidebar === 'object' &&
+                Object.prototype.hasOwnProperty.call(patch.regions.sidebar, 'blur')))));
+      var stExplicitSbBlur =
+        hasSt &&
+        patch.surfaceTints &&
+        typeof patch.surfaceTints === 'object' &&
+        (patch.surfaceTints.sidebar === null ||
+          (patch.surfaceTints.sidebar &&
+            typeof patch.surfaceTints.sidebar === 'object' &&
+            Object.prototype.hasOwnProperty.call(patch.surfaceTints.sidebar, 'blur')));
+      if (!bulkOptResetNullBlur) {
+        if (!regExplicitSbBlur) {
+          sbBlurTarget.regions = mergeRegionsObj(sbBlurTarget.regions === null ? null : sbBlurTarget.regions, {
+            sidebar: { blur: patch.sidebarBlur },
+          });
+          if (!(hasSt && patch.surfaceTints === null)) {
+            patchQueue.regions = mergeRegionsObj(patchQueue.regions === null ? null : patchQueue.regions, {
+              sidebar: { blur: patch.sidebarBlur },
+            });
+          }
+        }
+        if (!stExplicitSbBlur && !(hasSt && patch.surfaceTints === null)) {
+          sbBlurTarget.surfaceTints = mergeSurfaceTintsObj(sbBlurTarget.surfaceTints === null ? null : sbBlurTarget.surfaceTints, {
+            sidebar: { blur: patch.sidebarBlur },
+          });
+          patchQueue.surfaceTints = mergeSurfaceTintsObj(patchQueue.surfaceTints === null ? null : patchQueue.surfaceTints, {
+            sidebar: { blur: patch.sidebarBlur },
+          });
+        }
+      }
+    }
+
     // Instant <16ms optimistic skin update on host!
     if (W[SKIN_KEY] && typeof W[SKIN_KEY].updateConfig === 'function') {
       try {
@@ -1165,7 +1666,7 @@
       var mySeq = patchFlushSeq;
       callRpc('config.set', { patch: send }).then(function (res) {
         if (mySeq !== patchFlushSeq) return;
-        if (res && typeof res === 'object') ingestState(res.state || res);
+        if (res && typeof res === 'object') ingestState(extractStatePayload(res));
       });
     };
     if (immediate) {
@@ -1190,13 +1691,54 @@
     }
   }
 
+  function withTopLevelRev(dataObj, msg) {
+    var base = dataObj && typeof dataObj === 'object' ? dataObj : {};
+    if (!msg || typeof msg !== 'object') return base;
+    var needRev = msg.stateRev !== undefined && base.stateRev === undefined;
+    var needEpoch = msg.stateEpoch !== undefined && base.stateEpoch === undefined;
+    if (!needRev && !needEpoch) return base;
+    var out = Object.assign({}, base);
+    if (needRev) out.stateRev = msg.stateRev;
+    if (needEpoch) out.stateEpoch = msg.stateEpoch;
+    return out;
+  }
+
+  function extractStatePayload(res) {
+    if (!res || typeof res !== 'object') return null;
+    var inner = res.state && typeof res.state === 'object' ? res.state : res;
+    return withTopLevelRev(inner, res);
+  }
+
   function ingestState(data) {
     if (!data || typeof data !== 'object') return;
-    if (typeof data.skinEnabled === 'boolean') store.skinEnabled = data.skinEnabled;
-    else if (data.config && typeof data.config.skinEnabled === 'boolean') store.skinEnabled = data.config.skinEnabled;
+    var rawRev = data.stateRev;
+    var rev = rawRev !== undefined && rawRev !== null && rawRev !== '' ? Number(rawRev) : NaN;
+    var hasValidRev = Number.isFinite(rev) && rev > 0;
+    var ep = String(data.stateEpoch || data.mediaOrigin || W.__agyPrismCapToken || '');
+    if (hasValidRev) {
+      if (ep && store.lastRevEpoch && ep !== store.lastRevEpoch) {
+        store.lastAppliedRev = 0;
+        toggleStartRev = 0;
+      }
+      if (ep) store.lastRevEpoch = ep;
+      if (rev < store.lastAppliedRev) {
+        return;
+      }
+      store.lastAppliedRev = Math.floor(rev);
+    }
+
+    var skipSkinEnabledWhileToggling =
+      toggleBusy && (!hasValidRev || Math.floor(rev) <= toggleStartRev);
+    if (!skipSkinEnabledWhileToggling) {
+      if (typeof data.skinEnabled === 'boolean') store.skinEnabled = data.skinEnabled;
+      else if (data.config && typeof data.config.skinEnabled === 'boolean') store.skinEnabled = data.config.skinEnabled;
+    }
 
     if (data.config && typeof data.config === 'object') store.config = data.config;
     else if (data.prefs && typeof data.prefs === 'object') store.config = data.prefs;
+    if (skipSkinEnabledWhileToggling && store.config && typeof store.config === 'object') {
+      store.config = Object.assign({}, store.config, { skinEnabled: store.skinEnabled });
+    }
 
     if (data.activeItem !== undefined) store.activeItem = data.activeItem;
     else if (data.source && typeof data.source === 'object') store.activeItem = data.source;
@@ -1231,14 +1773,15 @@
     }
     if (!msg || typeof msg !== 'object') return false;
     if (msg.event === 'state') {
-      ingestState(msg.data || {});
+      ingestState(withTopLevelRev(msg.data, msg));
       return true;
     }
     if (msg.event === 'payload' || msg.event === 'skin') {
+      var payloadData = withTopLevelRev(msg.data, msg);
       if (W[SKIN_KEY] && typeof W[SKIN_KEY].applyPayload === 'function') {
-        W[SKIN_KEY].applyPayload(msg.data || {});
+        W[SKIN_KEY].applyPayload(payloadData);
       }
-      ingestState(msg.data || {});
+      ingestState(payloadData);
       return true;
     }
     if (msg.id && rpcPending[msg.id]) {
@@ -1279,26 +1822,73 @@
     if (acc && /^#|rgb/i.test(acc)) els.root.style.setProperty('--pp-accent', acc);
   }
 
-  function toggleSkinMaster(explicitEnabled) {
-    disarmRestore();
-    var next = typeof explicitEnabled === 'boolean' ? explicitEnabled : !store.skinEnabled;
+  function applyOptimisticSkinEnabled(enabled) {
+    if (!W[SKIN_KEY]) return;
+    try {
+      if (!enabled && typeof W[SKIN_KEY].applyPayload === 'function') {
+        W[SKIN_KEY].applyPayload({ skinEnabled: false });
+      } else if (enabled && typeof W[SKIN_KEY].updateConfig === 'function') {
+        W[SKIN_KEY].updateConfig({ skinEnabled: true });
+      } else if (enabled && typeof W[SKIN_KEY].applyPayload === 'function') {
+        W[SKIN_KEY].applyPayload({ skinEnabled: true, config: store.config, activeItem: store.activeItem });
+      }
+    } catch (_) {}
+  }
+
+  function runMasterSkinRpc(next, rpcMethod, rpcParams) {
+    if (toggleBusy) {
+      pendingToggleTarget = next;
+      store.skinEnabled = next;
+      if (!store.config || typeof store.config !== 'object') store.config = {};
+      store.config.skinEnabled = next;
+      renderAll();
+      return Promise.resolve(null);
+    }
+
+    var prevEnabled = Boolean(store.skinEnabled);
+    toggleSeq += 1;
+    var mySeq = toggleSeq;
+    toggleBusy = true;
+    toggleStartRev = store.lastAppliedRev;
+    pendingToggleTarget = null;
+
     store.skinEnabled = next;
     if (!store.config || typeof store.config !== 'object') store.config = {};
     store.config.skinEnabled = next;
-    if (W[SKIN_KEY]) {
-      try {
-        if (!next && typeof W[SKIN_KEY].applyPayload === 'function') {
-          W[SKIN_KEY].applyPayload({ skinEnabled: false });
-        } else if (next && typeof W[SKIN_KEY].updateConfig === 'function') {
-          W[SKIN_KEY].updateConfig({ skinEnabled: true });
-        }
-      } catch (_) {}
-    }
+    if (els.powerBtn) els.powerBtn.setAttribute('data-busy', 'true');
+    if (els.restoreBtn) els.restoreBtn.setAttribute('data-busy', 'true');
+    applyOptimisticSkinEnabled(next);
     renderAll();
-    return callRpc('skin.toggle', { enabled: next }).then(function (r) {
-      if (r) ingestState(r.state || r);
+
+    return callRpc(rpcMethod, rpcParams).then(function (r) {
+      if (destroyed || mySeq !== toggleSeq) return r;
+      toggleBusy = false;
+      if (els.powerBtn) els.powerBtn.setAttribute('data-busy', 'false');
+      if (els.restoreBtn) els.restoreBtn.setAttribute('data-busy', 'false');
+      if (!r || r.ok === false) {
+        pendingToggleTarget = null;
+        store.skinEnabled = prevEnabled;
+        if (!store.config || typeof store.config !== 'object') store.config = {};
+        store.config.skinEnabled = prevEnabled;
+        applyOptimisticSkinEnabled(prevEnabled);
+        renderAll();
+        showToast(tr('toggleFailToast'));
+        return null;
+      }
+      ingestState(extractStatePayload(r));
+      var queued = pendingToggleTarget;
+      pendingToggleTarget = null;
+      if (queued !== null && queued !== Boolean(store.skinEnabled)) {
+        return toggleSkinMaster(queued);
+      }
       return r;
     });
+  }
+
+  function toggleSkinMaster(explicitEnabled) {
+    disarmRestore();
+    var next = typeof explicitEnabled === 'boolean' ? explicitEnabled : !store.skinEnabled;
+    return runMasterSkinRpc(next, 'skin.toggle', { enabled: next });
   }
 
   function syncInlinePillState(pillEl) {
@@ -1473,15 +2063,22 @@
   function buildSliderRow(key, min, max, step, fmt, fallbackKey) {
     var valSpan = h('span', { class: 'pp-sval' });
     var labelSpan = h('span', { class: 'pp-slabel' });
+    function makeSliderPatch(v) {
+      var p = { preset: 'custom' };
+      p[key] = v;
+      if (key === 'sidebarBlur') {
+        p.regions = { sidebar: { blur: v } };
+        p.surfaceTints = { sidebar: { blur: v } };
+      }
+      return p;
+    }
     var rstBtn = h('button', {
       type: 'button',
       class: 'pp-rst',
       'data-reset-key': key,
       html: ICONS.reset,
       onclick: function () {
-        var p = { preset: 'custom' };
-        p[key] = fallbackKey ? null : DEFAULTS[key];
-        pushConfigPatch(p, true);
+        pushConfigPatch(makeSliderPatch(fallbackKey ? null : DEFAULTS[key]), true);
       },
     });
     var range = h('input', {
@@ -1493,16 +2090,10 @@
       max: max,
       step: step,
       oninput: function () {
-        var v = Number(range.value);
-        var p = { preset: 'custom' };
-        p[key] = v;
-        pushConfigPatch(p, false);
+        pushConfigPatch(makeSliderPatch(Number(range.value)), false);
       },
       onchange: function () {
-        var v = Number(range.value);
-        var p = { preset: 'custom' };
-        p[key] = v;
-        pushConfigPatch(p, true);
+        pushConfigPatch(makeSliderPatch(Number(range.value)), true);
       },
     });
     var row = h('div', { class: 'pp-srow', 'data-dirty': 'false' }, [labelSpan, valSpan, rstBtn, range]);
@@ -1525,6 +2116,15 @@
     var sliderKey = 'surfaceTints.' + compId + '.opacity';
     var valSpan = h('span', { class: 'pp-sval' });
     var labelSpan = h('span', { class: 'pp-slabel' });
+    function makeCompPatch(v) {
+      var regPatch = {};
+      regPatch[compId] = { opacity: v };
+      var stPatch = {};
+      stPatch[compId] = { opacity: v };
+      var p = { preset: 'custom', regions: regPatch, surfaceTints: stPatch };
+      if (compId === 'sidebar') p.sidebarOpacity = v;
+      return p;
+    }
     var rstBtn = h('button', {
       type: 'button',
       class: 'pp-rst',
@@ -1532,11 +2132,7 @@
       'data-comp': compId,
       html: ICONS.reset,
       onclick: function () {
-        var stPatch = {};
-        stPatch[compId] = { opacity: null };
-        var p = { preset: 'custom', surfaceTints: stPatch };
-        if (compId === 'sidebar') p.sidebarOpacity = null;
-        pushConfigPatch(p, true);
+        pushConfigPatch(makeCompPatch(null), true);
       },
     });
     var range = h('input', {
@@ -1549,23 +2145,23 @@
       max: bounds.max,
       step: 0.01,
       oninput: function () {
-        var v = Number(range.value);
-        var stPatch = {};
-        stPatch[compId] = { opacity: v };
-        var p = { preset: 'custom', surfaceTints: stPatch };
-        if (compId === 'sidebar') p.sidebarOpacity = v;
-        pushConfigPatch(p, false);
+        pushConfigPatch(makeCompPatch(Number(range.value)), false);
       },
       onchange: function () {
-        var v = Number(range.value);
-        var stPatch = {};
-        stPatch[compId] = { opacity: v };
-        var p = { preset: 'custom', surfaceTints: stPatch };
-        if (compId === 'sidebar') p.sidebarOpacity = v;
-        pushConfigPatch(p, true);
+        pushConfigPatch(makeCompPatch(Number(range.value)), true);
       },
     });
-    var row = h('div', { class: 'pp-srow', 'data-dirty': 'false', 'data-comp': compId }, [labelSpan, valSpan, rstBtn, range]);
+    var wcoHint =
+      compId === 'wco'
+        ? h('div', {
+            class: 'pp-wco-hint',
+            'data-testid': 'prism-wco-disabled-hint',
+            hidden: true,
+          })
+        : null;
+    var rowKids = [labelSpan, valSpan, rstBtn, range];
+    if (wcoHint) rowKids.push(wcoHint);
+    var row = h('div', { class: 'pp-srow', 'data-dirty': 'false', 'data-comp': compId }, rowKids);
     compSliderRefs[compId] = {
       compId: compId,
       row: row,
@@ -1573,6 +2169,7 @@
       val: valSpan,
       rst: rstBtn,
       range: range,
+      wcoHint: wcoHint,
       min: bounds.min,
       max: bounds.max,
       fmt: function (v) {
@@ -1622,7 +2219,7 @@
       html: ICONS.prev,
       onclick: function () {
         callRpc('playlist.step', { direction: -1, reason: 'manual' }).then(function (r) {
-          if (r) ingestState(r.state || r);
+          if (r) ingestState(extractStatePayload(r));
         });
       },
     });
@@ -1640,7 +2237,7 @@
       html: ICONS.next,
       onclick: function () {
         callRpc('playlist.step', { direction: 1, reason: 'manual' }).then(function (r) {
-          if (r) ingestState(r.state || r);
+          if (r) ingestState(extractStatePayload(r));
         });
       },
     });
@@ -1727,10 +2324,25 @@
             if (Object.prototype.hasOwnProperty.call(sp, k)) patch[k] = sp[k];
           }
           if (!store.config || typeof store.config !== 'object') store.config = {};
+          var activeOv = getActiveOverride();
           for (var qk in patch) {
             if (Object.prototype.hasOwnProperty.call(patch, qk)) {
               store.config[qk] = patch[qk];
               if (Object.prototype.hasOwnProperty.call(patchQueue, qk)) delete patchQueue[qk];
+              if (activeOv && PER_WALLPAPER_OVERRIDE_KEY_MAP[qk] && Object.prototype.hasOwnProperty.call(activeOv, qk)) {
+                delete activeOv[qk];
+              }
+            }
+          }
+          if (patch.surfaceTints === null) {
+            if (store.config.regions && typeof store.config.regions === 'object') {
+              store.config.regions = stripOpticalFromRegionsObj(store.config.regions);
+            }
+            if (patchQueue.regions && typeof patchQueue.regions === 'object') {
+              patchQueue.regions = stripOpticalFromRegionsObj(patchQueue.regions);
+            }
+            if (activeOv && activeOv.regions && typeof activeOv.regions === 'object') {
+              activeOv.regions = stripOpticalFromRegionsObj(activeOv.regions);
             }
           }
           if (W[SKIN_KEY] && typeof W[SKIN_KEY].updateConfig === 'function') {
@@ -1740,7 +2352,7 @@
           }
           renderAll();
           callRpc('preset.apply', { presetId: pid }).then(function (r) {
-            if (r) ingestState(r.state || r);
+            if (r) ingestState(extractStatePayload(r));
           });
         },
       });
@@ -1954,7 +2566,6 @@
     var slidersSec = h('div', { class: 'pp-sec' }, [
       buildSliderRow('glassOpacity', 0.15, 0.98, 0.01, function (v) { return Math.round(v * 100) + '%'; }),
       buildSliderRow('glassBlur', 0, 64, 1, function (v) { return Math.round(v) + ' px'; }),
-      buildSliderRow('sidebarOpacity', 0, 0.98, 0.01, function (v) { return Math.round(v * 100) + '%'; }, 'glassOpacity'),
       buildSliderRow('sidebarBlur', 0, 64, 1, function (v) { return Math.round(v) + ' px'; }, 'glassBlur'),
       buildSliderRow('islandGap', 0, 20, 1, function (v) { return Math.round(v) + ' px'; }),
       buildSliderRow('scrimOpacity', 0, 0.92, 0.01, function (v) { return Math.round(v * 100) + '%'; }),
@@ -1969,7 +2580,7 @@
       class: 'pp-btn pp-comp-reset',
       'data-testid': 'prism-pop-reset-tints',
       onclick: function () {
-        pushConfigPatch({ preset: 'custom', surfaceTints: null, sidebarOpacity: null }, true);
+        pushConfigPatch({ preset: 'custom', surfaceTints: null, sidebarOpacity: null, sidebarBlur: null }, true);
       },
     });
     var compRows = SURFACE_TINT_COMPONENTS.map(function (cid) {
@@ -2084,7 +2695,7 @@
       style: 'flex:1;',
       onclick: function () {
         callRpc('config.reset', { scope: 'skin' }).then(function (r) {
-          if (r) ingestState(r.state || r);
+          if (r) ingestState(extractStatePayload(r));
         });
       },
     });
@@ -2107,14 +2718,7 @@
           return;
         }
         disarmRestore();
-        store.skinEnabled = false;
-        if (W[SKIN_KEY] && typeof W[SKIN_KEY].applyPayload === 'function') {
-          W[SKIN_KEY].applyPayload({ skinEnabled: false });
-        }
-        renderAll();
-        callRpc('skin.restore', {}).then(function (r) {
-          if (r) ingestState(r.state || r);
-        });
+        runMasterSkinRpc(false, 'skin.restore', {});
       },
     });
     els.paneStatus = h('div', { class: 'pp-pane' }, [
@@ -2214,6 +2818,7 @@
     var firstId = itemsArr.length && itemsArr[0] ? itemsArr[0].id : '';
     var lastId = itemsArr.length && itemsArr[itemsArr.length - 1] ? itemsArr[itemsArr.length - 1].id : '';
     var pageLimit = Math.max(PAGE_SIZE, Number(ui.pageLimit) || PAGE_SIZE);
+    var animMode = String(cfgVal('libraryAnimatedThumbs') || 'hover');
     var gridSig = [
       getLang(),
       store.skinEnabled ? '1' : '0',
@@ -2222,6 +2827,7 @@
       ui.localOnly ? '1' : '0',
       ui.favOnly ? '1' : '0',
       String(pageLimit),
+      animMode,
       q,
       itemsArr.length,
       firstId,
@@ -2233,6 +2839,7 @@
     lastGridSig = gridSig;
 
     var prevScrollTop = els.body ? els.body.scrollTop : 0;
+    clearThumbObserverTargets();
     while (els.grid.firstChild) els.grid.removeChild(els.grid.firstChild);
 
     var filtered = (store.items || []).filter(function (it) {
@@ -2263,8 +2870,11 @@
       var isCur = store.skinEnabled && activeId && it.id === activeId;
       var isFav = favs.indexOf(it.id) >= 0;
       var thumb = h('div', { class: 'pp-thumb' }, [h('span', { text: String(it.kind || 'IMG').toUpperCase() })]);
-      if (it.thumbUrl) {
-        var thumbImg = h('img', {
+      var thumbImg = null;
+      var origThumbUrl = it.thumbUrl ? String(it.thumbUrl).trim() : '';
+      var staticThumbUrl = origThumbUrl ? toStaticThumbUrl(origThumbUrl) : '';
+      if (origThumbUrl) {
+        thumbImg = h('img', {
           loading: 'lazy',
           alt: '',
           onerror: function () {
@@ -2272,7 +2882,7 @@
           },
         });
         thumb.appendChild(thumbImg);
-        bindSafeThumb(thumbImg, it.thumbUrl);
+        bindSafeThumb(thumbImg, origThumbUrl);
       }
       if (isCur) thumb.appendChild(h('span', { class: 'pp-cur', html: ICONS.check }));
       var favBtn = h('button', {
@@ -2291,33 +2901,55 @@
       });
       thumb.appendChild(favBtn);
 
-      var card = h(
-        'div',
-        {
-          class: 'pp-card',
-          role: 'button',
-          tabindex: '0',
-          'aria-current': isCur ? 'true' : 'false',
-          onclick: function () {
-            store.skinEnabled = true;
-            store.activeItem = it;
-            if (W[SKIN_KEY] && typeof W[SKIN_KEY].applyPayload === 'function') {
-              W[SKIN_KEY].applyPayload({ skinEnabled: true, config: store.config, activeItem: it });
-            }
-            renderAll();
-            callRpc('wallpaper.apply', { wallpaperId: it.id }).then(function (r) {
-              if (r) ingestState(r.state || r);
-            });
-          },
-          onkeydown: function (e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              card.click();
-            }
-          },
+      var hoverTimer = 0;
+      var cardProps = {
+        class: 'pp-card',
+        role: 'button',
+        tabindex: '0',
+        'aria-current': isCur ? 'true' : 'false',
+        onclick: function () {
+          store.skinEnabled = true;
+          store.activeItem = it;
+          if (W[SKIN_KEY] && typeof W[SKIN_KEY].applyPayload === 'function') {
+            W[SKIN_KEY].applyPayload({ skinEnabled: true, config: store.config, activeItem: it });
+          }
+          renderAll();
+          callRpc('wallpaper.apply', { wallpaperId: it.id }).then(function (r) {
+            if (r) ingestState(extractStatePayload(r));
+          });
         },
-        [thumb, h('div', { class: 'pp-ctitle', text: it.title || it.id })]
-      );
+        onkeydown: function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            card.click();
+          }
+        },
+      };
+      if (thumbImg && animMode === 'hover' && staticThumbUrl && staticThumbUrl !== origThumbUrl) {
+        cardProps.onpointerenter = function () {
+          if (destroyed || !ui.open || !thumbImg.parentNode) return;
+          clearTimeout(hoverTimer);
+          hoverTimer = setTimeout(function () {
+            hoverTimer = 0;
+            if (destroyed || !ui.open || !thumbImg.parentNode) return;
+            try {
+              if (thumbIo && typeof thumbIo.unobserve === 'function') thumbIo.unobserve(thumbImg);
+            } catch (_) {}
+            loadSafeThumbNow(thumbImg, origThumbUrl);
+          }, 180);
+          thumbHoverTimers.push(hoverTimer);
+        };
+        cardProps.onpointerleave = function () {
+          if (hoverTimer) {
+            clearTimeout(hoverTimer);
+            hoverTimer = 0;
+          }
+          if (!destroyed && thumbImg.parentNode) {
+            loadSafeThumbNow(thumbImg, staticThumbUrl);
+          }
+        };
+      }
+      var card = h('div', cardProps, [thumb, h('div', { class: 'pp-ctitle', text: it.title || it.id })]);
       els.grid.appendChild(card);
     });
 
@@ -2356,10 +2988,15 @@
     if (els.orb) els.orb.setAttribute('data-skin-enabled', skinOn ? 'true' : 'false');
     if (els.powerBtn) {
       els.powerBtn.setAttribute('aria-checked', skinOn ? 'true' : 'false');
+      els.powerBtn.setAttribute('data-busy', toggleBusy ? 'true' : 'false');
       els.powerBtn.title = skinOn ? tr('powerTipOn') : tr('powerTipOff');
       if (els.powerText) els.powerText.textContent = skinOn ? tr('powerOn') : tr('powerOff');
     }
+    if (els.restoreBtn) {
+      els.restoreBtn.setAttribute('data-busy', toggleBusy ? 'true' : 'false');
+    }
     syncInlinePillState();
+    syncHousekeepTimer();
 
     // Header tooltips & state
     els.prevBtn.title = tr('prev');
@@ -2481,9 +3118,10 @@
       }
     }
 
-    // Per-Component Glass Depth Accordion (7 components with true resolveComponentDefaultAlpha Auto-follow)
+    // Per-Component Glass Depth Accordion (8 components with true resolveComponentDefaultAlpha Auto-follow)
     var effOptics = effectiveOpticsCfg();
     var isLightTheme = store.theme === 'light';
+    var wcoDisabled = cfgVal('transparentWindowControls') === false;
     var customCompCount = 0;
     if (els.compSummaryTitle) els.compSummaryTitle.textContent = tr('compTitle');
     if (els.compResetAllBtn) els.compResetAllBtn.textContent = tr('compResetAll');
@@ -2493,6 +3131,11 @@
       if (!cr) continue;
       cr.label.textContent = tr('comp_' + cid);
       cr.rst.title = tr('resetTip');
+      if (cid === 'wco' && cr.wcoHint) {
+        cr.wcoHint.hidden = !wcoDisabled;
+        cr.wcoHint.textContent = tr('wcoDisabledHint');
+        cr.row.setAttribute('data-disabled-hint', wcoDisabled ? 'true' : 'false');
+      }
       var compRaw = readComponentOpacity(cid);
       var compDragging = doc.activeElement === cr.range;
       if (compRaw === null) {
@@ -2598,8 +3241,10 @@
   }
 
   function refreshAllFromHost() {
+    var reqToggleSeq = toggleSeq;
     callRpc('state.get', {}).then(function (res) {
-      if (res) ingestState(res.state || res);
+      if (!res || reqToggleSeq !== toggleSeq) return;
+      ingestState(extractStatePayload(res));
     });
     refreshLibrary();
   }
@@ -2636,6 +3281,7 @@
     els.orb.setAttribute('aria-expanded', 'true');
     syncHostTheme();
     positionTriggersAndSheet();
+    syncHousekeepTimer();
     refreshAllFromHost();
     renderAll();
     try {
@@ -2650,6 +3296,9 @@
       return status();
     }
     disarmRestore();
+    clearThumbObserverTargets();
+    lastGridSig = '';
+    stopHousekeepTimer();
     ui.drilldown = false;
     ui.open = false;
     els.root.setAttribute('data-open', 'false');
@@ -2720,6 +3369,43 @@
   // ---------------------------------------------------------------------------
   // Mount, Self-Heal & Teardown
   // ---------------------------------------------------------------------------
+  function stopHousekeepTimer() {
+    if (housekeepTimer) {
+      clearInterval(housekeepTimer);
+      housekeepTimer = 0;
+    }
+  }
+
+  function syncHousekeepTimer() {
+    if (destroyed || !mounted || !ui.open) {
+      stopHousekeepTimer();
+      return;
+    }
+    var mode = String(cfgVal('triggerMode') || 'both');
+    var wantPill = mode === 'pill' || mode === 'both';
+    if (!wantPill) {
+      stopHousekeepTimer();
+      return;
+    }
+    if (!housekeepTimer) {
+      housekeepTimer = setInterval(function () {
+        if (destroyed || !ui.open) {
+          stopHousekeepTimer();
+          return;
+        }
+        var curMode = String(cfgVal('triggerMode') || 'both');
+        var curWantPill = curMode === 'pill' || curMode === 'both';
+        if (!curWantPill) {
+          stopHousekeepTimer();
+          return;
+        }
+        if (!els.root.isConnected || !doc.getElementById(STYLE_ID) || !doc.getElementById(PILL_ID)) {
+          heal();
+        }
+      }, 8000);
+    }
+  }
+
   function ensureStyles() {
     var s = doc.getElementById(STYLE_ID);
     if (!s) {
@@ -2776,14 +3462,7 @@
       } catch (_) {}
     }
 
-    housekeepTimer = setInterval(function () {
-      if (destroyed) return;
-      var mode = String(cfgVal('triggerMode') || 'both');
-      var wantPill = mode === 'pill' || mode === 'both';
-      if (!els.root.isConnected || !doc.getElementById(STYLE_ID) || (wantPill && !doc.getElementById(PILL_ID))) {
-        heal();
-      }
-    }, 2500);
+    syncHousekeepTimer();
 
     if (W.__AGY_PRISM_PANEL_BOOT__) {
       ingestState(W.__AGY_PRISM_PANEL_BOOT__);
@@ -2812,6 +3491,7 @@
       drilldown: ui.drilldown,
       restoreArmed: restoreArmed,
       skinEnabled: Boolean(store.skinEnabled),
+      stateRev: store.lastAppliedRev,
       tab: ui.tab,
       theme: store.theme,
       connected: hasBinding() || store.connected,
@@ -2826,11 +3506,12 @@
     destroyed = true;
     clearLazyKeepAlive();
     clearThumbBlobCache();
+    thumbIo = null;
     clearTimeout(restoreTimer);
     clearTimeout(patchTimer);
     clearTimeout(searchTimer);
     clearTimeout(toastTimer);
-    clearInterval(housekeepTimer);
+    stopHousekeepTimer();
     try {
       if (domObserver) domObserver.disconnect();
       if (themeObserver) themeObserver.disconnect();

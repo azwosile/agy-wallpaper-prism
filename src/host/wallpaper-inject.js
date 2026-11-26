@@ -1,4 +1,4 @@
-// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.1.0).
+// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.2.0).
 //
 // Gentle Fail-Open ES2020 browser IIFE loaded post-hydration (`stage.js`) or in headless verification harnesses.
 // Zero `Page.enable`/`Runtime.enable`, zero `app.asar` modifications, `z-index: -1` inert stage,
@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.1.0';
+  var VERSION = '2.2.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -31,6 +31,8 @@
   var WCO_ATTR = 'data-agy-prism-wco';
   var WCO_ACTIVE_ATTR = 'data-agy-prism-wco-active';
   var TOPBAR_STYLE_ATTR = 'data-prism-topbar-style';
+  var SIDEBAR_STYLE_ATTR = 'data-prism-sidebar-style';
+  var SIDEBAR_TYPO_ATTR = 'data-prism-sb-typo';
   var TOPBAR_ANC_ATTR = 'data-agy-prism-topbar-anc';
   var TOPBAR_HOST_ATTR = 'data-agy-prism-topbar-host';
   var TOPBAR_CLUSTER_GAP = 36;
@@ -48,10 +50,14 @@
   if (prev && typeof prev === 'object') {
     if (prev.version === VERSION && typeof prev.alive === 'function' && prev.alive()) {
       try {
-        if (W.__AGY_PRISM_BOOT_PAYLOAD__ && typeof prev.applyPayload === 'function') {
-          prev.applyPayload(W.__AGY_PRISM_BOOT_PAYLOAD__);
+        if (W.__agyPrismOn === false) {
+          if (typeof prev.applyPayload === 'function') prev.applyPayload({ skinEnabled: false });
+        } else {
+          if (W.__AGY_PRISM_BOOT_PAYLOAD__ && typeof prev.applyPayload === 'function') {
+            prev.applyPayload(W.__AGY_PRISM_BOOT_PAYLOAD__);
+          }
+          prev.heal();
         }
-        prev.heal();
       } catch (_) {}
       return prev.status();
     }
@@ -332,6 +338,25 @@
     TOPBAR_PILLS_ID +
     '):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
 
+  var SIBLING_DESCENDANT_EXCLUDE =
+    ':not(#agy-prism-pill):not(#agy-prism-pill *)' +
+    ':not(#gemini-neko-pet-root):not(#gemini-neko-pet-root *)' +
+    ':not(#gemini-neko-observer-modal):not(#gemini-neko-observer-modal *)' +
+    ':not(#gemini-neko-stats-bar):not(#gemini-neko-stats-bar *)' +
+    ':not(#ag-context-meter):not(#ag-context-meter *)' +
+    ':not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-capsule *)' +
+    ':not(#ag-usage-monitor-portal):not(#ag-usage-monitor-portal *)' +
+    ':not(#deck-metrics-strip):not(#deck-metrics-strip *)' +
+    ':not(#agy-prism-popover):not(#agy-prism-popover *)';
+
+  var COMPOSER_DESCENDANT_EXCLUDE =
+    ':not(#antigravity\\.agentSidePanelInputBox):not(#antigravity\\.agentSidePanelInputBox *)' +
+    ':not([data-testid="agent-input-box"]):not([data-testid="agent-input-box"] *)' +
+    ':not(.surface-composer-card):not(.surface-composer-card *)' +
+    ':not(.agy-composer):not(.agy-composer *)';
+
+  var TYPO_PROTECT_EX = ':not(pre, pre *, code, code *, .monaco-editor, .monaco-editor *, .xterm, .xterm *, svg, svg *)';
+
   var DIALOG_DESCENDANT_EXCLUDE =
     ':not(.settings-modal-backdrop *):not(.settings-modal-container *):not(.agy-dialog *):not([role="dialog"] *):not([role="alertdialog"] *):not([role="menu"] *):not([role="listbox"] *):not([data-radix-popper-content-wrapper] *):not(.agy-popover *):not(.quick-input-widget *)';
 
@@ -386,11 +411,15 @@
     '[data-testid="plugin-detail"]',
   ];
 
+  // DAY0_PROBE_CALIBRATION_SLOT: SLOT_L1_OUTER_SHELL — 2.35.1 live hub verified `div[data-testid="agent-input-box"].flex.flex-col.w-full.shrink-0` as direct parent of `#antigravity.agentSidePanelInputBox` (2 instances: main conversation-view & aux subagent-tab-composer).
+  // DAY0_PROBE_CALIBRATION_SLOT: SLOT_L2_INPUTBOX_CLASSES — 2.35.1 live hub verified `div#antigravity.agentSidePanelInputBox` (`testid=""`, cls `surface-composer relative flex flex-col p-px rounded-2xl bg-card-border`, radius 21px, bg rgb(13,13,17), 4px/5px box-shadow rings).
+  // DAY0_PROBE_CALIBRATION_SLOT: SLOT_L3_CONTEXT_BAR — idle input had only `.surface-composer-card` child (`未找到` dynamic tray in idle state); retain `:has(~ .surface-composer-card)` guard.
+  // DAY0_PROBE_CALIBRATION_SLOT: SLOT_L4_INNER_NESTED — 2.35.1 `.surface-composer-card` (`bg-card`, radius 20px, 4-layer box-shadow) contains `div.relative.w-full` & `div.agy-composer-footer` (0 nested `[data-testid="agent-input-box"]`); retain defensive inner strip.
   var GLASS_CARRIER_COMPOSERS = [
-    '[data-testid="agent-input-box"]',
-    '#antigravity\\.agentSidePanelInputBox > .surface-composer-card',
-    '.surface-composer-card',
-    '.agy-composer',
+    '#antigravity\\.agentSidePanelInputBox',
+    '[data-testid="agent-input-box"]:not(#antigravity\\.agentSidePanelInputBox):not(#antigravity\\.agentSidePanelInputBox *):not(:has(#antigravity\\.agentSidePanelInputBox)):not([data-testid="agent-input-box"] *)',
+    '.surface-composer-card:not(#antigravity\\.agentSidePanelInputBox *):not([data-testid="agent-input-box"] *):not([data-testid="agent-input-box"]):not(:has([data-testid="agent-input-box"]))',
+    '.agy-composer:not(#antigravity\\.agentSidePanelInputBox *):not([data-testid="agent-input-box"] *):not(.surface-composer-card *):not([data-testid="agent-input-box"]):not(.surface-composer-card):not(:has([data-testid="agent-input-box"])):not(:has(.surface-composer-card))',
   ];
 
   // Req #1: 3-Layer Zero-English Empty-Conversation Watermark Logo Selectors & Guards
@@ -457,16 +486,34 @@
   var COMPOSER_SUBTREE_SEL =
     '[data-testid="agent-input-box"], .surface-composer-card, .agy-composer, .composer-dock';
 
-  // Req #4: 7-Component Glass Surface Tint Constants & Per-Wallpaper Override Keys
-  var GLASS_COMPONENT_IDS = ['topbar', 'sidebar', 'workspace', 'rightPane', 'composer', 'card', 'popover'];
+  // Req #4 / v2.2.0: 8-Region Unified Glass & Typography Constants & Per-Wallpaper Override Keys
+  var REGION_IDS = ['topbar', 'wco', 'sidebar', 'workspace', 'card', 'composer', 'rightPane', 'popover'];
+  var SURFACE_TINT_COMPONENTS = REGION_IDS;
+  var GLASS_COMPONENT_IDS = REGION_IDS;
+  var BORDER_STYLES = ['full', 'bottom', 'none'];
+  var SIDEBAR_LIST_STYLES = ['capsule', 'underline', 'accordion', 'tree'];
+  var REGION_OPTICAL_KEYS = ['glassEnabled', 'blur', 'opacity', 'tone', 'tint', 'borderOpacity'];
+  var REGION_STRUCTURAL_KEYS = ['borderStyle', 'radius', 'fontSize', 'fontFamily', 'fontColor', 'allowRawFontColor'];
+  var SIDEBAR_REGION_EXTRA_KEYS = ['listStyle', 'sectionFontSize', 'projectFontSize', 'itemFontSize'];
   var SURFACE_TINT_BOUNDS = {
     topbar: { minOpacity: 0, maxOpacity: 0.98 },
+    wco: { minOpacity: 0, maxOpacity: 0.98 },
     sidebar: { minOpacity: 0, maxOpacity: 0.98 },
     workspace: { minOpacity: 0, maxOpacity: 0.98 },
-    rightPane: { minOpacity: 0, maxOpacity: 0.98 },
-    composer: { minOpacity: 0, maxOpacity: 0.98 },
     card: { minOpacity: 0, maxOpacity: 0.98 },
+    composer: { minOpacity: 0, maxOpacity: 0.98 },
+    rightPane: { minOpacity: 0, maxOpacity: 0.98 },
     popover: { minOpacity: 0.50, maxOpacity: 0.99 },
+  };
+  var REGION_FONT_SIZE_BOUNDS = {
+    topbar: { min: 10, max: 24 },
+    wco: { min: 10, max: 24 },
+    sidebar: { min: 11, max: 15 },
+    workspace: { min: 10, max: 24 },
+    card: { min: 10, max: 24 },
+    composer: { min: 10, max: 24 },
+    rightPane: { min: 10, max: 24 },
+    popover: { min: 10, max: 24 },
   };
   var PER_WALLPAPER_OVERRIDE_KEYS_MAP = {
     layoutMode: 1,
@@ -477,7 +524,11 @@
     glassBlur: 1,
     sidebarOpacity: 1,
     sidebarBlur: 1,
+    regions: 1,
     surfaceTints: 1,
+    globalFontSize: 1,
+    globalFontFamily: 1,
+    globalFontColor: 1,
     scrimOpacity: 1,
     mediaOpacity: 1,
     mediaBlur: 1,
@@ -510,7 +561,16 @@
     chatGlassFidelity: 1,
     contrastFloor: 1,
     floaterSolidBase: 1,
+    regions: 1,
     surfaceTints: 1,
+    globalFontSize: 1,
+    globalFontFamily: 1,
+    globalFontColor: 1,
+    sidebarListStyle: 1,
+    sidebarTypographyMode: 1,
+    sidebarFontSize: 1,
+    leftSidebarRadius: 1,
+    rightSidebarRadius: 1,
     preset: 1,
     mediaBlur: 1,
     mediaOpacity: 1,
@@ -528,7 +588,7 @@
     '.agy-popover',
     '.agy-menu',
     '.agy-toast',
-    '[role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"])',
+    '[role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]):not(.prism-sheet)',
     '[role="menu"]',
     '[role="listbox"]',
     '[role="tooltip"]',
@@ -700,6 +760,78 @@
     }
     return best;
   }
+  function enforceFgContrastRgb(fgRgb, bgRgb, isLight, minRatio) {
+    var target = Number.isFinite(minRatio) && minRatio > 1 ? minRatio : 4.5;
+    if (contrastRatio(fgRgb, bgRgb) >= target) return [fgRgb[0], fgRgb[1], fgRgb[2]];
+    var primaryAnchor = isLight ? [15, 23, 42] : [255, 255, 255];
+    var altAnchor = isLight ? [255, 255, 255] : [15, 23, 42];
+    var anchor =
+      contrastRatio(primaryAnchor, bgRgb) >= target ||
+      contrastRatio(primaryAnchor, bgRgb) >= contrastRatio(altAnchor, bgRgb)
+        ? primaryAnchor
+        : altAnchor;
+    var lo = 0;
+    var hi = 1;
+    var best = anchor;
+    for (var step = 0; step < 12; step += 1) {
+      var mid = (lo + hi) * 0.5;
+      var cand = mixRgb(fgRgb, anchor, mid);
+      if (contrastRatio(cand, bgRgb) >= target) {
+        best = cand;
+        hi = mid;
+      } else {
+        lo = mid;
+      }
+    }
+    return best;
+  }
+  var FONT_FAMILY_FORBIDDEN_CHARS_RE = /[;{}()\\/<>\r\n\0`]/;
+  var FONT_FAMILY_FORBIDDEN_KW_RE = /\b(?:url|expression|javascript|vbscript|behavior)\b|@import/i;
+  var FONT_FAMILY_TOKEN_RE = /^[a-zA-Z0-9\u4e00-\u9fff _-]+$/;
+  var GENERIC_FONT_FAMILIES = {
+    serif: 1,
+    'sans-serif': 1,
+    monospace: 1,
+    cursive: 1,
+    fantasy: 1,
+    'system-ui': 1,
+    'ui-sans-serif': 1,
+    'ui-serif': 1,
+    'ui-monospace': 1,
+    'ui-rounded': 1,
+  };
+  function sanitizeFontFamily(raw) {
+    if (typeof raw !== 'string') return '';
+    var trimmed = raw.trim();
+    if (!trimmed) return '';
+    if (FONT_FAMILY_FORBIDDEN_CHARS_RE.test(trimmed) || FONT_FAMILY_FORBIDDEN_KW_RE.test(trimmed)) return '';
+    var parts = trimmed.split(',');
+    var families = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < parts.length; i += 1) {
+      var tok = parts[i].trim();
+      if (!tok) continue;
+      if ((tok.charAt(0) === "'" && tok.charAt(tok.length - 1) === "'") || (tok.charAt(0) === '"' && tok.charAt(tok.length - 1) === '"')) {
+        tok = tok.slice(1, -1).trim();
+      }
+      tok = tok.replace(/\s+/g, ' ');
+      if (!tok || tok.length > 64) continue;
+      if (FONT_FAMILY_FORBIDDEN_KW_RE.test(tok) || !FONT_FAMILY_TOKEN_RE.test(tok)) continue;
+      var lower = tok.toLowerCase();
+      if (seen[lower]) continue;
+      seen[lower] = 1;
+      if (GENERIC_FONT_FAMILIES[lower]) families.push(lower);
+      else if (/\s/.test(tok) || /[\u4e00-\u9fff]/.test(tok)) families.push("'" + tok + "'");
+      else families.push(tok);
+      if (families.length >= 6) break;
+    }
+    while (families.length > 0) {
+      var joined = families.join(', ');
+      if (joined.length <= 120) return joined;
+      families.pop();
+    }
+    return '';
+  }
   function adaptCustomTintRgb(hexStr, isLight, contrastFloor) {
     var raw = hexToRgb(hexStr);
     if (!raw) return null;
@@ -750,94 +882,469 @@
     if (n >= 2) n = n / 100;
     return Math.round(clamp(n, min, max) * 1000) / 1000;
   }
+  function hasOwn(obj, key) {
+    return Boolean(obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key));
+  }
+  function isPlainObj(v) {
+    return Boolean(v && typeof v === 'object' && !Array.isArray(v));
+  }
+  function nullableBool(v) {
+    if (v === null || v === undefined || v === '' || v === 'auto') return null;
+    if (typeof v === 'boolean') return v;
+    if (v === 'on' || v === 'true' || v === 1) return true;
+    if (v === 'off' || v === 'false' || v === 0) return false;
+    return null;
+  }
+  function nullableNum(v, min, max, decimals) {
+    if (v === null || v === undefined || v === '' || v === 'auto') return null;
+    var s = typeof v === 'string' ? v.trim() : null;
+    if (s === '' || s === 'auto') return null;
+    var n = s !== null ? Number(s) : v;
+    if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+    var c = clamp(n, min, max);
+    var f = Math.pow(10, decimals || 0);
+    return Math.round(c * f) / f;
+  }
+  function oneOf(v, list, fallback) {
+    return list.indexOf(v) >= 0 ? v : fallback;
+  }
+  function sanitizeSidebarRadius(v, fallback) {
+    var dflt = fallback || 'auto';
+    if (v === null || v === undefined || v === '') return dflt;
+    var s = String(v).trim().toLowerCase();
+    if (s === 'auto') return 'auto';
+    if (s === 'native') return 'native';
+    if (/^-?\d+(?:\.\d+)?$/.test(s)) {
+      return String(Math.round(clamp(Number(s), 0, 28)));
+    }
+    return dflt;
+  }
+  function createDefaultRegionEntry(id) {
+    var out = {
+      glassEnabled: null,
+      blur: null,
+      opacity: null,
+      tone: 0,
+      tint: '',
+      borderOpacity: null,
+      borderStyle: null,
+      radius: null,
+      fontSize: null,
+      fontFamily: '',
+      fontColor: '',
+      allowRawFontColor: false,
+    };
+    if (id === 'sidebar') {
+      out.listStyle = 'capsule';
+      out.sectionFontSize = null;
+      out.projectFontSize = null;
+      out.itemFontSize = null;
+    }
+    return out;
+  }
+  function createDefaultRegions() {
+    var out = {};
+    for (var i = 0; i < REGION_IDS.length; i += 1) {
+      out[REGION_IDS[i]] = createDefaultRegionEntry(REGION_IDS[i]);
+    }
+    return out;
+  }
   function createDefaultSurfaceTints() {
     var out = {};
     for (var i = 0; i < GLASS_COMPONENT_IDS.length; i += 1) {
-      out[GLASS_COMPONENT_IDS[i]] = { opacity: null, tone: 0, tint: '' };
+      out[GLASS_COMPONENT_IDS[i]] = {
+        opacity: null,
+        tone: 0,
+        tint: '',
+        blur: null,
+        glassEnabled: null,
+        borderOpacity: null,
+      };
     }
     return out;
   }
   function mergeSurfaceTintsRaw(baseTints, patchTints) {
     if (patchTints === null) return null;
     var out = {};
-    var bMap = baseTints && typeof baseTints === 'object' && !Array.isArray(baseTints) ? baseTints : {};
-    var pMap = patchTints && typeof patchTints === 'object' && !Array.isArray(patchTints) ? patchTints : {};
+    var bMap = isPlainObj(baseTints) ? baseTints : {};
+    var pMap = isPlainObj(patchTints) ? patchTints : {};
     for (var i = 0; i < GLASS_COMPONENT_IDS.length; i += 1) {
       var id = GLASS_COMPONENT_IDS[i];
-      var hasB = Object.prototype.hasOwnProperty.call(bMap, id);
-      var hasP = Object.prototype.hasOwnProperty.call(pMap, id);
+      var hasB = hasOwn(bMap, id);
+      var hasP = hasOwn(pMap, id);
       if (hasP && pMap[id] === null) {
         out[id] = null;
         continue;
       }
       if (!hasB && !hasP) continue;
-      var bEnt = hasB && bMap[id] && typeof bMap[id] === 'object' ? bMap[id] : {};
-      var pEnt = hasP && pMap[id] && typeof pMap[id] === 'object' ? pMap[id] : {};
+      var bEnt = hasB && isPlainObj(bMap[id]) ? bMap[id] : {};
+      var pEnt = hasP && isPlainObj(pMap[id]) ? pMap[id] : {};
       var mergedEnt = {};
       var bk;
-      for (bk in bEnt) if (Object.prototype.hasOwnProperty.call(bEnt, bk)) mergedEnt[bk] = bEnt[bk];
-      for (bk in pEnt) if (Object.prototype.hasOwnProperty.call(pEnt, bk)) mergedEnt[bk] = pEnt[bk];
+      for (bk in bEnt) if (hasOwn(bEnt, bk)) mergedEnt[bk] = bEnt[bk];
+      for (bk in pEnt) if (hasOwn(pEnt, bk) && pEnt[bk] !== undefined) mergedEnt[bk] = pEnt[bk];
       out[id] = mergedEnt;
     }
     return out;
   }
-  function sanitizeSurfaceTintsWithSync(srcObj, baseTints, baseLegacySbOp) {
-    var src = srcObj && typeof srcObj === 'object' ? srcObj : {};
-    var hasSrcTints = Object.prototype.hasOwnProperty.call(src, 'surfaceTints');
-    var rawTints = hasSrcTints ? src.surfaceTints : undefined;
-    var out = createDefaultSurfaceTints();
-    if (rawTints !== null) {
-      var bMap = baseTints && typeof baseTints === 'object' && !Array.isArray(baseTints) ? baseTints : {};
-      var sMap = rawTints && typeof rawTints === 'object' && !Array.isArray(rawTints) ? rawTints : {};
-      for (var i = 0; i < GLASS_COMPONENT_IDS.length; i += 1) {
-        var id = GLASS_COMPONENT_IDS[i];
-        var bounds = SURFACE_TINT_BOUNDS[id];
-        var bEnt = bMap[id] && typeof bMap[id] === 'object' ? bMap[id] : { opacity: null, tone: 0, tint: '' };
-        var hasSrcId = Object.prototype.hasOwnProperty.call(sMap, id);
-        var sRaw = hasSrcId ? sMap[id] : undefined;
-        if (hasSrcId && sRaw === null) {
-          out[id] = { opacity: null, tone: 0, tint: '' };
-          continue;
-        }
-        var sEnt = sRaw && typeof sRaw === 'object' ? sRaw : {};
-        var rawOp = Object.prototype.hasOwnProperty.call(sEnt, 'opacity') ? sEnt.opacity : bEnt.opacity;
-        var rawTone = Object.prototype.hasOwnProperty.call(sEnt, 'tone') ? sEnt.tone : bEnt.tone;
-        var rawTint = Object.prototype.hasOwnProperty.call(sEnt, 'tint') ? sEnt.tint : bEnt.tint;
-        out[id] = {
-          opacity: nullableUnitOpacity(rawOp, bounds.minOpacity, bounds.maxOpacity),
-          tone: clamp(Math.round(num(rawTone, 0)), -100, 100),
-          tint: cleanTintHex(rawTint),
-        };
+  function mergeRegionsRaw(baseMap, patchMap) {
+    if (patchMap === null) return null;
+    var out = {};
+    var bMap = isPlainObj(baseMap) ? baseMap : {};
+    var pMap = isPlainObj(patchMap) ? patchMap : {};
+    for (var i = 0; i < GLASS_COMPONENT_IDS.length; i += 1) {
+      var id = GLASS_COMPONENT_IDS[i];
+      var hasB = hasOwn(bMap, id);
+      var hasP = hasOwn(pMap, id);
+      if (hasP && pMap[id] === null) {
+        out[id] = null;
+        continue;
+      }
+      if (!hasB && !hasP) continue;
+      var bEnt = hasB && isPlainObj(bMap[id]) ? bMap[id] : {};
+      var pEnt = hasP && isPlainObj(pMap[id]) ? pMap[id] : {};
+      var mergedEnt = {};
+      var k;
+      for (k in bEnt) if (hasOwn(bEnt, k)) mergedEnt[k] = bEnt[k];
+      for (k in pEnt) if (hasOwn(pEnt, k) && pEnt[k] !== undefined) mergedEnt[k] = pEnt[k];
+      out[id] = mergedEnt;
+    }
+    return out;
+  }
+  function stripOpticalFromRegionEntry(ent) {
+    var next = {};
+    if (isPlainObj(ent)) {
+      for (var k in ent) if (hasOwn(ent, k)) next[k] = ent[k];
+    }
+    next.glassEnabled = null;
+    next.blur = null;
+    next.opacity = null;
+    next.tone = 0;
+    next.tint = '';
+    next.borderOpacity = null;
+    return next;
+  }
+  function stripOpticalFromRegionsRaw(regMap) {
+    if (!isPlainObj(regMap)) return regMap;
+    var out = {};
+    for (var i = 0; i < GLASS_COMPONENT_IDS.length; i += 1) {
+      var id = GLASS_COMPONENT_IDS[i];
+      if (!hasOwn(regMap, id)) continue;
+      out[id] = isPlainObj(regMap[id]) ? stripOpticalFromRegionEntry(regMap[id]) : regMap[id];
+    }
+    return out;
+  }
+  function pickOpticalKeysFromEntry(ent) {
+    if (!isPlainObj(ent)) return null;
+    var out = {};
+    var any = false;
+    for (var i = 0; i < REGION_OPTICAL_KEYS.length; i += 1) {
+      var ok = REGION_OPTICAL_KEYS[i];
+      if (hasOwn(ent, ok) && ent[ok] !== undefined) {
+        out[ok] = ent[ok];
+        any = true;
       }
     }
-    var srcTouchedLegacySb = Object.prototype.hasOwnProperty.call(src, 'sidebarOpacity');
-    var rawLegacySb = srcTouchedLegacySb ? src.sidebarOpacity : baseLegacySbOp;
-    var sidebarOpacity = nullableUnitOpacity(rawLegacySb, 0, 0.98);
-    var srcResetAllTints = hasSrcTints && rawTints === null;
-    var srcSbEntry = rawTints && typeof rawTints === 'object' ? rawTints.sidebar : undefined;
-    var srcTouchedSidebarOp =
-      srcResetAllTints ||
-      (rawTints && typeof rawTints === 'object' && Object.prototype.hasOwnProperty.call(rawTints, 'sidebar') && srcSbEntry === null) ||
-      Boolean(srcSbEntry && typeof srcSbEntry === 'object' && Object.prototype.hasOwnProperty.call(srcSbEntry, 'opacity'));
+    return any ? out : null;
+  }
+  function sanitizeRegionEntry(id, raw) {
+    var bounds = SURFACE_TINT_BOUNDS[id] || { minOpacity: 0, maxOpacity: 0.98 };
+    var fsBounds = REGION_FONT_SIZE_BOUNDS[id] || { min: 10, max: 24 };
+    var r = isPlainObj(raw) ? raw : {};
+    var entry = {
+      glassEnabled: nullableBool(r.glassEnabled),
+      blur: nullableNum(r.blur, 0, 64, 0),
+      opacity: nullableUnitOpacity(r.opacity, bounds.minOpacity, bounds.maxOpacity),
+      tone: clamp(Math.round(num(r.tone, 0)), -100, 100),
+      tint: cleanTintHex(r.tint),
+      borderOpacity: nullableUnitOpacity(r.borderOpacity, 0, 1),
+      borderStyle:
+        r.borderStyle === null || r.borderStyle === undefined || r.borderStyle === '' || r.borderStyle === 'auto'
+          ? null
+          : oneOf(r.borderStyle, BORDER_STYLES, null),
+      radius: nullableNum(r.radius, 0, 28, 0),
+      fontSize: nullableNum(r.fontSize, fsBounds.min, fsBounds.max, 0),
+      fontFamily: sanitizeFontFamily(r.fontFamily),
+      fontColor: cleanTintHex(r.fontColor),
+      allowRawFontColor: bool(r.allowRawFontColor, false),
+    };
+    if (id === 'sidebar') {
+      entry.listStyle = oneOf(r.listStyle, SIDEBAR_LIST_STYLES, 'capsule');
+      entry.sectionFontSize = nullableNum(r.sectionFontSize, 11, 15, 1);
+      entry.projectFontSize = nullableNum(r.projectFontSize, 11, 15, 1);
+      entry.itemFontSize = nullableNum(r.itemFontSize, 11, 15, 1);
+    }
+    return entry;
+  }
+  function projectSurfaceTintsFromRegions(regions) {
+    var out = {};
+    for (var i = 0; i < SURFACE_TINT_COMPONENTS.length; i += 1) {
+      var id = SURFACE_TINT_COMPONENTS[i];
+      var r = (regions && regions[id]) || {};
+      out[id] = {
+        opacity: r.opacity !== undefined ? r.opacity : null,
+        tone: Number.isFinite(Number(r.tone)) ? Number(r.tone) : 0,
+        tint: r.tint || '',
+        blur: r.blur !== undefined ? r.blur : null,
+        glassEnabled: r.glassEnabled !== undefined ? r.glassEnabled : null,
+        borderOpacity: r.borderOpacity !== undefined ? r.borderOpacity : null,
+      };
+    }
+    return out;
+  }
+  function syncSidebarRadiusPairLocal(opts) {
+    var src = opts.src;
+    var baseRegions = opts.baseRegions;
+    var rawLegacyVal = opts.rawLegacyVal;
+    var legacyKey = opts.legacyKey;
+    var aliasKey = opts.aliasKey;
+    var regionId = opts.regionId;
+    var regions = opts.regions;
+    var srcResetFullRegions = opts.srcResetFullRegions;
 
-    if (srcTouchedSidebarOp && !srcTouchedLegacySb) {
-      sidebarOpacity = out.sidebar.opacity;
-    } else if (srcTouchedLegacySb && !srcTouchedSidebarOp) {
-      out.sidebar.opacity = sidebarOpacity;
-    } else if (srcTouchedSidebarOp && srcTouchedLegacySb) {
-      if (srcResetAllTints && sidebarOpacity !== null) {
-        out.sidebar.opacity = sidebarOpacity;
+    var hasLegacy = hasOwn(src, legacyKey) || (aliasKey && hasOwn(src, aliasKey));
+    var hasRegionEntry = isPlainObj(src.regions) && hasOwn(src.regions, regionId);
+    var regionEntryRaw = hasRegionEntry ? src.regions[regionId] : undefined;
+    var isExplicitRegionReset = srcResetFullRegions || (hasRegionEntry && regionEntryRaw === null);
+    var hasRegionRad = isExplicitRegionReset || Boolean(isPlainObj(regionEntryRaw) && hasOwn(regionEntryRaw, 'radius'));
+    var baseRegionRadius =
+      baseRegions && isPlainObj(baseRegions[regionId]) && baseRegions[regionId].radius !== undefined
+        ? baseRegions[regionId].radius
+        : null;
+
+    var legacyVal = sanitizeSidebarRadius(rawLegacyVal, 'auto');
+    if (hasRegionRad && !hasLegacy) {
+      if (regions[regionId].radius === null) {
+        if (legacyVal === 'native' && baseRegionRadius === null && !isExplicitRegionReset) {
+          legacyVal = 'native';
+        } else {
+          legacyVal = 'auto';
+        }
       } else {
-        sidebarOpacity = out.sidebar.opacity;
+        legacyVal = String(regions[regionId].radius);
+      }
+    } else if (hasLegacy && !hasRegionRad) {
+      if (legacyVal === 'auto' || legacyVal === 'native') {
+        regions[regionId].radius = null;
+      } else {
+        regions[regionId].radius = Number(legacyVal);
+      }
+    } else if (hasRegionRad && hasLegacy) {
+      if (srcResetFullRegions && legacyVal !== 'auto') {
+        regions[regionId].radius = legacyVal === 'native' ? null : Number(legacyVal);
+      } else if (legacyVal === 'native' && regions[regionId].radius === null) {
+        legacyVal = 'native';
+      } else {
+        legacyVal = regions[regionId].radius === null ? 'auto' : String(regions[regionId].radius);
       }
     } else {
-      if (out.sidebar.opacity === null && sidebarOpacity !== null) {
-        out.sidebar.opacity = sidebarOpacity;
-      } else {
-        sidebarOpacity = out.sidebar.opacity;
+      if (legacyVal === 'native' && regions[regionId].radius === null) {
+        legacyVal = 'native';
+      } else if (regions[regionId].radius !== null) {
+        legacyVal = String(regions[regionId].radius);
+      } else if (legacyVal !== 'auto') {
+        regions[regionId].radius = Number(legacyVal);
       }
     }
-    return { surfaceTints: out, sidebarOpacity: sidebarOpacity };
+    return legacyVal;
+  }
+  function sanitizeRegionsWithSync(srcObj, baseRegResult) {
+    var src = isPlainObj(srcObj) ? srcObj : {};
+    var bRes = isPlainObj(baseRegResult) ? baseRegResult : null;
+    var baseRegions = bRes && isPlainObj(bRes.regions) ? bRes.regions : null;
+
+    var hasSrcRegions = hasOwn(src, 'regions');
+    var srcResetFullRegions = hasSrcRegions && src.regions === null;
+    var hasSrcTints = hasOwn(src, 'surfaceTints');
+    var srcResetAllTints = hasSrcTints && src.surfaceTints === null;
+
+    var workingRegions = {};
+    var i;
+    var id;
+    for (i = 0; i < REGION_IDS.length; i += 1) {
+      id = REGION_IDS[i];
+      workingRegions[id] = baseRegions && isPlainObj(baseRegions[id]) ? sanitizeRegionEntry(id, baseRegions[id]) : createDefaultRegionEntry(id);
+    }
+
+    if (srcResetFullRegions) {
+      for (i = 0; i < REGION_IDS.length; i += 1) {
+        workingRegions[REGION_IDS[i]] = createDefaultRegionEntry(REGION_IDS[i]);
+      }
+    } else if (srcResetAllTints) {
+      for (i = 0; i < REGION_IDS.length; i += 1) {
+        workingRegions[REGION_IDS[i]] = stripOpticalFromRegionEntry(workingRegions[REGION_IDS[i]]);
+      }
+    }
+
+    if (!srcResetFullRegions && hasSrcTints && isPlainObj(src.surfaceTints)) {
+      for (i = 0; i < REGION_IDS.length; i += 1) {
+        id = REGION_IDS[i];
+        if (!hasOwn(src.surfaceTints, id)) continue;
+        var sRaw = src.surfaceTints[id];
+        if (sRaw === null) {
+          workingRegions[id] = stripOpticalFromRegionEntry(workingRegions[id]);
+        } else if (isPlainObj(sRaw)) {
+          for (var ok = 0; ok < REGION_OPTICAL_KEYS.length; ok += 1) {
+            var optKey = REGION_OPTICAL_KEYS[ok];
+            if (hasOwn(sRaw, optKey)) workingRegions[id][optKey] = sRaw[optKey];
+          }
+        }
+      }
+    }
+
+    if (!srcResetFullRegions && hasSrcRegions && isPlainObj(src.regions)) {
+      for (i = 0; i < REGION_IDS.length; i += 1) {
+        id = REGION_IDS[i];
+        if (!hasOwn(src.regions, id)) continue;
+        var rRaw = src.regions[id];
+        if (rRaw === null) {
+          workingRegions[id] = createDefaultRegionEntry(id);
+        } else if (isPlainObj(rRaw)) {
+          var allowed = id === 'sidebar'
+            ? REGION_OPTICAL_KEYS.concat(REGION_STRUCTURAL_KEYS, SIDEBAR_REGION_EXTRA_KEYS)
+            : REGION_OPTICAL_KEYS.concat(REGION_STRUCTURAL_KEYS);
+          for (var ak = 0; ak < allowed.length; ak += 1) {
+            var pk = allowed[ak];
+            if (hasOwn(rRaw, pk)) workingRegions[id][pk] = rRaw[pk];
+          }
+        }
+      }
+    }
+
+    var regions = {};
+    for (i = 0; i < REGION_IDS.length; i += 1) {
+      id = REGION_IDS[i];
+      regions[id] = sanitizeRegionEntry(id, workingRegions[id]);
+    }
+
+    var srcResetAllOptical = srcResetFullRegions || srcResetAllTints;
+    var srcResetRegionSidebar = srcResetFullRegions || (hasSrcRegions && isPlainObj(src.regions) && src.regions.sidebar === null);
+    var srcRegionsObj = hasSrcRegions && isPlainObj(src.regions) ? src.regions : null;
+    var srcTintsObj = hasSrcTints && isPlainObj(src.surfaceTints) ? src.surfaceTints : null;
+
+    // (i) 4-branch sync: `sidebarOpacity` <-> `regions.sidebar.opacity`
+    var srcTouchedLegacySbOp = hasOwn(src, 'sidebarOpacity');
+    var srcTouchedSidebarOp =
+      srcResetAllOptical ||
+      Boolean(srcRegionsObj && (srcRegionsObj.sidebar === null || (isPlainObj(srcRegionsObj.sidebar) && hasOwn(srcRegionsObj.sidebar, 'opacity')))) ||
+      Boolean(srcTintsObj && (srcTintsObj.sidebar === null || (isPlainObj(srcTintsObj.sidebar) && hasOwn(srcTintsObj.sidebar, 'opacity'))));
+    var rawSbOp = srcTouchedLegacySbOp ? src.sidebarOpacity : (bRes ? bRes.sidebarOpacity : undefined);
+    var sidebarOpacity = nullableUnitOpacity(rawSbOp, 0, 0.98);
+    if (srcTouchedSidebarOp && !srcTouchedLegacySbOp) {
+      sidebarOpacity = regions.sidebar.opacity;
+    } else if (srcTouchedLegacySbOp && !srcTouchedSidebarOp) {
+      regions.sidebar.opacity = sidebarOpacity;
+    } else if (srcTouchedSidebarOp && srcTouchedLegacySbOp) {
+      if (srcResetAllOptical && sidebarOpacity !== null) regions.sidebar.opacity = sidebarOpacity;
+      else sidebarOpacity = regions.sidebar.opacity;
+    } else {
+      if (regions.sidebar.opacity === null && sidebarOpacity !== null) regions.sidebar.opacity = sidebarOpacity;
+      else sidebarOpacity = regions.sidebar.opacity;
+    }
+
+    // (ii) 4-branch sync: `sidebarBlur` <-> `regions.sidebar.blur`
+    var srcTouchedLegacySbBlur = hasOwn(src, 'sidebarBlur');
+    var srcTouchedSidebarBlur =
+      srcResetAllOptical ||
+      Boolean(srcRegionsObj && (srcRegionsObj.sidebar === null || (isPlainObj(srcRegionsObj.sidebar) && hasOwn(srcRegionsObj.sidebar, 'blur')))) ||
+      Boolean(srcTintsObj && (srcTintsObj.sidebar === null || (isPlainObj(srcTintsObj.sidebar) && hasOwn(srcTintsObj.sidebar, 'blur'))));
+    var rawSbBlur = srcTouchedLegacySbBlur ? src.sidebarBlur : (bRes ? bRes.sidebarBlur : undefined);
+    var sidebarBlur = nullableNum(rawSbBlur, 0, 64, 0);
+    if (srcTouchedSidebarBlur && !srcTouchedLegacySbBlur) {
+      sidebarBlur = regions.sidebar.blur;
+    } else if (srcTouchedLegacySbBlur && !srcTouchedSidebarBlur) {
+      regions.sidebar.blur = sidebarBlur;
+    } else if (srcTouchedSidebarBlur && srcTouchedLegacySbBlur) {
+      if (srcResetAllOptical && sidebarBlur !== null) regions.sidebar.blur = sidebarBlur;
+      else sidebarBlur = regions.sidebar.blur;
+    } else {
+      if (regions.sidebar.blur === null && sidebarBlur !== null) regions.sidebar.blur = sidebarBlur;
+      else sidebarBlur = regions.sidebar.blur;
+    }
+
+    // (iii) 4-branch sync: `sidebarFontSize` <-> `regions.sidebar.fontSize`
+    var srcTouchedLegacySbFs = hasOwn(src, 'sidebarFontSize');
+    var srcTouchedSidebarFs =
+      srcResetRegionSidebar ||
+      Boolean(srcRegionsObj && isPlainObj(srcRegionsObj.sidebar) && hasOwn(srcRegionsObj.sidebar, 'fontSize'));
+    var rawSbFs = srcTouchedLegacySbFs ? src.sidebarFontSize : (bRes ? bRes.sidebarFontSize : undefined);
+    var sidebarFontSize = nullableNum(rawSbFs, 11, 15, 0);
+    if (srcTouchedSidebarFs && !srcTouchedLegacySbFs) {
+      sidebarFontSize = regions.sidebar.fontSize;
+    } else if (srcTouchedLegacySbFs && !srcTouchedSidebarFs) {
+      regions.sidebar.fontSize = sidebarFontSize;
+    } else if (srcTouchedSidebarFs && srcTouchedLegacySbFs) {
+      if (srcResetFullRegions && sidebarFontSize !== null) regions.sidebar.fontSize = sidebarFontSize;
+      else sidebarFontSize = regions.sidebar.fontSize;
+    } else {
+      if (regions.sidebar.fontSize === null && sidebarFontSize !== null) regions.sidebar.fontSize = sidebarFontSize;
+      else sidebarFontSize = regions.sidebar.fontSize;
+    }
+
+    // (iv) 4-branch sync: `sidebarListStyle` <-> `regions.sidebar.listStyle` (default 'capsule'; preserved across `surfaceTints: null`)
+    var srcTouchedLegacySbList = hasOwn(src, 'sidebarListStyle');
+    var srcTouchedSidebarList =
+      srcResetRegionSidebar ||
+      Boolean(srcRegionsObj && isPlainObj(srcRegionsObj.sidebar) && hasOwn(srcRegionsObj.sidebar, 'listStyle'));
+    var rawSbList = srcTouchedLegacySbList ? src.sidebarListStyle : (bRes ? bRes.sidebarListStyle : 'capsule');
+    var sidebarListStyle = oneOf(rawSbList, SIDEBAR_LIST_STYLES, 'capsule');
+    if (srcTouchedSidebarList && !srcTouchedLegacySbList) {
+      sidebarListStyle = regions.sidebar.listStyle;
+    } else if (srcTouchedLegacySbList && !srcTouchedSidebarList) {
+      regions.sidebar.listStyle = sidebarListStyle;
+    } else if (srcTouchedSidebarList && srcTouchedLegacySbList) {
+      if (srcResetFullRegions && sidebarListStyle !== 'capsule') regions.sidebar.listStyle = sidebarListStyle;
+      else sidebarListStyle = regions.sidebar.listStyle;
+    } else {
+      if (!baseRegions && !srcRegionsObj && regions.sidebar.listStyle === 'capsule' && sidebarListStyle !== 'capsule') {
+        regions.sidebar.listStyle = sidebarListStyle;
+      } else {
+        sidebarListStyle = regions.sidebar.listStyle;
+      }
+    }
+
+    // (v) `leftSidebarRadius` <-> `regions.sidebar.radius` & `rightSidebarRadius` <-> `regions.rightPane.radius`
+    var rawLeftRad = hasOwn(src, 'leftSidebarRadius')
+      ? src.leftSidebarRadius
+      : hasOwn(src, 'leftSidebarCornerRadius')
+        ? src.leftSidebarCornerRadius
+        : (bRes ? bRes.leftSidebarRadius : 'auto');
+    var rawRightRad = hasOwn(src, 'rightSidebarRadius')
+      ? src.rightSidebarRadius
+      : hasOwn(src, 'rightSidebarCornerRadius')
+        ? src.rightSidebarCornerRadius
+        : (bRes ? bRes.rightSidebarRadius : 'auto');
+    var leftSidebarRadius = syncSidebarRadiusPairLocal({
+      src: src,
+      baseRegions: baseRegions,
+      rawLegacyVal: rawLeftRad,
+      legacyKey: 'leftSidebarRadius',
+      aliasKey: 'leftSidebarCornerRadius',
+      regionId: 'sidebar',
+      regions: regions,
+      srcResetFullRegions: srcResetFullRegions,
+    });
+    var rightSidebarRadius = syncSidebarRadiusPairLocal({
+      src: src,
+      baseRegions: baseRegions,
+      rawLegacyVal: rawRightRad,
+      legacyKey: 'rightSidebarRadius',
+      aliasKey: 'rightSidebarCornerRadius',
+      regionId: 'rightPane',
+      regions: regions,
+      srcResetFullRegions: srcResetFullRegions,
+    });
+
+    return {
+      regions: regions,
+      surfaceTints: projectSurfaceTintsFromRegions(regions),
+      sidebarOpacity: sidebarOpacity,
+      sidebarBlur: sidebarBlur,
+      sidebarFontSize: sidebarFontSize,
+      sidebarListStyle: sidebarListStyle,
+      leftSidebarRadius: leftSidebarRadius,
+      rightSidebarRadius: rightSidebarRadius,
+    };
   }
   function resolveComponentSurface(opts) {
     var entry = opts.entry || { opacity: null, tone: 0, tint: '' };
@@ -867,15 +1374,84 @@
       hasToneOrTint: hasToneOrTint,
     };
   }
-  function buildBackdrop(px, light, isNested) {
+  function resolveRegionBlurPx(entry, defaultPx, globalGlassOn, mediaBlurPx) {
+    var glassOn = entry && entry.glassEnabled !== null && entry.glassEnabled !== undefined
+      ? Boolean(entry.glassEnabled)
+      : Boolean(globalGlassOn);
+    if (!glassOn) return 0;
+    var raw = entry && entry.blur !== null && entry.blur !== undefined
+      ? clamp(Math.round(Number(entry.blur)), 0, 64)
+      : clamp(Math.round(Number(defaultPx) || 0), 0, 64);
+    if (raw <= 0) return 0;
+    return mediaBlurPx > 0 ? Math.max(0, Math.round(raw - mediaBlurPx * 0.7)) : raw;
+  }
+  function computeBorderFactor(alpha, bScale, overrideBorderOp) {
+    if (overrideBorderOp !== null && overrideBorderOp !== undefined) {
+      return clamp(Number(overrideBorderOp), 0, 1);
+    }
+    if (bScale <= 0 || alpha <= 0.005) return 0;
+    return bScale * Math.pow(clamp(alpha / 0.80, 0, 1), 0.90);
+  }
+  function computeShadowFactor(alpha, shadowsOn) {
+    if (!shadowsOn || alpha <= 0.01) return 0;
+    return Math.pow(clamp(alpha / 0.65, 0, 1), 1.15);
+  }
+  function resolveBorderWidths(borderStyle) {
+    if (borderStyle === 'none') return { top: '0px', right: '0px', bottom: '0px', left: '0px' };
+    if (borderStyle === 'bottom') return { top: '0px', right: '0px', bottom: '1px', left: '0px' };
+    return { top: '1px', right: '1px', bottom: '1px', left: '1px' };
+  }
+  function buildRegionEdgeTokens(opts) {
+    var bf = opts.borderStyle === 'none' ? 0 : computeBorderFactor(opts.alpha, opts.bScale, opts.overrideBorderOp);
+    var shadowsActive = opts.isPopover ? Boolean(opts.shadowsOn) : (opts.layoutMode !== 'flush' && Boolean(opts.shadowsOn));
+    var sf = computeShadowFactor(opts.alpha, shadowsActive);
+    var border = bf <= 0.001 ? 'transparent' : rgbaStr(opts.ptRgb, opts.baseBorderA * bf);
+    var specular = bf <= 0.001 ? 'transparent' : rgbaStr([255, 255, 255], (opts.isLight ? 0.88 : 0.075) * bf);
+    var sheen = bf <= 0.001
+      ? 'none'
+      : opts.isLight
+        ? 'linear-gradient(172deg, rgba(255, 255, 255, ' + (0.68 * bf).toFixed(3) + ') 0%, rgba(255, 255, 255, 0) 40%)'
+        : 'linear-gradient(172deg, rgba(255, 255, 255, ' + (0.042 * bf).toFixed(3) + ') 0%, rgba(255, 255, 255, 0) 38%)';
+    var shadow = 'none';
+    if (sf > 0.001) {
+      if (opts.isPopover) {
+        shadow = opts.isLight
+          ? '0 28px 64px -18px rgba(15, 23, 42, ' + (0.28 * sf).toFixed(3) + '), 0 2px 8px rgba(15, 23, 42, ' + (0.10 * sf).toFixed(3) + ')'
+          : '0 28px 64px -14px rgba(0, 0, 0, ' + (0.64 * sf).toFixed(3) + '), 0 2px 8px rgba(0, 0, 0, ' + (0.30 * sf).toFixed(3) + ')';
+      } else {
+        shadow = opts.isLight
+          ? '0 10px 28px -10px rgba(15, 23, 42, ' + (0.14 * sf).toFixed(3) + '), 0 2px 6px rgba(15, 23, 42, ' + (0.06 * sf).toFixed(3) + ')'
+          : '0 10px 28px -8px rgba(0, 0, 0, ' + (0.46 * sf).toFixed(3) + '), 0 2px 6px rgba(0, 0, 0, ' + (0.24 * sf).toFixed(3) + ')';
+      }
+    }
+    return {
+      bf: bf,
+      sf: sf,
+      border: border,
+      specular: specular,
+      sheen: sheen,
+      shadow: shadow,
+      widths: resolveBorderWidths(opts.borderStyle),
+    };
+  }
+  function softKneeBlur(px) {
     var r = Math.round(clamp(px, 0, 64));
-    if (r <= 0) return 'none';
+    if (r <= 0) return { r: 0, satBoost: 0 };
+    if (r <= 28) return { r: r, satBoost: 0 };
+    var gpuR = Math.min(32, Math.round(28 + (4 * (r - 28)) / (r - 28 + 12)));
+    var satBoost = Math.round(Math.min(18, (r - 28) * 0.5));
+    return { r: gpuR, satBoost: satBoost };
+  }
+  function buildBackdrop(px, light, isNested) {
+    var rawR = Math.round(clamp(px, 0, 64));
+    if (rawR <= 0) return 'none';
+    var sk = softKneeBlur(rawR);
     var sat = isNested
-      ? Math.round(100 + Math.min(15, r * 0.25))
+      ? Math.round(100 + Math.min(15, rawR * 0.25) + sk.satBoost * 0.4)
       : light
-        ? Math.round(125 + Math.min(65, r * 1.45))
-        : Math.round(115 + Math.min(65, r * 1.35));
-    return 'blur(' + r + 'px) saturate(' + sat + '%)';
+        ? Math.round(125 + Math.min(65, rawR * 1.45) + sk.satBoost)
+        : Math.round(115 + Math.min(65, rawR * 1.35) + sk.satBoost);
+    return 'blur(' + sk.r + 'px) saturate(' + sat + '%)';
   }
 
   // ---------------------------------------------------------------------------
@@ -890,6 +1466,10 @@
   var state = {
     skinEnabled: true,
     wallpaperReady: false,
+    lastAppliedRev: 0,
+    lastRevEpoch: '',
+    degradedToPoster: false,
+    degradeReason: '',
     rawCfg: {},
     cfg: {},
     item: null,
@@ -968,6 +1548,7 @@
     welcomeLogoTimer: 0,
     welcomeLogoHiddenCount: 0,
     welcomeLogoObsTarget: null,
+    welcomeLogoNonEmptyScopes: [],
     watchdog15Timer: 0,
     watchdog80Timer: 0,
     appliedVars: {},
@@ -994,11 +1575,13 @@
   var topbarMutObs = null;
   var topbarFontsHooked = false;
   var holeRaf = 0;
+  var holeMutRaf = 0;
   var holeRafUntil = 0;
   var themeMq = null;
   var themeDebounce = 0;
   var batteryObj = null;
   var cleanups = [];
+  var pointerMoveBound = false;
 
   function listen(target, type, fn, opts) {
     if (!target || !target.addEventListener) return;
@@ -1054,6 +1637,20 @@
     });
   }
 
+  function shouldAcceptStateRev(rawRev, rawEpoch) {
+    if (rawRev === undefined || rawRev === null || rawRev === '') return true;
+    var rev = Number(rawRev);
+    if (!Number.isFinite(rev) || rev <= 0) return true;
+    var ep = String(rawEpoch || '');
+    if (ep && state.lastRevEpoch && ep !== state.lastRevEpoch) {
+      state.lastAppliedRev = 0;
+    }
+    if (ep) state.lastRevEpoch = ep;
+    if (rev < state.lastAppliedRev) return false;
+    state.lastAppliedRev = Math.floor(rev);
+    return true;
+  }
+
   function receive(msg) {
     if (destroyed) return false;
     try {
@@ -1063,7 +1660,16 @@
     }
     if (!msg || typeof msg !== 'object') return false;
     if (msg.event === 'payload' || msg.event === 'skin') {
-      applyPayload(msg.data || {});
+      var payloadData = msg.data && typeof msg.data === 'object' ? msg.data : {};
+      if (
+        (msg.stateRev !== undefined && payloadData.stateRev === undefined) ||
+        (msg.stateEpoch !== undefined && payloadData.stateEpoch === undefined)
+      ) {
+        payloadData = Object.assign({}, payloadData);
+        if (msg.stateRev !== undefined && payloadData.stateRev === undefined) payloadData.stateRev = msg.stateRev;
+        if (msg.stateEpoch !== undefined && payloadData.stateEpoch === undefined) payloadData.stateEpoch = msg.stateEpoch;
+      }
+      applyPayload(payloadData);
       return true;
     }
     if (msg.id && rpcPending[msg.id]) {
@@ -1292,16 +1898,16 @@
         if (!Object.prototype.hasOwnProperty.call(ov, k) || ov[k] === undefined) continue;
         if (k === 'surfaceTints') {
           c.surfaceTints = ov.surfaceTints === null ? null : mergeSurfaceTintsRaw(base.surfaceTints, ov.surfaceTints);
+        } else if (k === 'regions') {
+          c.regions = ov.regions === null ? null : mergeRegionsRaw(base.regions, ov.regions);
         } else {
           c[k] = ov[k];
         }
       }
     }
 
-    var baseTintSync = sanitizeSurfaceTintsWithSync(base, null, null);
-    var effTintSync = ov
-      ? sanitizeSurfaceTintsWithSync(ov, baseTintSync.surfaceTints, baseTintSync.sidebarOpacity)
-      : baseTintSync;
+    var baseRegSync = sanitizeRegionsWithSync(base, null);
+    var effRegSync = ov ? sanitizeRegionsWithSync(ov, baseRegSync) : baseRegSync;
 
     var schemeKey = String(c.colorScheme || 'prism-default').toLowerCase();
     if (!COLOR_SCHEMES[schemeKey]) schemeKey = 'prism-default';
@@ -1354,13 +1960,19 @@
       islandGap: clamp(num(c.islandGap, 8), 0, 20),
       workspacePad: clamp(num(c.workspacePad, 8), 0, 20),
       cornerStyle: corners,
-      leftCornerRadius: String(c.leftSidebarRadius || c.leftSidebarCornerRadius || 'auto'),
-      rightCornerRadius: String(c.rightSidebarRadius || c.rightSidebarCornerRadius || 'auto'),
+      leftCornerRadius: effRegSync.leftSidebarRadius,
+      rightCornerRadius: effRegSync.rightSidebarRadius,
       borders: borders,
       shadows: bool(c.shadows, true),
       transparentWindowControls: bool(c.transparentWindowControls, true),
       hideWelcomeLogo: bool(c.hideWelcomeLogo, false),
       topbarStyle: c.topbarStyle === 'bar' ? 'bar' : 'pills',
+      sidebarListStyle: effRegSync.sidebarListStyle,
+      sidebarTypographyMode: c.sidebarTypographyMode === 'native' ? 'native' : 'balanced',
+      sidebarFontSize: effRegSync.sidebarFontSize,
+      globalFontSize: nullableNum(c.globalFontSize, 10, 24, 0),
+      globalFontFamily: sanitizeFontFamily(c.globalFontFamily),
+      globalFontColor: cleanTintHex(c.globalFontColor),
       themeMode: String(c.themeMode || 'auto').toLowerCase(),
       themeFollow: bool(c.themeFollow, false),
       colorScheme: schemeKey,
@@ -1371,9 +1983,10 @@
       glassSurfaces: bool(c.glassSurfaces != null ? c.glassSurfaces : c.glassEnabled, true),
       glassOpacity: normUnit(c.glassOpacity != null ? c.glassOpacity : c.widgetFill != null ? c.widgetFill : 0.76, 0.76, 0.15, 0.98),
       glassBlur: clamp(num(c.glassBlur != null ? c.glassBlur : c.blur, 16), 0, 64),
-      sidebarOpacity: effTintSync.sidebarOpacity,
-      sidebarBlur: c.sidebarBlur === null || c.sidebarBlur === undefined || c.sidebarBlur === '' || c.sidebarBlur === 'auto' ? null : clamp(num(c.sidebarBlur, 16), 0, 64),
-      surfaceTints: effTintSync.surfaceTints,
+      sidebarOpacity: effRegSync.sidebarOpacity,
+      sidebarBlur: effRegSync.sidebarBlur,
+      regions: effRegSync.regions,
+      surfaceTints: effRegSync.surfaceTints,
       glassFidelity: normUnit(c.glassFidelity != null ? c.glassFidelity : 92, 0.92, 0, 1),
       chatGlassFidelity: normUnit(c.chatGlassFidelity != null ? c.chatGlassFidelity : 90, 0.90, 0, 1),
       scrimOpacity: normUnit(c.scrimOpacity != null ? c.scrimOpacity : c.scrim != null ? c.scrim : 0.26, 0.26, 0, 0.94),
@@ -1494,10 +2107,10 @@
 
     var g = cfg.glassOpacity;
     var solidChrome = !cfg.glassSurfaces;
-    var tints = cfg.surfaceTints || createDefaultSurfaceTints();
+    var regions = cfg.regions || createDefaultRegions();
 
     var sbBaseRgb = !isLight && (shadeRgb[0] + shadeRgb[1] + shadeRgb[2] > baseRgb[0] + baseRgb[1] + baseRgb[2]) ? baseRgb : shadeRgb;
-    var sbEntry = tints.sidebar || { opacity: null, tone: 0, tint: '' };
+    var sbEntry = regions.sidebar || createDefaultRegionEntry('sidebar');
     var hasCustomSbOp = sbEntry.opacity !== null && sbEntry.opacity !== undefined;
     var globalMinSbFloor = cfg.contrastFloor ? (isLight ? 0.48 : 0.36) : 0.15;
     var minSidebarFloor = hasCustomSbOp ? 0 : globalMinSbFloor;
@@ -1521,7 +2134,7 @@
     var defaultQuickPanelAlpha = isLight ? 0.88 : 0.84;
 
     var topbarRes = resolveComponentSurface({
-      entry: tints.topbar,
+      entry: regions.topbar,
       defaultRgb: sbBaseRgb,
       fgRgb: fgRgb,
       wallTintRgb: acc.wallTint,
@@ -1530,8 +2143,32 @@
       bounds: SURFACE_TINT_BOUNDS.topbar,
       isLight: isLight,
       contrastFloor: cfg.contrastFloor,
-      solidChrome: solidChrome,
+      solidChrome: regions.topbar.glassEnabled === true ? false : solidChrome,
     });
+    var wcoEntry = regions.wco;
+    var wcoIsAuto =
+      wcoEntry.opacity === null &&
+      Number(wcoEntry.tone || 0) === 0 &&
+      !wcoEntry.tint &&
+      wcoEntry.blur === null &&
+      wcoEntry.glassEnabled === null &&
+      wcoEntry.borderOpacity === null &&
+      wcoEntry.borderStyle === null &&
+      wcoEntry.radius === null;
+    var wcoRes = wcoIsAuto
+      ? topbarRes
+      : resolveComponentSurface({
+          entry: wcoEntry,
+          defaultRgb: topbarRes.hasToneOrTint ? topbarRes.preMixRgb : sbBaseRgb,
+          fgRgb: fgRgb,
+          wallTintRgb: acc.wallTint,
+          wallMixWeight: cfg.wallTintMix * 0.75,
+          defaultAlpha: topbarRes.alpha,
+          bounds: SURFACE_TINT_BOUNDS.wco,
+          isLight: isLight,
+          contrastFloor: cfg.contrastFloor,
+          solidChrome: wcoEntry.glassEnabled === true ? false : solidChrome,
+        });
     var sbRes = resolveComponentSurface({
       entry: sbEntry,
       defaultRgb: sbBaseRgb,
@@ -1542,10 +2179,10 @@
       bounds: SURFACE_TINT_BOUNDS.sidebar,
       isLight: isLight,
       contrastFloor: cfg.contrastFloor,
-      solidChrome: solidChrome,
+      solidChrome: sbEntry.glassEnabled === true ? false : solidChrome,
     });
     var wsRes = resolveComponentSurface({
-      entry: tints.workspace,
+      entry: regions.workspace,
       defaultRgb: baseRgb,
       fgRgb: fgRgb,
       wallTintRgb: acc.wallTint,
@@ -1554,10 +2191,10 @@
       bounds: SURFACE_TINT_BOUNDS.workspace,
       isLight: isLight,
       contrastFloor: cfg.contrastFloor,
-      solidChrome: solidChrome,
+      solidChrome: regions.workspace.glassEnabled === true ? false : solidChrome,
     });
     var rightPaneRes = resolveComponentSurface({
-      entry: tints.rightPane,
+      entry: regions.rightPane,
       defaultRgb: baseRgb,
       fgRgb: fgRgb,
       wallTintRgb: acc.wallTint,
@@ -1566,10 +2203,10 @@
       bounds: SURFACE_TINT_BOUNDS.rightPane,
       isLight: isLight,
       contrastFloor: cfg.contrastFloor,
-      solidChrome: solidChrome,
+      solidChrome: regions.rightPane.glassEnabled === true ? false : solidChrome,
     });
     var compRes = resolveComponentSurface({
-      entry: tints.composer,
+      entry: regions.composer,
       defaultRgb: tint1Rgb,
       fgRgb: fgRgb,
       wallTintRgb: acc.wallTint,
@@ -1578,10 +2215,10 @@
       bounds: SURFACE_TINT_BOUNDS.composer,
       isLight: isLight,
       contrastFloor: cfg.contrastFloor,
-      solidChrome: solidChrome,
+      solidChrome: regions.composer.glassEnabled === true ? false : solidChrome,
     });
     var cardRes = resolveComponentSurface({
-      entry: tints.card,
+      entry: regions.card,
       defaultRgb: tint1Rgb,
       fgRgb: fgRgb,
       wallTintRgb: acc.wallTint,
@@ -1590,10 +2227,10 @@
       bounds: SURFACE_TINT_BOUNDS.card,
       isLight: isLight,
       contrastFloor: cfg.contrastFloor,
-      solidChrome: solidChrome,
+      solidChrome: regions.card.glassEnabled === true ? false : solidChrome,
     });
     var popRes = resolveComponentSurface({
-      entry: tints.popover,
+      entry: regions.popover,
       defaultRgb: popRgb,
       fgRgb: fgRgb,
       wallTintRgb: acc.wallTint,
@@ -1602,10 +2239,10 @@
       bounds: SURFACE_TINT_BOUNDS.popover,
       isLight: isLight,
       contrastFloor: cfg.contrastFloor,
-      solidChrome: solidChrome,
+      solidChrome: regions.popover.glassEnabled === true ? false : solidChrome,
     });
     var quickPanelRes = resolveComponentSurface({
-      entry: tints.popover,
+      entry: regions.popover,
       defaultRgb: popRgb,
       fgRgb: fgRgb,
       wallTintRgb: acc.wallTint,
@@ -1614,28 +2251,35 @@
       bounds: SURFACE_TINT_BOUNDS.popover,
       isLight: isLight,
       contrastFloor: cfg.contrastFloor,
-      solidChrome: solidChrome,
+      solidChrome: regions.popover.glassEnabled === true ? false : solidChrome,
     });
 
     var deepSbRgb = sbRes.customized
       ? (isLight ? mixRgb(sbRes.preMixRgb, [205, 214, 230], 0.28) : mixRgb(sbRes.preMixRgb, [3, 4, 7], 0.45))
       : (isLight ? mixRgb(sbBaseRgb, [215, 224, 238], 0.35) : mixRgb(sbBaseRgb, [3, 4, 7], 0.55));
-    var deepSbAlpha = solidChrome
+    var sbLiftScale = sbRes.hasCustomOp ? Math.min(1, sbRes.alpha / 0.35) : 1;
+    var sbEffectiveSolid = sbEntry.glassEnabled === true ? false : solidChrome;
+    var deepSbAlpha = sbEffectiveSolid
       ? 1
-      : sbRes.customized
-        ? clamp(sbRes.alpha + (isLight ? 0.14 : 0.12), isLight ? 0.32 : 0.24, 0.97)
-        : isLight
-          ? clamp(Math.max(g + 0.14, 0.90), 0.45, 0.97)
-          : clamp(Math.max(g + 0.12, 0.88), 0.35, 0.96);
-    var stickySbAlpha = solidChrome
+      : sbRes.hasCustomOp
+        ? (sbRes.alpha <= 0.005 ? 0 : clamp(sbRes.alpha + (isLight ? 0.14 : 0.12) * sbLiftScale, 0, 0.97))
+        : sbRes.customized
+          ? clamp(sbRes.alpha + (isLight ? 0.14 : 0.12), isLight ? 0.32 : 0.24, 0.97)
+          : isLight
+            ? clamp(Math.max(g + 0.14, 0.90), 0.45, 0.97)
+            : clamp(Math.max(g + 0.12, 0.88), 0.35, 0.96);
+    var stickySbAlpha = sbEffectiveSolid
       ? 1
-      : sbRes.customized
-        ? clamp(sbRes.alpha + (isLight ? 0.16 : 0.14), isLight ? 0.38 : 0.30, 0.97)
-        : isLight
-          ? 0.94
-          : 0.91;
+      : sbRes.hasCustomOp
+        ? (sbRes.alpha <= 0.005 ? 0 : clamp(sbRes.alpha + (isLight ? 0.16 : 0.14) * sbLiftScale, 0, 0.97))
+        : sbRes.customized
+          ? clamp(sbRes.alpha + (isLight ? 0.16 : 0.14), isLight ? 0.38 : 0.30, 0.97)
+          : isLight
+            ? 0.94
+            : 0.91;
 
     var surfTopbar = topbarRes.rgba;
+    var surfWco = wcoRes.rgba;
     var surfSidebar = sbRes.rgba;
     var surfSidebarDeep = rgbaStr(sbEntry.tint ? deepSbRgb : mixRgb(deepSbRgb, acc.wallTint, cfg.wallTintMix * 0.45), deepSbAlpha);
     var surfStickySidebar = rgbaStr(deepSbRgb, stickySbAlpha);
@@ -1655,25 +2299,148 @@
     var surfPopover = popRes.rgba;
     var surfQuickPanel = quickPanelRes.rgba;
 
-    var borderScale = cfg.borders === 'off' ? 0 : cfg.borders === 'subtle' ? 0.5 : 1;
-    var borderHairline = rgbaStr(ptRgb, (isLight ? 0.095 : 0.075) * borderScale);
-    var borderIsland = rgbaStr(ptRgb, (isLight ? 0.125 : 0.105) * borderScale);
-    var borderCard = rgbaStr(ptRgb, (isLight ? 0.115 : 0.09) * borderScale);
-    var borderPopover = rgbaStr(ptRgb, isLight ? 0.16 : 0.145);
-    var specularTop = borderScale === 0 ? 'transparent' : isLight ? 'rgba(255, 255, 255, 0.88)' : 'rgba(255, 255, 255, 0.075)';
-    var sheen = isLight
-      ? 'linear-gradient(172deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0) 40%)'
-      : 'linear-gradient(172deg, rgba(255, 255, 255, 0.042) 0%, rgba(255, 255, 255, 0) 38%)';
+    var bScale = cfg.borders === 'off' ? 0 : cfg.borders === 'subtle' ? 0.5 : 1;
+    var shadowsOn = Boolean(cfg.shadows);
+    var islandBaseA = isLight ? 0.125 : 0.105;
+    var cardBaseA = isLight ? 0.115 : 0.09;
+    var popBaseA = isLight ? 0.16 : 0.145;
 
-    var shadowIsland =
-      cfg.layoutMode === 'flush' || !cfg.shadows
-        ? 'none'
-        : isLight
-          ? '0 10px 28px -10px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.06)'
-          : '0 10px 28px -8px rgba(0, 0, 0, 0.46), 0 2px 6px rgba(0, 0, 0, 0.24)';
-    var shadowPopover = isLight
-      ? '0 28px 64px -18px rgba(15, 23, 42, 0.28), 0 2px 8px rgba(15, 23, 42, 0.10)'
-      : '0 28px 64px -14px rgba(0, 0, 0, 0.64), 0 2px 8px rgba(0, 0, 0, 0.30)';
+    var topbarEdge = buildRegionEdgeTokens({
+      alpha: topbarRes.alpha,
+      bScale: bScale,
+      shadowsOn: shadowsOn,
+      isLight: isLight,
+      ptRgb: ptRgb,
+      baseBorderA: islandBaseA,
+      overrideBorderOp: regions.topbar.borderOpacity,
+      borderStyle: regions.topbar.borderStyle,
+      isPopover: false,
+      layoutMode: cfg.layoutMode,
+    });
+    var wcoEdge = wcoIsAuto
+      ? topbarEdge
+      : buildRegionEdgeTokens({
+          alpha: wcoRes.alpha,
+          bScale: bScale,
+          shadowsOn: shadowsOn,
+          isLight: isLight,
+          ptRgb: ptRgb,
+          baseBorderA: islandBaseA,
+          overrideBorderOp: regions.wco.borderOpacity,
+          borderStyle: regions.wco.borderStyle,
+          isPopover: false,
+          layoutMode: cfg.layoutMode,
+        });
+    var sbEdge = buildRegionEdgeTokens({
+      alpha: sbRes.alpha,
+      bScale: bScale,
+      shadowsOn: shadowsOn,
+      isLight: isLight,
+      ptRgb: ptRgb,
+      baseBorderA: islandBaseA,
+      overrideBorderOp: sbEntry.borderOpacity,
+      borderStyle: sbEntry.borderStyle,
+      isPopover: false,
+      layoutMode: cfg.layoutMode,
+    });
+    var wsEdge = buildRegionEdgeTokens({
+      alpha: wsRes.alpha,
+      bScale: bScale,
+      shadowsOn: shadowsOn,
+      isLight: isLight,
+      ptRgb: ptRgb,
+      baseBorderA: islandBaseA,
+      overrideBorderOp: regions.workspace.borderOpacity,
+      borderStyle: regions.workspace.borderStyle,
+      isPopover: false,
+      layoutMode: cfg.layoutMode,
+    });
+    var rightPaneEdge = buildRegionEdgeTokens({
+      alpha: rightPaneRes.alpha,
+      bScale: bScale,
+      shadowsOn: shadowsOn,
+      isLight: isLight,
+      ptRgb: ptRgb,
+      baseBorderA: islandBaseA,
+      overrideBorderOp: regions.rightPane.borderOpacity,
+      borderStyle: regions.rightPane.borderStyle,
+      isPopover: false,
+      layoutMode: cfg.layoutMode,
+    });
+    var cardEdge = buildRegionEdgeTokens({
+      alpha: cardRes.alpha,
+      bScale: bScale,
+      shadowsOn: shadowsOn,
+      isLight: isLight,
+      ptRgb: ptRgb,
+      baseBorderA: cardBaseA,
+      overrideBorderOp: regions.card.borderOpacity,
+      borderStyle: regions.card.borderStyle,
+      isPopover: false,
+      layoutMode: cfg.layoutMode,
+    });
+    var compEdge = buildRegionEdgeTokens({
+      alpha: compRes.alpha,
+      bScale: bScale,
+      shadowsOn: shadowsOn,
+      isLight: isLight,
+      ptRgb: ptRgb,
+      baseBorderA: cardBaseA,
+      overrideBorderOp: regions.composer.borderOpacity,
+      borderStyle: regions.composer.borderStyle,
+      isPopover: false,
+      layoutMode: cfg.layoutMode,
+    });
+    var popEdge = buildRegionEdgeTokens({
+      alpha: popRes.alpha,
+      bScale: bScale,
+      shadowsOn: shadowsOn,
+      isLight: isLight,
+      ptRgb: ptRgb,
+      baseBorderA: popBaseA,
+      overrideBorderOp: regions.popover.borderOpacity,
+      borderStyle: regions.popover.borderStyle,
+      isPopover: true,
+      layoutMode: cfg.layoutMode,
+    });
+
+    var stickyBf = sbEntry.borderStyle === 'none' ? 0 : computeBorderFactor(stickySbAlpha, bScale, sbEntry.borderOpacity);
+    var stickySf = computeShadowFactor(stickySbAlpha, shadowsOn);
+    var stickyShadowParts = [];
+    if (stickyBf > 0.001) stickyShadowParts.push('inset 0 1px 0 ' + rgbaStr([255, 255, 255], (isLight ? 0.88 : 0.075) * stickyBf));
+    if (stickySf > 0.001) stickyShadowParts.push('0 3px 10px rgba(0, 0, 0, ' + ((isLight ? 0.06 : 0.24) * stickySf).toFixed(3) + ')');
+    var stickyShadowCss = stickyShadowParts.length ? stickyShadowParts.join(', ') : 'none';
+
+    var deepBf = sbEntry.borderStyle === 'none' ? 0 : computeBorderFactor(deepSbAlpha, bScale, sbEntry.borderOpacity);
+    var deepSf = computeShadowFactor(deepSbAlpha, shadowsOn);
+    var projShadowParts = [];
+    if (deepBf > 0.001) projShadowParts.push('inset 0 1px 0 ' + rgbaStr([255, 255, 255], (isLight ? 0.88 : 0.075) * deepBf));
+    if (deepSf > 0.001) projShadowParts.push('0 2px 8px rgba(0, 0, 0, ' + ((isLight ? 0.05 : 0.22) * deepSf).toFixed(3) + ')');
+    var projShadowCss = projShadowParts.length ? projShadowParts.join(', ') : 'none';
+
+    var chipShadowCss = sbEdge.sf <= 0.001 ? 'none' : '0 1px 4px rgba(0, 0, 0, ' + ((isLight ? 0.08 : 0.26) * sbEdge.sf).toFixed(3) + ')';
+    var chipShadowHoverCss = sbEdge.sf <= 0.001 ? 'none' : '0 2px 8px rgba(0, 0, 0, ' + ((isLight ? 0.14 : 0.38) * sbEdge.sf).toFixed(3) + ')';
+    var sbChipHoverBorderCss = sbEdge.bf <= 0.001 ? 'transparent' : rgbaStr(ptRgb, (isLight ? 0.14 : 0.12) * sbEdge.bf);
+    var sbTreeGuideCss = sbEdge.bf <= 0.001 ? 'transparent' : rgbaStr(ptRgb, (isLight ? 0.14 : 0.12) * sbEdge.bf);
+    var compDividerCss = compEdge.bf <= 0.001 ? 'transparent' : rgbaStr(ptRgb, (isLight ? 0.085 : 0.070) * compEdge.bf);
+
+    var sashBf = Math.max(sbEdge.bf, wsEdge.bf);
+    var borderHairline = sashBf <= 0.001 ? 'transparent' : rgbaStr(ptRgb, (isLight ? 0.095 : 0.075) * sashBf);
+
+    var mainPageAlpha = wsRes.hasCustomOp ? wsRes.alpha : sbRes.alpha;
+    var surfMainPage = wsRes.hasCustomOp ? wsRes.rgba : sbRes.rgba;
+    var mainPageEdge = buildRegionEdgeTokens({
+      alpha: mainPageAlpha,
+      bScale: bScale,
+      shadowsOn: false,
+      isLight: isLight,
+      ptRgb: ptRgb,
+      baseBorderA: islandBaseA,
+      overrideBorderOp: wsRes.hasCustomOp ? regions.workspace.borderOpacity : sbEntry.borderOpacity,
+      borderStyle: wsRes.hasCustomOp ? regions.workspace.borderStyle : sbEntry.borderStyle,
+      isPopover: false,
+      layoutMode: cfg.layoutMode,
+    });
 
     var autoScrim = !cfg.scrimColor || /^(auto|rgba?\(0,\s*0,\s*0|#000|#000000|black)$/i.test(cfg.scrimColor);
     var scrimBg = autoScrim ? rgbaStr(shadeRgb, 1) : cfg.scrimColor;
@@ -1683,13 +2450,32 @@
       ? 'radial-gradient(ellipse 58% 66% at 50% 48%, rgba(255,255,255,0.28) 0%, rgba(244,247,251,0.14) 62%, rgba(232,238,246,0.32) 100%)'
       : 'radial-gradient(ellipse 58% 66% at 50% 48%, rgba(9,9,11,0.04) 0%, rgba(9,9,11,0.16) 62%, rgba(9,9,11,0.34) 100%)';
 
-    var blurMd = cfg.glassSurfaces ? cfg.glassBlur : 0;
-    var sbBlurPx = cfg.glassSurfaces ? (cfg.sidebarBlur !== null && cfg.sidebarBlur !== undefined ? cfg.sidebarBlur : cfg.glassBlur) : 0;
-    var blurLg = cfg.glassSurfaces && cfg.glassBlur > 0 ? Math.min(64, cfg.glassBlur + 4) : 0;
-    var blurXl = cfg.glassSurfaces && cfg.glassBlur > 0 ? Math.min(64, cfg.glassBlur + 6) : 0;
+    var rawBlurMd = cfg.glassBlur;
+    var rawSbBlur = cfg.sidebarBlur !== null && cfg.sidebarBlur !== undefined ? cfg.sidebarBlur : cfg.glassBlur;
+    var rawBlurLg = rawBlurMd > 0 ? Math.min(64, rawBlurMd + 4) : 0;
+    var rawBlurXl = rawBlurMd > 0 ? Math.min(64, rawBlurMd + 6) : 0;
+
+    var blurMd = cfg.glassSurfaces ? rawBlurMd : 0;
+    var blurLg = cfg.glassSurfaces ? rawBlurLg : 0;
+    var blurXl = cfg.glassSurfaces ? rawBlurXl : 0;
+
+    var topbarBlurPx = resolveRegionBlurPx(regions.topbar, rawBlurMd, cfg.glassSurfaces, cfg.mediaBlur);
+    var wcoDefaultBlur = regions.topbar.blur !== null && regions.topbar.blur !== undefined ? regions.topbar.blur : rawBlurMd;
+    var wcoBlurPx = wcoIsAuto
+      ? topbarBlurPx
+      : wcoEntry.blur === null && wcoEntry.glassEnabled === null
+        ? topbarBlurPx
+        : resolveRegionBlurPx(wcoEntry, wcoDefaultBlur, cfg.glassSurfaces, cfg.mediaBlur);
+    var sbBlurPx = resolveRegionBlurPx(sbEntry, rawSbBlur, cfg.glassSurfaces, cfg.mediaBlur);
+    var wsBlurPx = resolveRegionBlurPx(regions.workspace, rawBlurMd, cfg.glassSurfaces, cfg.mediaBlur);
+    var rightPaneBlurPx = resolveRegionBlurPx(regions.rightPane, rawBlurMd, cfg.glassSurfaces, cfg.mediaBlur);
+    var compBlurPx = resolveRegionBlurPx(regions.composer, rawBlurLg, cfg.glassSurfaces, cfg.mediaBlur);
+    var cardBlurPx = resolveRegionBlurPx(regions.card, 0, cfg.glassSurfaces, cfg.mediaBlur);
+    var popBlurPx = resolveRegionBlurPx(regions.popover, rawBlurXl, cfg.glassSurfaces, cfg.mediaBlur);
+
     var chipBlurPx = blurMd > 0 ? Math.max(4, Math.round(blurMd * 0.6)) : 0;
-    var codeBlurPx = cfg.codeReadabilityMode === 'frosted' && blurMd > 0 ? Math.max(4, Math.round(blurMd * 0.85)) : 0;
-    var projBlurPx = sbBlurPx > 0 ? Math.max(4, Math.round(sbBlurPx * 0.9)) : 0;
+    var codeBlurPx = cfg.codeReadabilityMode === 'frosted' && wsBlurPx > 0 ? Math.max(4, Math.round(wsBlurPx * 0.85)) : 0;
+    var effSbListStyle = sbEntry.listStyle || cfg.sidebarListStyle || 'capsule';
 
     var fitCss = cfg.fit === 'center' ? 'none' : cfg.fit;
     var isZeroCopyOverlaySafe =
@@ -1719,8 +2505,100 @@
 
     var leftNum = Number(cfg.leftCornerRadius);
     var rightNum = Number(cfg.rightCornerRadius);
-    var leftRad = cfg.leftCornerRadius === 'native' ? '0px' : Number.isFinite(leftNum) && cfg.leftCornerRadius !== '' ? leftNum + 'px' : R.island + 'px';
-    var rightRad = cfg.rightCornerRadius === 'native' ? '0px' : Number.isFinite(rightNum) && cfg.rightCornerRadius !== '' ? rightNum + 'px' : R.island + 'px';
+    var leftRad =
+      sbEntry.radius !== null && sbEntry.radius !== undefined
+        ? clamp(Math.round(Number(sbEntry.radius)), 0, 28) + 'px'
+        : cfg.leftCornerRadius === 'native'
+          ? '0px'
+          : Number.isFinite(leftNum) && cfg.leftCornerRadius !== '' && cfg.leftCornerRadius !== 'auto'
+            ? clamp(Math.round(leftNum), 0, 28) + 'px'
+            : R.island + 'px';
+    var rightRad =
+      regions.rightPane.radius !== null && regions.rightPane.radius !== undefined
+        ? clamp(Math.round(Number(regions.rightPane.radius)), 0, 28) + 'px'
+        : cfg.rightCornerRadius === 'native'
+          ? '0px'
+          : Number.isFinite(rightNum) && cfg.rightCornerRadius !== '' && cfg.rightCornerRadius !== 'auto'
+            ? clamp(Math.round(rightNum), 0, 28) + 'px'
+            : R.island + 'px';
+    var defaultTopbarPillRad = cfg.layoutMode === 'flush' ? R.ctl : Math.min(16, R.island);
+    var topbarRad =
+      regions.topbar.radius !== null && regions.topbar.radius !== undefined
+        ? clamp(Math.round(Number(regions.topbar.radius)), 0, 28) + 'px'
+        : defaultTopbarPillRad + 'px';
+    var wcoRad = wcoIsAuto
+      ? topbarRad
+      : regions.wco.radius !== null && regions.wco.radius !== undefined
+        ? clamp(Math.round(Number(regions.wco.radius)), 0, 28) + 'px'
+        : topbarRad;
+    var workspaceRad =
+      regions.workspace.radius !== null && regions.workspace.radius !== undefined
+        ? clamp(Math.round(Number(regions.workspace.radius)), 0, 28) + 'px'
+        : R.island + 'px';
+    var cardRad =
+      regions.card.radius !== null && regions.card.radius !== undefined
+        ? clamp(Math.round(Number(regions.card.radius)), 0, 28) + 'px'
+        : R.card + 'px';
+    var composerRad =
+      regions.composer.radius !== null && regions.composer.radius !== undefined
+        ? clamp(Math.round(Number(regions.composer.radius)), 0, 28) + 'px'
+        : R.card + 'px';
+    var popoverRad =
+      regions.popover.radius !== null && regions.popover.radius !== undefined
+        ? clamp(Math.round(Number(regions.popover.radius)), 0, 28) + 'px'
+        : R.card + 'px';
+
+    // #9 Sidebar typography scale (11..15px, virtual slot height safe)
+    var sbFsRaw = sbEntry.fontSize !== null && sbEntry.fontSize !== undefined ? sbEntry.fontSize : cfg.sidebarFontSize;
+    var sbBaseFs = sbFsRaw !== null && sbFsRaw !== undefined ? clamp(Math.round(Number(sbFsRaw)), 11, 15) : 13;
+    var sbSecFs = sbEntry.sectionFontSize !== null && sbEntry.sectionFontSize !== undefined
+      ? clamp(Math.round(Number(sbEntry.sectionFontSize)), 11, 15)
+      : sbBaseFs;
+    var sbProjFs = sbEntry.projectFontSize !== null && sbEntry.projectFontSize !== undefined
+      ? clamp(Math.round(Number(sbEntry.projectFontSize)), 11, 15)
+      : sbBaseFs;
+    var sbItemFs = sbEntry.itemFontSize !== null && sbEntry.itemFontSize !== undefined
+      ? clamp(Number(sbEntry.itemFontSize), 11, 14.5)
+      : Math.max(11, Math.min(14.5, sbBaseFs - 0.5));
+
+    // #14 Region custom typography & D7 opposite-anchor guardrail
+    var regResMap = {
+      topbar: topbarRes,
+      wco: wcoRes,
+      sidebar: sbRes,
+      workspace: wsRes,
+      card: cardRes,
+      composer: compRes,
+      rightPane: rightPaneRes,
+      popover: popRes,
+    };
+    var regionTypo = {};
+    for (var ti = 0; ti < REGION_IDS.length; ti += 1) {
+      var rid = REGION_IDS[ti];
+      var rEnt = regions[rid] || createDefaultRegionEntry(rid);
+      var rSurface = regResMap[rid];
+      var rawFgHex = rEnt.fontColor || cfg.globalFontColor || '';
+      var fgOut = '';
+      if (rawFgHex) {
+        var parsedFg = hexToRgb(rawFgHex);
+        if (parsedFg) {
+          if (rEnt.allowRawFontColor === true || rSurface.alpha < 0.55) {
+            fgOut = rgbToHex(parsedFg);
+          } else {
+            fgOut = rgbToHex(enforceFgContrastRgb(parsedFg, rSurface.rgb, isLight, 4.5));
+          }
+        }
+      }
+      var ffOut = sanitizeFontFamily(rEnt.fontFamily || cfg.globalFontFamily || '');
+      var fsOut = '';
+      if (rid !== 'sidebar' && rid !== 'wco') {
+        var rawFs = rEnt.fontSize !== null && rEnt.fontSize !== undefined ? rEnt.fontSize : cfg.globalFontSize;
+        if (rawFs !== null && rawFs !== undefined && rawFs !== '' && Number.isFinite(Number(rawFs))) {
+          fsOut = clamp(Math.round(Number(rawFs)), 10, 24) + 'px';
+        }
+      }
+      regionTypo[rid] = { fg: fgOut, ff: ffOut, fs: fsOut };
+    }
 
     var vars = {
       '--prism-pt-rgb': S.pt,
@@ -1739,17 +2617,19 @@
       '--prism-accent': acc.hex,
       '--prism-accent-rgb': acc.rgbStr,
       '--prism-accent-fg': acc.fg,
-      '--prism-accent-soft': 'rgba(' + acc.rgbStr + ', ' + (isLight ? '0.11' : '0.14') + ')',
-      '--prism-accent-border': 'rgba(' + acc.rgbStr + ', ' + (isLight ? '0.42' : '0.48') + ')',
+      '--prism-accent-soft': 'rgba(' + acc.rgbStr + ', ' + (isLight ? '0.110' : '0.140') + ')',
+      '--prism-accent-border': 'rgba(' + acc.rgbStr + ', ' + (isLight ? '0.420' : '0.480') + ')',
       '--prism-link': S.link,
       '--prism-surface-canvas': 'transparent',
       '--prism-surface-topbar': surfTopbar,
       '--prism-bg-topbar': 'var(--prism-surface-topbar)',
+      '--prism-surface-wco': surfWco,
       '--prism-surface-sidebar': surfSidebar,
       '--prism-surface-sidebar-deep': surfSidebarDeep,
       '--prism-surface-sticky-sidebar': surfStickySidebar,
       '--prism-surface-chat': surfChat,
       '--prism-surface-right-pane': surfRightPane,
+      '--prism-surface-main-page': surfMainPage,
       '--prism-surface-editor': surfEditor,
       '--prism-surface-card': surfCard,
       '--prism-surface-composer': surfComp,
@@ -1760,36 +2640,119 @@
       '--prism-muted-bg': rgbaStr(tint1Rgb, isLight ? 0.65 : 0.55),
       '--prism-sidebar-muted': 'rgba(' + S.pt + ', ' + (isLight ? '0.075' : '0.078') + ')',
       '--prism-sidebar-secondary': 'rgba(' + S.pt + ', ' + (isLight ? '0.115' : '0.125') + ')',
+      '--prism-sidebar-tree-guide': sbTreeGuideCss,
       '--prism-blur-md': blurMd + 'px',
       '--prism-blur-lg': blurLg + 'px',
       '--prism-blur-xl': blurXl + 'px',
-      '--prism-chat-backdrop': buildBackdrop(blurMd, isLight, false),
-      '--prism-topbar-backdrop': buildBackdrop(blurMd, isLight, false),
+      '--prism-chat-backdrop': buildBackdrop(wsBlurPx, isLight, false),
+      '--prism-right-pane-backdrop': buildBackdrop(rightPaneBlurPx, isLight, false),
+      '--prism-topbar-backdrop': buildBackdrop(topbarBlurPx, isLight, false),
+      '--prism-wco-backdrop': buildBackdrop(wcoBlurPx, isLight, false),
       '--prism-sidebar-backdrop': buildBackdrop(sbBlurPx, isLight, false),
-      '--prism-popover-backdrop': buildBackdrop(blurXl, isLight, false),
-      '--prism-sticky-backdrop': buildBackdrop(sbBlurPx, isLight, true),
-      '--prism-project-backdrop': buildBackdrop(projBlurPx, isLight, true),
-      '--prism-composer-backdrop': buildBackdrop(blurLg, isLight, true),
+      '--prism-popover-backdrop': popRes.alpha >= 0.94 ? 'none' : buildBackdrop(popBlurPx, isLight, false),
+      '--prism-quick-panel-backdrop': quickPanelRes.alpha >= 0.94 ? 'none' : buildBackdrop(popBlurPx, isLight, false),
+      '--prism-sticky-backdrop': stickySbAlpha >= 0.88 || effSbListStyle !== 'capsule' ? 'none' : buildBackdrop(sbBlurPx, isLight, true),
+      '--prism-project-backdrop': 'none',
+      '--prism-composer-backdrop': compRes.alpha >= 0.92 ? 'none' : buildBackdrop(compBlurPx, isLight, true),
+      '--prism-card-backdrop': cardRes.alpha >= 0.92 ? 'none' : buildBackdrop(cardBlurPx, isLight, true),
       '--prism-code-backdrop': buildBackdrop(codeBlurPx, isLight, true),
       '--prism-chrome-chip-backdrop': buildBackdrop(chipBlurPx, isLight, true),
+      '--prism-border-topbar': topbarEdge.border,
+      '--prism-specular-topbar': topbarEdge.specular,
+      '--prism-sheen-topbar': topbarEdge.sheen,
+      '--prism-shadow-topbar': topbarEdge.shadow,
+      '--prism-border-wco': wcoEdge.border,
+      '--prism-specular-wco': wcoEdge.specular,
+      '--prism-sheen-wco': wcoEdge.sheen,
+      '--prism-shadow-wco': wcoEdge.shadow,
+      '--prism-border-sidebar': sbEdge.border,
+      '--prism-border-sidebar-hover': sbChipHoverBorderCss,
+      '--prism-specular-sidebar': sbEdge.specular,
+      '--prism-sheen-sidebar': sbEdge.sheen,
+      '--prism-shadow-sidebar': sbEdge.shadow,
+      '--prism-sticky-shadow': stickyShadowCss,
+      '--prism-proj-shadow': projShadowCss,
+      '--prism-chip-shadow': chipShadowCss,
+      '--prism-chip-shadow-hover': chipShadowHoverCss,
+      '--prism-border-workspace': wsEdge.border,
+      '--prism-specular-workspace': wsEdge.specular,
+      '--prism-sheen-workspace': wsEdge.sheen,
+      '--prism-shadow-workspace': wsEdge.shadow,
+      '--prism-sheen-main-page': mainPageEdge.sheen,
+      '--prism-specular-main-page': mainPageEdge.specular,
+      '--prism-border-right-pane': rightPaneEdge.border,
+      '--prism-specular-right-pane': rightPaneEdge.specular,
+      '--prism-sheen-right-pane': rightPaneEdge.sheen,
+      '--prism-shadow-right-pane': rightPaneEdge.shadow,
+      '--prism-border-card': cardEdge.border,
+      '--prism-specular-card': cardEdge.specular,
+      '--prism-sheen-card': cardEdge.sheen,
+      '--prism-shadow-card': cardEdge.shadow,
+      '--prism-border-composer': compEdge.border,
+      '--prism-border-composer-divider': compDividerCss,
+      '--prism-specular-composer': compEdge.specular,
+      '--prism-sheen-composer': compEdge.sheen,
+      '--prism-shadow-composer': compEdge.shadow,
+      '--prism-border-popover': popEdge.border,
+      '--prism-specular-popover': popEdge.specular,
+      '--prism-sheen-popover': popEdge.sheen,
+      '--prism-shadow-popover': popEdge.shadow,
+      '--prism-border-sash': borderHairline,
       '--prism-border-hairline': borderHairline,
-      '--prism-border-island': borderIsland,
-      '--prism-border-card': borderCard,
-      '--prism-border-popover': borderPopover,
-      '--prism-specular-top': specularTop,
-      '--prism-sheen': sheen,
-      '--prism-shadow-island': shadowIsland,
-      '--prism-shadow-popover': shadowPopover,
+      '--prism-border-island': sbEdge.border,
+      '--prism-specular-top': topbarEdge.specular,
+      '--prism-sheen': topbarEdge.sheen,
+      '--prism-shadow-island': sbEdge.shadow,
+      '--prism-bw-topbar-top': topbarEdge.widths.top,
+      '--prism-bw-topbar-right': topbarEdge.widths.right,
+      '--prism-bw-topbar-bottom': topbarEdge.widths.bottom,
+      '--prism-bw-topbar-left': topbarEdge.widths.left,
+      '--prism-bw-wco-top': wcoEdge.widths.top,
+      '--prism-bw-wco-right': wcoEdge.widths.right,
+      '--prism-bw-wco-bottom': wcoEdge.widths.bottom,
+      '--prism-bw-wco-left': wcoEdge.widths.left,
+      '--prism-bw-sidebar-top': sbEdge.widths.top,
+      '--prism-bw-sidebar-right': sbEdge.widths.right,
+      '--prism-bw-sidebar-bottom': sbEdge.widths.bottom,
+      '--prism-bw-sidebar-left': sbEdge.widths.left,
+      '--prism-bw-workspace-top': wsEdge.widths.top,
+      '--prism-bw-workspace-right': wsEdge.widths.right,
+      '--prism-bw-workspace-bottom': wsEdge.widths.bottom,
+      '--prism-bw-workspace-left': wsEdge.widths.left,
+      '--prism-bw-card-top': cardEdge.widths.top,
+      '--prism-bw-card-right': cardEdge.widths.right,
+      '--prism-bw-card-bottom': cardEdge.widths.bottom,
+      '--prism-bw-card-left': cardEdge.widths.left,
+      '--prism-bw-composer-top': compEdge.widths.top,
+      '--prism-bw-composer-right': compEdge.widths.right,
+      '--prism-bw-composer-bottom': compEdge.widths.bottom,
+      '--prism-bw-composer-left': compEdge.widths.left,
+      '--prism-bw-right-pane-top': rightPaneEdge.widths.top,
+      '--prism-bw-right-pane-right': rightPaneEdge.widths.right,
+      '--prism-bw-right-pane-bottom': rightPaneEdge.widths.bottom,
+      '--prism-bw-right-pane-left': rightPaneEdge.widths.left,
+      '--prism-bw-popover-top': popEdge.widths.top,
+      '--prism-bw-popover-right': popEdge.widths.right,
+      '--prism-bw-popover-bottom': popEdge.widths.bottom,
+      '--prism-bw-popover-left': popEdge.widths.left,
       '--prism-workspace-pad': (cfg.layoutMode === 'islands' ? cfg.workspacePad : 0) + 'px',
       '--prism-island-gap': (cfg.layoutMode === 'islands' ? cfg.islandGap : 0) + 'px',
       '--prism-r-island': R.island + 'px',
-      '--prism-r-topbar-pill': (cfg.layoutMode === 'flush' ? R.ctl : Math.min(16, R.island)) + 'px',
+      '--prism-r-topbar-pill': topbarRad,
+      '--prism-r-wco': wcoRad,
       '--prism-r-left-island': leftRad,
       '--prism-r-right-island': rightRad,
+      '--prism-r-workspace': workspaceRad,
+      '--prism-r-card': cardRad,
+      '--prism-r-composer': composerRad,
+      '--prism-r-popover': popoverRad,
       '--prism-r-sheet': R.sheet + 'px',
-      '--prism-r-card': R.card + 'px',
       '--prism-r-ctl': R.ctl + 'px',
       '--prism-r-xs': R.xs + 'px',
+      '--prism-sb-section-fs': sbSecFs + 'px',
+      '--prism-sb-project-fs': sbProjFs + 'px',
+      '--prism-sb-item-fs': sbItemFs + 'px',
+      '--prism-sb-section-lh': sbSecFs >= 15 ? '1.2' : '1.25',
       '--prism-native-floor': isLight ? '#f7f7f8' : '#070708',
       '--prism-stage-bg': 'transparent',
       '--prism-wall-image': (function () {
@@ -1831,10 +2794,14 @@
       cfg.topbarStyle,
     ].join('|');
 
+    state.lastWcoSurface = { rgb: wcoRes.rgb, alpha: wcoRes.alpha };
+
     return {
       isLight: isLight,
       S: S,
       acc: acc,
+      wcoRes: wcoRes,
+      regionTypo: regionTypo,
       vars: vars,
       structuralSig: structuralSig,
     };
@@ -1925,8 +2892,7 @@
       GW + '[' + WCO_ATTR + '="transparent"] #' + WCO_PILL_ID + ' {\n' +
       '  display: block;\n' +
       '}\n' +
-      GW + ' .agy-prism-topbar-pill,\n' +
-      GW + '[' + WCO_ATTR + '="transparent"] #' + WCO_PILL_ID + ' {\n' +
+      GW + ' .agy-prism-topbar-pill {\n' +
       '  position: fixed !important;\n' +
       '  z-index: 0 !important;\n' +
       '  pointer-events: none !important;\n' +
@@ -1934,24 +2900,43 @@
       '  -webkit-user-select: none !important;\n' +
       '  box-sizing: border-box !important;\n' +
       '  border-radius: var(--prism-r-topbar-pill, var(--prism-r-island)) !important;\n' +
-      '  border: 1px solid var(--prism-border-island) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-topbar, var(--prism-border-island)) !important;\n' +
+      '  border-width: var(--prism-bw-topbar-top, 1px) var(--prism-bw-topbar-right, 1px) var(--prism-bw-topbar-bottom, 1px) var(--prism-bw-topbar-left, 1px) !important;\n' +
       '  background-color: var(--prism-bg-topbar, var(--prism-surface-topbar, var(--prism-surface-sidebar))) !important;\n' +
-      '  background-image: var(--prism-sheen) !important;\n' +
+      '  background-image: var(--prism-sheen-topbar, var(--prism-sheen)) !important;\n' +
       '  backdrop-filter: var(--prism-topbar-backdrop, var(--prism-sidebar-backdrop)) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-topbar-backdrop, var(--prism-sidebar-backdrop)) !important;\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-top), var(--prism-shadow-island) !important;\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-topbar, var(--prism-specular-top)), var(--prism-shadow-topbar, var(--prism-shadow-island)) !important;\n' +
+      '}\n' +
+      GW + '[' + WCO_ATTR + '="transparent"] #' + WCO_PILL_ID + ' {\n' +
+      '  position: fixed !important;\n' +
+      '  z-index: 0 !important;\n' +
+      '  pointer-events: none !important;\n' +
+      '  user-select: none !important;\n' +
+      '  -webkit-user-select: none !important;\n' +
+      '  box-sizing: border-box !important;\n' +
+      '  border-radius: var(--prism-r-wco, var(--prism-r-topbar-pill, var(--prism-r-island))) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-wco, var(--prism-border-topbar, var(--prism-border-island))) !important;\n' +
+      '  border-width: var(--prism-bw-wco-top, 1px) var(--prism-bw-wco-right, 1px) var(--prism-bw-wco-bottom, 1px) var(--prism-bw-wco-left, 1px) !important;\n' +
+      '  background-color: var(--prism-surface-wco, var(--prism-bg-topbar, var(--prism-surface-topbar, var(--prism-surface-sidebar)))) !important;\n' +
+      '  background-image: var(--prism-sheen-wco, var(--prism-sheen-topbar, var(--prism-sheen))) !important;\n' +
+      '  backdrop-filter: var(--prism-wco-backdrop, var(--prism-topbar-backdrop, var(--prism-sidebar-backdrop))) !important;\n' +
+      '  -webkit-backdrop-filter: var(--prism-wco-backdrop, var(--prism-topbar-backdrop, var(--prism-sidebar-backdrop))) !important;\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-wco, var(--prism-specular-top)), var(--prism-shadow-wco, var(--prism-shadow-island)) !important;\n' +
       '}\n' +
       GW + '[data-prism-layout="flush"] .agy-prism-topbar-pill {\n' +
       '  border-radius: 0px 0px var(--prism-r-topbar-pill, 6px) var(--prism-r-topbar-pill, 6px) !important;\n' +
-      '  border: 1px solid var(--prism-border-hairline) !important;\n' +
-      '  border-top: none !important;\n' +
+      '  border-color: var(--prism-border-topbar, var(--prism-border-hairline)) !important;\n' +
+      '  border-top-width: 0px !important;\n' +
       '  box-shadow: none !important;\n' +
       '}\n' +
       GW + '[' + WCO_ATTR + '="transparent"][data-prism-layout="flush"] #' + WCO_PILL_ID + ' {\n' +
-      '  border-radius: 0px 0px 0px var(--prism-r-topbar-pill, 6px) !important;\n' +
-      '  border: none !important;\n' +
-      '  border-left: 1px solid var(--prism-border-hairline) !important;\n' +
-      '  border-bottom: 1px solid var(--prism-border-hairline) !important;\n' +
+      '  border-radius: 0px 0px 0px var(--prism-r-wco, var(--prism-r-topbar-pill, 6px)) !important;\n' +
+      '  border-color: var(--prism-border-wco, var(--prism-border-hairline)) !important;\n' +
+      '  border-top-width: 0px !important;\n' +
+      '  border-right-width: 0px !important;\n' +
       '  box-shadow: none !important;\n' +
       '}\n' +
       GW + '[data-prism-kind="image"] body:not(:has(> #' + STAGE_ID + ' .agy-prism-media-wrap))::before {\n' +
@@ -1988,6 +2973,7 @@
       '  --card: var(--prism-surface-card) !important;\n' +
       '  --color-card: var(--prism-surface-card) !important;\n' +
       '  --card-border: var(--prism-border-card) !important;\n' +
+      '  --card-edge: var(--prism-border-workspace) !important;\n' +
       '  --border: var(--prism-border-hairline) !important;\n' +
       '  --color-border: var(--prism-border-hairline) !important;\n' +
       '  --popover: var(--prism-surface-popover) !important;\n' +
@@ -2037,7 +3023,7 @@
       '  background-color: transparent !important;\n' +
       '  background-image: none !important;\n' +
       '  clip-path: var(--prism-hole-clip, none);\n' +
-      '  contain: style;\n' +
+      '  contain: layout style;\n' +
       '}\n' +
       '#' + STAGE_ID + ' *, #' + FX_CANVAS_ID + ' {\n' +
       '  pointer-events: none !important;\n' +
@@ -2182,6 +3168,18 @@
     var sbBeforeList = GLASS_CARRIER_SIDEBARS.map(function (s) {
       return GW + ' ' + s + NOT_HOLE + '::before';
     }).join(',\n');
+    var SB_STICKY_A =
+      LEFT_SB_SCOPE +
+      ' :is([data-sidebar-section-drop-id], [data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])):not(:has([data-testid="project-header"])):not(:has([data-project-card]))';
+    var SB_STICKY_B =
+      '.sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none):not(:has([data-testid="project-header"])):not(:has([data-project-card]))';
+    var prefixSticky = function (pfx, sfx) {
+      sfx = sfx || '';
+      return pfx + ' ' + SB_STICKY_A + sfx + ',\n' + pfx + ' ' + SB_STICKY_B + sfx;
+    };
+    var SB_STYLE_SEL = function (styleName) {
+      return GW + '[' + SIDEBAR_STYLE_ATTR + '="' + styleName + '"]';
+    };
 
     out.push(
       sbHostList + ' {\n' +
@@ -2200,10 +3198,10 @@
       '  border-radius: inherit;\n' +
       '  pointer-events: none;\n' +
       '  background-color: var(--prism-surface-sidebar);\n' +
-      '  background-image: var(--prism-sheen);\n' +
+      '  background-image: var(--prism-sheen-sidebar);\n' +
       '  backdrop-filter: var(--prism-sidebar-backdrop);\n' +
       '  -webkit-backdrop-filter: var(--prism-sidebar-backdrop);\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-top);\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-sidebar);\n' +
       '}\n' +
       GW + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]):has(.agy-row-actions) {\n' +
       '  --prism-act-stop: 76px;\n' +
@@ -2231,16 +3229,16 @@
       GW + ' .agy-row-actions > button {\n' +
       '  color: var(--prism-fg-2) !important;\n' +
       '  background-color: rgba(var(--prism-shade-rgb), ' + (isLight ? '0.78' : '0.68') + ') !important;\n' +
-      '  border: 1px solid var(--prism-border-hairline) !important;\n' +
-      '  backdrop-filter: var(--prism-chrome-chip-backdrop) !important;\n' +
-      '  -webkit-backdrop-filter: var(--prism-chrome-chip-backdrop) !important;\n' +
-      '  box-shadow: 0 1px 4px rgba(0, 0, 0, ' + (isLight ? '0.08' : '0.26') + ') !important;\n' +
+      '  border: 1px solid var(--prism-border-sidebar) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  box-shadow: var(--prism-chip-shadow) !important;\n' +
       '}\n' +
       GW + ' .agy-row-actions > button:is(:hover, :focus-visible) {\n' +
       '  color: var(--prism-fg) !important;\n' +
       '  background-color: rgba(var(--prism-tint-2-rgb), 0.94) !important;\n' +
-      '  border-color: var(--prism-border-card) !important;\n' +
-      '  box-shadow: 0 2px 8px rgba(0, 0, 0, ' + (isLight ? '0.14' : '0.38') + ') !important;\n' +
+      '  border-color: var(--prism-border-sidebar-hover) !important;\n' +
+      '  box-shadow: var(--prism-chip-shadow-hover) !important;\n' +
       '}\n' +
       GW + ' ' + LEFT_SB_SCOPE + ' .bg-sidebar:not([style*="sticky"]):not(.sticky):not([data-sidebar-section-drop-id]):not([data-testid="project-header"]):not([data-project-card]) { background-color: transparent !important; }\n' +
       GW + ' .monaco-workbench :is(.part.sidebar, .part.auxiliarybar, .part.activitybar) > :is(.content, .title, .composite.title, .header-or-footer) { background-color: transparent !important; }\n' +
@@ -2254,16 +3252,14 @@
       GW + ' ' + LEFT_SB_SCOPE + ' [data-sidebar-section-drop-id]:has([data-testid="project-header"], [data-project-card])::before {\n' +
       '  content: none !important;\n' +
       '}\n' +
-      GW + ' ' + LEFT_SB_SCOPE + ' :is([data-sidebar-section-drop-id], [data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])):not(:has([data-testid="project-header"])):not(:has([data-project-card])),\n' +
-      GW + ' .sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none):not(:has([data-testid="project-header"])):not(:has([data-project-card])) {\n' +
+      prefixSticky(GW, '') + ' {\n' +
       '  isolation: isolate;\n' +
       '  background-color: transparent !important;\n' +
       '  backdrop-filter: none !important;\n' +
       '  -webkit-backdrop-filter: none !important;\n' +
       '  border-radius: var(--prism-r-ctl) !important;\n' +
       '}\n' +
-      GW + ' ' + LEFT_SB_SCOPE + ' :is([data-sidebar-section-drop-id], [data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):is(.bg-sidebar, :has([data-testid="section-header"])):not(:has([data-testid="project-header"])):not(:has([data-project-card]))::before,\n' +
-      GW + ' .sticky:is(.bg-sidebar, .bg-background):not(.pointer-events-none):not(:has([data-testid="project-header"])):not(:has([data-project-card]))::before {\n' +
+      prefixSticky(GW, '::before') + ' {\n' +
       '  content: "";\n' +
       '  position: absolute;\n' +
       '  inset: 0;\n' +
@@ -2271,11 +3267,11 @@
       '  border-radius: var(--prism-r-ctl) !important;\n' +
       '  pointer-events: none;\n' +
       '  background-color: var(--prism-surface-sticky-sidebar) !important;\n' +
-      '  background-image: var(--prism-sheen);\n' +
+      '  background-image: var(--prism-sheen-sidebar);\n' +
       '  backdrop-filter: var(--prism-sticky-backdrop) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-sticky-backdrop) !important;\n' +
-      '  border: 1px solid var(--prism-border-hairline);\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-top), 0 3px 10px rgba(0, 0, 0, ' + (isLight ? '0.06' : '0.24') + ');\n' +
+      '  border: 1px solid var(--prism-border-sidebar);\n' +
+      '  box-shadow: var(--prism-sticky-shadow);\n' +
       '}\n' +
       GW + ' ' + LEFT_SB_SCOPE + ' :is([data-sidebar-section-drop-id], [data-index][style*="sticky"], [style*="position: sticky"], [style*="position:sticky"]):not(:has([data-testid="project-header"])):not(:has([data-project-card])) .bg-sidebar {\n' +
       '  background-color: transparent !important;\n' +
@@ -2297,11 +3293,11 @@
       '  border-radius: inherit;\n' +
       '  pointer-events: none;\n' +
       '  background-color: var(--prism-surface-sidebar-deep) !important;\n' +
-      '  background-image: var(--prism-sheen);\n' +
+      '  background-image: var(--prism-sheen-sidebar);\n' +
       '  backdrop-filter: var(--prism-project-backdrop) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-project-backdrop) !important;\n' +
-      '  border: 1px solid var(--prism-border-card);\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-top), 0 2px 8px rgba(0, 0, 0, ' + (isLight ? '0.05' : '0.22') + ');\n' +
+      '  border: 1px solid var(--prism-border-sidebar);\n' +
+      '  box-shadow: var(--prism-proj-shadow);\n' +
       '}\n' +
       GW + ' :is(button[data-testid="project-header"]:is(:hover, :focus-visible), .group\\/header:hover button[data-testid="project-header"], [data-project-card="true"]:is(:hover, :focus-visible))::before {\n' +
       '  border-color: var(--prism-accent-border) !important;\n' +
@@ -2310,18 +3306,239 @@
       '  border-radius: var(--prism-r-xs) !important;\n' +
       '  color: var(--prism-fg-2) !important;\n' +
       '  background-color: rgba(var(--prism-sidebar-deep-rgb, var(--prism-shade-rgb)), ' + (isLight ? '0.82' : '0.74') + ') !important;\n' +
-      '  border: 1px solid var(--prism-border-hairline) !important;\n' +
-      '  backdrop-filter: var(--prism-chrome-chip-backdrop) !important;\n' +
-      '  -webkit-backdrop-filter: var(--prism-chrome-chip-backdrop) !important;\n' +
-      '  box-shadow: 0 1px 4px rgba(0, 0, 0, ' + (isLight ? '0.08' : '0.26') + ') !important;\n' +
+      '  border: 1px solid var(--prism-border-sidebar) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  box-shadow: var(--prism-chip-shadow) !important;\n' +
       '}\n' +
       GW + ' ' + LEFT_SB_SCOPE + ' .group\\/header > div.absolute > :is(button, a):is(:hover, :focus-visible) {\n' +
       '  color: var(--prism-fg) !important;\n' +
       '  background-color: rgba(var(--prism-tint-2-rgb), 0.94) !important;\n' +
-      '  border-color: var(--prism-border-card) !important;\n' +
+      '  border-color: var(--prism-border-sidebar-hover) !important;\n' +
+      '  box-shadow: var(--prism-chip-shadow-hover) !important;\n' +
       '}\n' +
       GW + ' .surface-opaque.bg-background {\n' +
       '  background-color: var(--prism-surface-card) !important;\n' +
+      '}'
+    );
+
+    var prefixProj = function (pfx, sfx) {
+      sfx = sfx || '';
+      return pfx + ' button[data-testid="project-header"]' + sfx + ',\n' + pfx + ' [data-project-card="true"]' + sfx;
+    };
+    var prefixProjHoverBefore = function (pfx) {
+      return (
+        pfx + ' button[data-testid="project-header"]:is(:hover, :focus-visible)::before,\n' +
+        pfx + ' .group\\/header:hover button[data-testid="project-header"]::before,\n' +
+        pfx + ' [data-project-card="true"]:is(:hover, :focus-visible)::before'
+      );
+    };
+    var SB_PROJ_EXP_A = 'button[data-testid="project-header"][aria-expanded="true"]';
+    var SB_PROJ_EXP_B = '[data-project-card="true"][aria-expanded="true"]';
+    var SB_PROJ_EXP_C = '[data-sidebar-section-drop-id]:not([data-sidebar-section-collapsed="true"]) :is(button[data-testid="project-header"], [data-project-card="true"]):not([aria-expanded="false"])';
+    var prefixProjExpanded = function (pfx, sfx) {
+      sfx = sfx || '';
+      return pfx + ' ' + SB_PROJ_EXP_A + sfx + ',\n' + pfx + ' ' + SB_PROJ_EXP_B + sfx + ',\n' + pfx + ' ' + SB_PROJ_EXP_C + sfx;
+    };
+    var SB_CHILD_WRAP_INNER =
+      '[data-sidebar-section-id]:not([data-sidebar-section-id="main-section-header"]):has(.agy-sidebar-row.pl-\\[30px\\], [data-testid="conversation-row-sidebar"].pl-\\[30px\\], .agy-sidebar-row.pl-5, [data-testid="conversation-row-sidebar"].pl-5)';
+
+    // #6 Pure-CSS Sidebar List Styles (capsule default, underline, accordion, tree) + #9 Balanced Typography
+    out.push(
+      prefixSticky(SB_STYLE_SEL('underline'), '') + ' {\n' +
+      '  border-radius: 0px !important;\n' +
+      '}\n' +
+      prefixSticky(SB_STYLE_SEL('underline'), '::before') + ' {\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  border: none !important;\n' +
+      '  border-bottom: 1px solid var(--prism-border-sidebar) !important;\n' +
+      '  border-radius: 0px !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      prefixProj(SB_STYLE_SEL('underline'), '') + ' {\n' +
+      '  border-radius: 0px !important;\n' +
+      '}\n' +
+      prefixProj(SB_STYLE_SEL('underline'), '::before') + ' {\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  border: none !important;\n' +
+      '  border-bottom: 1px solid var(--prism-border-sidebar) !important;\n' +
+      '  border-radius: 0px !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      prefixProjHoverBefore(SB_STYLE_SEL('underline')) + ' {\n' +
+      '  background-color: var(--prism-sidebar-muted) !important;\n' +
+      '  border-bottom-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      prefixSticky(SB_STYLE_SEL('accordion'), '::before') + ' {\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  border: none !important;\n' +
+      '  border-radius: 0px !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      prefixProj(SB_STYLE_SEL('accordion'), '::before') + ' {\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  border: none !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      prefixProjHoverBefore(SB_STYLE_SEL('accordion')) + ' {\n' +
+      '  background-color: var(--prism-sidebar-muted) !important;\n' +
+      '}\n' +
+      prefixProj(SB_STYLE_SEL('accordion'), '::after') + ' {\n' +
+      '  content: "";\n' +
+      '  position: absolute;\n' +
+      '  right: 10px;\n' +
+      '  top: 50%;\n' +
+      '  width: 6px;\n' +
+      '  height: 6px;\n' +
+      '  border-right: 1.5px solid currentColor;\n' +
+      '  border-bottom: 1.5px solid currentColor;\n' +
+      '  opacity: 0.55;\n' +
+      '  pointer-events: none;\n' +
+      '  transform: translateY(-60%) rotate(-45deg);\n' +
+      '  transition: transform 150ms ease, opacity 120ms ease;\n' +
+      '}\n' +
+      prefixProjExpanded(SB_STYLE_SEL('accordion'), '') + ' {\n' +
+      '  color: var(--prism-accent) !important;\n' +
+      '}\n' +
+      prefixProjExpanded(SB_STYLE_SEL('accordion'), '::after') + ' {\n' +
+      '  transform: translateY(-70%) rotate(45deg);\n' +
+      '  opacity: 0.88;\n' +
+      '  border-color: var(--prism-accent);\n' +
+      '}\n' +
+      SB_STYLE_SEL('accordion') + ' .group\\/header:is(:hover, :focus-within) button[data-testid="project-header"]::after,\n' +
+      SB_STYLE_SEL('accordion') + ' button[data-testid="project-header"]:is(:hover, :focus-within)::after,\n' +
+      SB_STYLE_SEL('accordion') + ' [data-project-card="true"]:is(:hover, :focus-within)::after {\n' +
+      '  opacity: 0 !important;\n' +
+      '}\n' +
+      SB_STYLE_SEL('accordion') + ' ' + LEFT_SB_SCOPE + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"])[data-selected="true"] {\n' +
+      '  background-color: var(--prism-accent-soft) !important;\n' +
+      '  color: var(--prism-accent) !important;\n' +
+      '  border-radius: var(--prism-r-ctl) !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      SB_STYLE_SEL('accordion') + ' ' + LEFT_SB_SCOPE + ' ' + SB_CHILD_WRAP_INNER + ' {\n' +
+      '  background-color: rgba(var(--prism-pt-rgb), 0.025) !important;\n' +
+      '}\n' +
+      prefixSticky(SB_STYLE_SEL('tree'), '') + ' {\n' +
+      '  border-radius: 0px !important;\n' +
+      '}\n' +
+      prefixSticky(SB_STYLE_SEL('tree'), '::before') + ' {\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  border: none !important;\n' +
+      '  border-bottom: 1px solid var(--prism-border-sidebar) !important;\n' +
+      '  border-radius: 0px !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      SB_STYLE_SEL('tree') + ' ' + LEFT_SB_SCOPE + ' [data-testid="section-header"] button:not(h2 button):not(h2 *) {\n' +
+      '  border-radius: 4px !important;\n' +
+      '}\n' +
+      prefixProj(SB_STYLE_SEL('tree'), '') + ' {\n' +
+      '  border-radius: 4px !important;\n' +
+      '}\n' +
+      prefixProj(SB_STYLE_SEL('tree'), '::before') + ' {\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '  border: none !important;\n' +
+      '  border-radius: 4px !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      prefixProjHoverBefore(SB_STYLE_SEL('tree')) + ' {\n' +
+      '  background-color: var(--prism-sidebar-muted) !important;\n' +
+      '}\n' +
+      prefixProj(SB_STYLE_SEL('tree'), '::after') + ' {\n' +
+      '  content: "";\n' +
+      '  order: -1;\n' +
+      '  flex-shrink: 0;\n' +
+      '  width: 5px;\n' +
+      '  height: 5px;\n' +
+      '  margin-left: 2px;\n' +
+      '  margin-right: 6px;\n' +
+      '  border-right: 1.5px solid currentColor;\n' +
+      '  border-bottom: 1.5px solid currentColor;\n' +
+      '  opacity: 0.60;\n' +
+      '  pointer-events: none;\n' +
+      '  transform: rotate(-45deg);\n' +
+      '  transition: transform 140ms ease, opacity 120ms ease;\n' +
+      '}\n' +
+      prefixProjExpanded(SB_STYLE_SEL('tree'), '::after') + ' {\n' +
+      '  transform: rotate(45deg);\n' +
+      '  opacity: 0.88;\n' +
+      '}\n' +
+      SB_STYLE_SEL('tree') + ' ' + LEFT_SB_SCOPE + ' ' + SB_CHILD_WRAP_INNER + ' {\n' +
+      '  position: relative;\n' +
+      '}\n' +
+      SB_STYLE_SEL('tree') + ' ' + LEFT_SB_SCOPE + ' ' + SB_CHILD_WRAP_INNER + '::before {\n' +
+      '  content: "";\n' +
+      '  position: absolute;\n' +
+      '  left: 11px;\n' +
+      '  top: 0;\n' +
+      '  bottom: 0;\n' +
+      '  width: 1px;\n' +
+      '  pointer-events: none;\n' +
+      '  background-color: var(--prism-sidebar-tree-guide);\n' +
+      '}\n' +
+      SB_STYLE_SEL('tree') + ' ' + LEFT_SB_SCOPE + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]) {\n' +
+      '  border-radius: 4px !important;\n' +
+      '}\n' +
+      GW + '[' + SIDEBAR_TYPO_ATTR + '="balanced"] ' + LEFT_SB_SCOPE + ' [data-testid="section-header"] h2 {\n' +
+      '  font-size: var(--prism-sb-section-fs, 13px) !important;\n' +
+      '  font-weight: 600 !important;\n' +
+      '  opacity: 0.82 !important;\n' +
+      '  line-height: var(--prism-sb-section-lh, 1.25) !important;\n' +
+      '  letter-spacing: 0.01em !important;\n' +
+      '  text-transform: none !important;\n' +
+      '}\n' +
+      GW + '[' + SIDEBAR_TYPO_ATTR + '="balanced"] ' + LEFT_SB_SCOPE + ' .group\\/section-header {\n' +
+      '  padding-top: 2px !important;\n' +
+      '  padding-bottom: 2px !important;\n' +
+      '  min-height: 24px !important;\n' +
+      '}\n' +
+      GW + '[' + SIDEBAR_TYPO_ATTR + '="balanced"] ' + LEFT_SB_SCOPE + ' :is(.agy-row-actions, .group\\/header > div.absolute) {\n' +
+      '  gap: 2px !important;\n' +
+      '}\n' +
+      GW + '[' + SIDEBAR_TYPO_ATTR + '="balanced"] ' + LEFT_SB_SCOPE + ' [data-testid="section-header"] :is(button, a):not(h2 button):not(h2 *),\n' +
+      GW + '[' + SIDEBAR_TYPO_ATTR + '="balanced"] ' + LEFT_SB_SCOPE + ' :is(.agy-row-actions > button, .group\\/header > div.absolute > :is(button, a)):not(h2 button):not(h2 *) {\n' +
+      '  width: 18px !important;\n' +
+      '  height: 18px !important;\n' +
+      '  min-width: 18px !important;\n' +
+      '  min-height: 18px !important;\n' +
+      '  padding: 0 !important;\n' +
+      '  border-radius: var(--prism-r-xs) !important;\n' +
+      '  display: inline-flex !important;\n' +
+      '  align-items: center !important;\n' +
+      '  justify-content: center !important;\n' +
+      '}\n' +
+      GW + '[' + SIDEBAR_TYPO_ATTR + '="balanced"] ' + LEFT_SB_SCOPE + ' :is(button[data-testid="project-header"], [data-project-card="true"]) {\n' +
+      '  font-size: var(--prism-sb-project-fs, 13px) !important;\n' +
+      '  font-weight: 500 !important;\n' +
+      '  line-height: 1.25 !important;\n' +
+      '  letter-spacing: normal !important;\n' +
+      '  text-transform: none !important;\n' +
+      '}\n' +
+      GW + '[' + SIDEBAR_TYPO_ATTR + '="balanced"] ' + LEFT_SB_SCOPE + ' :is(button[data-testid="project-header"].group\\/headerbtn, .group\\/headerbtn) {\n' +
+      '  padding-top: 4px !important;\n' +
+      '  padding-bottom: 4px !important;\n' +
+      '}\n' +
+      GW + '[' + SIDEBAR_TYPO_ATTR + '="balanced"] ' + LEFT_SB_SCOPE + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"]) {\n' +
+      '  font-size: var(--prism-sb-item-fs, 12.5px) !important;\n' +
+      '  line-height: 1.3 !important;\n' +
       '}'
     );
 
@@ -2353,10 +3570,10 @@
       '  border-radius: inherit;\n' +
       '  pointer-events: none;\n' +
       '  background-color: var(--prism-surface-chat);\n' +
-      '  background-image: var(--prism-sheen);\n' +
+      '  background-image: var(--prism-sheen-workspace);\n' +
       '  backdrop-filter: var(--prism-chat-backdrop);\n' +
       '  -webkit-backdrop-filter: var(--prism-chat-backdrop);\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-top);\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-workspace);\n' +
       '}\n' +
       rightPaneBeforeList + ' {\n' +
       '  content: "";\n' +
@@ -2366,10 +3583,10 @@
       '  border-radius: inherit;\n' +
       '  pointer-events: none;\n' +
       '  background-color: var(--prism-surface-right-pane, var(--prism-surface-chat));\n' +
-      '  background-image: var(--prism-sheen);\n' +
-      '  backdrop-filter: var(--prism-chat-backdrop);\n' +
-      '  -webkit-backdrop-filter: var(--prism-chat-backdrop);\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-top);\n' +
+      '  background-image: var(--prism-sheen-right-pane);\n' +
+      '  backdrop-filter: var(--prism-right-pane-backdrop);\n' +
+      '  -webkit-backdrop-filter: var(--prism-right-pane-backdrop);\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-right-pane);\n' +
       '}\n' +
       GW + ' [data-testid="aux-pane-split"] :is([data-testid="conversation-view"], [data-main-content-header], [data-side-panel-strip], .agy-sheet [data-side-panel-body], [data-side-panel-body]) {\n' +
       '  background-color: transparent !important;\n' +
@@ -2400,16 +3617,22 @@
       '  z-index: -1;\n' +
       '  border-radius: inherit;\n' +
       '  pointer-events: none;\n' +
-      '  background-color: var(--prism-surface-sidebar);\n' +
-      '  background-image: var(--prism-sheen);\n' +
-      '  backdrop-filter: var(--prism-topbar-backdrop);\n' +
-      '  -webkit-backdrop-filter: var(--prism-topbar-backdrop);\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-top);\n' +
+      '  background-color: var(--prism-surface-main-page, var(--prism-surface-sidebar));\n' +
+      '  background-image: var(--prism-sheen-main-page);\n' +
+      '  backdrop-filter: var(--prism-chat-backdrop);\n' +
+      '  -webkit-backdrop-filter: var(--prism-chat-backdrop);\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-main-page);\n' +
       '}\n' +
       GW + ' :is([data-testid="customization-card"], .agy-spotlight-card, [data-testid="marketplace-bundles-banner"]) {\n' +
       '  background-color: var(--prism-surface-card) !important;\n' +
-      '  border: 1px solid var(--prism-border-card) !important;\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-top) !important;\n' +
+      '  background-image: var(--prism-sheen-card) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-card) !important;\n' +
+      '  border-width: var(--prism-bw-card-top, 1px) var(--prism-bw-card-right, 1px) var(--prism-bw-card-bottom, 1px) var(--prism-bw-card-left, 1px) !important;\n' +
+      '  border-radius: var(--prism-r-card) !important;\n' +
+      '  backdrop-filter: var(--prism-card-backdrop) !important;\n' +
+      '  -webkit-backdrop-filter: var(--prism-card-backdrop) !important;\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-card), var(--prism-shadow-card) !important;\n' +
       '}\n' +
       GW + ' [data-testid="customization-card"]:hover {\n' +
       '  background-color: var(--prism-secondary-bg) !important;\n' +
@@ -2429,17 +3652,29 @@
     var compBeforeList = GLASS_CARRIER_COMPOSERS.map(function (s) {
       return GW + ' ' + s + '::before';
     }).join(',\n');
+    var compAfterList = GLASS_CARRIER_COMPOSERS.map(function (s) {
+      return GW + ' ' + s + '::after';
+    }).join(',\n');
 
+    // #7 Composer Single-Carrier Flattening (B6: zero --color-card-border wipe, GW Fail-Open on all branches, fixed-probe top=0 safe)
     out.push(
       compHostList + ' {\n' +
       '  position: relative !important;\n' +
       '  isolation: isolate;\n' +
+      '  overflow: visible !important;\n' +
       '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
       '  backdrop-filter: none !important;\n' +
       '  -webkit-backdrop-filter: none !important;\n' +
-      '  border: 1px solid var(--prism-border-card) !important;\n' +
-      '  border-radius: var(--prism-r-card) !important;\n' +
-      '  box-shadow: var(--prism-shadow-island) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-composer, var(--prism-border-card)) !important;\n' +
+      '  border-width: var(--prism-bw-composer-top, 1px) var(--prism-bw-composer-right, 1px) var(--prism-bw-composer-bottom, 1px) var(--prism-bw-composer-left, 1px) !important;\n' +
+      '  border-radius: var(--prism-r-composer, var(--prism-r-card)) !important;\n' +
+      '  outline: none !important;\n' +
+      '  box-shadow: var(--prism-shadow-composer, var(--prism-shadow-island)) !important;\n' +
+      '  --glass: transparent;\n' +
+      '  --glass-border: transparent;\n' +
+      '  --glass-highlight: transparent;\n' +
       '}\n' +
       compBeforeList + ' {\n' +
       '  content: "";\n' +
@@ -2449,10 +3684,60 @@
       '  border-radius: inherit;\n' +
       '  pointer-events: none;\n' +
       '  background-color: var(--prism-surface-composer);\n' +
-      '  background-image: var(--prism-sheen);\n' +
+      '  background-image: var(--prism-sheen-composer);\n' +
       '  backdrop-filter: var(--prism-composer-backdrop);\n' +
       '  -webkit-backdrop-filter: var(--prism-composer-backdrop);\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-top);\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-composer);\n' +
+      '}\n' +
+      compAfterList + ' {\n' +
+      '  content: none !important;\n' +
+      '  display: none !important;\n' +
+      '}\n' +
+      GW + ' :is([data-main-content-body], [data-testid="conversation-view"], [data-testid="aux-pane-split"]) :is(div, section):has(> #antigravity\\.agentSidePanelInputBox):not([data-main-content-body]):not([data-testid="conversation-view"]):not([data-testid="aux-pane-split"]):not([data-testid="aux-pane-split"] > :first-child):not(.agy-shell):not(.agy-inset-shell):not(.composer-dock),\n' +
+      GW + ' [data-testid="agent-input-box"]:not([data-main-content-body]):not([data-testid="conversation-view"]):not([data-testid="aux-pane-split"]):not([data-testid="aux-pane-split"] > :first-child):not(.agy-shell):not(.agy-inset-shell):not(.composer-dock):is(:has(> #antigravity\\.agentSidePanelInputBox), :has([data-testid="agent-input-box"])) {\n' +
+      '  background: transparent !important;\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  border: none !important;\n' +
+      '  outline: none !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' :is([data-main-content-body], [data-testid="conversation-view"], [data-testid="aux-pane-split"]) :is(div, section):has(> #antigravity\\.agentSidePanelInputBox):not([data-main-content-body]):not([data-testid="conversation-view"]):not([data-testid="aux-pane-split"]):not([data-testid="aux-pane-split"] > :first-child):not(.agy-shell):not(.agy-inset-shell):not(.composer-dock)::before,\n' +
+      GW + ' :is([data-main-content-body], [data-testid="conversation-view"], [data-testid="aux-pane-split"]) :is(div, section):has(> #antigravity\\.agentSidePanelInputBox):not([data-main-content-body]):not([data-testid="conversation-view"]):not([data-testid="aux-pane-split"]):not([data-testid="aux-pane-split"] > :first-child):not(.agy-shell):not(.agy-inset-shell):not(.composer-dock)::after {\n' +
+      '  content: none !important;\n' +
+      '  background: none !important;\n' +
+      '  border: none !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      GW + ' #antigravity\\.agentSidePanelInputBox > :is(.surface-composer-card, .surface-composer, .agy-composer, [data-testid="agent-input-box"], div:first-child:has(~ .surface-composer-card):not(.surface-composer-card):not([data-testid*="attachment"]):not([data-testid*="chip"]):not([role="menu"]):not([role="listbox"])),\n' +
+      GW + ' #antigravity\\.agentSidePanelInputBox :is(.surface-composer-card, .surface-composer, .agy-composer, [data-testid="agent-input-box"]),\n' +
+      GW + ' [data-testid="agent-input-box"]:not(#antigravity\\.agentSidePanelInputBox):not(:has(#antigravity\\.agentSidePanelInputBox)) :is(.surface-composer-card, .surface-composer, .agy-composer, [data-testid="agent-input-box"]),\n' +
+      GW + ' [data-testid="agent-input-box"]:not(#antigravity\\.agentSidePanelInputBox):not(:has(#antigravity\\.agentSidePanelInputBox)) > :not(.surface-composer-card):has(~ .surface-composer-card):not([data-testid*="attachment"]):not([data-testid*="chip"]):not([role="menu"]):not([role="listbox"]),\n' +
+      GW + ' :is(#antigravity\\.agentSidePanelInputBox, [data-testid="agent-input-box"], .surface-composer-card, .agy-composer) > :is(div.relative.w-full, .agy-composer-footer, form, [data-testid="composer-editor-container"]) {\n' +
+      '  background: transparent !important;\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  border: none !important;\n' +
+      '  outline: none !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '  border-radius: 0px !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' #antigravity\\.agentSidePanelInputBox :is(.surface-composer-card, .surface-composer, .agy-composer, [data-testid="agent-input-box"])::before,\n' +
+      GW + ' #antigravity\\.agentSidePanelInputBox :is(.surface-composer-card, .surface-composer, .agy-composer, [data-testid="agent-input-box"])::after,\n' +
+      GW + ' #antigravity\\.agentSidePanelInputBox > div:first-child:has(~ .surface-composer-card):not(.surface-composer-card):not([data-testid*="attachment"]):not([data-testid*="chip"])::before,\n' +
+      GW + ' #antigravity\\.agentSidePanelInputBox > div:first-child:has(~ .surface-composer-card):not(.surface-composer-card):not([data-testid*="attachment"]):not([data-testid*="chip"])::after,\n' +
+      GW + ' [data-testid="agent-input-box"]:not(#antigravity\\.agentSidePanelInputBox):not(:has(#antigravity\\.agentSidePanelInputBox)) :is(.surface-composer-card, .surface-composer, .agy-composer, [data-testid="agent-input-box"])::before,\n' +
+      GW + ' [data-testid="agent-input-box"]:not(#antigravity\\.agentSidePanelInputBox):not(:has(#antigravity\\.agentSidePanelInputBox)) :is(.surface-composer-card, .surface-composer, .agy-composer, [data-testid="agent-input-box"])::after {\n' +
+      '  content: none !important;\n' +
+      '  display: none !important;\n' +
+      '}\n' +
+      GW + ' #antigravity\\.agentSidePanelInputBox > .surface-composer-card:not(:first-child),\n' +
+      GW + ' [data-testid="agent-input-box"]:not(#antigravity\\.agentSidePanelInputBox):not(:has(#antigravity\\.agentSidePanelInputBox)) > .surface-composer-card:not(:first-child) {\n' +
+      '  border-top: 1px solid var(--prism-border-composer-divider, var(--prism-border-composer)) !important;\n' +
       '}'
     );
 
@@ -2463,11 +3748,11 @@
       '  backdrop-filter: none !important;\n' +
       '}\n' +
       GW + ' [data-side-panel-strip] {\n' +
-      '  border-bottom: 1px solid var(--prism-border-hairline) !important;\n' +
+      '  border-bottom: 1px solid var(--prism-border-right-pane) !important;\n' +
       '}\n' +
       GW + ' [data-testid="new-tab-search-input"] {\n' +
       '  background-color: rgba(var(--prism-tint-1-rgb), ' + (isLight ? '0.68' : '0.46') + ') !important;\n' +
-      '  border: 1px solid var(--prism-border-card) !important;\n' +
+      '  border: 1px solid var(--prism-border-right-pane) !important;\n' +
       '  border-radius: var(--prism-r-ctl) !important;\n' +
       '  backdrop-filter: var(--prism-chrome-chip-backdrop) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-chrome-chip-backdrop) !important;\n' +
@@ -2503,7 +3788,12 @@
       GW + ' .code-block,\n' +
       GW + ' .md-code-block {\n' +
       '  background-color: var(--prism-surface-code-block) !important;\n' +
-      '  border: 1px solid var(--prism-border-card) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-top-width: var(--prism-bw-card-top, 1px) !important;\n' +
+      '  border-right-width: var(--prism-bw-card-right, 1px) !important;\n' +
+      '  border-bottom-width: var(--prism-bw-card-bottom, 1px) !important;\n' +
+      '  border-left-width: var(--prism-bw-card-left, 1px) !important;\n' +
+      '  border-color: var(--prism-border-card) !important;\n' +
       '  border-radius: var(--prism-r-ctl) !important;\n' +
       '  backdrop-filter: var(--prism-code-backdrop) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-code-backdrop) !important;\n' +
@@ -2526,8 +3816,10 @@
         GW + '[data-prism-layout="islands"] .agy-sidebar' + NOT_HOLE + ',\n' +
         GW + '[data-prism-layout="islands"] aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *)' + NOT_HOLE + ' {\n' +
         '  border-radius: var(--prism-r-left-island) !important;\n' +
-        '  border: 1px solid var(--prism-border-island) !important;\n' +
-        '  box-shadow: var(--prism-shadow-island) !important;\n' +
+        '  border-style: solid !important;\n' +
+        '  border-color: var(--prism-border-sidebar, var(--prism-border-island)) !important;\n' +
+        '  border-width: var(--prism-bw-sidebar-top, 1px) var(--prism-bw-sidebar-right, 1px) var(--prism-bw-sidebar-bottom, 1px) var(--prism-bw-sidebar-left, 1px) !important;\n' +
+        '  box-shadow: var(--prism-shadow-sidebar, var(--prism-shadow-island)) !important;\n' +
         '}\n' +
         GW + '[data-prism-layout="islands"] :is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2) {\n' +
         '  width: var(--prism-island-gap) !important;\n' +
@@ -2545,26 +3837,40 @@
         '  background: var(--prism-accent);\n' +
         '  opacity: 0.78;\n' +
         '}\n' +
-        GW + '[data-prism-layout="islands"] .monaco-workbench :is(.part.activitybar, .part.sidebar, .part.editor .editor-group-container, .part.panel, .part.auxiliarybar) {\n' +
+        GW + '[data-prism-layout="islands"] .monaco-workbench :is(.part.activitybar, .part.sidebar) {\n' +
         '  margin: calc(var(--prism-island-gap) * 0.5) !important;\n' +
-        '  border-radius: var(--prism-r-island) !important;\n' +
-        '  border: 1px solid var(--prism-border-island) !important;\n' +
-        '  box-shadow: var(--prism-shadow-island) !important;\n' +
+        '  border-radius: var(--prism-r-left-island, var(--prism-r-island)) !important;\n' +
+        '  border-style: solid !important;\n' +
+        '  border-color: var(--prism-border-sidebar, var(--prism-border-island)) !important;\n' +
+        '  border-width: var(--prism-bw-sidebar-top, 1px) var(--prism-bw-sidebar-right, 1px) var(--prism-bw-sidebar-bottom, 1px) var(--prism-bw-sidebar-left, 1px) !important;\n' +
+        '  box-shadow: var(--prism-shadow-sidebar, var(--prism-shadow-island)) !important;\n' +
+        '}\n' +
+        GW + '[data-prism-layout="islands"] .monaco-workbench :is(.part.editor .editor-group-container, .part.panel) {\n' +
+        '  margin: calc(var(--prism-island-gap) * 0.5) !important;\n' +
+        '  border-radius: var(--prism-r-workspace, var(--prism-r-island)) !important;\n' +
+        '  border-style: solid !important;\n' +
+        '  border-color: var(--prism-border-workspace, var(--prism-border-island)) !important;\n' +
+        '  border-width: var(--prism-bw-workspace-top, 1px) var(--prism-bw-workspace-right, 1px) var(--prism-bw-workspace-bottom, 1px) var(--prism-bw-workspace-left, 1px) !important;\n' +
+        '  box-shadow: var(--prism-shadow-workspace, var(--prism-shadow-island)) !important;\n' +
+        '}\n' +
+        GW + '[data-prism-layout="islands"] .monaco-workbench .part.auxiliarybar {\n' +
+        '  margin: calc(var(--prism-island-gap) * 0.5) !important;\n' +
         '}\n' +
         GW + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] > :is(div, main, section):first-child' + NOT_HOLE + ',\n' +
         GW + '[data-prism-layout="islands"] .agy-shell > main' + NOT_HOLE + ' {\n' +
-        '  border-radius: var(--prism-r-island) !important;\n' +
-        '  border: 1px solid var(--prism-border-island) !important;\n' +
-        '  box-shadow: var(--prism-shadow-island) !important;\n' +
+        '  border-radius: var(--prism-r-workspace, var(--prism-r-island)) !important;\n' +
+        '  border-style: solid !important;\n' +
+        '  border-color: var(--prism-border-workspace, var(--prism-border-island)) !important;\n' +
+        '  border-width: var(--prism-bw-workspace-top, 1px) var(--prism-bw-workspace-right, 1px) var(--prism-bw-workspace-bottom, 1px) var(--prism-bw-workspace-left, 1px) !important;\n' +
+        '  box-shadow: var(--prism-shadow-workspace, var(--prism-shadow-island)) !important;\n' +
         '}\n' +
         GW + '[data-prism-layout="islands"] [data-testid="aux-pane-split"] > :is(div, aside, section):last-child:not(:first-child):not([hidden]):not([aria-hidden="true"])' + NOT_HOLE + ',\n' +
         GW + '[data-prism-layout="islands"] .monaco-workbench .part.auxiliarybar' + NOT_HOLE + ' {\n' +
         '  border-radius: var(--prism-r-right-island) !important;\n' +
-        '  border: 1px solid var(--prism-border-island) !important;\n' +
-        '  box-shadow: var(--prism-shadow-island) !important;\n' +
-        '}\n' +
-        GW + '[data-prism-layout="islands"] :is([data-main-content-body], .agy-sheet [data-side-panel-body])::after {\n' +
-        '  display: none !important;\n' +
+        '  border-style: solid !important;\n' +
+        '  border-color: var(--prism-border-right-pane, var(--prism-border-island)) !important;\n' +
+        '  border-width: var(--prism-bw-right-pane-top, 1px) var(--prism-bw-right-pane-right, 1px) var(--prism-bw-right-pane-bottom, 1px) var(--prism-bw-right-pane-left, 1px) !important;\n' +
+        '  box-shadow: var(--prism-shadow-right-pane, var(--prism-shadow-island)) !important;\n' +
         '}'
       );
     } else {
@@ -2575,11 +3881,12 @@
         '}\n' +
         GW + '[data-prism-layout="flush"] :is([data-testid="sidebar-split"], [data-testid="aux-pane-split"]) > div:nth-child(2) {\n' +
         '  width: 1px !important;\n' +
-        '  background-color: var(--prism-border-hairline) !important;\n' +
+        '  background-color: var(--prism-border-sash, var(--prism-border-hairline)) !important;\n' +
         '}\n' +
+        GW + '[data-prism-layout="flush"] [data-testid="sidebar-split"] > div:first-child' + NOT_HOLE + ',\n' +
         GW + '[data-prism-layout="flush"] .agy-sidebar' + NOT_HOLE + ',\n' +
         GW + '[data-prism-layout="flush"] aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *)' + NOT_HOLE + ' {\n' +
-        '  border-right: 1px solid var(--prism-border-hairline) !important;\n' +
+        '  border-right: var(--prism-bw-sidebar-right, 1px) solid var(--prism-border-sidebar) !important;\n' +
         '}\n' +
         GW + '[data-prism-layout="flush"] [data-side-panel-strip]:not([data-testid="aux-pane-split"] *)' + NOT_HOLE + ',\n' +
         GW + '[data-prism-layout="flush"] .agy-sheet [data-side-panel-body]:not([data-testid="aux-pane-split"] *)' + NOT_HOLE + ' {\n' +
@@ -2590,7 +3897,14 @@
       );
     }
 
-    // 5. Solid Popovers, Menus & 2.34.0 Settings Modal Floor (>= 0.96 alpha, zero [class*="bg-background"] hover clobber)
+    // Both islands & flush suppress trailing ::after edge dividers on main/side panel bodies
+    out.push(
+      GW + ' :is([data-main-content-body], .agy-sheet [data-side-panel-body], [data-side-panel-body])::after {\n' +
+      '  display: none !important;\n' +
+      '}'
+    );
+
+    // 5. Solid Popovers, Menus & 2.34.0 Settings Modal Floor (>= 0.94 alpha, zero [class*="bg-background"] hover clobber)
     out.push(
       GG + ' .settings-modal-backdrop {\n' +
       '  background-color: ' + (isLight ? 'rgba(15, 23, 42, 0.28)' : 'rgba(0, 0, 0, 0.45)') + ' !important;\n' +
@@ -2622,17 +3936,20 @@
       '  --background: var(--prism-surface-popover) !important;\n' +
       '  --color-background: var(--prism-surface-popover) !important;\n' +
       '  --content: var(--prism-surface-popover) !important;\n' +
+      '  border-radius: var(--prism-r-popover, var(--prism-r-card)) !important;\n' +
       '  background-color: var(--prism-surface-popover) !important;\n' +
-      '  background-image: var(--prism-sheen) !important;\n' +
+      '  background-image: var(--prism-sheen-popover, var(--prism-sheen)) !important;\n' +
       '  backdrop-filter: var(--prism-popover-backdrop) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-popover-backdrop) !important;\n' +
-      '  border: 1px solid var(--prism-border-popover) !important;\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-top), var(--prism-shadow-popover) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-popover) !important;\n' +
+      '  border-width: var(--prism-bw-popover-top, 1px) var(--prism-bw-popover-right, 1px) var(--prism-bw-popover-bottom, 1px) var(--prism-bw-popover-left, 1px) !important;\n' +
+      '  box-shadow: inset 0 1px 0 var(--prism-specular-popover, var(--prism-specular-top)), var(--prism-shadow-popover) !important;\n' +
       '}\n\n' +
       GG + ' :is([data-testid="title-menu-bar"] [data-browser-occluder="true"], .surface-opaque.bg-sidebar:not(.sticky):not([style*="sticky"])) {\n' +
-      '  border-radius: var(--prism-r-card) !important;\n' +
+      '  border-radius: var(--prism-r-popover, var(--prism-r-card)) !important;\n' +
       '}\n\n' +
-      GG + ' :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {\n' +
+      GG + ' :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]):not(.prism-sheet), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {\n' +
       '  --background: var(--prism-surface-popover) !important;\n' +
       '  --color-background: var(--prism-surface-popover) !important;\n' +
       '  --content: var(--prism-surface-popover) !important;\n' +
@@ -2666,6 +3983,78 @@
       GW + ' ::-webkit-scrollbar-track { background: transparent !important; }\n' +
       GG + ' ::-webkit-scrollbar-thumb { background: var(--prism-scroll-thumb) !important; border-radius: 999px; }'
     );
+
+    // 7. #14 Per-Region Typography (workspace -> card -> composer cascade order; code/svg/pill/sibling/input safe)
+    var TYPO_SPECS = [
+      {
+        id: 'topbar',
+        scope: ':is([data-testid="title-menu-bar"], .monaco-workbench .part.titlebar)',
+        extraEx: DIALOG_DESCENDANT_EXCLUDE,
+        hasFs: true,
+      },
+      {
+        id: 'sidebar',
+        scope: ':is([data-testid="sidebar-split"] > div:first-child, .agy-sidebar, aside[data-side-panel-body]:not(.agy-sheet *):not([data-testid="aux-pane-split"] *), .monaco-workbench .part.activitybar, .monaco-workbench .part.sidebar)',
+        extraEx: DIALOG_DESCENDANT_EXCLUDE,
+        hasFs: false,
+      },
+      {
+        id: 'workspace',
+        scope: ':is([data-testid="aux-pane-split"] > :is(div, main, section):first-child, .agy-shell > main, .monaco-workbench .part.editor > .content, .monaco-workbench .part.panel)',
+        extraEx: COMPOSER_DESCENDANT_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
+        hasFs: true,
+      },
+      {
+        id: 'card',
+        scope: ':is(.msg-user, .msg-agent, [data-testid="customization-card"], .agy-spotlight-card, [data-testid="marketplace-bundles-banner"], .surface-opaque.bg-background)',
+        extraEx: COMPOSER_DESCENDANT_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
+        hasFs: true,
+      },
+      {
+        id: 'composer',
+        scope: ':is(#antigravity\\.agentSidePanelInputBox, [data-testid="agent-input-box"], .surface-composer-card, .agy-composer)',
+        extraEx: DIALOG_DESCENDANT_EXCLUDE,
+        hasFs: true,
+      },
+      {
+        id: 'rightPane',
+        scope: ':is([data-testid="aux-pane-split"] > :is(div, aside, section):last-child:not(:first-child):not([hidden]):not([aria-hidden="true"]), .monaco-workbench .part.auxiliarybar, [data-side-panel-strip]:not([data-testid="aux-pane-split"] *), .agy-sheet [data-side-panel-body]:not([data-testid="aux-pane-split"] *))',
+        extraEx: COMPOSER_DESCENDANT_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
+        hasFs: true,
+      },
+      {
+        id: 'popover',
+        scope: ':is(' + SOLID_POPOVERS.join(', ') + ')',
+        extraEx: '',
+        hasFs: true,
+      },
+    ];
+    for (var ts = 0; ts < TYPO_SPECS.length; ts += 1) {
+      var sp = TYPO_SPECS[ts];
+      var sfx = TYPO_PROTECT_EX + SIBLING_EXCLUDE + SIBLING_DESCENDANT_EXCLUDE + sp.extraEx;
+      var rootSfx = sp.id === 'popover' ? TYPO_PROTECT_EX + SIBLING_DESCENDANT_EXCLUDE : sfx;
+      var mkSel = function (attr, fsTarget) {
+        var rPfx = GW + '[' + attr + '="1"] ' + sp.scope;
+        var innerSet = fsTarget
+          ? ':where(p, span, div, li, button, a, label, textarea, input, [contenteditable="true"])'
+          : ':where(*)';
+        return rPfx + rootSfx + ',\n' + rPfx + ' ' + innerSet + sfx;
+      };
+      out.push(
+        mkSel('data-prism-fg-' + sp.id, false) + ' {\n' +
+        '  color: var(--prism-region-' + sp.id + '-fg) !important;\n' +
+        '}\n' +
+        mkSel('data-prism-ff-' + sp.id, false) + ' {\n' +
+        '  font-family: var(--prism-region-' + sp.id + '-ff) !important;\n' +
+        '}' +
+        (sp.hasFs
+          ? '\n' +
+            mkSel('data-prism-fs-' + sp.id, true) + ' {\n' +
+            '  font-size: var(--prism-region-' + sp.id + '-fs) !important;\n' +
+            '}'
+          : '')
+      );
+    }
 
     return out.join('\n\n');
   }
@@ -2828,6 +4217,10 @@
       holeResizeObs = null;
     }
     state.holeObservedNodes = [];
+    if (holeMutRaf) {
+      W.cancelAnimationFrame(holeMutRaf);
+      holeMutRaf = 0;
+    }
     if (holeRaf) {
       W.cancelAnimationFrame(holeRaf);
       holeRaf = 0;
@@ -2854,11 +4247,29 @@
     if (!holeSubObs && W.MutationObserver && doc.body) {
       holeSubObs = new MutationObserver(function (muts) {
         if (destroyed || !state.skinEnabled) return;
-        syncBrowserHoleCutout();
+        var hasSplitTransition = false;
         for (var i = 0; i < muts.length; i += 1) {
           if (muts[i].attributeName === 'data-split-transition') {
-            armHoleTransitionRaf(560);
+            hasSplitTransition = true;
             break;
+          }
+        }
+        if (hasSplitTransition) {
+          if (holeMutRaf && typeof W.cancelAnimationFrame === 'function') {
+            W.cancelAnimationFrame(holeMutRaf);
+            holeMutRaf = 0;
+          }
+          syncBrowserHoleCutout();
+          armHoleTransitionRaf(560);
+        } else if (!holeMutRaf) {
+          if (typeof W.requestAnimationFrame === 'function') {
+            holeMutRaf = W.requestAnimationFrame(function () {
+              holeMutRaf = 0;
+              if (destroyed || !state.skinEnabled) return;
+              syncBrowserHoleCutout();
+            });
+          } else {
+            syncBrowserHoleCutout();
           }
         }
       });
@@ -3197,7 +4608,7 @@
     }
   }
 
-  var MAX_BLOB_MEDIA_BYTES = 256 * 1024 * 1024;
+  var MAX_BLOB_MEDIA_BYTES = 48 * 1024 * 1024;
   var BLOB_FETCH_TIMEOUT_MS = 20000;
 
   function isCrossSchemeLoopbackUrl(url) {
@@ -3220,7 +4631,7 @@
   // Antigravity 2.34.0 (Chrome 152) serves the main hub on `https://127.0.0.1:<port>`, where direct
   // `<video>`/`<audio>` `type:"Media"` requests to `http://127.0.0.1:<mediaPort>` stall indefinitely at
   // `readyState === 0`. Zero-delay `fetch()` -> `blob:` bypasses the Media loader hang with a 20s timeout
-  // and 256 MiB safety cap.
+  // and 48 MiB safety cap.
   function attachLoopbackMediaSrc(el, url, opts) {
     if (!el || !url) return;
     opts = opts || {};
@@ -3463,7 +4874,7 @@
     var activeReader = null;
     var ac = typeof W.AbortController === 'function' ? new W.AbortController() : null;
 
-    var failMse = function () {
+    var failMse = function (reason) {
       if (failedOnce) return;
       failedOnce = true;
       mseDone = true;
@@ -3482,7 +4893,7 @@
         activeReader = null;
       }
       if (!destroyed && !isStale() && typeof fallbackToPoster === 'function') {
-        fallbackToPoster();
+        fallbackToPoster(reason || 'mse-stream-error');
       }
     };
 
@@ -3494,7 +4905,7 @@
       typeof W.URL === 'undefined' ||
       typeof W.URL.createObjectURL !== 'function'
     ) {
-      failMse();
+      failMse('mse-unsupported');
       return;
     }
 
@@ -3535,7 +4946,7 @@
     try {
       ms = new W.MediaSource();
     } catch (_) {
-      failMse();
+      failMse('mse-ctor-error');
       return;
     }
 
@@ -3739,7 +5150,7 @@
         .catch(function (err) {
           if (mseDone || destroyed || isStale()) return;
           if (err && err.name === 'AbortError') return;
-          failMse();
+          failMse(err && err.message ? 'mse:' + String(err.message) : 'mse-stream-error');
         });
     };
 
@@ -4158,6 +5569,8 @@
       state.failedMediaRetries = 0;
     }
     state.activeMediaKey = mediaKey;
+    state.degradedToPoster = false;
+    state.degradeReason = '';
     var mountSeq = ++state.mediaMountSeq;
     clearInterval(state.slideTimer);
     state.slideTimer = 0;
@@ -4206,6 +5619,7 @@
       );
       setWallpaperReady(true);
       syncMediaPlaybackState();
+      syncLifecycleTimers();
     };
 
     var failMount = function () {
@@ -4232,6 +5646,7 @@
       state.activeWrap = null;
       state.activeMediaKey = '';
       setWallpaperReady(false);
+      syncLifecycleTimers();
     };
 
     if (effKind === 'none') {
@@ -4576,6 +5991,8 @@
           }
           if (video.readyState < 2 || !(video.videoWidth > 0)) return;
           settledVid = true;
+          state.degradedToPoster = false;
+          state.degradeReason = '';
           clearTimeout(state.pendingMediaTimer);
           state.pendingMediaTimer = 0;
           if (!needsCrossfade) nextWrap.style.opacity = '';
@@ -4599,14 +6016,16 @@
           failMount();
         };
 
-        var fallbackToPoster = function () {
+        var fallbackToPoster = function (reason) {
           if (posterFallbackStarted || settledVid || destroyed || mountSeq !== state.mediaMountSeq) return;
+          state.degradeReason = String(reason || 'video-degraded');
           if (!(item && item.thumbUrl)) {
             onVideoFailed();
             return;
           }
           posterFallbackStarted = true;
           settledVid = true;
+          state.degradedToPoster = true;
           video.__prismPriming = false;
           video.__prismMseLoading = false;
           video.__prismMseActive = false;
@@ -4723,7 +6142,7 @@
             return;
           }
           if (video.__prismMseActive && item && item.thumbUrl) {
-            fallbackToPoster();
+            fallbackToPoster('mse-video-error');
             return;
           }
           onVideoFailed();
@@ -4773,7 +6192,7 @@
                 return;
               }
               if (video.__prismMseActive) {
-                fallbackToPoster();
+                fallbackToPoster('mse-load-timeout');
               } else {
                 onVideoFailed();
               }
@@ -4818,7 +6237,7 @@
                 return;
               }
               if (item && item.thumbUrl) {
-                fallbackToPoster();
+                fallbackToPoster('blob-cap-no-mse');
                 return;
               }
             }
@@ -4888,6 +6307,8 @@
               return;
             }
             settledStage = true;
+            state.degradedToPoster = false;
+            state.degradeReason = '';
             state.activeVideoStageReady = true;
             clearTimeout(state.pendingMediaTimer);
             state.pendingMediaTimer = 0;
@@ -5232,6 +6653,8 @@
       if (isWake && !doc.hidden) {
         if (state.activeVideoStageFrame && state.activeVideoStageFrame.isConnected) {
           sendVideoStageControl();
+        } else if (state.activeIframe && state.activeIframe.isConnected) {
+          syncMediaPlaybackState();
         } else if (vid && vid.isConnected && vid.__prismPriming && !vid.error) {
           if (vid.readyState >= 2 && vid.videoWidth > 0) {
             try { vid.dispatchEvent(new Event('loadeddata')); } catch (_) {}
@@ -5304,6 +6727,11 @@
         }
         if (cfg.rotationEnabled && cfg.rotationTrigger === 'videoEnd') {
           callHostRpc('playlist.step', { direction: 1, reason: 'videoEnd' });
+        } else if (vid.__prismMseActive && vid.__prismMseEvicted) {
+          // Evicted MSE SourceBuffer has time 0 purged; remount fresh MediaSource stream instead of seeking 0!
+          state.vidStallCount = 0;
+          mountStageMedia(true);
+          return;
         } else {
           try {
             vid.currentTime = 0;
@@ -5318,6 +6746,12 @@
 
       // Case 3: Persistent D3D11 hardware decoder stall -> seamless reload preserving poster/blob floor
       if (state.vidStallCount >= 5) {
+        if (vid.__prismMseActive) {
+          // MSE blob URLs are single-use per MediaSource instance; rebuild stream cleanly.
+          state.vidStallCount = 0;
+          mountStageMedia(true);
+          return;
+        }
         try {
           var resumeT = Number.isFinite(dur) && dur > 2 && curT < dur - 0.75 ? curT : 0;
           if (vid.__prismBlobUrl) {
@@ -5335,16 +6769,85 @@
         state.vidStallCount = 0;
       } else if (state.vidStallCount >= 3) {
         // Case 2: Mid-stream freeze (>= ~2.7s stalled) -> soft keyframe nudge
-        try {
-          var kickT = Number.isFinite(dur) && dur > 1.5 && curT < dur - 0.75 ? Math.max(0, curT - 0.035) : 0;
-          vid.currentTime = kickT;
-          vid.play().catch(function () {});
-        } catch (_) {}
+        if (vid.__prismMseActive) {
+          var hasBuf = vid.buffered && vid.buffered.length > 0;
+          if (!hasBuf) {
+            state.vidStallCount = 0;
+            mountStageMedia(true);
+            return;
+          }
+          try {
+            var bufStart = Number(vid.buffered.start(0));
+            var bufEnd = Number(vid.buffered.end(vid.buffered.length - 1));
+            var rawKick = Number.isFinite(dur) && dur > 1.5 && curT < dur - 0.75 ? Math.max(0, curT - 0.035) : bufStart;
+            vid.currentTime = Math.max(bufStart, Math.min(bufEnd, rawKick));
+            vid.play().catch(function () {});
+          } catch (_) {}
+        } else {
+          try {
+            var kickT = Number.isFinite(dur) && dur > 1.5 && curT < dur - 0.75 ? Math.max(0, curT - 0.035) : 0;
+            vid.currentTime = kickT;
+            vid.play().catch(function () {});
+          } catch (_) {}
+        }
       }
     }
 
     state.lastVidCheckTime = curT;
     state.lastVidCheckFrames = curF;
+  }
+
+  function clearLifecycleTimers() {
+    if (state.blurPollTimer) {
+      clearInterval(state.blurPollTimer);
+      state.blurPollTimer = 0;
+    }
+    if (state.videoWatchTimer) {
+      clearInterval(state.videoWatchTimer);
+      state.videoWatchTimer = 0;
+    }
+  }
+
+  function syncLifecycleTimers() {
+    if (destroyed || !state.skinEnabled) {
+      clearLifecycleTimers();
+      return;
+    }
+    var needBlurPoll = Boolean((state.cfg && state.cfg.pauseOnBlur) || state.autoPaused);
+    if (needBlurPoll) {
+      if (!state.blurPollTimer) {
+        state.blurPollTimer = setInterval(function () {
+          if (destroyed || !state.skinEnabled) {
+            clearLifecycleTimers();
+            return;
+          }
+          if (state.cfg.pauseOnBlur || state.autoPaused) evaluateAutoPause();
+        }, 3000);
+      }
+    } else if (state.blurPollTimer) {
+      clearInterval(state.blurPollTimer);
+      state.blurPollTimer = 0;
+    }
+
+    var hasVidWatchTarget = Boolean(
+      (state.activeVideo && state.activeVideo.isConnected) ||
+      (state.activeVideoStageFrame && state.activeVideoStageFrame.isConnected)
+    );
+    var shouldPauseWatch = Boolean(state.cfg && (state.cfg.paused || state.autoPaused || state.cfg.agentBusyPaused));
+    if (hasVidWatchTarget && !shouldPauseWatch && !doc.hidden) {
+      if (!state.videoWatchTimer) {
+        state.videoWatchTimer = setInterval(function () {
+          if (destroyed || !state.skinEnabled) {
+            clearLifecycleTimers();
+            return;
+          }
+          checkVideoLiveness(false);
+        }, 1100);
+      }
+    } else if (state.videoWatchTimer) {
+      clearInterval(state.videoWatchTimer);
+      state.videoWatchTimer = 0;
+    }
   }
 
   function evaluateAutoPause() {
@@ -5367,6 +6870,7 @@
       state.autoPaused = nextPaused;
       state.pauseReason = reason;
       syncMediaPlaybackState();
+      syncLifecycleTimers();
       if (wokeFromHidden && state.activeWrap) {
         // 2-frame repaint nudge after wake from minimize/virtual desktop switch.
         W.requestAnimationFrame(function () {
@@ -5379,7 +6883,13 @@
         });
       }
     } else if (!nextPaused && !doc.hidden) {
-      if (state.activeVideo && state.activeVideo.paused && !state.cfg.paused && !state.cfg.agentBusyPaused) {
+      if (
+        !state.cfg.paused &&
+        !state.cfg.agentBusyPaused &&
+        ((state.activeVideo && state.activeVideo.paused) ||
+          (state.activeIframe && state.activeIframe.isConnected) ||
+          (state.activeVideoStageFrame && state.activeVideoStageFrame.isConnected))
+      ) {
         syncMediaPlaybackState();
       }
     }
@@ -5397,9 +6907,11 @@
           state.hiddenDebounced = Boolean(doc.hidden);
           evaluateAutoPause();
         }, 1200);
+        syncLifecycleTimers();
       } else {
         state.hiddenDebounced = false;
         evaluateAutoPause();
+        syncLifecycleTimers();
         scheduleWakeVideoCheck(150);
       }
     });
@@ -5413,13 +6925,7 @@
       scheduleWakeVideoCheck(220);
     });
 
-    state.blurPollTimer = setInterval(function () {
-      if (state.cfg.pauseOnBlur || state.autoPaused) evaluateAutoPause();
-    }, 3000);
-
-    state.videoWatchTimer = setInterval(function () {
-      checkVideoLiveness(false);
-    }, 1100);
+    syncLifecycleTimers();
 
     if (W.navigator && typeof W.navigator.getBattery === 'function') {
       W.navigator
@@ -5557,55 +7063,69 @@
     }
   }
 
-  function setupPointerHooks() {
-    listen(
-      W,
-      'pointermove',
-      function (e) {
-        if (!state.skinEnabled || state.autoPaused) return;
-        var vw = Math.max(1, W.innerWidth);
-        var vh = Math.max(1, W.innerHeight);
+  function onPointerMove(e) {
+    if (destroyed || !state.skinEnabled || state.autoPaused) return;
+    var vw = Math.max(1, W.innerWidth);
+    var vh = Math.max(1, W.innerHeight);
 
-        if (state.activeIframe && state.activeIframe.contentWindow) {
-          try {
-            state.activeIframe.contentWindow.postMessage(
-              { type: 'we-pointer', event: 'move', x: e.clientX / vw, y: e.clientY / vh, clientX: e.clientX, clientY: e.clientY },
-              '*'
-            );
-          } catch (_) {}
-        }
+    if (state.cfg.interactiveWeb && state.activeIframe && state.activeIframe.contentWindow) {
+      try {
+        state.activeIframe.contentWindow.postMessage(
+          { type: 'we-pointer', event: 'move', x: e.clientX / vw, y: e.clientY / vh, clientX: e.clientX, clientY: e.clientY },
+          '*'
+        );
+      } catch (_) {}
+    }
 
-        if (state.cfg.parallaxEnabled) {
-          var nx = (e.clientX / vw - 0.5) * -2;
-          var ny = (e.clientY / vh - 0.5) * -2;
-          state.parallaxTargetX = nx * state.cfg.parallaxStrength;
-          state.parallaxTargetY = ny * state.cfg.parallaxStrength;
-          if (!state.parallaxRaf) state.parallaxRaf = W.requestAnimationFrame(stepParallax);
-        }
+    if (state.cfg.parallaxEnabled) {
+      var nx = (e.clientX / vw - 0.5) * -2;
+      var ny = (e.clientY / vh - 0.5) * -2;
+      state.parallaxTargetX = nx * state.cfg.parallaxStrength;
+      state.parallaxTargetY = ny * state.cfg.parallaxStrength;
+      if (!state.parallaxRaf) state.parallaxRaf = W.requestAnimationFrame(stepParallax);
+    }
 
-        if (state.cfg.fxEnabled && state.wallpaperReady) {
-          var now = Date.now();
-          if (now - state.lastTrailAt > 28) {
-            state.lastTrailAt = now;
-            var rgb = state.accentRgbStr || '102, 157, 246';
-            state.fxParticles.push({
-              x: e.clientX,
-              y: e.clientY,
-              vx: (Math.random() - 0.5) * 0.8,
-              vy: (Math.random() - 0.5) * 0.8 - 0.3,
-              r: 2.2,
-              grow: 0.04,
-              life: 0.85,
-              decay: 0.045,
-              rgb: rgb,
-              ring: false,
-            });
-            if (!state.fxRaf) state.fxRaf = W.requestAnimationFrame(stepFx);
-          }
-        }
-      },
-      { passive: true }
+    if (state.cfg.fxEnabled && state.wallpaperReady) {
+      var now = Date.now();
+      if (now - state.lastTrailAt > 28) {
+        state.lastTrailAt = now;
+        var rgb = state.accentRgbStr || '102, 157, 246';
+        state.fxParticles.push({
+          x: e.clientX,
+          y: e.clientY,
+          vx: (Math.random() - 0.5) * 0.8,
+          vy: (Math.random() - 0.5) * 0.8 - 0.3,
+          r: 2.2,
+          grow: 0.04,
+          life: 0.85,
+          decay: 0.045,
+          rgb: rgb,
+          ring: false,
+        });
+        if (!state.fxRaf) state.fxRaf = W.requestAnimationFrame(stepFx);
+      }
+    }
+  }
+
+  function syncPointerHooks() {
+    var needMove = Boolean(
+      !destroyed &&
+      state.skinEnabled &&
+      ((state.cfg && state.cfg.parallaxEnabled) ||
+        (state.cfg && state.cfg.fxEnabled) ||
+        (state.cfg && state.cfg.interactiveWeb && resolveEffectiveKind(state.item, state.cfg) === 'web'))
     );
+    if (needMove && !pointerMoveBound) {
+      W.addEventListener('pointermove', onPointerMove, { passive: true });
+      pointerMoveBound = true;
+    } else if (!needMove && pointerMoveBound) {
+      W.removeEventListener('pointermove', onPointerMove, { passive: true });
+      pointerMoveBound = false;
+    }
+  }
+
+  function setupPointerHooks() {
+    syncPointerHooks();
 
     listen(
       W,
@@ -6046,10 +7566,12 @@
       welcomeLogoObs = null;
     }
     state.welcomeLogoObsTarget = null;
+    state.welcomeLogoNonEmptyScopes = [];
   }
 
   function teardownWelcomeLogoGuard() {
     disconnectWelcomeLogoObserver();
+    state.welcomeLogoNonEmptyScopes = [];
     clearWelcomeLogoMarks();
   }
 
@@ -6069,6 +7591,32 @@
     }, 120);
   }
 
+  function isInsideKnownNonEmptyWelcomeScope(el) {
+    if (!el || !state.welcomeLogoNonEmptyScopes || !state.welcomeLogoNonEmptyScopes.length) return false;
+    for (var i = 0; i < state.welcomeLogoNonEmptyScopes.length; i += 1) {
+      var sc = state.welcomeLogoNonEmptyScopes[i];
+      if (sc && sc.isConnected && typeof sc.contains === 'function' && sc.contains(el)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function invalidateNonEmptyWelcomeScopes(el) {
+    if (!state.welcomeLogoNonEmptyScopes || !state.welcomeLogoNonEmptyScopes.length) return;
+    var next = [];
+    for (var i = 0; i < state.welcomeLogoNonEmptyScopes.length; i += 1) {
+      var sc = state.welcomeLogoNonEmptyScopes[i];
+      if (!sc || !sc.isConnected) continue;
+      if (el && ((typeof sc.contains === 'function' && sc.contains(el)) || (typeof el.contains === 'function' && el.contains(sc)))) {
+        continue;
+      }
+      if (sc.querySelector && !sc.querySelector(NON_EMPTY_CHAT_SEL)) continue;
+      next.push(sc);
+    }
+    state.welcomeLogoNonEmptyScopes = next;
+  }
+
   function syncWelcomeLogo() {
     if (destroyed || !state.skinEnabled || !state.cfg.hideWelcomeLogo || !doc.body) {
       teardownWelcomeLogoGuard();
@@ -6085,9 +7633,16 @@
         if (destroyed || !state.skinEnabled || !state.cfg.hideWelcomeLogo) return;
         var relevant = false;
         for (var i = 0; i < muts.length; i += 1) {
-          var mt = muts[i] && muts[i].target;
+          var m = muts[i];
+          var mt = m && m.target;
           var mtEl = mt && mt.nodeType === 1 ? mt : mt && mt.parentElement;
           if (mtEl && mtEl.closest && mtEl.closest(WELCOME_LOGO_OBS_IGNORE_ANCESTOR)) continue;
+          if (m && m.removedNodes && m.removedNodes.length > 0) {
+            invalidateNonEmptyWelcomeScopes(mtEl);
+            relevant = true;
+            break;
+          }
+          if (mtEl && isInsideKnownNonEmptyWelcomeScope(mtEl)) continue;
           relevant = true;
           break;
         }
@@ -6099,11 +7654,17 @@
       } catch (_) {}
     }
 
+    invalidateNonEmptyWelcomeScopes(null);
     var scopes = resolveWelcomeLogoScopes();
     var nextEls = [];
     var nextPseudos = [];
     for (var s = 0; s < scopes.length; s += 1) {
-      var res = detectWelcomeLogoInScope(scopes[s]);
+      var sc = scopes[s];
+      if (state.welcomeLogoNonEmptyScopes.indexOf(sc) >= 0) continue;
+      var res = detectWelcomeLogoInScope(sc);
+      if (!res.elMarks.length && !res.pseudoMarks.length && sc && sc.querySelector && sc.querySelector(NON_EMPTY_CHAT_SEL)) {
+        state.welcomeLogoNonEmptyScopes.push(sc);
+      }
       for (var e = 0; e < res.elMarks.length; e += 1) {
         if (nextEls.indexOf(res.elMarks[e]) < 0) nextEls.push(res.elMarks[e]);
       }
@@ -6520,6 +8081,10 @@
     state.effectiveTheme = resolveEffectiveTheme(state.cfg);
 
     var effKind = resolveEffectiveKind(state.item, state.cfg);
+    var effSbListStyle =
+      (state.cfg.regions && state.cfg.regions.sidebar && state.cfg.regions.sidebar.listStyle) ||
+      state.cfg.sidebarListStyle ||
+      'capsule';
     var rootAttrs = [
       [ROOT_ATTR, VERSION],
       [GLASS_ATTR, 'ready'],
@@ -6528,6 +8093,8 @@
       ['data-prism-accent-mode', state.cfg.accentMode],
       ['data-prism-layout', state.cfg.layoutMode],
       [TOPBAR_STYLE_ATTR, state.cfg.topbarStyle || 'pills'],
+      [SIDEBAR_STYLE_ATTR, effSbListStyle],
+      [SIDEBAR_TYPO_ATTR, state.cfg.sidebarTypographyMode || 'balanced'],
       ['data-prism-corners', state.cfg.cornerStyle],
       ['data-prism-borders', state.cfg.borders],
       ['data-prism-shadows', state.cfg.shadows ? 'on' : 'off'],
@@ -6567,6 +8134,26 @@
     }
 
     var tok = computeSkinTokens(state.cfg);
+    var typo = tok.regionTypo || {};
+    var typoFields = ['fg', 'ff', 'fs'];
+    for (var ri = 0; ri < REGION_IDS.length; ri += 1) {
+      var rid = REGION_IDS[ri];
+      var rt = typo[rid] || { fg: '', ff: '', fs: '' };
+      for (var fi = 0; fi < typoFields.length; fi += 1) {
+        var f = typoFields[fi];
+        var attrName = 'data-prism-' + f + '-' + rid;
+        var varName = '--prism-region-' + rid + '-' + f;
+        var val = rt[f] ? String(rt[f]) : '';
+        if (val) {
+          if (root.getAttribute(attrName) !== '1') root.setAttribute(attrName, '1');
+          tok.vars[varName] = val;
+        } else {
+          root.removeAttribute(attrName);
+          if (root.style) root.style.removeProperty(varName);
+          delete state.appliedVars[varName];
+        }
+      }
+    }
     applyFastCssVars(tok.vars);
 
     var styleEl = doc.getElementById(STYLE_ID);
@@ -6623,6 +8210,24 @@
     var wantTransparent = Boolean(!forceRestore && state.skinEnabled && state.cfg.transparentWindowControls !== false);
     var color = wantTransparent ? '#00000000' : isLight ? '#FFFFFF' : '#131313';
     var symbolColor = wantTransparent ? (isLight ? '#18181B' : '#F2F2F5') : isLight ? '#000000' : '#FAFAFA';
+    if (wantTransparent && state.cfg) {
+      var wcoEnt = state.cfg.regions && state.cfg.regions.wco;
+      var rawWcoFg = (wcoEnt && wcoEnt.fontColor) || state.cfg.globalFontColor || '';
+      if (rawWcoFg) {
+        var parsedWcoFg = hexToRgb(rawWcoFg);
+        if (parsedWcoFg) {
+          var wcoSurf = state.lastWcoSurface;
+          var wcoBgRgb = wcoSurf && wcoSurf.rgb ? wcoSurf.rgb : (isLight ? [245, 245, 247] : [19, 19, 25]);
+          var wcoAlpha = wcoSurf && Number.isFinite(Number(wcoSurf.alpha)) ? Number(wcoSurf.alpha) : 0.72;
+          var allowRaw = Boolean(wcoEnt && wcoEnt.allowRawFontColor === true);
+          if (allowRaw || wcoAlpha < 0.55) {
+            symbolColor = rgbToHex(parsedWcoFg);
+          } else {
+            symbolColor = rgbToHex(enforceFgContrastRgb(parsedWcoFg, wcoBgRgb, isLight, 4.5));
+          }
+        }
+      }
+    }
     return {
       isLight: isLight,
       wantTransparent: wantTransparent,
@@ -6885,8 +8490,25 @@
 
   function teardownSkinDomOnly() {
     state.mediaMountSeq += 1;
+    clearLifecycleTimers();
     clearRootWatchdogTimers();
     state._watchdogReported = false;
+    clearTimeout(state.hiddenTimer);
+    state.hiddenTimer = 0;
+    clearTimeout(state.wakeNudgeTimer);
+    state.wakeNudgeTimer = 0;
+    if (state.parallaxRaf) {
+      try { W.cancelAnimationFrame(state.parallaxRaf); } catch (_) {}
+      state.parallaxRaf = 0;
+    }
+    if (state.fxRaf) {
+      try { W.cancelAnimationFrame(state.fxRaf); } catch (_) {}
+      state.fxRaf = 0;
+    }
+    if (state.unmuteGestureCleanup) {
+      try { state.unmuteGestureCleanup(); } catch (_) {}
+      state.unmuteGestureCleanup = null;
+    }
     disconnectHoleActiveObservers();
     teardownWelcomeLogoGuard();
     removeTopbarGlassPills();
@@ -6920,11 +8542,14 @@
     state.activeVideoStageReady = false;
     state.activeVideoStageUrl = '';
     state.activeMediaKey = '';
+    state.degradedToPoster = false;
+    state.degradeReason = '';
     state.wallpaperReady = false;
     state.slides = [];
     state.lastStructuralSig = '';
     state.lastCaretSig = '';
     state.lastSidecarSig = '';
+    syncPointerHooks();
     clearFastCssVars();
     removeWcoGlassPill();
     syncWindowControlsOverlay(true, true);
@@ -6949,6 +8574,8 @@
         WCO_ATTR,
         WCO_ACTIVE_ATTR,
         TOPBAR_STYLE_ATTR,
+        SIDEBAR_STYLE_ATTR,
+        SIDEBAR_TYPO_ATTR,
         WELCOME_LOGO_ATTR,
         'data-prism-theme',
         'data-prism-scheme',
@@ -6962,6 +8589,20 @@
         'data-prism-kind',
       ];
       for (var i = 0; i < attrs.length; i += 1) root.removeAttribute(attrs[i]);
+      for (var ri = 0; ri < REGION_IDS.length; ri += 1) {
+        var rId = REGION_IDS[ri];
+        root.removeAttribute('data-prism-fg-' + rId);
+        root.removeAttribute('data-prism-ff-' + rId);
+        root.removeAttribute('data-prism-fs-' + rId);
+      }
+      if (root.attributes && typeof root.attributes.length === 'number') {
+        for (var ai = root.attributes.length - 1; ai >= 0; ai -= 1) {
+          var attrItem = root.attributes[ai];
+          if (attrItem && /^data-prism-(?:fg|ff|fs)-/.test(attrItem.name)) {
+            root.removeAttribute(attrItem.name);
+          }
+        }
+      }
     }
   }
 
@@ -7049,16 +8690,53 @@
   function applyPayload(payload) {
     if (destroyed) return status();
     var p = payload && typeof payload === 'object' ? payload : {};
-    lastPayload = p;
+    if (!shouldAcceptStateRev(p.stateRev, p.stateEpoch || p.mediaOrigin || W.__agyPrismCapToken || '')) {
+      return status();
+    }
 
-    if (p.skinEnabled === false || (p.config && p.config.skinEnabled === false)) {
+    var isSoftDisable =
+      p.skinEnabled === false ||
+      p.skinEnabled === 0 ||
+      Boolean(p.config && (p.config.skinEnabled === false || p.config.skinEnabled === 0));
+    var hasFullCfg = Boolean(p.config && isPlainObj(p.config) && Object.keys(p.config).length > 2);
+
+    if (isSoftDisable) {
+      if (hasFullCfg) {
+        lastPayload = p;
+      } else {
+        var nextLp = isPlainObj(lastPayload) ? Object.assign({}, lastPayload) : {};
+        nextLp.skinEnabled = false;
+        if (p.stateRev !== undefined) nextLp.stateRev = p.stateRev;
+        if (p.stateEpoch !== undefined) nextLp.stateEpoch = p.stateEpoch;
+        lastPayload = nextLp;
+      }
+      W.__agyPrismOn = false;
       state.skinEnabled = false;
       teardownSkinDomOnly();
       return status();
     }
 
+    W.__agyPrismOn = true;
     state.skinEnabled = true;
-    var rawCfg = p.config || p.prefs || p;
+    var rawCfg =
+      (hasFullCfg ? p.config : null) ||
+      p.prefs ||
+      (p.config && isPlainObj(p.config)
+        ? Object.assign({}, (isPlainObj(lastPayload) && lastPayload.config) || state.rawCfg || {}, p.config)
+        : isPlainObj(lastPayload) && (lastPayload.config || lastPayload.prefs) && Object.keys(p).length <= 3
+          ? lastPayload.config || lastPayload.prefs
+          : p);
+    if (hasFullCfg || p.prefs || (!p.config && Object.keys(p).length > 3)) {
+      lastPayload = p;
+    } else if (isPlainObj(lastPayload)) {
+      lastPayload = Object.assign({}, lastPayload, p, {
+        skinEnabled: true,
+        config: rawCfg,
+      });
+    } else {
+      lastPayload = p;
+    }
+
     var prevItemId = state.item && state.item.id ? String(state.item.id) : '';
     if (p.activeItem !== undefined) state.item = p.activeItem;
     else if (p.source && typeof p.source === 'object') {
@@ -7082,6 +8760,8 @@
         webUrl: p.source.webUrl || '',
         schemeColor: p.source.schemeColor || '',
       };
+    } else if (!state.item && isPlainObj(lastPayload) && lastPayload.activeItem) {
+      state.item = lastPayload.activeItem;
     }
     var nextItemId = state.item && state.item.id ? String(state.item.id) : '';
     if (typeof p.mediaOrigin === 'string') state.mediaOrigin = p.mediaOrigin;
@@ -7127,6 +8807,8 @@
       mountStageMedia(false);
       attachWatchers();
       evaluateAutoPause();
+      syncLifecycleTimers();
+      syncPointerHooks();
       armPostMountWatchdog();
     };
 
@@ -7163,14 +8845,28 @@
         nextOvMap[wid] = ovClone;
         merged.perWallpaperOverrides = nextOvMap;
       }
-      var patchHasTints = Object.prototype.hasOwnProperty.call(patch, 'surfaceTints');
-      var patchHasLegacySb = Object.prototype.hasOwnProperty.call(patch, 'sidebarOpacity');
+      var patchHasRegions = hasOwn(patch, 'regions');
+      var patchResetFullRegions = patchHasRegions && patch.regions === null;
+      var patchHasTints = hasOwn(patch, 'surfaceTints');
       var patchResetAllTints = patchHasTints && patch.surfaceTints === null;
-      var patchTouchedSbTint =
-        patchResetAllTints ||
-        (patchHasTints && patch.surfaceTints && typeof patch.surfaceTints === 'object' &&
-          (patch.surfaceTints.sidebar === null ||
-            (patch.surfaceTints.sidebar && typeof patch.surfaceTints.sidebar === 'object' && Object.prototype.hasOwnProperty.call(patch.surfaceTints.sidebar, 'opacity'))));
+      var patchRegSbObj = isPlainObj(patch.regions) && isPlainObj(patch.regions.sidebar) ? patch.regions.sidebar : null;
+      var patchRegSbReset = patchResetFullRegions || (isPlainObj(patch.regions) && patch.regions.sidebar === null);
+      var patchRegRpReset = patchResetFullRegions || (isPlainObj(patch.regions) && patch.regions.rightPane === null);
+      var patchTintSbObj = isPlainObj(patch.surfaceTints) && isPlainObj(patch.surfaceTints.sidebar) ? patch.surfaceTints.sidebar : null;
+      var patchTintSbReset = patchResetAllTints || (isPlainObj(patch.surfaceTints) && patch.surfaceTints.sidebar === null);
+
+      var patchHasLegacySbOp = hasOwn(patch, 'sidebarOpacity');
+      var patchTouchedSbOp = Boolean(patchResetFullRegions || patchRegSbReset || patchTintSbReset || (patchRegSbObj && hasOwn(patchRegSbObj, 'opacity')) || (patchTintSbObj && hasOwn(patchTintSbObj, 'opacity')));
+      var patchHasLegacySbBlur = hasOwn(patch, 'sidebarBlur');
+      var patchTouchedSbBlur = Boolean(patchResetFullRegions || patchRegSbReset || patchTintSbReset || (patchRegSbObj && hasOwn(patchRegSbObj, 'blur')) || (patchTintSbObj && hasOwn(patchTintSbObj, 'blur')));
+      var patchHasLegacySbFs = hasOwn(patch, 'sidebarFontSize');
+      var patchTouchedSbFs = Boolean(patchResetFullRegions || patchRegSbReset || (patchRegSbObj && hasOwn(patchRegSbObj, 'fontSize')));
+      var patchHasLegacySbList = hasOwn(patch, 'sidebarListStyle');
+      var patchTouchedSbList = Boolean(patchResetFullRegions || patchRegSbReset || (patchRegSbObj && hasOwn(patchRegSbObj, 'listStyle')));
+      var patchHasLegacyLeftRad = hasOwn(patch, 'leftSidebarRadius') || hasOwn(patch, 'leftSidebarCornerRadius');
+      var patchTouchedLeftRad = Boolean(patchResetFullRegions || patchRegSbReset || (patchRegSbObj && hasOwn(patchRegSbObj, 'radius')));
+      var patchHasLegacyRightRad = hasOwn(patch, 'rightSidebarRadius') || hasOwn(patch, 'rightSidebarCornerRadius');
+      var patchTouchedRightRad = Boolean(patchResetFullRegions || patchRegRpReset || (isPlainObj(patch.regions) && isPlainObj(patch.regions.rightPane) && hasOwn(patch.regions.rightPane, 'radius')));
 
       for (k in patch) {
         if (!Object.prototype.hasOwnProperty.call(patch, k)) continue;
@@ -7181,24 +8877,151 @@
           if (ovClone) {
             ovClone.surfaceTints = patch.surfaceTints === null ? null : mergeSurfaceTintsRaw(ovClone.surfaceTints, patch.surfaceTints);
           }
+        } else if (k === 'regions') {
+          merged.regions = patch.regions === null ? null : mergeRegionsRaw(merged.regions, patch.regions);
+          if (ovClone) {
+            ovClone.regions = patch.regions === null ? null : mergeRegionsRaw(ovClone.regions, patch.regions);
+          }
         } else {
           merged[k] = patch[k];
           if (ovClone && (Object.prototype.hasOwnProperty.call(ovClone, k) || PER_WALLPAPER_OVERRIDE_KEYS_MAP[k])) {
-            // Preserve explicit `null` in perWallpaperOverrides (e.g. sidebarBlur: null / sidebarOpacity: null)
             ovClone[k] = patch[k];
           }
         }
       }
-      if (patchHasLegacySb && !patchTouchedSbTint) {
-        merged.surfaceTints = mergeSurfaceTintsRaw(merged.surfaceTints, { sidebar: { opacity: patch.sidebarOpacity } });
-        if (ovClone) {
-          ovClone.surfaceTints = mergeSurfaceTintsRaw(ovClone.surfaceTints, { sidebar: { opacity: patch.sidebarOpacity } });
+
+      var syncUpdatedTarget = function (tgt) {
+        if (!isPlainObj(tgt)) return;
+        if (patchResetFullRegions) {
+          tgt.regions = null;
+          if (!patchHasTints) tgt.surfaceTints = null;
+        } else {
+          if (patchResetAllTints) {
+            if (isPlainObj(tgt.regions)) {
+              tgt.regions = stripOpticalFromRegionsRaw(tgt.regions);
+            }
+            if (isPlainObj(patch.regions)) {
+              tgt.regions = mergeRegionsRaw(tgt.regions, patch.regions);
+            }
+          } else if (patchHasTints && isPlainObj(patch.surfaceTints)) {
+            var regCopy = isPlainObj(tgt.regions) ? Object.assign({}, tgt.regions) : {};
+            for (var si = 0; si < SURFACE_TINT_COMPONENTS.length; si += 1) {
+              var sid = SURFACE_TINT_COMPONENTS[si];
+              if (!hasOwn(patch.surfaceTints, sid)) continue;
+              var stEnt = patch.surfaceTints[sid];
+              if (stEnt === null) {
+                regCopy[sid] = stripOpticalFromRegionEntry(regCopy[sid]);
+              } else if (isPlainObj(stEnt)) {
+                var entCopy = isPlainObj(regCopy[sid]) ? Object.assign({}, regCopy[sid]) : {};
+                for (var oi = 0; oi < REGION_OPTICAL_KEYS.length; oi += 1) {
+                  var optKey = REGION_OPTICAL_KEYS[oi];
+                  if (hasOwn(stEnt, optKey)) entCopy[optKey] = stEnt[optKey];
+                }
+                regCopy[sid] = entCopy;
+              }
+            }
+            tgt.regions = isPlainObj(patch.regions) ? mergeRegionsRaw(regCopy, patch.regions) : regCopy;
+          }
+          if (patchHasRegions && isPlainObj(patch.regions) && !patchHasTints) {
+            var regProjected = sanitizeRegionsWithSync(tgt, null);
+            tgt.surfaceTints = regProjected.surfaceTints;
+          }
         }
-      } else if (patchTouchedSbTint && !patchHasLegacySb) {
-        var nextSbVal = patchResetAllTints || patch.surfaceTints.sidebar === null ? null : patch.surfaceTints.sidebar.opacity;
-        merged.sidebarOpacity = nextSbVal;
-        if (ovClone) ovClone.sidebarOpacity = nextSbVal;
-      }
+
+        var ensureSbReg = function () {
+          if (!isPlainObj(tgt.regions)) tgt.regions = {};
+          if (!isPlainObj(tgt.regions.sidebar)) tgt.regions.sidebar = {};
+          return tgt.regions.sidebar;
+        };
+        var ensureSbTint = function () {
+          if (!isPlainObj(tgt.surfaceTints)) tgt.surfaceTints = {};
+          if (!isPlainObj(tgt.surfaceTints.sidebar)) tgt.surfaceTints.sidebar = {};
+          return tgt.surfaceTints.sidebar;
+        };
+
+        if (patchHasLegacySbOp && !patchTouchedSbOp) {
+          ensureSbReg().opacity = patch.sidebarOpacity;
+          ensureSbTint().opacity = patch.sidebarOpacity;
+        } else if (patchTouchedSbOp && !patchHasLegacySbOp) {
+          var effOp = patchResetFullRegions || patchResetAllTints || patchRegSbReset || patchTintSbReset
+            ? null
+            : tgt.regions && isPlainObj(tgt.regions.sidebar)
+              ? tgt.regions.sidebar.opacity
+              : undefined;
+          if (effOp !== undefined) tgt.sidebarOpacity = effOp;
+        }
+
+        if (patchHasLegacySbBlur && !patchTouchedSbBlur) {
+          ensureSbReg().blur = patch.sidebarBlur;
+          ensureSbTint().blur = patch.sidebarBlur;
+        } else if (patchTouchedSbBlur && !patchHasLegacySbBlur) {
+          var effBlur = patchResetFullRegions || patchResetAllTints || patchRegSbReset || patchTintSbReset
+            ? null
+            : tgt.regions && isPlainObj(tgt.regions.sidebar)
+              ? tgt.regions.sidebar.blur
+              : undefined;
+          if (effBlur !== undefined) tgt.sidebarBlur = effBlur;
+        }
+
+        if (patchHasLegacySbFs && !patchTouchedSbFs) {
+          ensureSbReg().fontSize = patch.sidebarFontSize;
+        } else if (patchTouchedSbFs && !patchHasLegacySbFs) {
+          var effFs = patchResetFullRegions || patchRegSbReset
+            ? null
+            : tgt.regions && isPlainObj(tgt.regions.sidebar)
+              ? tgt.regions.sidebar.fontSize
+              : undefined;
+          if (effFs !== undefined) tgt.sidebarFontSize = effFs;
+        }
+
+        if (patchHasLegacySbList && !patchTouchedSbList) {
+          ensureSbReg().listStyle = patch.sidebarListStyle;
+        } else if (patchTouchedSbList && !patchHasLegacySbList) {
+          var effList = patchResetFullRegions || patchRegSbReset
+            ? 'capsule'
+            : tgt.regions && isPlainObj(tgt.regions.sidebar)
+              ? tgt.regions.sidebar.listStyle
+              : undefined;
+          if (effList !== undefined) tgt.sidebarListStyle = effList;
+        }
+
+        if (patchHasLegacyLeftRad && !patchTouchedLeftRad) {
+          var rawLR = hasOwn(patch, 'leftSidebarRadius') ? patch.leftSidebarRadius : patch.leftSidebarCornerRadius;
+          var normLR = sanitizeSidebarRadius(rawLR, 'auto');
+          ensureSbReg().radius = normLR === 'auto' || normLR === 'native' ? null : Number(normLR);
+          tgt.leftSidebarRadius = normLR;
+        } else if (patchTouchedLeftRad && !patchHasLegacyLeftRad) {
+          var nextLR = patchResetFullRegions || patchRegSbReset
+            ? null
+            : tgt.regions && isPlainObj(tgt.regions.sidebar)
+              ? tgt.regions.sidebar.radius
+              : undefined;
+          if (nextLR !== undefined) {
+            tgt.leftSidebarRadius = nextLR === null ? (tgt.leftSidebarRadius === 'native' && !patchResetFullRegions && !patchRegSbReset ? 'native' : 'auto') : String(nextLR);
+          }
+        }
+
+        if (patchHasLegacyRightRad && !patchTouchedRightRad) {
+          var rawRR = hasOwn(patch, 'rightSidebarRadius') ? patch.rightSidebarRadius : patch.rightSidebarCornerRadius;
+          var normRR = sanitizeSidebarRadius(rawRR, 'auto');
+          if (!isPlainObj(tgt.regions)) tgt.regions = {};
+          if (!isPlainObj(tgt.regions.rightPane)) tgt.regions.rightPane = {};
+          tgt.regions.rightPane.radius = normRR === 'auto' || normRR === 'native' ? null : Number(normRR);
+          tgt.rightSidebarRadius = normRR;
+        } else if (patchTouchedRightRad && !patchHasLegacyRightRad) {
+          var nextRR = patchResetFullRegions || patchRegRpReset
+            ? null
+            : tgt.regions && isPlainObj(tgt.regions.rightPane)
+              ? tgt.regions.rightPane.radius
+              : undefined;
+          if (nextRR !== undefined) {
+            tgt.rightSidebarRadius = nextRR === null ? (tgt.rightSidebarRadius === 'native' && !patchResetFullRegions && !patchRegRpReset ? 'native' : 'auto') : String(nextRR);
+          }
+        }
+      };
+
+      syncUpdatedTarget(merged);
+      if (ovClone) syncUpdatedTarget(ovClone);
     } else {
       allFastOptical = false;
     }
@@ -7214,12 +9037,20 @@
         slides: state.slides,
       });
       refreshSkinStyles();
+      syncLifecycleTimers();
+      syncPointerHooks();
       return status();
     }
 
     state.rawCfg = merged;
+    var nextSkinEnabled =
+      patch && (patch.skinEnabled === false || patch.skinEnabled === 0)
+        ? false
+        : patch && (patch.skinEnabled === true || patch.skinEnabled === 1)
+          ? true
+          : state.skinEnabled;
     return applyPayload({
-      skinEnabled: patch && typeof patch.skinEnabled === 'boolean' ? patch.skinEnabled : state.skinEnabled,
+      skinEnabled: nextSkinEnabled,
       config: merged,
       activeItem: state.item,
       mediaOrigin: state.mediaOrigin,
@@ -7293,6 +9124,9 @@
       installed: !destroyed,
       version: VERSION,
       skinEnabled: state.skinEnabled,
+      stateRev: Number(state.lastAppliedRev || 0),
+      degradedToPoster: Boolean(state.degradedToPoster),
+      degradeReason: String(state.degradeReason || ''),
       theme: state.effectiveTheme,
       hostTheme: state.hostTheme,
       layoutMode: state.cfg.layoutMode || 'islands',
@@ -7362,6 +9196,8 @@
     if (destroyed) return { installed: false };
     destroyed = true;
     state.skinEnabled = false;
+    clearLifecycleTimers();
+    syncPointerHooks();
     clearRootWatchdogTimers();
     disconnectHoleActiveObservers();
     teardownWelcomeLogoGuard();
@@ -7433,7 +9269,10 @@
   W[API_KEY] = api;
 
   var bootPayload = W.__AGY_PRISM_BOOT_PAYLOAD__ || carryPayload;
-  if (bootPayload) {
+  if (W.__agyPrismOn === false) {
+    state.skinEnabled = false;
+    teardownSkinDomOnly();
+  } else if (bootPayload) {
     applyPayload(bootPayload);
   }
 

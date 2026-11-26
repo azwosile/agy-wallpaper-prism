@@ -135,14 +135,17 @@ jobs:
             const svg = fs.readFileSync("assets/logo.svg", "utf8");
             assert.ok(svg.includes("<svg") && svg.includes("viewBox=\"0 0 256 256\""), "Invalid assets/logo.svg");
             const skill = fs.readFileSync("skills/wallpaper-prism/SKILL.md", "utf8");
+            assert.equal(skill.includes("\r"), false, "skills/wallpaper-prism/SKILL.md must be pure LF");
             assert.ok(skill.includes("sidecar://agy-wallpaper-prism/prism_studio/"), "Missing sidecar:// URI in SKILL.md");
             assert.ok(skill.includes("customization://agy-wallpaper-prism"), "Missing customization:// URI in SKILL.md");
+            assert.equal(skill.includes("plugin://") || skill.includes("plugins://"), false, "Forbidden plugin:// scheme in SKILL.md");
+            assert.ok(skill.includes(process.env.PLUGIN_VERSION), `SKILL.md missing version ${process.env.PLUGIN_VERSION}`);
 
             // 3. Unit checks on shared SemVer, schema, and zh/en i18n parity
             const semver = await import("./src/shared/semver.mjs");
-            assert.equal(semver.isNewerVersion("2.1.0", "2.0.9"), true);
-            assert.equal(semver.isNewerVersion("2.1.0", "2.1.0"), false);
-            assert.equal(semver.compareSemver("2.1.0", "2.1.0-rc.1") > 0, true);
+            assert.equal(semver.isNewerVersion("2.2.0", "2.1.0"), true);
+            assert.equal(semver.isNewerVersion("2.2.0", "2.2.0"), false);
+            assert.equal(semver.compareSemver("2.2.0", "2.2.0-rc.1") > 0, true);
 
             const { PLUGIN_VERSION, sanitizeConfig } = await import("./src/shared/schema.mjs");
             assert.equal(PLUGIN_VERSION, process.env.PLUGIN_VERSION);

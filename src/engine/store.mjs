@@ -35,9 +35,13 @@ import {
   DEFAULT_CONFIG,
   FACTORY_PRESETS,
   PER_WALLPAPER_OVERRIDE_KEYS,
+  REGION_IDS,
+  REGION_OPTICAL_KEYS,
+  REGION_STRUCTURAL_KEYS,
   resolveEffectiveConfig,
-   sanitizeConfig,
+  sanitizeConfig,
   SCENE_PRESETS,
+  SIDEBAR_REGION_EXTRA_KEYS,
 } from '../shared/schema.mjs';
 import { IMAGE_EXTS, VIDEO_EXTS } from './scanner.mjs';
 
@@ -60,7 +64,7 @@ const EXT_FROM_CONTENT_TYPE = Object.freeze({
 });
 
 // Keys captured when saving a whole-profile user preset (excludes machine-local paths & caches)
-const PROFILE_PRESET_KEYS = Object.freeze([
+export const PROFILE_PRESET_KEYS = Object.freeze([
   'preset',
   'layoutMode',
   'islandGap',
@@ -70,6 +74,9 @@ const PROFILE_PRESET_KEYS = Object.freeze([
   'rightSidebarRadius',
   'borders',
   'shadows',
+  'topbarStyle',
+  'transparentWindowControls',
+  'hideWelcomeLogo',
   'themeMode',
   'themeFollow',
   'colorScheme',
@@ -82,6 +89,13 @@ const PROFILE_PRESET_KEYS = Object.freeze([
   'sidebarOpacity',
   'sidebarBlur',
   'surfaceTints',
+  'regions',
+  'globalFontSize',
+  'globalFontFamily',
+  'globalFontColor',
+  'sidebarListStyle',
+  'sidebarTypographyMode',
+  'sidebarFontSize',
   'glassFidelity',
   'chatGlassFidelity',
   'codeReadabilityMode',
@@ -111,6 +125,8 @@ const PROFILE_PRESET_KEYS = Object.freeze([
   'fpsCap',
   'sceneLive',
   'sceneLiveFps',
+  'previewLiveMedia',
+  'libraryAnimatedThumbs',
   'switchTransition',
   'switchTransitionDir',
   'switchTransitionSpeed',
@@ -120,6 +136,13 @@ const PROFILE_PRESET_KEYS = Object.freeze([
   'parallaxEnabled',
   'parallaxStrength',
   'triggerMode',
+]);
+
+// Optional wallpaper binding keys captured only when `includeWallpaper: true`
+export const PROFILE_WALLPAPER_BINDING_KEYS = Object.freeze([
+  'activeWallpaperId',
+  'wallpaperId',
+  'kind',
 ]);
 
 const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -340,17 +363,207 @@ function extractPresetPatch(rawPatch) {
   const cleanFull = sanitizeConfig(rawPatch, DEFAULT_CONFIG);
   const out = {};
   for (const key of PROFILE_PRESET_KEYS) {
-    if (key in rawPatch) {
-      out[key] = cleanFull[key];
+    if (Object.prototype.hasOwnProperty.call(rawPatch, key)) {
+      out[key] = structuredClone(cleanFull[key]);
+    }
+  }
+  const hasExplicitBinding = Boolean(
+    (Object.prototype.hasOwnProperty.call(rawPatch, 'activeWallpaperId') && String(rawPatch.activeWallpaperId || '').trim()) ||
+    (Object.prototype.hasOwnProperty.call(rawPatch, 'wallpaperId') && String(rawPatch.wallpaperId || '').trim()),
+  );
+  if (hasExplicitBinding && cleanFull.activeWallpaperId) {
+    for (const bk of PROFILE_WALLPAPER_BINDING_KEYS) {
+      out[bk] = cleanFull[bk];
     }
   }
   // If caller passed a full config object without selective keys, snapshot all profile keys
   if (Object.keys(out).length === 0) {
     for (const key of PROFILE_PRESET_KEYS) {
-      out[key] = cleanFull[key];
+      out[key] = structuredClone(cleanFull[key]);
     }
   }
   return out;
+}
+
+function resolveUniquePresetName(desiredName, existingList, excludeId = '') {
+  const used = new Set(
+    existingList
+      .filter((p) => p && p.id !== excludeId)
+      .map((p) => String(p.name || '').trim().toLowerCase()),
+  );
+  const clean = String(desiredName || '').trim().slice(0, 80);
+  if (!used.has(clean.toLowerCase())) return clean;
+  const base = clean.slice(0, 72).trim();
+  let suffix = 2;
+  while (used.has(`${base} (${suffix})`.toLowerCase())) {
+    suffix += 1;
+  }
+  return `${base} (${suffix})`;
+}
+
+function nextDefaultProfileName(existingList, lang = 'zh') {
+  const prefix = lang === 'en' ? 'Profile' : '配置';
+  const used = new Set(existingList.map((p) => String(p.name || '').trim().toLowerCase()));
+  let n = 1;
+  while (used.has(`${prefix} ${n}`.toLowerCase())) n += 1;
+  return `${prefix} ${n}`;
+}
+
+/**
+ * Pure sparse per-wallpaper override merger shared by `savePerWallpaperOverride` and `savePreset`.
+ * Only writes sanitized values for touched `(regionId, propKey)` entries without freezing untouched
+ * regions or leaving `surfaceTints: null` tombstones.
+ */
+export function applySparsePerWallpaperOverride(baseConfig, wallpaperId, patch = null) {
+  const id = String(wallpaperId || '').trim();
+  if (!id) return sanitizeConfig({}, baseConfig);
+  const map = { ...(baseConfig.perWallpaperOverrides || {}) };
+  if (patch === null) {
+    delete map[id];
+  } else if (patch && typeof patch === 'object' && !Array.isArray(patch)) {
+    const prevEff = resolveEffectiveConfig(baseConfig, id);
+    const clean = sanitizeConfig(patch, prevEff);
+    const filtered = structuredClone(map[id] || {});
+
+    if (filtered.surfaceTints === null) delete filtered.surfaceTints;
+    if (filtered.regions === null) delete filtered.regions;
+
+    const ensureSparseMap = (key) => {
+      if (!filtered[key] || typeof filtered[key] !== 'object' || Array.isArray(filtered[key])) {
+        filtered[key] = {};
+      }
+      return filtered[key];
+    };
+    const setSparseRegionProp = (rid, propKey, sanitizedVal) => {
+      const rMap = ensureSparseMap('regions');
+      if (!rMap[rid] || typeof rMap[rid] !== 'object') rMap[rid] = {};
+      rMap[rid][propKey] = sanitizedVal;
+      if (REGION_OPTICAL_KEYS.includes(propKey)) {
+        const tMap = ensureSparseMap('surfaceTints');
+        if (!tMap[rid] || typeof tMap[rid] !== 'object') tMap[rid] = {};
+        tMap[rid][propKey] = sanitizedVal;
+      }
+      if (rid === 'sidebar' && propKey === 'opacity') filtered.sidebarOpacity = sanitizedVal;
+      if (rid === 'sidebar' && propKey === 'blur') filtered.sidebarBlur = sanitizedVal;
+    };
+    const pruneSparseContainer = (key) => {
+      const obj = filtered[key];
+      if (!obj || typeof obj !== 'object') return;
+      for (const rid of Object.keys(obj)) {
+        if (!obj[rid] || (typeof obj[rid] === 'object' && Object.keys(obj[rid]).length === 0)) {
+          delete obj[rid];
+        }
+      }
+      if (Object.keys(obj).length === 0) delete filtered[key];
+    };
+
+    const hasPatchRegions = Object.prototype.hasOwnProperty.call(patch, 'regions');
+    const hasPatchTints = Object.prototype.hasOwnProperty.call(patch, 'surfaceTints');
+    const resetAllOpticalTints = hasPatchTints && patch.surfaceTints === null;
+    const hasPatchSbOp = Object.prototype.hasOwnProperty.call(patch, 'sidebarOpacity');
+    const hasPatchSbBlur = Object.prototype.hasOwnProperty.call(patch, 'sidebarBlur');
+
+    // 1. Scalar PER_WALLPAPER_OVERRIDE_KEYS
+    for (const k of PER_WALLPAPER_OVERRIDE_KEYS) {
+      if (k === 'regions' || k === 'surfaceTints' || k === 'sidebarOpacity' || k === 'sidebarBlur') continue;
+      if (Object.prototype.hasOwnProperty.call(patch, k)) {
+        filtered[k] = structuredClone(clean[k]);
+      }
+    }
+
+    // 2. Legacy/optical surfaceTints patch (sparse sanitized write + sync into sparse regions)
+    if (hasPatchTints) {
+      if (resetAllOpticalTints) {
+        delete filtered.surfaceTints;
+        delete filtered.sidebarOpacity;
+        delete filtered.sidebarBlur;
+        if (filtered.regions && typeof filtered.regions === 'object') {
+          for (const rid of REGION_IDS) {
+            if (!filtered.regions[rid] || typeof filtered.regions[rid] !== 'object') continue;
+            for (const ok of REGION_OPTICAL_KEYS) delete filtered.regions[rid][ok];
+          }
+          pruneSparseContainer('regions');
+        }
+      } else if (patch.surfaceTints && typeof patch.surfaceTints === 'object' && !Array.isArray(patch.surfaceTints)) {
+        for (const rid of REGION_IDS) {
+          if (!Object.prototype.hasOwnProperty.call(patch.surfaceTints, rid)) continue;
+          const sRaw = patch.surfaceTints[rid];
+          if (sRaw === null) {
+            if (filtered.surfaceTints && typeof filtered.surfaceTints === 'object') delete filtered.surfaceTints[rid];
+            if (filtered.regions?.[rid] && typeof filtered.regions[rid] === 'object') {
+              for (const ok of REGION_OPTICAL_KEYS) delete filtered.regions[rid][ok];
+            }
+            if (rid === 'sidebar') {
+              delete filtered.sidebarOpacity;
+              delete filtered.sidebarBlur;
+            }
+          } else if (sRaw && typeof sRaw === 'object') {
+            for (const ok of REGION_OPTICAL_KEYS) {
+              if (Object.prototype.hasOwnProperty.call(sRaw, ok)) {
+                setSparseRegionProp(rid, ok, clean.regions[rid][ok]);
+              }
+            }
+          }
+        }
+        pruneSparseContainer('surfaceTints');
+        pruneSparseContainer('regions');
+      }
+    }
+
+    // 3. Canonical regions patch (sparse sanitized write; wins over surfaceTints in same patch)
+    if (hasPatchRegions) {
+      if (patch.regions === null) {
+        delete filtered.regions;
+        delete filtered.surfaceTints;
+        delete filtered.sidebarOpacity;
+        delete filtered.sidebarBlur;
+      } else if (patch.regions && typeof patch.regions === 'object' && !Array.isArray(patch.regions)) {
+        for (const rid of REGION_IDS) {
+          if (!Object.prototype.hasOwnProperty.call(patch.regions, rid)) continue;
+          const rRaw = patch.regions[rid];
+          if (rRaw === null) {
+            if (filtered.regions && typeof filtered.regions === 'object') delete filtered.regions[rid];
+            if (filtered.surfaceTints && typeof filtered.surfaceTints === 'object') delete filtered.surfaceTints[rid];
+            if (rid === 'sidebar') {
+              delete filtered.sidebarOpacity;
+              delete filtered.sidebarBlur;
+            }
+          } else if (rRaw && typeof rRaw === 'object') {
+            const allowedKeys = rid === 'sidebar'
+              ? [...REGION_OPTICAL_KEYS, ...REGION_STRUCTURAL_KEYS, ...SIDEBAR_REGION_EXTRA_KEYS]
+              : [...REGION_OPTICAL_KEYS, ...REGION_STRUCTURAL_KEYS];
+            for (const pk of allowedKeys) {
+              if (Object.prototype.hasOwnProperty.call(rRaw, pk)) {
+                setSparseRegionProp(rid, pk, clean.regions[rid][pk]);
+              }
+            }
+          }
+        }
+        pruneSparseContainer('regions');
+        pruneSparseContainer('surfaceTints');
+      }
+    }
+
+    // 4. Legacy sidebarOpacity / sidebarBlur bidirectional sync into sparse regions & surfaceTints
+    // Skip re-creating null keys during a bulk optical reset `{ surfaceTints: null, sidebarOpacity: null }`,
+    // while still honoring `{ surfaceTints: null, sidebarOpacity: 0.50 }` and standalone `{ sidebarOpacity: null }`.
+    const touchedCanonicalSbOp =
+      (hasPatchRegions && (patch.regions === null || patch.regions?.sidebar === null || Object.prototype.hasOwnProperty.call(patch.regions?.sidebar || {}, 'opacity'))) ||
+      (hasPatchTints && (patch.surfaceTints?.sidebar === null || Object.prototype.hasOwnProperty.call(patch.surfaceTints?.sidebar || {}, 'opacity')));
+    if (hasPatchSbOp && !touchedCanonicalSbOp && !(resetAllOpticalTints && clean.sidebarOpacity === null)) {
+      setSparseRegionProp('sidebar', 'opacity', clean.sidebarOpacity);
+    }
+
+    const touchedCanonicalSbBlur =
+      (hasPatchRegions && (patch.regions === null || patch.regions?.sidebar === null || Object.prototype.hasOwnProperty.call(patch.regions?.sidebar || {}, 'blur'))) ||
+      (hasPatchTints && (patch.surfaceTints?.sidebar === null || Object.prototype.hasOwnProperty.call(patch.surfaceTints?.sidebar || {}, 'blur')));
+    if (hasPatchSbBlur && !touchedCanonicalSbBlur && !(resetAllOpticalTints && clean.sidebarBlur === null)) {
+      setSparseRegionProp('sidebar', 'blur', clean.sidebarBlur);
+    }
+
+    map[id] = filtered;
+  }
+  return sanitizeConfig({ perWallpaperOverrides: map }, baseConfig);
 }
 
 function moveFileCrossDeviceSafe(srcFile, dstFile) {
@@ -544,6 +757,7 @@ export async function createPrismStore(opts = {}) {
         try {
           const obj = JSON.parse(readFileSync(full, 'utf8'));
           if (!obj || typeof obj !== 'object' || !obj.id || !obj.patch) continue;
+          const cleanPatch = extractPresetPatch(obj.patch);
           out.push({
             id: String(obj.id),
             name: String(obj.name || obj.id).slice(0, 80),
@@ -551,9 +765,10 @@ export async function createPrismStore(opts = {}) {
             description: String(obj.description || '').slice(0, 240),
             descriptionEn: String(obj.descriptionEn || obj.description || '').slice(0, 240),
             builtin: false,
+            includesWallpaper: Boolean(obj.includesWallpaper || cleanPatch.activeWallpaperId),
             createdAt: Number(obj.createdAt) || 0,
             updatedAt: Number(obj.updatedAt) || 0,
-            patch: extractPresetPatch(obj.patch),
+            patch: cleanPatch,
           });
         } catch { /* skip malformed preset file */ }
       }
@@ -653,57 +868,379 @@ export async function createPrismStore(opts = {}) {
     return getConfig();
   }
 
-  async function applyPreset(presetId) {
+  async function applyPreset(presetId, { overrideStrategy = 'sync', wallpaperExists = null } = {}) {
     const found = getPresetById(presetId);
     if (!found) {
       throw makeError(`Unknown preset: ${presetId}`, 404);
     }
-    const patch = found.isScenePreset
+
+    const basePatch = found.isScenePreset
       ? { ...found.patch }
       : { ...found.patch, activeProfilePresetId: found.id };
-    const nextCfg = await updateConfig(patch);
-    return { config: nextCfg, preset: found };
+
+    // 1. Optional bound wallpaper resolution with graceful fallback when missing
+    let wallpaperFallback = null;
+    const boundWid = String(basePatch.activeWallpaperId || basePatch.wallpaperId || '').trim();
+    if (boundWid && typeof wallpaperExists === 'function' && !wallpaperExists(boundWid)) {
+      delete basePatch.activeWallpaperId;
+      delete basePatch.wallpaperId;
+      delete basePatch.kind;
+      wallpaperFallback = { missingId: boundWid, keptId: config.activeWallpaperId || '' };
+    }
+
+    // 2. Break sticky `eco` pause when legacy/imported user preset omits `paused`
+    if (!found.isScenePreset && !Object.prototype.hasOwnProperty.call(basePatch, 'paused') && config.preset === 'eco') {
+      basePatch.paused = false;
+    }
+
+    // 3. Expand scene preset keys if this profile preset references a SCENE_PRESET (even if config.preset matches)
+    const expandedPatch =
+      !found.isScenePreset && typeof basePatch.preset === 'string' && SCENE_PRESETS[basePatch.preset]
+        ? { ...SCENE_PRESETS[basePatch.preset].patch, ...basePatch }
+        : { ...basePatch };
+
+    // 4. Resolve perWallpaperOverrides shadowing on target active wallpaper
+    const targetWid = String(expandedPatch.activeWallpaperId || config.activeWallpaperId || '').trim();
+    const existingOv =
+      targetWid && config.perWallpaperOverrides && typeof config.perWallpaperOverrides[targetWid] === 'object'
+        ? config.perWallpaperOverrides[targetWid]
+        : null;
+
+    let overrideSynced = false;
+    if (existingOv) {
+      const nextOverridesMap = { ...config.perWallpaperOverrides };
+      if (overrideStrategy === 'clear') {
+        delete nextOverridesMap[targetWid];
+        expandedPatch.perWallpaperOverrides = nextOverridesMap;
+        overrideSynced = true;
+      } else {
+        // Default 'sync': keep pin intact (preserving unmentioned per-wallpaper keys like fit/framing)
+        // while DELETING every shadowing override key from `nextOv` so top-level `expandedPatch`
+        // takes 100% immediate effect WITHOUT poisoning `nextOv` with `surfaceTints: null` tombstones
+        // or injecting default `radius: null` noise keys that could collapse `leftSidebarRadius: 'native'`.
+        const nextOv = structuredClone(existingOv);
+        // Clean legacy v2.1.0 disk tombstones so historical dirty overrides cannot poison future edits
+        if (nextOv.surfaceTints === null) delete nextOv.surfaceTints;
+        if (nextOv.regions === null) delete nextOv.regions;
+
+        const hasExplicitRegions = Object.prototype.hasOwnProperty.call(expandedPatch, 'regions');
+        const hasOpticalReset = expandedPatch.surfaceTints === null && !hasExplicitRegions;
+
+        const pruneEmptyOverrideMap = (key) => {
+          const obj = nextOv[key];
+          if (!obj || typeof obj !== 'object') return;
+          for (const rid of Object.keys(obj)) {
+            if (!obj[rid] || (typeof obj[rid] === 'object' && Object.keys(obj[rid]).length === 0)) {
+              delete obj[rid];
+            }
+          }
+          if (Object.keys(obj).length === 0) delete nextOv[key];
+        };
+
+        for (const k of PER_WALLPAPER_OVERRIDE_KEYS) {
+          if (!Object.prototype.hasOwnProperty.call(expandedPatch, k)) continue;
+          if (k === 'surfaceTints' && hasOpticalReset) {
+            delete nextOv.surfaceTints;
+            delete nextOv.sidebarOpacity;
+            delete nextOv.sidebarBlur;
+            if (nextOv.regions && typeof nextOv.regions === 'object') {
+              for (const rid of REGION_IDS) {
+                if (!nextOv.regions[rid] || typeof nextOv.regions[rid] !== 'object') continue;
+                for (const ok of REGION_OPTICAL_KEYS) delete nextOv.regions[rid][ok];
+              }
+              pruneEmptyOverrideMap('regions');
+            }
+          } else if (k === 'regions') {
+            if (expandedPatch.regions === null) {
+              delete nextOv.regions;
+              delete nextOv.surfaceTints;
+              delete nextOv.sidebarOpacity;
+              delete nextOv.sidebarBlur;
+            } else if (expandedPatch.regions && typeof expandedPatch.regions === 'object') {
+              for (const rid of REGION_IDS) {
+                if (!Object.prototype.hasOwnProperty.call(expandedPatch.regions, rid)) continue;
+                const rVal = expandedPatch.regions[rid];
+                if (rVal === null) {
+                  if (nextOv.regions && typeof nextOv.regions === 'object') delete nextOv.regions[rid];
+                  if (nextOv.surfaceTints && typeof nextOv.surfaceTints === 'object') delete nextOv.surfaceTints[rid];
+                  if (rid === 'sidebar') {
+                    delete nextOv.sidebarOpacity;
+                    delete nextOv.sidebarBlur;
+                  }
+                } else if (rVal && typeof rVal === 'object') {
+                  for (const pk of Object.keys(rVal)) {
+                    if (nextOv.regions?.[rid] && typeof nextOv.regions[rid] === 'object') {
+                      delete nextOv.regions[rid][pk];
+                    }
+                    if (REGION_OPTICAL_KEYS.includes(pk) && nextOv.surfaceTints?.[rid] && typeof nextOv.surfaceTints[rid] === 'object') {
+                      delete nextOv.surfaceTints[rid][pk];
+                    }
+                    if (rid === 'sidebar' && pk === 'opacity') delete nextOv.sidebarOpacity;
+                    if (rid === 'sidebar' && pk === 'blur') delete nextOv.sidebarBlur;
+                  }
+                }
+              }
+              pruneEmptyOverrideMap('regions');
+              pruneEmptyOverrideMap('surfaceTints');
+            }
+          } else if (k === 'surfaceTints' && expandedPatch.surfaceTints && typeof expandedPatch.surfaceTints === 'object') {
+            for (const rid of REGION_IDS) {
+              if (!Object.prototype.hasOwnProperty.call(expandedPatch.surfaceTints, rid)) continue;
+              const sVal = expandedPatch.surfaceTints[rid];
+              if (sVal === null) {
+                if (nextOv.surfaceTints && typeof nextOv.surfaceTints === 'object') delete nextOv.surfaceTints[rid];
+                if (nextOv.regions?.[rid] && typeof nextOv.regions[rid] === 'object') {
+                  for (const ok of REGION_OPTICAL_KEYS) delete nextOv.regions[rid][ok];
+                }
+                if (rid === 'sidebar') {
+                  delete nextOv.sidebarOpacity;
+                  delete nextOv.sidebarBlur;
+                }
+              } else if (sVal && typeof sVal === 'object') {
+                for (const ok of REGION_OPTICAL_KEYS) {
+                  if (!Object.prototype.hasOwnProperty.call(sVal, ok)) continue;
+                  if (nextOv.surfaceTints?.[rid] && typeof nextOv.surfaceTints[rid] === 'object') delete nextOv.surfaceTints[rid][ok];
+                  if (nextOv.regions?.[rid] && typeof nextOv.regions[rid] === 'object') delete nextOv.regions[rid][ok];
+                  if (rid === 'sidebar' && ok === 'opacity') delete nextOv.sidebarOpacity;
+                  if (rid === 'sidebar' && ok === 'blur') delete nextOv.sidebarBlur;
+                }
+              }
+            }
+            pruneEmptyOverrideMap('regions');
+            pruneEmptyOverrideMap('surfaceTints');
+          } else {
+            // Delete overlapping scalar override key (e.g. glassOpacity, colorScheme, layoutMode, sidebarOpacity, sidebarBlur)
+            delete nextOv[k];
+            if (k === 'sidebarOpacity') {
+              if (nextOv.regions?.sidebar && typeof nextOv.regions.sidebar === 'object') delete nextOv.regions.sidebar.opacity;
+              if (nextOv.surfaceTints?.sidebar && typeof nextOv.surfaceTints.sidebar === 'object') delete nextOv.surfaceTints.sidebar.opacity;
+              pruneEmptyOverrideMap('regions');
+              pruneEmptyOverrideMap('surfaceTints');
+            } else if (k === 'sidebarBlur') {
+              if (nextOv.regions?.sidebar && typeof nextOv.regions.sidebar === 'object') delete nextOv.regions.sidebar.blur;
+              if (nextOv.surfaceTints?.sidebar && typeof nextOv.surfaceTints.sidebar === 'object') delete nextOv.surfaceTints.sidebar.blur;
+              pruneEmptyOverrideMap('regions');
+              pruneEmptyOverrideMap('surfaceTints');
+            }
+          }
+        }
+        nextOverridesMap[targetWid] = nextOv;
+        expandedPatch.perWallpaperOverrides = nextOverridesMap;
+        overrideSynced = true;
+      }
+    }
+
+    const nextCfg = await updateConfig(expandedPatch);
+    return { config: nextCfg, preset: found, overrideSynced, wallpaperFallback };
   }
 
-  async function savePreset({ name, description = '', patch = null } = {}) {
-    const cleanName = String(name || '').trim().slice(0, 80);
-    if (!cleanName) {
-      throw makeError('Preset name is required', 400);
+  async function savePreset({
+    id = '',
+    name = '',
+    description,
+    patch = null,
+    includeWallpaper = false,
+    mode = 'create',
+    commitPatch = true,
+  } = {}) {
+    // 1. Flush any debounced config writes first so server memory & disk are consistent
+    await flushConfigNow();
+
+    const opMode = mode === 'overwrite' ? 'overwrite' : 'create';
+    const allPresets = listPresets();
+    const userPresets = readUserPresets();
+    const rawName = String(name || '').trim().slice(0, 80);
+
+    // 2. Merge any in-flight client `patch` into BOTH `committedConfig` (when `commitPatch !== false`)
+    // and `snapshotSource` without losing perWallpaperOverrides
+    const hasIncomingPatch = Boolean(
+      patch && typeof patch === 'object' && !Array.isArray(patch) && Object.keys(patch).length > 0,
+    );
+    let committedConfig = config;
+    let snapshotSource;
+    if (hasIncomingPatch) {
+      if (Object.prototype.hasOwnProperty.call(patch, 'perWallpaperOverrides')) {
+        const mergedCfg = sanitizeConfig(patch, config);
+        if (commitPatch) committedConfig = mergedCfg;
+        snapshotSource = resolveEffectiveConfig(mergedCfg, mergedCfg.activeWallpaperId);
+      } else {
+        snapshotSource = sanitizeConfig(patch, getEffectiveConfig());
+        if (commitPatch) {
+          const activeId = String(config.activeWallpaperId || '').trim();
+          const hasPin = Boolean(
+            activeId && config.perWallpaperOverrides && typeof config.perWallpaperOverrides[activeId] === 'object',
+          );
+          if (hasPin) {
+            // Keep active pinned wallpaper's effective state synchronized with the committed direct patch
+            const pinPart = {};
+            const globalPart = {};
+            for (const [k, v] of Object.entries(patch)) {
+              if (PER_WALLPAPER_OVERRIDE_KEYS.includes(k)) pinPart[k] = v;
+              else globalPart[k] = v;
+            }
+            if (Object.keys(globalPart).length > 0) {
+              committedConfig = sanitizeConfig(globalPart, committedConfig);
+            }
+            if (Object.keys(pinPart).length > 0) {
+              committedConfig = applySparsePerWallpaperOverride(committedConfig, activeId, pinPart);
+            }
+          } else {
+            committedConfig = sanitizeConfig(patch, config);
+          }
+        }
+      }
+    } else {
+      snapshotSource = getEffectiveConfig();
     }
-    const cleanDesc = String(description || '').trim().slice(0, 240);
-    const snapshotSource = patch && typeof patch === 'object'
-      ? sanitizeConfig(patch, config)
-      : getEffectiveConfig();
+
     const presetPatch = {};
     for (const k of PROFILE_PRESET_KEYS) {
-      presetPatch[k] = snapshotSource[k];
+      presetPatch[k] = structuredClone(snapshotSource[k]);
+    }
+    const bindWallpaper = Boolean(includeWallpaper && snapshotSource.activeWallpaperId);
+    if (bindWallpaper) {
+      presetPatch.activeWallpaperId = snapshotSource.activeWallpaperId;
+      presetPatch.wallpaperId = snapshotSource.activeWallpaperId;
+      presetPatch.kind = snapshotSource.kind;
     }
 
     const now = Date.now();
-    const existingUser = readUserPresets().find(
-      (p) => p.name.toLowerCase() === cleanName.toLowerCase(),
-    );
-    const id = existingUser ? existingUser.id : slugifyId(cleanName, 'user');
+    let targetId;
+    let finalName;
+    let finalDesc;
+    let createdAt = now;
+
+    if (opMode === 'overwrite') {
+      const reqId = String(id || '').trim();
+      if (reqId && (FACTORY_PRESETS.some((p) => p.id === reqId) || Boolean(SCENE_PRESETS[reqId]))) {
+        throw makeError('Built-in factory presets cannot be overwritten; create or duplicate instead', 403);
+      }
+      const existing = reqId
+        ? userPresets.find((p) => p.id === reqId)
+        : rawName
+          ? userPresets.find((p) => p.name.toLowerCase() === rawName.toLowerCase())
+          : null;
+      if (!existing) {
+        throw makeError(`User preset not found for overwrite: ${reqId || rawName || '(empty)'}`, 404);
+      }
+      targetId = existing.id;
+      finalName = rawName
+        ? resolveUniquePresetName(rawName, allPresets, existing.id)
+        : existing.name;
+      finalDesc = description !== undefined
+        ? String(description || '').trim().slice(0, 240)
+        : existing.description;
+      createdAt = existing.createdAt || now;
+    } else {
+      // mode === 'create': NEVER silently overwrite an existing user snapshot!
+      const baseName = rawName || nextDefaultProfileName(allPresets, committedConfig.language);
+      finalName = resolveUniquePresetName(baseName, allPresets);
+      finalDesc = String(description || '').trim().slice(0, 240);
+      targetId = slugifyId(finalName, 'user');
+    }
+
     const record = {
-      id,
-      name: cleanName,
-      nameEn: cleanName,
-      description: cleanDesc,
-      descriptionEn: cleanDesc,
+      id: targetId,
+      name: finalName,
+      nameEn: finalName,
+      description: finalDesc,
+      descriptionEn: finalDesc,
       builtin: false,
-      createdAt: existingUser?.createdAt || now,
+      includesWallpaper: bindWallpaper,
+      createdAt,
       updatedAt: now,
       patch: presetPatch,
     };
 
+    const patchCommitted = Boolean(hasIncomingPatch && commitPatch);
     await enqueueWrite(async () => {
-      await writeAtomicJsonAsync(join(presetsDir, `${id}.json`), record);
+      await writeAtomicJsonAsync(join(presetsDir, `${basename(targetId)}.json`), record);
       cachedUserPresets = null;
-      config = sanitizeConfig({ activeProfilePresetId: id }, config);
+      config = sanitizeConfig({ activeProfilePresetId: targetId }, committedConfig);
       await writeAtomicJsonAsync(configPath, config);
     });
 
-    return { preset: record, presets: listPresets(), config: getConfig() };
+    return { preset: record, presets: listPresets(), config: getConfig(), patchCommitted };
+  }
+
+  async function renamePreset(idOrOpts, maybeOpts = {}) {
+    const params =
+      typeof idOrOpts === 'string'
+        ? { ...(maybeOpts && typeof maybeOpts === 'object' ? maybeOpts : {}), id: idOrOpts }
+        : (idOrOpts && typeof idOrOpts === 'object' ? idOrOpts : {});
+    const { id, name, description } = params;
+    const cleanId = String(id || '').trim();
+    if (!cleanId) throw makeError('Preset id is required', 400);
+    if (FACTORY_PRESETS.some((p) => p.id === cleanId) || Boolean(SCENE_PRESETS[cleanId])) {
+      throw makeError('Built-in factory presets cannot be renamed', 403);
+    }
+    const cleanName = String(name || '').trim().slice(0, 80);
+    if (!cleanName) throw makeError('Preset name is required', 400);
+
+    const existing = readUserPresets().find((p) => p.id === cleanId);
+    if (!existing) throw makeError(`User preset not found: ${cleanId}`, 404);
+
+    const finalName = resolveUniquePresetName(cleanName, listPresets(), cleanId);
+    const finalDesc = description !== undefined
+      ? String(description || '').trim().slice(0, 240)
+      : existing.description;
+    const updated = {
+      ...existing,
+      name: finalName,
+      nameEn: finalName,
+      description: finalDesc,
+      descriptionEn: finalDesc,
+      updatedAt: Date.now(),
+    };
+
+    await enqueueWrite(async () => {
+      await writeAtomicJsonAsync(join(presetsDir, `${basename(cleanId)}.json`), updated);
+      cachedUserPresets = null;
+    });
+
+    return { ok: true, preset: updated, presets: listPresets(), config: getConfig() };
+  }
+
+  async function duplicatePreset(idOrOpts, maybeOpts = {}) {
+    const params =
+      typeof idOrOpts === 'string'
+        ? { ...(maybeOpts && typeof maybeOpts === 'object' ? maybeOpts : {}), id: idOrOpts }
+        : (idOrOpts && typeof idOrOpts === 'object' ? idOrOpts : {});
+    const { id, name = '', activate = false } = params;
+    const cleanId = String(id || '').trim();
+    if (!cleanId) throw makeError('Preset id is required', 400);
+    const source = getPresetById(cleanId);
+    if (!source) throw makeError(`Preset not found: ${cleanId}`, 404);
+
+    const copyTag = config.language === 'en' ? 'Copy' : '副本';
+    const rawName = String(name || '').trim().slice(0, 72) || `${source.name} (${copyTag})`;
+    const finalName = resolveUniquePresetName(rawName, listPresets());
+    const newId = slugifyId(finalName, 'user');
+    const now = Date.now();
+    const clonedPatch = structuredClone(extractPresetPatch(source.patch));
+    const record = {
+      id: newId,
+      name: finalName,
+      nameEn: finalName,
+      description: String(source.description || '').slice(0, 240),
+      descriptionEn: String(source.descriptionEn || source.description || '').slice(0, 240),
+      builtin: false,
+      includesWallpaper: Boolean(clonedPatch.activeWallpaperId),
+      createdAt: now,
+      updatedAt: now,
+      patch: clonedPatch,
+    };
+
+    await enqueueWrite(async () => {
+      await writeAtomicJsonAsync(join(presetsDir, `${basename(newId)}.json`), record);
+      cachedUserPresets = null;
+      if (activate) {
+        config = sanitizeConfig({ activeProfilePresetId: newId }, config);
+        await writeAtomicJsonAsync(configPath, config);
+      }
+    });
+
+    return { ok: true, preset: record, presets: listPresets(), config: getConfig() };
   }
 
   async function deletePreset(presetId) {
@@ -765,14 +1302,8 @@ export async function createPrismStore(opts = {}) {
       throw makeError('Preset contains no valid configuration properties', 400);
     }
 
-    const existingNames = new Set(listPresets().map((p) => p.name.toLowerCase()));
     const baseName = String(raw.name || raw.title || 'Imported Preset').trim().slice(0, 72) || 'Imported Preset';
-    let finalName = baseName;
-    let suffix = 2;
-    while (existingNames.has(finalName.toLowerCase())) {
-      finalName = `${baseName} (${suffix})`;
-      suffix += 1;
-    }
+    const finalName = resolveUniquePresetName(baseName, listPresets());
 
     const now = Date.now();
     const id = slugifyId(finalName, 'import');
@@ -783,6 +1314,7 @@ export async function createPrismStore(opts = {}) {
       description: String(raw.description || '').slice(0, 240),
       descriptionEn: String(raw.descriptionEn || raw.description || '').slice(0, 240),
       builtin: false,
+      includesWallpaper: Boolean(patch.activeWallpaperId),
       createdAt: now,
       updatedAt: now,
       patch,
@@ -830,18 +1362,7 @@ export async function createPrismStore(opts = {}) {
     const id = String(wallpaperId || '').trim();
     if (!id) throw makeError('wallpaperId is required', 400);
     return enqueueWrite(() => {
-      const map = { ...(config.perWallpaperOverrides || {}) };
-      if (patch === null) {
-        delete map[id];
-      } else {
-        const clean = sanitizeConfig(patch, config);
-        const filtered = { ...(map[id] || {}) };
-        for (const k of PER_WALLPAPER_OVERRIDE_KEYS) {
-          if (k in patch) filtered[k] = clean[k];
-        }
-        map[id] = filtered;
-      }
-      config = sanitizeConfig({ perWallpaperOverrides: map }, config);
+      config = applySparsePerWallpaperOverride(config, id, patch);
       writeAtomicJsonSync(configPath, config);
       return getConfig();
     });
@@ -1188,6 +1709,8 @@ export async function createPrismStore(opts = {}) {
     getPresetById,
     applyPreset,
     savePreset,
+    renamePreset,
+    duplicatePreset,
     deletePreset,
     exportPreset,
     importPreset,

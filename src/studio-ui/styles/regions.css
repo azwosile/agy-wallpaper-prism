@@ -1,0 +1,718 @@
+/* ==========================================================================
+   Wallpaper Prism Studio — Autosave Status, 8-Region Accordions,
+   Named Snapshots Manager, P1/P2a/P3 Health Alerts & WCAG/CJK Controls
+   ========================================================================== */
+
+/* ==========================================================================
+   Topbar 1-Line Silent Autosave Status Pill (zero toast spam)
+   ========================================================================== */
+.prism-autosave-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--prism-fg-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition:
+    opacity var(--prism-dur-base) ease,
+    background var(--prism-dur-fast) ease,
+    border-color var(--prism-dur-fast) ease,
+    color var(--prism-dur-fast) ease;
+}
+
+.prism-autosave-pill[data-state="idle"] {
+  opacity: 0;
+  max-width: 0;
+  padding: 0;
+  border-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.prism-autosave-pill[data-state="saving"] {
+  opacity: 1;
+  background: var(--prism-ctl-bg);
+  border-color: var(--prism-border-card);
+  color: var(--prism-fg-2);
+}
+
+.prism-autosave-pill[data-state="saved"] {
+  opacity: 1;
+  background: rgba(var(--prism-ok-rgb), 0.12);
+  border-color: rgba(var(--prism-ok-rgb), 0.36);
+  color: var(--prism-ok);
+}
+
+.prism-autosave-pill[data-state="error"] {
+  opacity: 1;
+  background: rgba(var(--prism-danger-rgb), 0.14);
+  border-color: rgba(var(--prism-danger-rgb), 0.45);
+  color: var(--prism-danger);
+}
+
+.prism-autosave-retry {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.prism-autosave-retry:hover {
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   Media Health Alert Banners (P1 Paused / P2a Degraded / P3 Static-CSS)
+   ========================================================================== */
+#prism-media-health-host:empty {
+  display: none;
+}
+
+.prism-health-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prism-health-banner,
+.prism-alert-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-ctl-bg);
+  color: var(--prism-fg);
+  font-size: 11.5px;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+.prism-health-banner-text,
+.prism-alert-banner-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 180px;
+  line-height: 1.3;
+}
+
+/* P1: Paused wallpaper / battery-paused amber strip */
+.prism-health-banner[data-tone="warn"],
+.prism-health-banner[data-alert="paused"],
+.prism-alert-banner[data-tone="warn"],
+.prism-alert-banner[data-alert="paused"] {
+  background: rgba(var(--prism-warn-rgb), 0.12);
+  border-color: rgba(var(--prism-warn-rgb), 0.42);
+  color: var(--prism-fg);
+}
+
+/* P2a: Static poster fallback / degraded media warning */
+.prism-health-banner[data-tone="danger"],
+.prism-health-banner[data-alert="degraded"],
+.prism-alert-banner[data-tone="danger"],
+.prism-alert-banner[data-alert="degraded"] {
+  background: rgba(var(--prism-danger-rgb), 0.12);
+  border-color: rgba(var(--prism-danger-rgb), 0.44);
+  color: var(--prism-fg);
+}
+
+/* P3: Pure static-css startup mode info notice */
+.prism-health-banner[data-tone="info"],
+.prism-health-banner[data-alert="static-css"],
+.prism-alert-banner[data-tone="info"],
+.prism-alert-banner[data-alert="static-css"] {
+  background: rgba(var(--prism-accent-rgb), 0.10);
+  border-color: rgba(var(--prism-accent-rgb), 0.36);
+  color: var(--prism-fg);
+}
+
+/* ==========================================================================
+   Themed Select Control (Snapshots, CJK Font Presets, Filters)
+   ========================================================================== */
+.prism-select {
+  height: 26px;
+  max-width: 100%;
+  padding: 0 24px 0 8px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid var(--prism-border-card);
+  background-color: rgba(var(--prism-base-rgb), 0.78);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--prism-fg-muted) 50%),
+    linear-gradient(135deg, var(--prism-fg-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) 50%,
+    calc(100% - 7px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  -webkit-appearance: none;
+  appearance: none;
+  color: var(--prism-fg);
+  font-size: 11.5px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--prism-dur-fast) ease, background-color var(--prism-dur-fast) ease;
+}
+.prism-select:hover {
+  border-color: rgba(var(--prism-pt-rgb), 0.24);
+}
+.prism-select:focus {
+  border-color: var(--prism-accent);
+}
+.prism-select option {
+  background: rgb(var(--prism-popover-rgb));
+  color: var(--prism-fg);
+}
+
+/* ==========================================================================
+   Minimal Wide-Screen Left Rail Profile Card (zero duplicate sliders)
+   ========================================================================== */
+.prism-rail-profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+}
+
+.prism-rail-profile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.prism-rail-meta-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.prism-rail-preset-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.prism-rail-preset-row .prism-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.prism-rail-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ==========================================================================
+   Skin Tab Compact Top Action Bar (~76-96px)
+   ========================================================================== */
+.prism-skin-top-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.prism-skin-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.prism-skin-scope-group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1 1 200px;
+  flex-wrap: wrap;
+}
+
+.prism-skin-pin-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--prism-fg-2);
+  cursor: pointer;
+}
+
+.prism-skin-preset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 7px;
+  border-top: 1px solid var(--prism-border-hairline);
+}
+
+.prism-preset-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 220px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.prism-preset-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.prism-preset-select {
+  min-width: 140px;
+  max-width: 240px;
+  flex: 1 1 140px;
+}
+
+.prism-dirty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid rgba(var(--prism-warn-rgb), 0.42);
+  background: rgba(var(--prism-warn-rgb), 0.14);
+  color: var(--prism-warn);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   8-Region Default-Collapsed Accordions (details[data-region])
+   ========================================================================== */
+.prism-regions-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prism-region-group {
+  transition: border-color var(--prism-dur-fast) ease;
+}
+.prism-region-group[open] {
+  border-color: rgba(var(--prism-accent-rgb), 0.34);
+}
+
+.prism-region-group > summary {
+  padding: 9px 11px;
+  border-radius: var(--prism-r-card);
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  transition: background var(--prism-dur-fast) ease;
+}
+.prism-region-group > summary:hover {
+  background: rgba(var(--prism-pt-rgb), 0.035);
+}
+.prism-region-group[open] > summary {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.prism-region-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  border: 1px solid var(--prism-border-card);
+  background-color: #1c1f2b;
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.14) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.14) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.14) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.14) 75%);
+  background-size: 6px 6px;
+  background-position: 0 0, 0 3px, 3px -3px, -3px 0;
+  overflow: hidden;
+  display: inline-flex;
+  padding: 1px;
+}
+.prism-region-swatch-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  display: block;
+}
+
+.prism-region-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--prism-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prism-region-summary-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.prism-region-badge,
+.prism-region-custom-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-ctl-bg);
+  color: var(--prism-fg-muted);
+  font-size: 10.5px;
+  font-weight: 550;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.prism-region-badge.is-custom,
+.prism-region-custom-badge.is-custom {
+  border-color: var(--prism-accent-border);
+  background: var(--prism-accent-soft);
+  color: var(--prism-accent);
+}
+
+.prism-region-subgroup {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid var(--prism-border-hairline);
+  background: rgba(var(--prism-pt-rgb), 0.025);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prism-region-subgroup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--prism-border-hairline);
+}
+
+.prism-region-subgroup-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--prism-fg-2);
+}
+
+.prism-region-notice {
+  padding: 6px 9px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid rgba(var(--prism-warn-rgb), 0.36);
+  background: rgba(var(--prism-warn-rgb), 0.10);
+  color: var(--prism-fg-2);
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+/* ==========================================================================
+   Named Snapshots Manager Drawer (#prism-presets-grid + External Create Form)
+   ========================================================================== */
+.prism-presets-drawer-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.prism-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.prism-preset-card {
+  padding: 9px 10px;
+  border-radius: var(--prism-r-card);
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-card-bg, rgb(var(--prism-tint-1-rgb)));
+  background-image: var(--prism-sheen);
+  box-shadow: inset 0 1px 0 var(--prism-specular-top);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: border-color var(--prism-dur-fast) ease;
+}
+.prism-preset-card.is-active {
+  border-color: var(--prism-accent);
+  box-shadow: 0 0 0 1px rgba(var(--prism-accent-rgb), 0.3), inset 0 1px 0 var(--prism-specular-top);
+}
+
+.prism-preset-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.prism-preset-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--prism-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prism-preset-card-desc {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--prism-fg-muted);
+}
+.prism-preset-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.prism-preset-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid var(--prism-border-hairline);
+  background: var(--prism-ctl-bg);
+  color: var(--prism-fg-muted);
+  font-size: 10px;
+  line-height: 1.25;
+}
+.prism-preset-tag.is-wall {
+  border-color: var(--prism-accent-border);
+  background: var(--prism-accent-soft);
+  color: var(--prism-accent);
+}
+.prism-preset-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 5px;
+  border-top: 1px solid var(--prism-border-hairline);
+}
+
+.prism-preset-rename-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.prism-preset-rename-row .prism-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+}
+
+.prism-preset-create-form {
+  padding: 10px;
+  border-radius: var(--prism-r-card);
+  border: 1px solid var(--prism-border-card);
+  background: rgba(var(--prism-base-rgb), 0.56);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.prism-preset-create-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.prism-preset-create-inputs .prism-input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.prism-preset-create-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.prism-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--prism-fg-2);
+  cursor: pointer;
+}
+.prism-checkbox-row input[type="checkbox"] {
+  accent-color: var(--prism-accent);
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Foreground Color Picker + WCAG AA Badge + Raw Unlock + Low-Opacity Hint
+   & CJK Safe Font Family Control
+   ========================================================================== */
+.prism-fg-color-ctl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 0;
+  border-top: 1px solid var(--prism-border-hairline);
+}
+
+.prism-fg-color-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.prism-color-picker-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.prism-wcag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.prism-wcag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid var(--prism-border-card);
+  background: var(--prism-ctl-bg);
+  color: var(--prism-fg-2);
+  font-family: var(--prism-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.prism-wcag-badge[data-wcag="pass"],
+.prism-wcag-badge.is-pass {
+  border-color: rgba(var(--prism-ok-rgb), 0.45);
+  background: rgba(var(--prism-ok-rgb), 0.14);
+  color: var(--prism-ok);
+}
+.prism-wcag-badge[data-wcag="adjusted"],
+.prism-wcag-badge.is-adjusted {
+  border-color: var(--prism-accent-border);
+  background: var(--prism-accent-soft);
+  color: var(--prism-accent);
+}
+.prism-wcag-badge[data-wcag="warn"],
+.prism-wcag-badge.is-warn,
+.prism-wcag-badge[data-wcag="low-opacity"],
+.prism-wcag-badge.is-low-opacity {
+  border-color: rgba(var(--prism-warn-rgb), 0.48);
+  background: rgba(var(--prism-warn-rgb), 0.14);
+  color: var(--prism-warn);
+}
+
+.prism-raw-color-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--prism-fg-2);
+  cursor: pointer;
+}
+
+.prism-low-opacity-hint {
+  padding: 5px 8px;
+  border-radius: var(--prism-r-xs);
+  border: 1px solid rgba(var(--prism-warn-rgb), 0.32);
+  background: rgba(var(--prism-warn-rgb), 0.09);
+  color: var(--prism-fg-2);
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+.prism-font-ctl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 0;
+  border-top: 1px solid var(--prism-border-hairline);
+}
+
+.prism-font-ctl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.prism-font-ctl-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.prism-font-ctl-inputs .prism-select {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+.prism-font-ctl-inputs .prism-input {
+  flex: 1 1 160px;
+  min-width: 0;
+  height: 26px;
+}
+
+.prism-font-sanitize-note {
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--prism-warn);
+}

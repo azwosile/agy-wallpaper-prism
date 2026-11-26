@@ -551,6 +551,14 @@ export function validateTarGzArchive(gzBuf, { expectedVersion = '' } = {}) {
     throw new Error('ERR_TAR_INVALID_BUNDLE: External ES module <script src> forbidden in index.html');
   }
 
+  const skillMd = files.get('skills/wallpaper-prism/SKILL.md').toString('utf8');
+  if (skillMd.includes('\r')) {
+    throw new Error('ERR_TAR_SKILL_CRLF: skills/wallpaper-prism/SKILL.md must be pure LF (0 CR/CRLF)');
+  }
+  if (skillMd.includes('plugin://') || skillMd.includes('plugins://')) {
+    throw new Error('ERR_TAR_SKILL_PROTOCOL: skills/wallpaper-prism/SKILL.md must not contain plugin:// or plugins://');
+  }
+
   return {
     entryCount,
     uncompressedBytes: tarBuf.length,

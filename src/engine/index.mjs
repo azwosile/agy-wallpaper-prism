@@ -22,7 +22,12 @@ import {
 import { createPrismStore, resolveDefaultPrismDataDir, writeFsyncJsonSync } from './store.mjs';
 
 // Re-export low-level engine primitives for direct module consumers & verification tests
-export { createMediaServer, hasRawTraversalAttempt, parseByteRange } from './media-server.mjs';
+export {
+  createMediaServer,
+  hasRawTraversalAttempt,
+  parseByteRange,
+  probeMseVideoMime,
+} from './media-server.mjs';
 export {
   boxAt,
   buildVirtualFaststartFromFile,
@@ -68,9 +73,12 @@ export {
   syncDesktopWallpaper,
 } from './scanner.mjs';
 export {
+  applySparsePerWallpaperOverride,
   createPrismStore,
   MAX_UPLOAD_BYTES,
   migrateLegacyPrismDataIfNeeded,
+  PROFILE_PRESET_KEYS,
+  PROFILE_WALLPAPER_BINDING_KEYS,
   resolveDefaultPrismDataDir,
   writeAtomicJsonAsync,
   writeAtomicJsonSync,
@@ -106,7 +114,9 @@ export async function createWallpaperPrismEngine(opts = {}) {
   let steamPrimaryRoot = '';
   let initialized = false;
   let initPromise = null;
+  const DEFAULT_DEFERRED_SCAN_MS = 30_000; // #12: defer background full-library scan from 4s -> 30s idle (or Studio open)
   let deferredScanTimer = null;
+  let deferredScanPending = false;
   let scanInFlight = null;
   let closed = false;
 
@@ -257,6 +267,11 @@ export async function createWallpaperPrismEngine(opts = {}) {
     if (!refresh && scanInFlight) return scanInFlight;
 
     const run = async () => {
+      deferredScanPending = false;
+      if (deferredScanTimer) {
+        clearTimeout(deferredScanTimer);
+        deferredScanTimer = null;
+      }
       const cfg = store.getConfig();
       const scanRes = await scanWallpaperLibrary({
         config: cfg,
@@ -318,16 +333,37 @@ export async function createWallpaperPrismEngine(opts = {}) {
     return p;
   }
 
-  function scheduleDeferredRefresh(delayMs = 4000) {
-    if (closed || deferredScanTimer || opts.disableDeferredScan) return;
+  function scheduleDeferredRefresh(delayMs = DEFAULT_DEFERRED_SCAN_MS) {
+    if (closed || opts.disableDeferredScan) return;
+    deferredScanPending = true;
+    if (deferredScanTimer) {
+      clearTimeout(deferredScanTimer);
+      deferredScanTimer = null;
+    }
     deferredScanTimer = setTimeout(() => {
       deferredScanTimer = null;
-      if (closed) return;
+      if (closed || !deferredScanPending) return;
       performScan(false).catch(() => {});
     }, delayMs);
     if (typeof deferredScanTimer.unref === 'function') {
       deferredScanTimer.unref();
     }
+  }
+
+  function triggerDeferredScanIfNeeded({ immediate = false, delayMs = 250 } = {}) {
+    if (closed || !deferredScanPending || scanInFlight || opts.disableDeferredScan) return false;
+    if (deferredScanTimer) {
+      clearTimeout(deferredScanTimer);
+      deferredScanTimer = null;
+    }
+    if (immediate) {
+      deferredScanPending = false;
+      void performScan(false).catch(() => {});
+      return true;
+    }
+    const nextDelay = typeof delayMs === 'number' && Number.isFinite(delayMs) ? Math.max(0, delayMs) : 250;
+    scheduleDeferredRefresh(nextDelay);
+    return true;
   }
 
   async function init() {
@@ -350,7 +386,9 @@ export async function createWallpaperPrismEngine(opts = {}) {
         lastDiscovery = warm.discovery;
         steamPrimaryRoot = warm.discovery?.weInstallDir || '';
         syncPublicLibrary();
-        scheduleDeferredRefresh(warm.staleVersion ? 350 : (Number(opts.deferredScanDelayMs) || 4000));
+        scheduleDeferredRefresh(
+          warm.staleVersion ? 350 : (Number(opts.deferredScanDelayMs) || DEFAULT_DEFERRED_SCAN_MS),
+        );
       } else {
         await performScan(false);
       }
@@ -375,6 +413,9 @@ export async function createWallpaperPrismEngine(opts = {}) {
         deferredScanTimer = null;
       }
       return performScan(Boolean(refresh));
+    }
+    if (deferredScanPending) {
+      triggerDeferredScanIfNeeded({ delayMs: 250 });
     }
     return {
       items: publicLibraryItems,
@@ -432,6 +473,13 @@ export async function createWallpaperPrismEngine(opts = {}) {
         wallpaperId: '',
         kind: 'none',
       });
+      if (prevCfg.activeWallpaperId) {
+        if (typeof mediaServer?.prunePinnedSessions === 'function') {
+          mediaServer.prunePinnedSessions('');
+        } else if (typeof mediaServer?.releaseOldVideoPins === 'function') {
+          mediaServer.releaseOldVideoPins('');
+        }
+      }
       playlist.syncTimer();
       return emitStateChange(true);
     }
@@ -447,13 +495,30 @@ export async function createWallpaperPrismEngine(opts = {}) {
       throw err;
     }
 
+    const isDynamicKind =
+      target.kind === 'video' ||
+      target.kind === 'scene' ||
+      target.kind === 'web' ||
+      target.kind === 'slideshow';
+    const hasExplicitPaused = Boolean(
+      extraPatch && typeof extraPatch === 'object' && Object.prototype.hasOwnProperty.call(extraPatch, 'paused'),
+    );
     await store.updateConfig({
       skinEnabled: true,
+      ...(isDynamicKind && !hasExplicitPaused ? { paused: false } : {}),
       ...extraPatch,
       activeWallpaperId: target.id,
       wallpaperId: target.id,
       kind: target.kind,
     });
+
+    if (prevCfg.activeWallpaperId !== target.id) {
+      if (typeof mediaServer?.prunePinnedSessions === 'function') {
+        mediaServer.prunePinnedSessions(target.id);
+      } else if (typeof mediaServer?.releaseOldVideoPins === 'function') {
+        mediaServer.releaseOldVideoPins(target.token || target.id);
+      }
+    }
 
     if (!internalMeta.fromPlaylist) {
       playlist.recordManualSelection(prevCfg.activeWallpaperId, target.id);
@@ -486,23 +551,63 @@ export async function createWallpaperPrismEngine(opts = {}) {
     };
   }
 
-  async function applyPreset(presetId) {
+  async function applyPreset(presetId, opts = {}) {
     if (!initialized) await init();
-    const { preset } = await store.applyPreset(presetId);
+    const { preset, overrideSynced, wallpaperFallback } = await store.applyPreset(presetId, {
+      ...opts,
+      wallpaperExists: (wid) => publicLibraryItems.some((it) => it.id === wid),
+    });
     syncPublicLibrary();
     playlist.syncTimer();
     const payload = emitStateChange(true);
-    return { ...payload, preset };
+    return { ...payload, preset, overrideSynced, wallpaperFallback };
   }
 
   function listPresets() {
     return store.listPresets();
   }
 
-  async function savePreset({ name, description = '', patch = null } = {}) {
+  async function savePreset({
+    id = '',
+    name = '',
+    description,
+    patch = null,
+    includeWallpaper = false,
+    mode = 'create',
+    commitPatch = true,
+  } = {}) {
     if (!initialized) await init();
-    const { preset, presets } = await store.savePreset({ name, description, patch });
+    const { preset, presets, patchCommitted } = await store.savePreset({
+      id,
+      name,
+      description,
+      patch,
+      includeWallpaper,
+      mode,
+      commitPatch,
+    });
+    if (patchCommitted) {
+      syncPublicLibrary();
+      playlist.syncTimer();
+    }
+    const payload = emitStateChange(Boolean(patchCommitted));
+    events.emit('presets', payload);
+    return { ...payload, preset, presets, patchCommitted: Boolean(patchCommitted) };
+  }
+
+  async function renamePreset(idOrOpts, maybeOpts) {
+    if (!initialized) await init();
+    const { preset, presets } = await store.renamePreset(idOrOpts, maybeOpts);
     const payload = emitStateChange(false);
+    events.emit('presets', payload);
+    return { ...payload, preset, presets };
+  }
+
+  async function duplicatePreset(idOrOpts, maybeOpts) {
+    if (!initialized) await init();
+    const { preset, presets } = await store.duplicatePreset(idOrOpts, maybeOpts);
+    const payload = emitStateChange(false);
+    events.emit('presets', payload);
     return { ...payload, preset, presets };
   }
 
@@ -510,6 +615,7 @@ export async function createWallpaperPrismEngine(opts = {}) {
     if (!initialized) await init();
     const { presets } = await store.deletePreset(id);
     const payload = emitStateChange(false);
+    events.emit('presets', payload);
     return { ...payload, deletedId: id, presets };
   }
 
@@ -517,6 +623,7 @@ export async function createWallpaperPrismEngine(opts = {}) {
     if (!initialized) await init();
     const { preset, presets } = await store.importPreset(obj);
     const payload = emitStateChange(false);
+    events.emit('presets', payload);
     return { ...payload, preset, presets };
   }
 
@@ -594,6 +701,7 @@ export async function createWallpaperPrismEngine(opts = {}) {
   async function close() {
     if (closed) return;
     closed = true;
+    deferredScanPending = false;
     if (deferredScanTimer) {
       clearTimeout(deferredScanTimer);
       deferredScanTimer = null;
@@ -625,11 +733,14 @@ export async function createWallpaperPrismEngine(opts = {}) {
     restoreSkin,
     resetConfig,
     listLibrary,
+    triggerDeferredScanIfNeeded,
     applyWallpaper,
     stepPlaylist,
     applyPreset,
     listPresets,
     savePreset,
+    renamePreset,
+    duplicatePreset,
     deletePreset,
     importPreset,
     exportPreset,

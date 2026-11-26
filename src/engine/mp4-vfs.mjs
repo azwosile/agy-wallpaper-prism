@@ -21,6 +21,7 @@ import { Readable } from 'node:stream';
 export const MP4_VFS_MAX_MOOV_BYTES = 8 * 1024 * 1024;
 const DEFAULT_MAX_ENTRIES = 32;
 const DEFAULT_MAX_CACHE_BYTES = 64 * 1024 * 1024;
+export const MP4_VFS_DEFAULT_MAX_PINNED = 8;
 const TOP_BOX_MAX = 64;
 const HEADER_PROBE = 16;
 
@@ -370,7 +371,11 @@ export function createMp4VfsKit({
   maxMoovBytes = MP4_VFS_MAX_MOOV_BYTES,
   maxEntries = DEFAULT_MAX_ENTRIES,
   maxBytes = DEFAULT_MAX_CACHE_BYTES,
+  maxPinned = MP4_VFS_DEFAULT_MAX_PINNED,
 } = {}) {
+  const pinLimit = Number.isInteger(Number(maxPinned)) && Number(maxPinned) > 0
+    ? Math.min(MP4_VFS_DEFAULT_MAX_PINNED, Number(maxPinned))
+    : MP4_VFS_DEFAULT_MAX_PINNED;
   const cache = new Map(); // cacheKey -> layout
   const pinnedByToken = new Map(); // token -> { stamp, layout }
   let cachedBytes = 0;
@@ -425,15 +430,58 @@ export function createMp4VfsKit({
     const pinKey = String(token || absPath);
     const prev = pinnedByToken.get(pinKey);
     if (prev && prev.stamp === key) {
+      pinnedByToken.delete(pinKey);
+      pinnedByToken.set(pinKey, prev);
       return prev.layout.kind === 'virtual' ? prev.layout : null;
     }
     const layout = layoutFor(absPath);
+    if (pinnedByToken.has(pinKey)) pinnedByToken.delete(pinKey);
     pinnedByToken.set(pinKey, { stamp: key, layout });
-    if (pinnedByToken.size > maxEntries * 4) {
+    while (pinnedByToken.size > pinLimit) {
       const first = pinnedByToken.keys().next();
-      if (!first.done) pinnedByToken.delete(first.value);
+      if (first.done) break;
+      pinnedByToken.delete(first.value);
     }
     return layout.kind === 'virtual' ? layout : null;
+  }
+
+  function matchesPinToken(pinKey, token) {
+    return pinKey === token
+      || pinKey.startsWith(`${token}:`)
+      || pinKey === `scene-vid:${token}`
+      || pinKey.startsWith(`web:${token}:`);
+  }
+
+  function unpin(tokenPrefix) {
+    const pref = String(tokenPrefix || '').trim();
+    if (!pref) return 0;
+    let removed = 0;
+    for (const k of [...pinnedByToken.keys()]) {
+      if (matchesPinToken(k, pref)) {
+        pinnedByToken.delete(k);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
+  function unpinExcept(activeToken = '') {
+    const tokens = Array.isArray(activeToken)
+      ? activeToken.map((t) => String(t || '').trim()).filter(Boolean)
+      : [String(activeToken || '').trim()].filter(Boolean);
+    if (tokens.length === 0) {
+      const n = pinnedByToken.size;
+      pinnedByToken.clear();
+      return n;
+    }
+    let removed = 0;
+    for (const k of [...pinnedByToken.keys()]) {
+      if (!tokens.some((t) => matchesPinToken(k, t))) {
+        pinnedByToken.delete(k);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 
   function clear() {
@@ -445,8 +493,10 @@ export function createMp4VfsKit({
   return {
     layoutFor,
     pinnedFaststartVariant,
+    unpin,
+    unpinExcept,
     clear,
-    stats: () => ({ entries: cache.size, cachedBytes, pinned: pinnedByToken.size }),
+    stats: () => ({ entries: cache.size, cachedBytes, pinned: pinnedByToken.size, maxPinned: pinLimit }),
   };
 }
 

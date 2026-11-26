@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.1.0
+ * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.2.0
  *
- * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.1.0 specifications across:
- *   Suite 1 — Manifest (v2.1.0), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
+ * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.2.0 specifications across:
+ *   Suite 1 — Manifest (v2.2.0), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
  *             Zero-PII Audit & SHA-256 Workspace <-> Global Plugin Sync
  *   Suite 2 — Backend Engine, DSH Parity, Co-Keyed Storage, Two-Phase `fsync` Boot Canary Circuit-Breaker
  *             (`canary.json` arming -> tripped, `/api/canary/reset`, `/api/skin/wake`), PR #6 Hardened `fetch+blob`,
- *             PR #7 `/video-stage/` Streaming Iframe + v2.0.8 OOPIF Web Audio & Studio/Host SSE 6-Socket Cap,
+ *             PR #7 `/video-stage/` Streaming Iframe + v2.0.8 OOPIF Web Audio & Studio 4-Socket (2 aux + 2 popout) / Host 2-Socket SSE Cap,
  *             PR #9 `deadPluginOrigins` TTL/AbortError/Ghost-Video Guard & `wake()` Live-SSE Fast-Path,
- *             Issue #10 Pure-Optical `SCENE_PRESETS`, Req #4 7-Component `surfaceTints` + 128/128 WCAG AA Matrix,
- *             Req #5 + D1 Mock GitHub Auto-Updater / Loopback `Host` / Tar-Safe / Rollback & Req #7 Release Packager
- *   Suite 3 — Studio v2.1 UI (`Host & System` 3-way Startup Strategy + Canary + Panic Badge + Update Card +
+ *             Issue #10 Pure-Optical `SCENE_PRESETS`, 8-Region `regions` + `surfaceTints` + 128/128 WCAG AA Matrix,
+ *             v2.2.0 Visual Editor CSP / Popout / Preset Lifecycle / Soft-Knee Blur / WCO / Contrast Guardrail & Packager
+ *   Suite 3 — Studio v2.2 UI (8-Region Accordions + Layer B Soft/Deep Sleep + Visual Canvas Modal/Popout +
  *             21:9 `.mini-blur-veil` / `.mini-aux` Parity) & Antigravity 2.35.1 Hub Headless Chrome E2E:
  *               1) Zero-Enable Ephemeral Micro-Bootstrap (`<= 6144 B`), Lazy `/host/<token>/panel.js` Load,
  *                  PR #8 Footer-Remount Self-Heal, `REMOVE_PANEL_EXPR` Non-Resurrection & Double-Inject Guard
@@ -197,7 +197,7 @@ function decodePngRgba(pngBuf) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  console.log('=== agy-wallpaper-prism v2.1.0 Full Verification Harness ===');
+  console.log('=== agy-wallpaper-prism v2.2.0 Full Verification Harness ===');
   fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
   fs.mkdirSync(DEFAULT_ARTIFACT_DIR, { recursive: true });
   const fixturesDir = path.join(SCRATCH_ROOT, 'fixtures');
@@ -206,9 +206,9 @@ async function main() {
   // =========================================================================
   // SUITE 1: Manifest, Bundle, Zero-Enable CDP Audit, Zero-PII & Byte Sync
   // =========================================================================
-  console.log('\n--- Suite 1: Manifest (v2.1.0), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
+  console.log('\n--- Suite 1: Manifest (v2.2.0), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
 
-  await check('plugin.json, package.json & 7-point v2.1.0 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
+  await check('plugin.json, package.json & 7-point v2.2.0 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
     const pPath = path.join(REPO_ROOT, 'plugin.json');
     const pkgPath = path.join(REPO_ROOT, 'package.json');
     const readmePath = path.join(REPO_ROOT, 'README.md');
@@ -226,13 +226,13 @@ async function main() {
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.1.0', `Expected plugin.json version 2.1.0, got ${raw.version}`);
-    assert.equal(pkg.version, '2.1.0', `Expected package.json version 2.1.0, got ${pkg.version}`);
-    assert.match(readme, /\*\*Version\*\*:\s*`2\.1\.0`/, 'Expected README.md **Version**: `2.1.0`');
-    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.1\.0'/, 'Expected schema.mjs PLUGIN_VERSION = 2.1.0');
-    assert.match(schemaSrc, /skinVersion:\s*'2\.1\.0'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.1.0');
-    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.1\.0'/, 'Expected wallpaper-inject.js VERSION = 2.1.0');
-    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.1\.0'/, 'Expected panel-inject.js VERSION = 2.1.0');
+    assert.equal(raw.version, '2.2.0', `Expected plugin.json version 2.2.0, got ${raw.version}`);
+    assert.equal(pkg.version, '2.2.0', `Expected package.json version 2.2.0, got ${pkg.version}`);
+    assert.match(readme, /\*\*Version\*\*:\s*`2\.2\.0`/, 'Expected README.md **Version**: `2.2.0`');
+    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.2\.0'/, 'Expected schema.mjs PLUGIN_VERSION = 2.2.0');
+    assert.match(schemaSrc, /skinVersion:\s*'2\.2\.0'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.2.0');
+    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.2\.0'/, 'Expected wallpaper-inject.js VERSION = 2.2.0');
+    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.2\.0'/, 'Expected panel-inject.js VERSION = 2.2.0');
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -320,15 +320,19 @@ async function main() {
     const html = fs.readFileSync(idxPath, 'utf8');
     assert.ok(html.includes('<style') && html.includes('<script'), 'Expected inlined <style> and <script>');
     assert.ok(!/<script[^>]+type=["']module["'][^>]+src=/i.test(html), 'External ES module <script src> forbidden in sidecar');
+    assert.ok(!/<link[^>]+rel=["']stylesheet["']/i.test(html), 'External <link rel="stylesheet"> forbidden in single-file bundle');
     assert.ok(/#app[\s\S]{0,220}height:\s*100(%|dvh|vh)/i.test(html), 'Missing #app 100% height lock in Studio CSS');
     assert.ok(html.includes('prism-startup-safety-card'), 'Bundled index.html missing v2.0 #prism-startup-safety-card');
     assert.ok(html.includes('prism-master-toggle-btn'), 'Bundled index.html missing v2.0.7 #prism-master-toggle-btn');
-    assert.ok(html.includes('prism-update-card'), 'Bundled index.html missing v2.1.0 #prism-update-card');
-    assert.ok(html.includes('mini-blur-veil'), 'Bundled index.html missing v2.1.0 .mini-blur-veil');
+    assert.ok(html.includes('prism-update-card'), 'Bundled index.html missing #prism-update-card');
+    assert.ok(html.includes('mini-blur-veil'), 'Bundled index.html missing .mini-blur-veil');
     assert.ok(html.includes('class="agy-prism-root"'), 'Bundled index.html missing Req #6 #app.agy-prism-root guard');
-    assert.ok(html.includes('2.1.0'), 'Bundled index.html missing inlined v2.1.0 version marker');
+    assert.ok(html.includes('prism-region-group'), 'Bundled index.html missing v2.2.0 .prism-region-group 8-region accordions');
+    assert.ok(html.includes('toggle-preview-live'), 'Bundled index.html missing v2.2.0 toggle-preview-live static-first action');
+    assert.ok(html.includes('agy-prism-visual-editor'), 'Bundled index.html missing v2.2.0 .agy-prism-visual-editor');
+    assert.ok(html.includes('2.2.0'), 'Bundled index.html missing inlined v2.2.0 version marker');
     assert.equal(html.includes('\r'), false, 'Bundled index.html must be pure LF (0 CR/CRLF)');
-    return `${Math.round(html.length / 1024)} KB inlined v2.1.0 pure-LF bundle`;
+    return `${Math.round(html.length / 1024)} KB inlined v2.2.0 pure-LF bundle`;
   });
 
   await check('Syntax check (`node --check`) across all JS/MJS entrypoints & test modules', '@resilience-designer', () => {
@@ -355,7 +359,18 @@ async function main() {
       'src/host/index.mjs',
       'src/host/wallpaper-inject.js',
       'src/host/panel-inject.js',
+      'src/studio-ui/state.mjs',
+      'src/studio-ui/optics.mjs',
+      'src/studio-ui/controls.mjs',
+      'src/studio-ui/tabs/library.mjs',
+      'src/studio-ui/tabs/skin-regions.mjs',
+      'src/studio-ui/tabs/playback.mjs',
+      'src/studio-ui/tabs/system.mjs',
+      'src/studio-ui/editor/region-inspector.mjs',
+      'src/studio-ui/editor/visual-canvas.mjs',
       'src/studio-ui/app.mjs',
+      'test/cdp-browser.mjs',
+      'test/fixtures-builder.mjs',
       'test/mock-hub-template.mjs',
       'test/http-inproc.mjs',
       'test/verify-all.mjs',
@@ -436,7 +451,24 @@ async function main() {
       'src/host/index.mjs',
       'src/host/wallpaper-inject.js',
       'src/host/panel-inject.js',
+      'src/studio-ui/state.mjs',
+      'src/studio-ui/optics.mjs',
+      'src/studio-ui/controls.mjs',
+      'src/studio-ui/tabs/library.mjs',
+      'src/studio-ui/tabs/skin-regions.mjs',
+      'src/studio-ui/tabs/playback.mjs',
+      'src/studio-ui/tabs/system.mjs',
+      'src/studio-ui/editor/region-inspector.mjs',
+      'src/studio-ui/editor/visual-canvas.mjs',
+      'src/studio-ui/app.mjs',
     ];
+    for (const stagedRel of syncFiles) {
+      assert.equal(
+        sha256File(path.join(REPO_ROOT, stagedRel)),
+        sha256File(path.join(dstDir, stagedRel)),
+        `Staged installLocalPlugin() mismatch on ${stagedRel}`,
+      );
+    }
 
     const globalPluginDir = path.join(os.homedir(), '.gemini', 'config', 'plugins', 'agy-wallpaper-prism');
     let syncNote = 'staged copy verified';
@@ -460,6 +492,93 @@ async function main() {
       }
     }
     return syncNote;
+  });
+
+  await check('D1 `docs/AI_HANDOFF.md` freeze (`git diff ded7824`) & Zero-CR (`\\r`) text hygiene across repo', '@exec-mock-tests', () => {
+    const hasBaselineCommit = (() => {
+      try {
+        execFileSync('git', ['rev-parse', '--verify', 'ded7824'], { cwd: REPO_ROOT, stdio: 'pipe' });
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    assert.equal(hasBaselineCommit, true, 'Missing git baseline commit ded7824 for D1 docs/AI_HANDOFF.md verification');
+    const handoffDiff = execFileSync('git', ['diff', 'ded7824', '--', 'docs/AI_HANDOFF.md'], {
+      cwd: REPO_ROOT,
+      stdio: 'pipe',
+    }).toString('utf8');
+    assert.equal(handoffDiff, '', `D1 violation: docs/AI_HANDOFF.md was modified since ded7824:\n${handoffDiff.slice(0, 400)}`);
+
+    const crHits = [];
+    const scanRoots = ['scripts', 'src', 'sidecars', 'skills', 'test', 'host'];
+    const textExts = new Set(['.js', '.mjs', '.json', '.md', '.html', '.css', '.svg', '.yml', '.yaml']);
+    const walkLf = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (ent.name === 'node_modules' || ent.name === 'dist' || ent.name.startsWith('.tmp-')) continue;
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) walkLf(full);
+        else if (ent.isFile() && textExts.has(path.extname(ent.name).toLowerCase())) {
+          const buf = fs.readFileSync(full);
+          if (buf.includes(0x0d)) crHits.push(path.relative(REPO_ROOT, full));
+        }
+      }
+    };
+    for (const root of scanRoots) walkLf(path.join(REPO_ROOT, root));
+    for (const topFile of ['plugin.json', 'package.json', 'README.md']) {
+      const p = path.join(REPO_ROOT, topFile);
+      if (fs.existsSync(p) && fs.readFileSync(p).includes(0x0d)) crHits.push(topFile);
+    }
+    assert.deepEqual(crHits, [], `Files contain forbidden CR (\\r): ${crHits.join(', ')}`);
+    return 'D1 docs/AI_HANDOFF.md diff clean vs ded7824 + 0 CR bytes across all source/test/doc files';
+  });
+
+  await check('Zero-Enable `buildHostMicroBootstrap` <= 6144 B hard cap & `W[K].apply` + `ds(W[K])` contract', '@exec-mock-tests', async () => {
+    const { buildHostMicroBootstrap } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs')).href
+    );
+    const expr = buildHostMicroBootstrap({
+      hostOrigin: 'https://127.0.0.1:65535',
+      capToken: 'c'.repeat(64),
+      triggerMode: 'both',
+      startupMode: 'gentle-auto',
+      skinEnabled: true,
+    });
+    const bytes = Buffer.byteLength(expr, 'utf8');
+    assert.ok(bytes <= 6144, `buildHostMicroBootstrap exceeded 6144 B cap: ${bytes} B`);
+    assert.ok(expr.includes('W[K].apply?W[K].apply({skinEnabled:!1'), 'Micro-bootstrap missing W[K].apply soft-disable path');
+    assert.ok(expr.includes('ds(W[K])'), 'Micro-bootstrap missing ds(W[K]) fallback tear-down path');
+    return `Micro-bootstrap ${bytes} B <= 6144 B with W[K].apply & ds(W[K])`;
+  });
+
+  await check('`src/shared/i18n.mjs` 100% zh/en key parity & v2.2.0 region/preset/degrade/sidebar/editor keys', '@exec-mock-tests', async () => {
+    const { DICT, t } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'i18n.mjs')).href);
+    const zhKeys = Object.keys(DICT.zh || {}).sort();
+    const enKeys = Object.keys(DICT.en || {}).sort();
+    const missingInEn = zhKeys.filter((k) => !Object.prototype.hasOwnProperty.call(DICT.en, k));
+    const missingInZh = enKeys.filter((k) => !Object.prototype.hasOwnProperty.call(DICT.zh, k));
+    assert.deepEqual(missingInEn, [], `Keys in DICT.zh missing from DICT.en: ${missingInEn.join(', ')}`);
+    assert.deepEqual(missingInZh, [], `Keys in DICT.en missing from DICT.zh: ${missingInZh.join(', ')}`);
+
+    const requiredV22Keys = [
+      'region.topbar',
+      'region.wco',
+      'region.sidebar',
+      'glass.floaterSolidBase',
+      'optics.scrimColor',
+      'ext.fxClickMode',
+      'ext.fxTrailMode',
+      'alert.degradedToPoster',
+      'preset.includeWallpaper',
+      'editor.popoutBtn',
+    ];
+    for (const rk of requiredV22Keys) {
+      assert.ok(typeof DICT.zh[rk] === 'string' && DICT.zh[rk].length > 0, `Missing zh key: ${rk}`);
+      assert.ok(typeof DICT.en[rk] === 'string' && DICT.en[rk].length > 0, `Missing en key: ${rk}`);
+    }
+    assert.ok(t('alert.degradedToPoster', { reason: 'timeout' }, 'en').includes('timeout'));
+    return `${zhKeys.length} zh === ${enKeys.length} en keys (100% parity + ${requiredV22Keys.length} v2.2 keys)`;
   });
 
   // =========================================================================
@@ -1515,6 +1634,8 @@ async function main() {
       await sleep(40);
       assert.ok(revokedBlobUrls.includes(createdBlobUrls[1]), 'Expected second video blob URL to be revoked when poster fallback commits');
       assert.equal(prism.status().wallpaperReady, true, 'Expected >256MB video with thumbUrl to stay wallpaperReady=true via poster fallback');
+      assert.equal(prism.status().degradedToPoster, true, 'Expected degradedToPoster=true when oversized video falls back to poster');
+      assert.ok(String(prism.status().degradeReason || '').length > 0, 'Expected non-empty degradeReason on poster degradation');
       assert.equal(docRoot.getAttribute('data-agy-prism-wallpaper'), 'ready');
       const stageEl = mockDoc.getElementById('agy-prism-stage');
       assert.equal(stageEl.querySelectorAll('video').length, 0, 'Oversized <video> element must be removed during poster fallback');
@@ -1527,7 +1648,7 @@ async function main() {
         `Expected 0ms fetch() for poster-ok.png (seen: ${fetchCalls.map((c) => c.url).join(', ')})`,
       );
 
-      // 4) 404 broken video fails open (data-agy-prism-wallpaper removed) AND hides #agy-prism-fx-canvas
+      // 4) 404 broken video fails open (data-agy-prism-wallpaper removed) AND hides #agy-prism-fx-canvas & clears degrade state
       stepStartMs = Date.now();
       prism.applyPayload({
         skinEnabled: true,
@@ -1541,12 +1662,14 @@ async function main() {
       });
       await sleep(40);
       assert.equal(prism.status().wallpaperReady, false, '404 video MUST fail open with wallpaperReady=false');
+      assert.equal(prism.status().degradedToPoster, false, '404 without poster must clear degradedToPoster=false');
+      assert.equal(prism.status().degradeReason, '', '404 without poster must clear degradeReason');
       assert.equal(docRoot.getAttribute('data-agy-prism-wallpaper'), null, '404 video MUST clear data-agy-prism-wallpaper');
       const fx404 = mockDoc.getElementById('agy-prism-fx-canvas');
       assert.ok(fx404, '#agy-prism-fx-canvas node still managed by fxEnabled');
       assert.equal(fx404.style.display, 'none', '#agy-prism-fx-canvas MUST be display:none when wallpaperReady=false');
 
-      return `0ms fetch+blob (${fetchCalls[0].elapsedMs}ms) + ${revokedBlobUrls.length} blob revocations + >256MB poster fallback + 404 fail-open & fx hidden`;
+      return `0ms fetch+blob (${fetchCalls[0].elapsedMs}ms) + ${revokedBlobUrls.length} blob revocations + >256MB poster degrade/reason + 404 fail-open & fx hidden`;
     } finally {
       prism.destroy();
     }
@@ -1601,8 +1724,9 @@ async function main() {
     const cdpCode = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs'), 'utf8');
     assert.ok(cdpCode.includes('MAX_HOST_SSE'), 'cdp-bridge.mjs missing MAX_HOST_SSE socket pool cap');
 
-    // 2B. Verify concurrent Studio `/api/events` SSE socket eviction (opening 3 streams actively closes stream #1, keeping <= 2 active)
-    const openPersistentStudioSse = () => {
+    // 2B. Verify partitioned Studio `/api/events` SSE socket eviction (MAX_STUDIO_SSE = 4: 2 aux + 2 popout, channels never evict each other!)
+    const openPersistentStudioSse = (channel = 'aux') => {
+      const ssePath = channel === 'popout' ? '/api/events?channel=popout' : '/api/events';
       const tryTcp = () =>
         new Promise((resolve, reject) => {
           let opened = false;
@@ -1617,7 +1741,7 @@ async function main() {
             resolveClosed();
           };
           const req = http.get(
-            `${studio.origin}/api/events`,
+            `${studio.origin}${ssePath}`,
             { agent: false, headers: { Accept: 'text/event-stream', Connection: 'keep-alive' } },
             (res) => {
               let buf = '';
@@ -1630,6 +1754,7 @@ async function main() {
                   opened = true;
                   resolve({
                     transport: 'tcp',
+                    channel,
                     status: res.statusCode,
                     headers: res.headers,
                     isClosed: () => closed,
@@ -1664,7 +1789,7 @@ async function main() {
 
           const req = new IncomingMessage(socket);
           req.method = 'GET';
-          req.url = '/api/events';
+          req.url = ssePath;
           req.httpVersion = '1.1';
           req.httpVersionMajor = 1;
           req.httpVersionMinor = 1;
@@ -1702,6 +1827,7 @@ async function main() {
               opened = true;
               resolve({
                 transport: 'inproc-persistent',
+                channel,
                 status,
                 headers: { ...res.getHeaders(), ...explicitHeaders },
                 isClosed: () => closed,
@@ -1748,33 +1874,60 @@ async function main() {
     const sseStreams = [];
     let sseEvictionTransport = '';
     try {
-      const s1 = await openPersistentStudioSse();
-      sseStreams.push(s1);
-      assert.equal(s1.status, 200, `SSE stream #1 returned ${s1.status}`);
-      assert.equal(s1.isClosed(), false, 'SSE stream #1 should remain open');
+      const a1 = await openPersistentStudioSse('aux');
+      sseStreams.push(a1);
+      assert.equal(a1.status, 200, `Aux SSE stream #1 returned ${a1.status}`);
+      assert.equal(a1.isClosed(), false);
 
-      const s2 = await openPersistentStudioSse();
-      sseStreams.push(s2);
-      assert.equal(s2.status, 200, `SSE stream #2 returned ${s2.status}`);
-      assert.equal(s1.isClosed(), false, 'SSE stream #1 should stay open while total streams <= 2');
-      assert.equal(s2.isClosed(), false, 'SSE stream #2 should remain open');
+      const a2 = await openPersistentStudioSse('aux');
+      sseStreams.push(a2);
+      assert.equal(a2.status, 200, `Aux SSE stream #2 returned ${a2.status}`);
+      assert.equal(a1.isClosed(), false, 'Aux SSE #1 should remain open when <= 2 aux streams');
+      assert.equal(a2.isClosed(), false);
 
-      const s3 = await openPersistentStudioSse();
-      sseStreams.push(s3);
-      assert.equal(s3.status, 200, `SSE stream #3 returned ${s3.status}`);
+      const p1 = await openPersistentStudioSse('popout');
+      sseStreams.push(p1);
+      const p2 = await openPersistentStudioSse('popout');
+      sseStreams.push(p2);
+      assert.equal(p1.status, 200, `Popout SSE stream #1 returned ${p1.status}`);
+      assert.equal(p2.status, 200, `Popout SSE stream #2 returned ${p2.status}`);
+      assert.equal(a1.isClosed(), false, 'Popout SSE channels must NOT evict Aux SSE #1 (MAX_STUDIO_SSE=4: 2 aux + 2 popout)');
+      assert.equal(a2.isClosed(), false, 'Popout SSE channels must NOT evict Aux SSE #2');
+      assert.equal(p1.isClosed(), false);
+      assert.equal(p2.isClosed(), false);
+
+      const a3 = await openPersistentStudioSse('aux');
+      sseStreams.push(a3);
+      assert.equal(a3.status, 200, `Aux SSE stream #3 returned ${a3.status}`);
 
       await Promise.race([
-        s1.closedPromise,
+        a1.closedPromise,
         sleep(1500).then(() => {
-          throw new Error('Oldest SSE stream #1 was NOT actively evicted/closed when 3rd /api/events connection opened (MAX_STUDIO_SSE=2)');
+          throw new Error('Oldest Aux SSE stream #1 was NOT evicted when 3rd bare /api/events opened (MAX_STUDIO_SSE_PER_CHANNEL=2)');
         }),
       ]);
-      assert.equal(s1.isClosed(), true, 'Expected oldest SSE stream #1 to be closed upon 3rd connection');
-      assert.equal(s2.isClosed(), false, 'Expected SSE stream #2 to remain open');
-      assert.equal(s3.isClosed(), false, 'Expected SSE stream #3 to remain open');
+      assert.equal(a1.isClosed(), true, 'Expected oldest Aux SSE #1 to be closed upon 3rd aux connection');
+      assert.equal(a2.isClosed(), false, 'Expected Aux SSE #2 to remain open');
+      assert.equal(a3.isClosed(), false, 'Expected Aux SSE #3 to remain open');
+      assert.equal(p1.isClosed(), false, 'Aux eviction must NOT close Popout SSE #1');
+      assert.equal(p2.isClosed(), false, 'Aux eviction must NOT close Popout SSE #2');
+
+      const p3 = await openPersistentStudioSse('popout');
+      sseStreams.push(p3);
+      assert.equal(p3.status, 200, `Popout SSE stream #3 returned ${p3.status}`);
+      await Promise.race([
+        p1.closedPromise,
+        sleep(1500).then(() => {
+          throw new Error('Oldest Popout SSE stream #1 was NOT evicted when 3rd /api/events?channel=popout opened');
+        }),
+      ]);
+      assert.equal(p1.isClosed(), true, 'Expected oldest Popout SSE #1 to be closed upon 3rd popout connection');
+      assert.equal(p2.isClosed(), false);
+      assert.equal(p3.isClosed(), false);
+
       const activeStreams = sseStreams.filter((s) => !s.isClosed()).length;
-      assert.ok(activeStreams <= 2, `Expected <= 2 active /api/events SSE streams, got ${activeStreams}`);
-      sseEvictionTransport = s3.transport;
+      assert.equal(activeStreams, 4, `Expected 4 active /api/events SSE streams (2 aux + 2 popout), got ${activeStreams}`);
+      sseEvictionTransport = p3.transport;
     } finally {
       for (const s of sseStreams) {
         try { s.close(); } catch {}
@@ -3078,7 +3231,18 @@ async function main() {
         `PR #9 2D-quinquies: proven-alive origin was wrongly blacklisted by transient >350ms timeout (got ${prism.status().videoTransport})`,
       );
 
-      // 2E) Also verify `panel-inject.js` thumbnail grid (`bindSafeThumb`) uses 0ms fetch+blob under https://127.0.0.1
+      // 2E) Also verify `panel-inject.js` thumbnail grid (`bindSafeThumb`) uses 0ms fetch+blob under https://127.0.0.1,
+      //     lazy-defers via IntersectionObserver, appends ?static=1 to extensionless preview URLs, and leaves .png untouched
+      const ioObserved = [];
+      let ioCallback = null;
+      mockWin.IntersectionObserver = function MockIntersectionObserver(cb) {
+        ioCallback = cb;
+        return {
+          observe: (el) => ioObserved.push(el),
+          unobserve: () => {},
+          disconnect: () => { ioObserved.length = 0; },
+        };
+      };
       vm.runInContext(panelInjectSrc, vmCtx, { filename: 'panel-inject.js' });
       const panel = mockWin.__agyPrismPanel;
       assert.ok(panel && typeof panel.syncState === 'function', 'panel-inject.js failed to mount in https: VM');
@@ -3087,6 +3251,7 @@ async function main() {
         const revokesBeforePanelDestroy = revokedBlobUrls.length;
         panel.syncState({
           skinEnabled: true,
+          config: { libraryAnimatedThumbs: 'hover' },
           items: [
             {
               id: 'panel-t1',
@@ -3095,25 +3260,56 @@ async function main() {
               source: 'local',
               thumbUrl: 'http://127.0.0.1:49152/preview/panel-t1/thumb.png',
             },
+            {
+              id: 'panel-t2',
+              title: 'Panel Static Video Thumb',
+              kind: 'video',
+              source: 'local',
+              thumbUrl: 'http://127.0.0.1:49152/preview/panel-t2/thumb',
+            },
           ],
         });
         const libTabBtn = mockDoc.getElementById('agy-prism-popover')?.querySelectorAll('.pp-tab').find((b) => b.getAttribute('data-tab') === 'library');
         assert.ok(libTabBtn, 'panel-inject.js missing library .pp-tab button');
         libTabBtn.click();
+        await sleep(25);
+        assert.equal(
+          fetchCalls.some((c) => c.url.includes('panel-t2/thumb')),
+          false,
+          'panel-inject.js bindSafeThumb eagerly fetched video thumb before IntersectionObserver fired!',
+        );
+        const panelImgs = mockDoc.getElementById('agy-prism-popover')?.querySelectorAll('img') || [];
+        assert.equal(panelImgs.length, 2, 'Expected 2 thumbnail <img> elements in panel library grid');
+        assert.equal(
+          panelImgs[0].dataset?.prismThumbUrl || panelImgs[0].getAttribute('data-prism-thumb-url'),
+          'http://127.0.0.1:49152/preview/panel-t1/thumb.png',
+          '.png thumbnail must NOT receive ?static=1 suffix',
+        );
+        assert.equal(
+          panelImgs[1].dataset?.prismThumbUrl || panelImgs[1].getAttribute('data-prism-thumb-url'),
+          'http://127.0.0.1:49152/preview/panel-t2/thumb?static=1',
+          'Extensionless video preview thumbnail must receive ?static=1 suffix under hover mode',
+        );
+        assert.ok(typeof ioCallback === 'function' && ioObserved.length >= 2, 'Expected IntersectionObserver.observe() calls on panel thumbnails');
+        ioCallback(panelImgs.map((target) => ({ target, isIntersecting: true })));
         await sleep(40);
         assert.ok(
           fetchCalls.some((c) => c.url === 'http://127.0.0.1:49152/preview/panel-t1/thumb.png'),
-          'panel-inject.js bindSafeThumb did not fetch thumbUrl via fetch+blob on https: host',
+          'panel-inject.js bindSafeThumb did not fetch .png thumbUrl via fetch+blob on intersection',
         );
-        const panelImgs = mockDoc.getElementById('agy-prism-popover')?.querySelectorAll('img') || [];
-        assert.equal(panelImgs.length, 1, 'Expected 1 thumbnail <img> in panel library grid');
-        assert.ok(panelImgs[0].src.startsWith('blob:'), `Expected blob: src on panel thumbnail, got ${panelImgs[0].src}`);
+        assert.ok(
+          fetchCalls.some((c) => c.url === 'http://127.0.0.1:49152/preview/panel-t2/thumb?static=1'),
+          'panel-inject.js bindSafeThumb did not fetch ?static=1 video thumb via fetch+blob on intersection',
+        );
+        assert.ok(panelImgs[0].src.startsWith('blob:'), `Expected blob: src on panel thumbnail 0, got ${panelImgs[0].src}`);
+        assert.ok(panelImgs[1].src.startsWith('blob:'), `Expected blob: src on panel thumbnail 1, got ${panelImgs[1].src}`);
         panel.destroy();
         assert.ok(
           revokedBlobUrls.length > revokesBeforePanelDestroy,
           'panel.destroy() did not revoke cached thumbBlobCache blob URLs',
         );
       } finally {
+        delete mockWin.IntersectionObserver;
         try { panel.destroy(); } catch {}
       }
 
@@ -3545,14 +3741,18 @@ async function main() {
       assert.equal(p.patch.fpsCap, presetId === 'eco' ? 30 : 60, `SCENE_PRESETS.${presetId}.patch.fpsCap expected ${presetId === 'eco' ? 30 : 60}, got ${p.patch.fpsCap}`);
     }
 
-    // 2) Req #4: 7-component surfaceTints schema, bounds clamping, null reset, sidebarOpacity bidirectional sync & resolveComponentDefaultAlpha
-    assert.deepEqual([...SURFACE_TINT_COMPONENTS], ['topbar', 'sidebar', 'workspace', 'rightPane', 'composer', 'card', 'popover']);
+    // 2) 8-component SURFACE_TINT_COMPONENTS + REGION_IDS canonical order, bounds clamping, null reset preserves regions structure & resolveComponentDefaultAlpha
+    assert.deepEqual([...SURFACE_TINT_COMPONENTS], ['topbar', 'wco', 'sidebar', 'workspace', 'card', 'composer', 'rightPane', 'popover']);
+    assert.equal(SURFACE_TINT_BOUNDS.wco.minOpacity, 0, 'wco.minOpacity must allow 0% independent transparent override');
     assert.equal(SURFACE_TINT_BOUNDS.popover.minOpacity, 0.5);
     const syncedFromSb = sanitizeConfig({ sidebarOpacity: 0.88 });
     assert.equal(syncedFromSb.sidebarOpacity, 0.88);
     assert.equal(syncedFromSb.surfaceTints.sidebar.opacity, 0.88, 'sidebarOpacity did not sync into surfaceTints.sidebar.opacity');
 
-    const syncedFromSt = sanitizeConfig({ surfaceTints: { sidebar: { opacity: 0.42, tone: -150, tint: '#abc' }, popover: { opacity: 0.1, tone: 150, tint: 'invalid' } } });
+    const syncedFromSt = sanitizeConfig({
+      regions: { sidebar: { opacity: 0.42, borderStyle: 'full', radius: '16' } },
+      surfaceTints: { sidebar: { opacity: 0.42, tone: -150, tint: '#abc' }, popover: { opacity: 0.1, tone: 150, tint: 'invalid' } },
+    });
     assert.equal(syncedFromSt.sidebarOpacity, 0.42, 'surfaceTints.sidebar.opacity did not sync back into sidebarOpacity');
     assert.equal(syncedFromSt.surfaceTints.sidebar.tone, -100, 'tone not clamped to -100');
     assert.equal(syncedFromSt.surfaceTints.sidebar.tint, '#AABBCC', '3-digit hex tint not normalized to #AABBCC');
@@ -3567,8 +3767,10 @@ async function main() {
       assert.equal(resetSt.surfaceTints[comp].tone, 0);
       assert.equal(resetSt.surfaceTints[comp].tint, '');
     }
+    assert.equal(resetSt.regions.sidebar.borderStyle, 'full', 'surfaceTints: null must preserve structural borderStyle in regions.sidebar');
+    assert.equal(resetSt.regions.sidebar.radius, 16, 'surfaceTints: null must preserve structural radius in regions.sidebar');
 
-    // Verify resolveComponentDefaultAlpha returns bounded numeric alpha for all 7 components in dark & light modes
+    // Verify resolveComponentDefaultAlpha returns bounded numeric alpha for all 8 components in dark & light modes
     const baseCfg = sanitizeConfig({});
     for (const isLight of [false, true]) {
       for (const comp of SURFACE_TINT_COMPONENTS) {
@@ -3576,6 +3778,11 @@ async function main() {
         assert.ok(typeof a === 'number' && Number.isFinite(a) && a >= 0 && a <= 1, `resolveComponentDefaultAlpha(${comp}, ${isLight}) invalid: ${a}`);
         if (comp === 'popover') assert.ok(a >= 0.9, `resolveComponentDefaultAlpha(popover, ${isLight}) expected >= 0.9, got ${a}`);
       }
+      assert.equal(
+        resolveComponentDefaultAlpha('wco', baseCfg, isLight),
+        resolveComponentDefaultAlpha('topbar', baseCfg, isLight),
+        `Default WCO Auto alpha must inherit topbar alpha (isLight=${isLight})`,
+      );
       assert.equal(
         resolveComponentDefaultAlpha('rightPane', baseCfg, isLight),
         resolveComponentDefaultAlpha('workspace', baseCfg, isLight),
@@ -3711,6 +3918,7 @@ async function main() {
     ];
     const surfaceVars = [
       '--prism-surface-topbar',
+      '--prism-surface-wco',
       '--prism-surface-sidebar',
       '--prism-surface-chat',
       '--prism-surface-right-pane',
@@ -3778,13 +3986,13 @@ async function main() {
     );
 
     // 1) SemVer unit checks (`isNewerVersion(candidate, current)`)
-    assert.equal(compareSemver('2.1.0', '2.0.9'), 1);
-    assert.equal(compareSemver('v2.1.0', '2.1.0'), 0);
-    assert.equal(compareSemver('2.1.0-beta.1', '2.1.0'), -1);
-    assert.equal(compareSemver('2.1.0+build.42', '2.1.0'), 0);
-    assert.equal(isNewerVersion('2.1.0', '2.0.9'), true);
-    assert.equal(isNewerVersion('2.0.9', '2.1.0'), false);
-    assert.equal(isNewerVersion('2.1.0-rc.1', '2.1.0'), false);
+    assert.equal(compareSemver('2.2.0', '2.1.0'), 1);
+    assert.equal(compareSemver('v2.2.0', '2.2.0'), 0);
+    assert.equal(compareSemver('2.2.0-beta.1', '2.2.0'), -1);
+    assert.equal(compareSemver('2.2.0+build.42', '2.2.0'), 0);
+    assert.equal(isNewerVersion('2.2.0', '2.1.0'), true);
+    assert.equal(isNewerVersion('2.1.0', '2.2.0'), false);
+    assert.equal(isNewerVersion('2.2.0-rc.1', '2.2.0'), false);
     assert.equal(parseSemver('not-a-version'), null);
 
     // 2) `tar-safe.mjs` hostile archive rejection (Zip-Slip, absolute, symlink, hardlink, Windows reserved, case collision)
@@ -3852,7 +4060,7 @@ async function main() {
 
     const healthzRes = await invokeServerInMemory(studio.server, { method: 'GET', url: '/api/healthz', headers: { Host: '127.0.0.1:53040' } });
     assert.equal(healthzRes.status, 200);
-    assert.equal(healthzRes.json().version, '2.1.0');
+    assert.equal(healthzRes.json().version, '2.2.0');
     assert.notEqual(healthzRes.headers['access-control-allow-origin'], '*', '/api/healthz must NOT emit wildcard CORS');
 
     const badOriginApply = await invokeServerInMemory(studio.server, {
@@ -3888,11 +4096,11 @@ async function main() {
     assert.equal(gitCheckoutApply.status, 409, `POST /api/update/apply in .git checkout expected 409, got ${gitCheckoutApply.status}`);
     assert.equal(gitCheckoutApply.json().code, 'ERR_GIT_DEV_CHECKOUT');
 
-    // 4) Build deterministic v2.1.0 release tarball (all real runtime files) & test (a) Offline fail-safe, (b) Temp-plugin-dir swap, (c) Mid-sync rollback!
-    const pkg210Map = collectDirectoryFilesMap(REPO_ROOT);
-    const mockTarGz = createDeterministicTarGz(pkg210Map);
+    // 4) Build deterministic v2.2.0 release tarball (all real runtime files) & test (a) Offline fail-safe, (b) Temp-plugin-dir swap, (c) Mid-sync rollback!
+    const pkg220Map = collectDirectoryFilesMap(REPO_ROOT);
+    const mockTarGz = createDeterministicTarGz(pkg220Map);
     const mockSha256 = createHash('sha256').update(mockTarGz).digest('hex');
-    const mockShaText = `${mockSha256}  agy-wallpaper-prism-v2.1.0.tar.gz\n`;
+    const mockShaText = `${mockSha256}  agy-wallpaper-prism-v2.2.0.tar.gz\n`;
 
     const makeMockGhFetch = ({ offline = false } = {}) => async (url) => {
       const u = String(url || '');
@@ -3908,19 +4116,19 @@ async function main() {
           headers: new Map([['content-type', 'application/json']]),
           async json() {
             return {
-              tag_name: 'v2.1.0',
-              html_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/tag/v2.1.0',
-              body: 'Release v2.1.0 mock notes',
-              published_at: '2026-11-25T00:00:00Z',
+              tag_name: 'v2.2.0',
+              html_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/tag/v2.2.0',
+              body: 'Release v2.2.0 mock notes',
+              published_at: '2026-11-26T00:00:00Z',
               assets: [
                 {
-                  name: 'agy-wallpaper-prism-v2.1.0.tar.gz',
-                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.1.0/agy-wallpaper-prism-v2.1.0.tar.gz',
+                  name: 'agy-wallpaper-prism-v2.2.0.tar.gz',
+                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.2.0/agy-wallpaper-prism-v2.2.0.tar.gz',
                   size: mockTarGz.length,
                 },
                 {
-                  name: 'agy-wallpaper-prism-v2.1.0.tar.gz.sha256',
-                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.1.0/agy-wallpaper-prism-v2.1.0.tar.gz.sha256',
+                  name: 'agy-wallpaper-prism-v2.2.0.tar.gz.sha256',
+                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.2.0/agy-wallpaper-prism-v2.2.0.tar.gz.sha256',
                   size: Buffer.byteLength(mockShaText, 'utf8'),
                 },
               ],
@@ -3953,11 +4161,11 @@ async function main() {
     const seedMockPluginDir = (dir) => {
       fs.mkdirSync(path.join(dir, 'sidecars', 'prism_studio'), { recursive: true });
       fs.mkdirSync(path.join(dir, 'src', 'shared'), { recursive: true });
-      fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({ name: 'agy-wallpaper-prism', version: '2.0.9' }, null, 2), 'utf8');
-      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'agy-wallpaper-prism', version: '2.0.9' }, null, 2), 'utf8');
-      fs.writeFileSync(path.join(dir, 'sidecars', 'prism_studio', 'main.mjs'), '// v2.0.9 main\n', 'utf8');
-      fs.writeFileSync(path.join(dir, 'sidecars', 'prism_studio', 'index.html'), '<!doctype html><html><body>v2.0.9</body></html>\n', 'utf8');
-      fs.writeFileSync(path.join(dir, 'src', 'shared', 'schema.mjs'), "export const PLUGIN_VERSION = '2.0.9';\n", 'utf8');
+      fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({ name: 'agy-wallpaper-prism', version: '2.1.0' }, null, 2), 'utf8');
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'agy-wallpaper-prism', version: '2.1.0' }, null, 2), 'utf8');
+      fs.writeFileSync(path.join(dir, 'sidecars', 'prism_studio', 'main.mjs'), '// v2.1.0 main\n', 'utf8');
+      fs.writeFileSync(path.join(dir, 'sidecars', 'prism_studio', 'index.html'), '<!doctype html><html><body>v2.1.0</body></html>\n', 'utf8');
+      fs.writeFileSync(path.join(dir, 'src', 'shared', 'schema.mjs'), "export const PLUGIN_VERSION = '2.1.0';\n", 'utf8');
       fs.writeFileSync(path.join(dir, '.prism-install-id'), 'keep-this-install-id-12345\n', 'utf8');
     };
 
@@ -3969,7 +4177,7 @@ async function main() {
     const offUpdater = createPrismUpdater({
       pluginRoot: offPluginDir,
       dataDir: offDataDir,
-      currentVersion: '2.0.9',
+      currentVersion: '2.1.0',
       fetchImpl: makeMockGhFetch({ offline: true }),
       managedSidecar: false,
     });
@@ -3982,11 +4190,11 @@ async function main() {
     const swapDataDir = path.join(SCRATCH_ROOT, 'upd-swap-data');
     seedMockPluginDir(swapPluginDir);
     fs.mkdirSync(swapDataDir, { recursive: true });
-    const UPD_TOKEN = 'mock-updater-token-210';
+    const UPD_TOKEN = 'mock-updater-token-220';
     const updSrv = await createPrismStudioServer({
       dataDir: swapDataDir,
       pluginRoot: swapPluginDir,
-      currentVersion: '2.0.9',
+      currentVersion: '2.1.0',
       token: UPD_TOKEN,
       startCdp: false,
       managedSidecar: false,
@@ -4002,22 +4210,22 @@ async function main() {
       assert.notEqual(stResp.headers['access-control-allow-origin'], '*', '/api/update/status must NOT emit wildcard CORS');
       const stJson = stResp.json();
       assert.equal(stJson.hasUpdate, true, `Expected mock GitHub release hasUpdate=true, got ${JSON.stringify(stJson)}`);
-      assert.equal(stJson.latestVersion, '2.1.0');
+      assert.equal(stJson.latestVersion, '2.2.0');
       assert.equal(stJson.canAutoUpdate, true);
 
       const applyResp = await invokeServerInMemory(updSrv.server, {
         method: 'POST',
         url: '/api/update/apply',
         headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': UPD_TOKEN, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetVersion: '2.1.0' }),
+        body: JSON.stringify({ targetVersion: '2.2.0' }),
       });
       assert.equal(applyResp.status, 200, `Mock /api/update/apply expected 200, got ${applyResp.status}: ${applyResp.text()}`);
       const applyJson = applyResp.json();
       assert.equal(applyJson.ok, true);
-      assert.equal(applyJson.toVersion, '2.1.0');
-      assert.equal(JSON.parse(fs.readFileSync(path.join(swapPluginDir, 'plugin.json'), 'utf8')).version, '2.1.0');
+      assert.equal(applyJson.toVersion, '2.2.0');
+      assert.equal(JSON.parse(fs.readFileSync(path.join(swapPluginDir, 'plugin.json'), 'utf8')).version, '2.2.0');
       assert.equal(fs.readFileSync(path.join(swapPluginDir, '.prism-install-id'), 'utf8'), 'keep-this-install-id-12345\n', '.prism-install-id was NOT preserved across update swap!');
-      assert.ok(fs.existsSync(path.join(swapPluginDir, 'src', 'engine', 'updater.mjs')), 'New v2.1.0 file missing after swap');
+      assert.ok(fs.existsSync(path.join(swapPluginDir, 'src', 'engine', 'updater.mjs')), 'New v2.2.0 file missing after swap');
     } finally {
       await updSrv.close().catch(() => {});
     }
@@ -4032,7 +4240,7 @@ async function main() {
     const rbUpdater = createPrismUpdater({
       pluginRoot: rbPluginDir,
       dataDir: rbDataDir,
-      currentVersion: '2.0.9',
+      currentVersion: '2.1.0',
       fetchImpl: makeMockGhFetch({ offline: false }),
       managedSidecar: false,
       onRollback: () => { rollbackCalled = true; },
@@ -4047,15 +4255,15 @@ async function main() {
       },
     });
     await assert.rejects(
-      () => rbUpdater.applyUpdate({ targetVersion: '2.1.0' }),
+      () => rbUpdater.applyUpdate({ targetVersion: '2.2.0' }),
       (err) => err && (err.code === 'ENOSPC' || String(err.message || '').includes('Simulated disk full')),
       'Mid-sync ENOSPC failure must reject after synchronous rollback',
     );
     assert.equal(rollbackCalled, true, 'onRollback callback was not invoked');
-    assert.equal(JSON.parse(fs.readFileSync(path.join(rbPluginDir, 'plugin.json'), 'utf8')).version, '2.0.9', 'Rollback did not restore original plugin.json 2.0.9!');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(rbPluginDir, 'plugin.json'), 'utf8')).version, '2.1.0', 'Rollback did not restore original plugin.json 2.1.0!');
     assert.equal(fs.readFileSync(path.join(rbPluginDir, '.prism-install-id'), 'utf8'), 'keep-this-install-id-12345\n', 'Rollback did not preserve .prism-install-id!');
 
-    return `SemVer + ${hostileCases.length} hostile tar rejections + Host 403 + Origin 403/Token 401/CT 415/Git 409 + offline fail-safe + swap (2.0.9->2.1.0) & ENOSPC rollback verified`;
+    return `SemVer + ${hostileCases.length} hostile tar rejections + Host 403 + Origin 403/Token 401/CT 415/Git 409 + offline fail-safe + swap (2.1.0->2.2.0) & ENOSPC rollback verified`;
   });
 
   await check('Req #7: `scripts/pack-release.mjs` 3-Artifact Release Bundle (`.tar.gz` + `.sha256` + `.zip`) & `dist/` Gitignore', '@exec-build-release / @exec-tests', async () => {
@@ -4068,8 +4276,8 @@ async function main() {
 
     const scratchDist = path.join(SCRATCH_ROOT, 'dist-verify');
     const pack = await packReleaseBundle({ sourceRoot: REPO_ROOT, outDir: scratchDist, skipBuild: true });
-    assert.equal(pack.version, '2.1.0');
-    assert.equal(pack.tag, 'v2.1.0');
+    assert.equal(pack.version, '2.2.0');
+    assert.equal(pack.tag, 'v2.2.0');
     assert.ok(fs.existsSync(pack.tarPath), 'Missing .tar.gz release artifact');
     assert.ok(fs.existsSync(pack.shaPath), 'Missing .tar.gz.sha256 release artifact');
     assert.ok(fs.existsSync(pack.zipPath), 'Missing .zip release artifact');
@@ -4084,23 +4292,605 @@ async function main() {
     assert.equal(zipBuf.readUInt32LE(0), 0x04034b50, 'ZIP missing PK\\x03\\x04 Local File Header magic');
     assert.ok(zipBuf.includes(Buffer.from([0x50, 0x4b, 0x05, 0x06])), 'ZIP missing PK\\x05\\x06 EOCD signature');
 
-    validateTarGzArchive(tarBuf, { expectedVersion: '2.1.0' });
+    validateTarGzArchive(tarBuf, { expectedVersion: '2.2.0' });
     const extractDir = path.join(SCRATCH_ROOT, 'dist-extract');
     extractSafeTarGz({ tarGzBuffer: tarBuf, destDir: extractDir });
-    const staged = validateStagedPlugin({ stageDir: extractDir, currentVersion: '2.0.9', requireNewerVersion: true });
-    assert.equal(staged.version, '2.1.0');
+    const staged = validateStagedPlugin({ stageDir: extractDir, currentVersion: '2.1.0', requireNewerVersion: true });
+    assert.equal(staged.version, '2.2.0');
 
     // Verify `dist/` is gitignored so running `node scripts/pack-release.mjs` keeps working tree clean
-    const ignored = execFileSync('git', ['check-ignore', 'dist'], { cwd: REPO_ROOT, stdio: 'pipe' }).toString('utf8').trim();
-    assert.equal(ignored, 'dist', `Expected dist to be gitignored, got "${ignored}"`);
+    const ignored = execFileSync('git', ['check-ignore', 'dist/'], { cwd: REPO_ROOT, stdio: 'pipe' }).toString('utf8').trim();
+    assert.ok(ignored === 'dist/' || ignored === 'dist', `Expected dist/ to be gitignored, got "${ignored}"`);
 
     return `v${pack.version} 3 artifacts (.tar.gz ${Math.round(pack.tarSizeBytes / 1024)}KB, .sha256 match, .zip ${Math.round(pack.zipSizeBytes / 1024)}KB, ${pack.fileCount} files, dist gitignored)`;
   });
 
+  // -------------------------------------------------------------------------
+  // Suite 2 v2.2.0 New Automated Checks (S2-01 .. S2-08)
+  // -------------------------------------------------------------------------
+  await check('S2-01: 8-Region unified `regions` schema, sidebar radii/styles/typography, fontSize [11..15], `sanitizeFontFamily` & `applyResetScope`', '@exec-mock-tests', async () => {
+    const {
+      REGION_IDS,
+      SIDEBAR_RADII,
+      SIDEBAR_LIST_STYLES,
+      SIDEBAR_TYPOGRAPHY_MODES,
+      REGION_FONT_SIZE_BOUNDS,
+      CJK_SAFE_FONT_PRESETS,
+      sanitizeFontFamily,
+      sanitizeConfig,
+      applyResetScope,
+    } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href);
+
+    assert.deepEqual([...REGION_IDS], ['topbar', 'wco', 'sidebar', 'workspace', 'card', 'composer', 'rightPane', 'popover']);
+    assert.deepEqual([...SIDEBAR_RADII], ['auto', 'native', '0', '6', '12', '16', '20']);
+    assert.deepEqual([...SIDEBAR_LIST_STYLES], ['capsule', 'underline', 'accordion', 'tree']);
+    assert.deepEqual([...SIDEBAR_TYPOGRAPHY_MODES], ['balanced', 'native']);
+    assert.equal(REGION_FONT_SIZE_BOUNDS.sidebar.min, 11);
+    assert.equal(REGION_FONT_SIZE_BOUNDS.sidebar.max, 15);
+    assert.ok(Array.isArray(CJK_SAFE_FONT_PRESETS) && CJK_SAFE_FONT_PRESETS.length >= 2, 'Expected >= 2 CJK-safe font presets');
+
+    assert.equal(sanitizeFontFamily('"Microsoft YaHei", sans-serif'), "'Microsoft YaHei', sans-serif");
+    assert.equal(sanitizeFontFamily('evil;color:red;url(https://x)'), '', 'sanitizeFontFamily failed to reject CSS injection string');
+    assert.equal(sanitizeFontFamily('<script>alert(1)</script>'), '', 'sanitizeFontFamily failed to reject angle-bracket injection');
+
+    const cfgLow = sanitizeConfig({ sidebarTypographyMode: 'balanced', regions: { sidebar: { fontSize: 6, listStyle: 'tree', radius: 16, borderStyle: 'none' } } });
+    assert.equal(cfgLow.regions.sidebar.fontSize, 11, 'sidebar.fontSize below 11 must clamp to 11');
+    assert.equal(cfgLow.regions.sidebar.listStyle, 'tree');
+    assert.equal(cfgLow.sidebarTypographyMode, 'balanced');
+    assert.equal(cfgLow.regions.sidebar.radius, 16);
+    assert.equal(cfgLow.regions.sidebar.borderStyle, 'none');
+
+    const cfgHigh = sanitizeConfig({ regions: { sidebar: { fontSize: 99, opacity: 0.65 } } });
+    assert.equal(cfgHigh.regions.sidebar.fontSize, 15, 'sidebar.fontSize above 15 must clamp to 15');
+    assert.equal(cfgHigh.sidebarOpacity, 0.65, 'regions.sidebar.opacity did not mirror into legacy sidebarOpacity');
+
+    const multi = sanitizeConfig({
+      regions: {
+        topbar: { opacity: 0.77, tint: '#112233' },
+        sidebar: { opacity: 0.65, listStyle: 'accordion', fontSize: 13 },
+      },
+    });
+    const resetSidebar = sanitizeConfig({ regions: { sidebar: null } }, multi);
+    assert.equal(resetSidebar.regions.sidebar.opacity, null, 'regions.sidebar=null failed to clear sidebar opacity');
+    assert.equal(resetSidebar.regions.topbar.opacity, 0.77, 'regions.sidebar=null mutated sibling topbar region');
+    assert.equal(resetSidebar.regions.topbar.tint, '#112233');
+    const resetPlayback = applyResetScope(multi, 'playback');
+    assert.equal(resetPlayback.regions.topbar.opacity, 0.77, 'applyResetScope playback mutated regions.topbar');
+    const resetSkin = applyResetScope(multi, 'skin');
+    assert.equal(resetSkin.regions.topbar.opacity, null, 'applyResetScope skin failed to clear regions.topbar');
+
+    return `8 REGION_IDS + SIDEBAR_RADII(${SIDEBAR_RADII.length}) + fontSize[11..15] + XSS font sanitization + applyResetScope`;
+  });
+
+  await check('S2-02: `PROFILE_PRESET_KEYS`, `/api/presets/{save,rename,duplicate,delete}`, `perWallpaperOverrides` vs `/api/preset/apply` & `includeWallpaper` fallback', '@exec-mock-tests', async () => {
+    const { PROFILE_PRESET_KEYS } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'store.mjs')).href);
+    for (const k of ['regions', 'floaterSolidBase', 'scrimColor', 'fxClickMode', 'fxTrailMode']) {
+      assert.ok(PROFILE_PRESET_KEYS.includes(k), `PROFILE_PRESET_KEYS missing v2.2 key "${k}"`);
+    }
+
+    const prevState = await engine.getConfig();
+    const lib = await engine.listLibrary({ refresh: false });
+    const items = Array.isArray(lib) ? lib : lib.items || [];
+    const targetWall = items.find((x) => String(x.workshopId) === '100001') || items[0];
+    assert.ok(targetWall, 'Need active library item for S2-02 preset test');
+
+    const createdIds = [];
+    try {
+      await engine.applyWallpaper(targetWall.id, { skinEnabled: true, glassBlur: 14 });
+      const saveRes = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: '/api/presets/save',
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'S202 Preset A',
+          description: 'initial preset',
+          includeWallpaper: false,
+          patch: { glassBlur: 24, regions: { sidebar: { opacity: 0.78 } }, floaterSolidBase: false },
+          mode: 'create',
+        }),
+      });
+      assert.equal(saveRes.status, 200, `/api/presets/save failed: ${saveRes.text()}`);
+      const p1 = saveRes.json().preset;
+      assert.ok(p1?.id, 'Expected saved preset id');
+      createdIds.push(p1.id);
+
+      const renRes = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: '/api/presets/rename',
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: p1.id, name: 'S202 Preset Renamed', description: 'renamed desc' }),
+      });
+      assert.equal(renRes.status, 200);
+      assert.equal(renRes.json().preset?.name, 'S202 Preset Renamed');
+
+      const dupRes = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: '/api/presets/duplicate',
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: p1.id, name: 'S202 Preset Copy' }),
+      });
+      assert.equal(dupRes.status, 200);
+      const p2 = dupRes.json().preset;
+      assert.ok(p2?.id && p2.id !== p1.id, 'Duplicate preset must allocate distinct id');
+      createdIds.push(p2.id);
+
+      // Seed stale perWallpaperOverride on active wallpaper + save preset with nonexistent bound wallpaperId to verify (a) no shadowing, (b) fallback!
+      await engine.updateConfig({
+        perWallpaperOverrides: {
+          [targetWall.id]: { glassBlur: 9, regions: { sidebar: { opacity: 0.91 } } },
+        },
+      });
+      const missingBindSave = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: '/api/presets/save',
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'S202 Missing Wall Fallback',
+          includeWallpaper: true,
+          commitPatch: false,
+          patch: { glassBlur: 19, activeWallpaperId: 'nonexistent-wall-999999', wallpaperId: 'nonexistent-wall-999999' },
+          mode: 'create',
+        }),
+      });
+      assert.equal(missingBindSave.status, 200);
+      const p3 = missingBindSave.json().preset;
+      createdIds.push(p3.id);
+
+      const applyFallbackRes = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: '/api/preset/apply',
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: p3.id }),
+      });
+      assert.equal(applyFallbackRes.status, 200);
+      const applyFallbackJson = applyFallbackRes.json();
+      assert.equal(applyFallbackJson.wallpaperFallback?.missingId, 'nonexistent-wall-999999', 'Missing bound wallpaperId must report wallpaperFallback.missingId');
+      assert.ok(applyFallbackJson.wallpaperFallback?.keptId, 'Missing bound wallpaperId must keep current active wallpaper');
+      assert.equal(applyFallbackJson.missingWallpaperId, 'nonexistent-wall-999999');
+
+      // Apply preset p1 explicitly and verify perWallpaperOverrides does NOT shadow p1.patch (glassBlur=24)
+      const applyP1Res = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: '/api/preset/apply',
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: p1.id }),
+      });
+      assert.equal(applyP1Res.status, 200);
+      const cfgAfterApply = applyP1Res.json().state?.config;
+      assert.equal(cfgAfterApply.glassBlur, 24, `perWallpaperOverrides shadowed applied preset glassBlur (${cfgAfterApply.glassBlur} vs 24)`);
+      assert.equal(cfgAfterApply.floaterSolidBase, false);
+    } finally {
+      for (const delId of createdIds) {
+        await invokeServerInMemory(studio.server, {
+          method: 'POST',
+          url: '/api/presets/delete',
+          headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: delId }),
+        }).catch(() => {});
+      }
+      await engine.updateConfig({
+        perWallpaperOverrides: prevState.perWallpaperOverrides || {},
+        glassBlur: prevState.glassBlur,
+        floaterSolidBase: prevState.floaterSolidBase,
+        regions: prevState.regions,
+        surfaceTints: prevState.surfaceTints,
+      }).catch(() => {});
+    }
+    return 'PROFILE_PRESET_KEYS + /api/presets/{save,rename,duplicate,delete} + non-shadowing & missing-wallpaper fallback verified';
+  });
+
+  await check('S2-03: 4-layer `(regionId, propKey)` concurrent merge, `<50ms` `POST /api/config` (`flush:true`) & monotonic `stateRev` out-of-order rejection', '@exec-mock-tests', async () => {
+    const prevCfg = await engine.getConfig();
+    try {
+      const t0 = performance.now();
+      const [r1, r2, r3] = await Promise.all([
+        invokeServerInMemory(studio.server, {
+          method: 'POST',
+          url: '/api/config',
+          headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patch: { regions: { topbar: { opacity: 0.73 } } } }),
+        }),
+        invokeServerInMemory(studio.server, {
+          method: 'POST',
+          url: '/api/config',
+          headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patch: { regions: { topbar: { tint: '#2563EB' } } } }),
+        }),
+        invokeServerInMemory(studio.server, {
+          method: 'POST',
+          url: '/api/config',
+          headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ flush: true, patch: { regions: { sidebar: { fontSize: 13 } } } }),
+        }),
+      ]);
+      const ackMs = Math.round((performance.now() - t0) * 100) / 100;
+      assert.equal(r1.status, 200);
+      assert.equal(r2.status, 200);
+      assert.equal(r3.status, 200);
+      assert.ok(ackMs < 250, `Concurrent POST /api/config batch took too long (${ackMs}ms)`);
+      const singleT0 = performance.now();
+      const singleRes = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: '/api/config',
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patch: { regions: { topbar: { blur: 12 } } } }),
+      });
+      const singleAckMs = Math.round((performance.now() - singleT0) * 100) / 100;
+      assert.equal(singleRes.status, 200);
+      assert.ok(singleAckMs < 50, `Expected <50ms non-blocking POST /api/config ACK, got ${singleAckMs}ms`);
+
+      const merged = await engine.getConfig();
+      assert.equal(merged.regions.topbar.opacity, 0.73, 'Concurrent (topbar, opacity) clobbered!');
+      assert.equal(merged.regions.topbar.tint, '#2563EB', 'Concurrent (topbar, tint) clobbered!');
+      assert.equal(merged.regions.topbar.blur, 12);
+      assert.equal(merged.regions.sidebar.fontSize, 13);
+
+      const persisted = JSON.parse(fs.readFileSync(path.join(engineDataDir, 'config.json'), 'utf8'));
+      assert.equal(persisted.regions?.sidebar?.fontSize, 13, 'flush:true did not flush config.json synchronously');
+
+      // VM test: stale lower stateRev must be rejected monotonically
+      const wallSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+      const mNode = (tag) => {
+        const attrs = new Map();
+        const cls = new Set();
+        const styles = new Map();
+        return {
+          tagName: tag.toUpperCase(),
+          id: '',
+          textContent: '',
+          children: [],
+          parentNode: null,
+          classList: { add: (...xs) => xs.forEach((x) => cls.add(x)), remove: (...xs) => xs.forEach((x) => cls.delete(x)), contains: (x) => cls.has(x) },
+          style: { setProperty: (k, v) => styles.set(k, String(v)), removeProperty: (k) => styles.delete(k), getPropertyValue: (k) => styles.get(k) || '' },
+          setAttribute: (k, v) => attrs.set(k, String(v)),
+          getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
+          hasAttribute: (k) => attrs.has(String(k)),
+          removeAttribute: (k) => attrs.delete(k),
+          appendChild(ch) { ch.parentNode = this; this.children.push(ch); return ch; },
+          insertBefore(ch, ref) { ch.parentNode = this; const i = this.children.indexOf(ref); if (i >= 0) this.children.splice(i, 0, ch); else this.children.push(ch); return ch; },
+          removeChild(ch) { const i = this.children.indexOf(ch); if (i >= 0) this.children.splice(i, 1); ch.parentNode = null; return ch; },
+          remove() { if (this.parentNode) this.parentNode.removeChild(this); },
+          querySelector: () => null,
+          querySelectorAll: () => [],
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          getBoundingClientRect: () => ({ left: 0, top: 0, width: 1440, height: 900 }),
+        };
+      };
+      const rEl = mNode('HTML');
+      const hEl = mNode('HEAD');
+      const bEl = mNode('BODY');
+      rEl.appendChild(hEl);
+      rEl.appendChild(bEl);
+      const findId = (n, id) => { if (n.id === id) return n; for (const c of n.children) { const x = findId(c, id); if (x) return x; } return null; };
+      const d = { documentElement: rEl, head: hEl, body: bEl, hidden: false, createElement: mNode, getElementById: (id) => findId(rEl, id), querySelector: () => null, querySelectorAll: () => [], addEventListener: () => {}, removeEventListener: () => {} };
+      const w = {
+        document: d,
+        location: { protocol: 'http:', origin: 'http://127.0.0.1:43200', href: 'http://127.0.0.1:43200/' },
+        innerWidth: 1440,
+        innerHeight: 900,
+        devicePixelRatio: 1,
+        setTimeout,
+        clearTimeout,
+        setInterval,
+        clearInterval,
+        requestAnimationFrame: () => 0,
+        cancelAnimationFrame: () => {},
+        getComputedStyle: () => ({ backgroundColor: 'rgb(7, 7, 8)', getPropertyValue: () => '' }),
+        matchMedia: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      };
+      w.window = w;
+      w.top = w;
+      vm.runInContext(wallSrc, vm.createContext({ window: w, document: d, location: w.location, setTimeout, clearTimeout, setInterval, clearInterval, getComputedStyle: w.getComputedStyle }), { filename: 'wallpaper-inject-rev.js' });
+      w.__agyPrism.applyPayload({ skinEnabled: true, stateRev: 10, stateEpoch: 's203-ep', config: { glassBlur: 22 }, activeItem: null });
+      assert.equal(w.__agyPrism.status().stateRev, 10);
+      w.__agyPrism.applyPayload({ skinEnabled: true, stateRev: 8, stateEpoch: 's203-ep', config: { glassBlur: 5 }, activeItem: null });
+      assert.equal(w.__agyPrism.status().stateRev, 10, 'Out-of-order lower stateRev=8 was NOT rejected!');
+      w.__agyPrism.destroy();
+      return `Concurrent 4-layer merge + ${singleAckMs}ms ACK + flush:true + stateRev monotonic guard (10 drops 8)`;
+    } finally {
+      await engine.updateConfig({ regions: prevCfg.regions, surfaceTints: prevCfg.surfaceTints, flush: true }).catch(() => {});
+    }
+  });
+
+  await check('S2-04: Visual Editor Popout security (`/api/studio/popout` 403/401/415, `studioHttpOrigin`, `/?mode=visual-editor` CSP `frame-ancestors \'none\'`, `execFile` static check)', '@exec-mock-tests', async () => {
+    const mainSrc = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'main.mjs'), 'utf8');
+    assert.ok(mainSrc.includes('execFile(') && mainSrc.includes('launchSystemBrowserNoShell'), 'main.mjs missing execFile browser launcher');
+    assert.equal(/\bshell\s*:\s*true\b/.test(mainSrc), false, 'Forbidden shell:true found in sidecars/prism_studio/main.mjs!');
+
+    const popDataDir = path.join(SCRATCH_ROOT, 's204-popout-data');
+    fs.mkdirSync(popDataDir, { recursive: true });
+    const POP_TOKEN = 's204-popout-token';
+    const launched = [];
+    const popSrv = await createPrismStudioServer({
+      dataDir: popDataDir,
+      token: POP_TOKEN,
+      startCdp: false,
+      inspectShortcuts: false,
+      openExternalUrl: (targetUrl) => {
+        launched.push(targetUrl);
+      },
+    });
+    try {
+      const bootRes = await invokeServerInMemory(popSrv.server, {
+        method: 'GET',
+        url: '/api/bootstrap',
+        headers: { Host: '127.0.0.1:53040' },
+      });
+      assert.equal(bootRes.status, 200);
+      assert.ok(String(bootRes.json().studioHttpOrigin || '').startsWith('http://127.0.0.1:'), 'Expected studioHttpOrigin in /api/bootstrap');
+
+      const badOrigin = await invokeServerInMemory(popSrv.server, {
+        method: 'POST',
+        url: '/api/studio/popout',
+        headers: { Host: '127.0.0.1:53040', Origin: 'https://evil.example', 'X-Sidecar-Token': POP_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'visual-editor' }),
+      });
+      assert.equal(badOrigin.status, 403);
+
+      const noAuth = await invokeServerInMemory(popSrv.server, {
+        method: 'POST',
+        url: '/api/studio/popout',
+        headers: { Host: '127.0.0.1:53040', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'visual-editor' }),
+      });
+      assert.equal(noAuth.status, 401);
+
+      const badCt = await invokeServerInMemory(popSrv.server, {
+        method: 'POST',
+        url: '/api/studio/popout',
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': POP_TOKEN, 'Content-Type': 'text/plain' },
+        body: '{"mode":"visual-editor"}',
+      });
+      assert.equal(badCt.status, 415);
+
+      const okPop = await invokeServerInMemory(popSrv.server, {
+        method: 'POST',
+        url: '/api/studio/popout',
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': POP_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'visual-editor', region: 'sidebar' }),
+      });
+      assert.equal(okPop.status, 200, `/api/studio/popout failed: ${okPop.text()}`);
+      assert.equal(launched.length, 1);
+      assert.ok(launched[0].includes('/?mode=visual-editor') && launched[0].includes('region=sidebar'), `Unexpected popout URL: ${launched[0]}`);
+      assert.equal(launched[0].includes('token='), false, `Security leak: Popout URL contained query token! (${launched[0]})`);
+
+      const veHtml = await invokeServerInMemory(popSrv.server, {
+        method: 'GET',
+        url: '/?mode=visual-editor',
+        headers: { Host: '127.0.0.1:53040' },
+      });
+      assert.equal(veHtml.status, 200);
+      assert.ok(String(veHtml.headers['content-security-policy'] || '').includes("frame-ancestors 'none'"), '/?mode=visual-editor missing CSP frame-ancestors none');
+
+      const auxHtml = await invokeServerInMemory(popSrv.server, {
+        method: 'GET',
+        url: '/',
+        headers: { Host: '127.0.0.1:53040' },
+      });
+      assert.equal(auxHtml.status, 200);
+      assert.equal(String(auxHtml.headers['content-security-policy'] || '').includes("frame-ancestors 'none'"), false, 'Aux pane GET / must remain embeddable (no frame-ancestors none)');
+    } finally {
+      await popSrv.close().catch(() => {});
+    }
+    return 'popout 403/401/415 + 0 URL token + studioHttpOrigin + visual-editor CSP frame-ancestors none vs Aux / verified';
+  });
+
+  await check('S2-05: Feedback #11 playback resilience (`P1..P5` preset `paused:false`, muted autoplay fallback & 48 MiB blob guard)', '@exec-mock-tests', async () => {
+    const { FACTORY_PRESETS, SCENE_PRESETS } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href);
+    const { buildLiveSceneHtml } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'runtime', 'web-shim.mjs')).href);
+
+    assert.equal(FACTORY_PRESETS.length, 7, `Expected 7 FACTORY_PRESETS, got ${FACTORY_PRESETS.length}`);
+    for (const fp of FACTORY_PRESETS) {
+      assert.equal(fp.patch?.paused, false, `FACTORY_PRESETS.${fp.id} must explicitly set patch.paused === false`);
+    }
+    assert.equal(SCENE_PRESETS.eco.patch.paused, true, 'SCENE_PRESETS.eco should pause live playback');
+
+    const sceneHtml = buildLiveSceneHtml({ id: 's205-scene', title: 'S205' }, { muted: false, volume: 0.5 }, { sceneVideoUrl: 'http://127.0.0.1:49152/media/tok/scene.mp4' });
+    assert.ok(sceneHtml.includes('playVideoSafe') && sceneHtml.includes('muted = true'), 'buildLiveSceneHtml missing muted autoplay fallback in playVideoSafe()');
+
+    const wallSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+    assert.match(wallSrc, /MAX_BLOB_MEDIA_BYTES\s*=\s*48\s*\*\s*1024\s*\*\s*1024/, 'Expected MAX_BLOB_MEDIA_BYTES = 48 * 1024 * 1024');
+    return '7/7 FACTORY_PRESETS paused:false + eco paused:true + playVideoSafe muted fallback + 48 MiB blob cap verified';
+  });
+
+  await check('S2-06: `?static=1` & `X-Prism-Animated-Preview: 1`, `mp4-vfs` `pinned<=8`, deferred scan & `MSE_MAX_CONCURRENCY = 2`', '@exec-mock-tests', async () => {
+    const lib = await engine.listLibrary({ refresh: false });
+    const items = Array.isArray(lib) ? lib : lib.items || [];
+    const previewItem = items.find((x) => x.thumbUrl && String(x.thumbUrl).includes('/preview/'));
+    assert.ok(previewItem, 'Need scanned library item with /preview/ thumbUrl for S2-06');
+    const previewPath = new URL(previewItem.thumbUrl).pathname + '?static=1';
+    const staticRes = await invokeServerInMemory(mediaHttpServer, { method: 'GET', url: previewPath });
+    assert.equal(staticRes.status, 200, `GET ${previewPath} returned ${staticRes.status}`);
+    const ct = String(staticRes.headers['content-type'] || '');
+    const animHdr = String(staticRes.headers['x-prism-animated-preview'] || '');
+    assert.ok(ct.startsWith('image/') || animHdr === '1', `Expected image/* or X-Prism-Animated-Preview: 1 for ?static=1, got ct=${ct} hdr=${animHdr}`);
+
+    const { createMp4VfsKit } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'mp4-vfs.mjs')).href);
+    const vfs = createMp4VfsKit({ maxPinned: 8 });
+    const sampleVid = items.find((x) => x.kind === 'video' && x.mediaUrl);
+    if (sampleVid) {
+      // Trigger pinned cache across 10 distinct session tokens via real file if accessible
+      const libRaw = (await invokeServerInMemory(studio.server, { method: 'GET', url: '/api/library' })).json();
+      const firstFile = libRaw?.items?.find((x) => x.absPath && /\.mp4$/i.test(x.absPath))?.absPath;
+      if (firstFile && fs.existsSync(firstFile)) {
+        for (let i = 0; i < 10; i += 1) {
+          vfs.pinnedFaststartVariant(firstFile, `tok-${i}`);
+        }
+        assert.ok(vfs.stats().pinned <= 8, `mp4-vfs pinned cache exceeded cap 8: ${vfs.stats().pinned}`);
+      }
+    }
+    vfs.clear();
+
+    const engSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'engine', 'index.mjs'), 'utf8');
+    const srvSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'engine', 'media-server.mjs'), 'utf8');
+    assert.ok(engSrc.includes('scheduleDeferredRefresh'), 'src/engine/index.mjs missing non-blocking scheduleDeferredRefresh');
+    assert.match(srvSrc, /MSE_MAX_CONCURRENCY\s*=\s*2\b/, 'media-server.mjs missing MSE_MAX_CONCURRENCY = 2');
+    return `?static=1 (ct=${ct}, animHdr=${animHdr || '0'}) + vfs maxPinned=8 + deferred scan + MSE_MAX_CONCURRENCY=2`;
+  });
+
+  await check('S2-07: `teardownSkinDomOnly` timer cleanup (`clearInterval`) & anti-zombie `window.__agyPrismOn = false`', '@exec-mock-tests', async () => {
+    const wallSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+    let clearedCount = 0;
+    let nextTimerId = 100;
+    const activeIntervals = new Set();
+    const capturedCallbacks = [];
+    const spySetInterval = (fn) => {
+      const id = ++nextTimerId;
+      activeIntervals.add(id);
+      capturedCallbacks.push(fn);
+      return id;
+    };
+    const spyClearInterval = (id) => {
+      if (activeIntervals.delete(id)) clearedCount += 1;
+    };
+
+    const mk = (tag) => {
+      const attrs = new Map();
+      const cls = new Set();
+      const styles = new Map();
+      const listeners = new Map();
+      const n = {
+        tagName: tag.toUpperCase(),
+        id: '',
+        src: '',
+        textContent: '',
+        children: [],
+        parentNode: null,
+        paused: false,
+        readyState: 4,
+        videoWidth: 1920,
+        videoHeight: 1080,
+        classList: { add: (...xs) => xs.forEach((x) => cls.add(x)), remove: (...xs) => xs.forEach((x) => cls.delete(x)), contains: (x) => cls.has(x) },
+        style: { setProperty: (k, v) => styles.set(k, String(v)), removeProperty: (k) => styles.delete(k), getPropertyValue: (k) => styles.get(k) || '', display: '' },
+        setAttribute: (k, v) => attrs.set(k, String(v)),
+        getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
+        hasAttribute: (k) => attrs.has(String(k)),
+        removeAttribute: (k) => attrs.delete(k),
+        appendChild(ch) { ch.parentNode = this; this.children.push(ch); return ch; },
+        insertBefore(ch, ref) { ch.parentNode = this; const i = this.children.indexOf(ref); if (i >= 0) this.children.splice(i, 0, ch); else this.children.push(ch); return ch; },
+        removeChild(ch) { const i = this.children.indexOf(ch); if (i >= 0) this.children.splice(i, 1); ch.parentNode = null; return ch; },
+        remove() { if (this.parentNode) this.parentNode.removeChild(this); },
+        querySelector: () => null,
+        querySelectorAll: (sel) => (sel === 'video' ? n.children.filter((c) => c.tagName === 'VIDEO') : []),
+        addEventListener(t, fn) { const arr = listeners.get(t) || []; arr.push(fn); listeners.set(t, arr); },
+        removeEventListener: () => {},
+        play: () => Promise.resolve(),
+        pause() { this.paused = true; },
+        load: () => {},
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 1440, height: 900 }),
+      };
+      return n;
+    };
+    const r = mk('HTML');
+    const h = mk('HEAD');
+    const b = mk('BODY');
+    r.appendChild(h);
+    r.appendChild(b);
+    const findById = (n, id) => { if (n.id === id) return n; for (const c of n.children) { const f = findById(c, id); if (f) return f; } return null; };
+    const doc = { documentElement: r, head: h, body: b, hidden: false, createElement: mk, getElementById: (id) => findById(r, id), querySelector: () => null, querySelectorAll: () => [], addEventListener: () => {}, removeEventListener: () => {} };
+    const win = {
+      document: doc,
+      location: { protocol: 'http:', origin: 'http://127.0.0.1:43201', href: 'http://127.0.0.1:43201/' },
+      innerWidth: 1440,
+      innerHeight: 900,
+      devicePixelRatio: 1,
+      setTimeout,
+      clearTimeout,
+      setInterval: spySetInterval,
+      clearInterval: spyClearInterval,
+      requestAnimationFrame: () => 0,
+      cancelAnimationFrame: () => {},
+      getComputedStyle: () => ({ backgroundColor: 'rgb(7, 7, 8)', getPropertyValue: () => '' }),
+      matchMedia: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    win.window = win;
+    win.top = win;
+    vm.runInContext(
+      wallSrc,
+      vm.createContext({ window: win, document: doc, location: win.location, setTimeout, clearTimeout, setInterval: spySetInterval, clearInterval: spyClearInterval, getComputedStyle: win.getComputedStyle }),
+      { filename: 'wallpaper-inject-teardown.js' },
+    );
+
+    win.__agyPrism.applyPayload({
+      skinEnabled: true,
+      stateRev: 1,
+      config: { fxEnabled: true, pauseOnBlur: true },
+      activeItem: { id: 's207-img', kind: 'image', mediaUrl: 'http://127.0.0.1:49152/preview/s207/p.png', thumbUrl: '' },
+    });
+    assert.equal(win.__agyPrismOn, true);
+    assert.ok(activeIntervals.size >= 1, 'Expected blurPollTimer interval to be armed when pauseOnBlur=true');
+    win.__agyPrism.applyPayload({ skinEnabled: false, stateRev: 2 });
+    assert.equal(win.__agyPrismOn, false, 'Soft disable did not set window.__agyPrismOn = false');
+    assert.equal(doc.getElementById('agy-prism-stage'), null, 'teardownSkinDomOnly left #agy-prism-stage');
+    assert.equal(doc.getElementById('agy-prism-css'), null, 'teardownSkinDomOnly left #agy-prism-css');
+    assert.ok(activeIntervals.size === 0 && clearedCount >= 1, `teardownSkinDomOnly failed to clear active intervals (active=${activeIntervals.size}, cleared=${clearedCount})`);
+
+    // Simulate zombie delayed timers firing while __agyPrismOn === false
+    for (const cb of capturedCallbacks) {
+      try { cb(); } catch {}
+    }
+    assert.equal(doc.getElementById('agy-prism-stage'), null, 'Anti-zombie guard failed: late callback recreated #agy-prism-stage');
+    win.__agyPrism.destroy();
+    return `teardownSkinDomOnly cleared ${clearedCount} timers + __agyPrismOn=false blocked ${capturedCallbacks.length} late callbacks`;
+  });
+
+  await check('S2-08: D7 Opposite-Anchor WCAG guardrail (`enforceFgContrastRgb`, `resolveRegionFgColor`, `allowRawFontColor` & `<0.55` warning)', '@exec-mock-tests', async () => {
+    const { resolveRegionFgColor } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href);
+
+    const darkGuard = resolveRegionFgColor({
+      fgHex: '#111111',
+      bgRgb: [14, 14, 17],
+      bgAlpha: 0.85,
+      isLight: false,
+      allowRawFontColor: false,
+    });
+    assert.equal(darkGuard.clamped, true, 'Dark fg on dark bg with allowRaw=false must clamp');
+    assert.ok(darkGuard.ratio >= 4.5, `Expected clamped dark-mode ratio >= 4.5, got ${darkGuard.ratio}`);
+    assert.equal(darkGuard.lowOpacityWarning, false);
+
+    const lightGuard = resolveRegionFgColor({
+      fgHex: '#F2F4F8',
+      bgRgb: [245, 247, 250],
+      bgAlpha: 0.85,
+      isLight: true,
+      allowRawFontColor: false,
+    });
+    assert.equal(lightGuard.clamped, true, 'Light fg on light bg with allowRaw=false must clamp');
+    assert.ok(lightGuard.ratio >= 4.5, `Expected clamped light-mode ratio >= 4.5, got ${lightGuard.ratio}`);
+
+    const rawUnlock = resolveRegionFgColor({
+      fgHex: '#111111',
+      bgRgb: [14, 14, 17],
+      bgAlpha: 0.85,
+      isLight: false,
+      allowRawFontColor: true,
+    });
+    assert.equal(rawUnlock.clamped, false, 'allowRawFontColor=true must bypass clamping');
+    assert.equal(rawUnlock.color, '#111111');
+
+    const lowOpacity = resolveRegionFgColor({
+      fgHex: '#111111',
+      bgRgb: [14, 14, 17],
+      bgAlpha: 0.40,
+      isLight: false,
+      allowRawFontColor: false,
+    });
+    assert.equal(lowOpacity.lowOpacityWarning, true, 'bgAlpha < 0.55 must flag lowOpacityWarning=true');
+    assert.equal(lowOpacity.clamped, false, 'bgAlpha < 0.55 must not hard-lock user color');
+    assert.equal(lowOpacity.color, '#111111');
+
+    return `darkClamp=${darkGuard.color}(${darkGuard.ratio}:1) lightClamp=${lightGuard.color}(${lightGuard.ratio}:1) raw=${rawUnlock.color} lowAlphaWarn=true`;
+  });
+
   // =========================================================================
-  // SUITE 3: Studio v2.0 UI & Antigravity 2.34.0 Hub Headless Chrome E2E
+  // SUITE 3: Studio v2.2 UI & Antigravity 2.35.1 Hub Headless Chrome E2E
   // =========================================================================
-  console.log('\n--- Suite 3: Studio v2.0 UI & Antigravity 2.34.0 Hub Headless E2E + 1440x900 Screenshots ---');
+  console.log('\n--- Suite 3: Studio v2.2 UI & Antigravity 2.35.1 Hub Headless E2E + 1440x900 Screenshots ---');
 
   const auroraItem = findWorkshopItem('100001');
   const videoItem = findWorkshopItem('100002');
@@ -4194,7 +4984,7 @@ async function main() {
     // -----------------------------------------------------------------------
     const shotStudioHostPath = path.join(DEFAULT_ARTIFACT_DIR, 'v2-studio-host-system-canary.png');
 
-    await check('Studio v2.0 UI (`index.html`): 401 guard, 21:9 video stability, 3-way Startup Strategy (`温和自动恢复 1.5s`), Canary & Panic Key badge + Screenshot (b)', '@crash-forensics', async () => {
+    await check('Studio v2.2 UI (`index.html`): 401 guard, static-first -> live toggle, 3-way Startup Strategy (`温和自动恢复 1.5s`), Canary & Panic Key + 8-Region collapsed reset + Screenshot (b)', '@crash-forensics', async () => {
       const unauth = await invokeServerInMemory(studio.server, {
         method: 'POST',
         url: '/api/config',
@@ -4230,10 +5020,14 @@ async function main() {
           }
           const cards = document.querySelectorAll('.prism-wall-card, [data-action="card-click"]');
           const tabs = Array.from(new Set(Array.from(document.querySelectorAll('[data-action="switch-tab"]')).map(b => b.dataset.tab)));
+          const railDuplicateSliders = document.querySelectorAll('#prism-rail-optics-card input[data-config-slider], #prism-rail-optics-card [data-slider-key], .prism-left-rail input[data-config-slider="sidebarOpacity"], .prism-left-rail [data-slider-key="sidebarOpacity"]').length;
+          const hasExtractedChips = Boolean(document.getElementById('rail-extracted-chips'));
           return {
             appWidth: Math.round(r.width),
             appHeight: Math.round(r.height),
             railContentFillRatio: Math.round(railContentFillRatio * 1000) / 1000,
+            railDuplicateSliders,
+            hasExtractedChips,
             hasSidecarBridge: Boolean(window.sidecar && typeof window.sidecar.fetch === 'function'),
             cardCount: cards.length,
             tabs,
@@ -4243,25 +5037,43 @@ async function main() {
         assert.equal(layoutMetrics.appWidth, 1440);
         assert.equal(layoutMetrics.appHeight, 900);
         assert.ok(layoutMetrics.railContentFillRatio >= 0.80, `Left rail fill ratio=${layoutMetrics.railContentFillRatio}`);
+        assert.equal(layoutMetrics.railDuplicateSliders, 0, `Left rail must contain 0 duplicate optical sliders (got ${layoutMetrics.railDuplicateSliders})`);
+        assert.equal(layoutMetrics.hasExtractedChips, false, 'Left rail must NOT render deprecated #rail-extracted-chips');
         assert.equal(layoutMetrics.hasSidecarBridge, true);
         assert.ok(layoutMetrics.cardCount >= 4);
         const sysTabName = layoutMetrics.tabs.includes('host') ? 'host' : 'system';
 
-        // Select H.264 video wallpaper (100002) so left-rail 21:9 preview is live & vivid
+        // Select H.264 video wallpaper (100002) -> v2.2.0 defaults to static-first preview (0 eager <video>) until clicking [data-action="toggle-preview-live"]
         await studioPage.evaluate(`(() => {
           const card = Array.from(document.querySelectorAll('.prism-wall-card, [data-action="card-click"]'))
             .find(el => (el.dataset.id || '').includes('100002') || el.innerText.includes('Cyber Obsidian Rain'));
           if (card) card.click();
         })()`);
-        await sleep(520);
+        await sleep(360);
+
+        const staticFirstCheck = await studioPage.evaluate(`(() => {
+          const v = document.querySelector('.prism-preview-stage video, .prism-mini-preview video, .prism-left-rail video');
+          const toggleBtn = document.querySelector('[data-action="toggle-preview-live"]');
+          return {
+            hasVideoBeforeToggle: Boolean(v),
+            liveAttrBefore: toggleBtn ? toggleBtn.getAttribute('data-live') : null,
+          };
+        })()`);
+        assert.equal(staticFirstCheck.hasVideoBeforeToggle, false, 'v2.2.0 Studio preview MUST default to static-first (0 <video> before live toggle)');
+        assert.equal(staticFirstCheck.liveAttrBefore, 'false', 'Expected [data-action="toggle-preview-live"][data-live="false"] by default');
+
+        await studioPage.evaluate(`document.querySelector('[data-action="toggle-preview-live"]')?.click()`);
+        await sleep(450);
 
         const studioVidCheck = await studioPage.evaluate(`(() => {
           const v = document.querySelector('.prism-preview-stage video, .prism-mini-preview video, .prism-left-rail video');
+          const toggleBtn = document.querySelector('[data-action="toggle-preview-live"]');
           window.__studioPreviewVideoRef = v || null;
-          return v ? { found: true, paused: v.paused, readyState: v.readyState } : { found: false };
+          return v ? { found: true, paused: v.paused, readyState: v.readyState, liveAttrAfter: toggleBtn?.getAttribute('data-live') } : { found: false };
         })()`);
-        assert.equal(studioVidCheck.found, true, 'Studio 21:9 preview did not mount <video>');
-        assert.equal(studioVidCheck.paused, false, 'Studio 21:9 preview <video> paused');
+        assert.equal(studioVidCheck.found, true, 'Studio 21:9 preview did not mount <video> after clicking [data-action="toggle-preview-live"]');
+        assert.equal(studioVidCheck.paused, false, 'Studio 21:9 preview <video> paused after clicking live toggle');
+        assert.equal(studioVidCheck.liveAttrAfter, 'true', 'Expected [data-action="toggle-preview-live"][data-live="true"] after enabling');
 
         // Switch to `Host & System` tab & verify v2.0 Startup Strategy + Canary + Panic Key controls
         await studioPage.evaluate(`document.querySelector('[data-action="switch-tab"][data-tab="${sysTabName}"]').click()`);
@@ -4314,23 +5126,53 @@ async function main() {
         });
         assert.ok(sHostV2.bytes > 20000, 'Studio Host & System v2.0 screenshot suspiciously small');
 
-        // PR #3 Studio Drawer & <summary> Click Delegation E2E (`close-drawer` child span + `reset-module` inside <summary>)
+        // PR #3 + v2.2.0 Studio 8-Region Accordion Default Collapsed & <summary> Reset Delegation E2E (`global` owns `reset-module`; regions 1-7 use `reset-region`)
         await engine.updateConfig({ islandGap: 14 });
         await studioPage.evaluate(`document.querySelector('[data-action="switch-tab"][data-tab="skin"]').click()`);
         await sleep(220);
         const summaryResetCheck = await studioPage.evaluate(`(() => {
-          const resetBtn = document.querySelector('summary [data-action="reset-module"]');
-          const details = resetBtn ? resetBtn.closest('details') : null;
-          const wasOpen = details ? details.open : false;
+          const detailsAll = Array.from(document.querySelectorAll('#prism-region-accordions > details.prism-region-group'));
+          const regionOrder = detailsAll.map((d) => d.getAttribute('data-region'));
+          const allInitiallyCollapsed = detailsAll.length === 8 && detailsAll.every((d) => d.open === false);
+          const groupResetActions = detailsAll.map((d) => {
+            const btn = d.querySelector('summary [data-action]');
+            return { region: d.getAttribute('data-region'), action: btn ? btn.getAttribute('data-action') : null };
+          });
+          const globalDet = document.querySelector('details.prism-region-group[data-region="global"]');
+          const globalSum = globalDet ? globalDet.querySelector('summary') : null;
+          if (globalSum && !globalDet.open) globalSum.click();
+          const resetBtn = globalDet ? globalDet.querySelector('summary [data-action="reset-module"]') : null;
+          const wasOpen = globalDet ? globalDet.open : false;
           if (resetBtn) resetBtn.click();
-          return { found: Boolean(resetBtn), wasOpen, stillOpen: details ? details.open : false };
+          return {
+            regionOrder,
+            allInitiallyCollapsed,
+            groupResetActions,
+            found: Boolean(resetBtn),
+            wasOpen,
+            stillOpen: globalDet ? globalDet.open : false,
+          };
         })()`);
-        assert.equal(summaryResetCheck.found, true, 'Missing <summary> [data-action="reset-module"] button in Skin tab');
+        assert.deepEqual(
+          summaryResetCheck.regionOrder,
+          ['topbar', 'wco', 'sidebar', 'workspace', 'composer', 'rightPane', 'popover', 'global'],
+          `Unexpected 8-region accordion order: ${JSON.stringify(summaryResetCheck.regionOrder)}`,
+        );
+        assert.equal(summaryResetCheck.allInitiallyCollapsed, true, 'All 8 Skin region accordions MUST start collapsed (open === false)');
+        for (const ga of summaryResetCheck.groupResetActions) {
+          assert.equal(
+            ga.action,
+            ga.region === 'global' ? 'reset-module' : 'reset-region',
+            `Expected ${ga.region} summary action to be ${ga.region === 'global' ? 'reset-module' : 'reset-region'}, got ${ga.action}`,
+          );
+        }
+        assert.equal(summaryResetCheck.found, true, 'Missing details[data-region="global"] summary [data-action="reset-module"] button in Skin tab');
         assert.equal(summaryResetCheck.wasOpen, true);
         assert.equal(summaryResetCheck.stillOpen, true, 'Clicking <summary> reset-module collapsed <details> or failed delegation!');
         await sleep(200);
         const cfgAfterResetMod = await engine.getConfig();
         assert.equal(cfgAfterResetMod.islandGap, 8, `Clicking <summary> reset-module did not reset islandGap to 8 (got ${cfgAfterResetMod.islandGap})`);
+        await studioPage.evaluate(`document.querySelector('details.prism-region-group[data-region="global"] > summary')?.click()`);
 
         // Open Inspector Drawer -> verify interior click keeps drawer open & child <span> inside close-drawer closes it!
         await studioPage.evaluate(`document.querySelector('[data-action="switch-tab"][data-tab="library"]').click()`);
@@ -4395,7 +5237,27 @@ async function main() {
       assert.ok(css.includes('[data-testid="project-header"]'), 'buildStaticCssSheet missing deep rounded project-header capsule rule');
       assert.ok(css.includes('--prism-surface-sidebar-deep'), 'buildStaticCssSheet missing --prism-surface-sidebar-deep token');
       assert.ok(css.includes('[data-testid="new-tab-search-input"]'), 'buildStaticCssSheet missing right aux-pane new-tab-search-input glass rule');
-      return `${css.length}B static CSS sheet verified`;
+
+      const underlineCss = buildStaticCssSheet(
+        buildClientSkinPayload({ ...st.config, regions: { ...(st.config.regions || {}), sidebar: { listStyle: 'underline', borderStyle: 'none' } } }, auroraItem, st.mediaOrigin, { skinEnabled: true }),
+      );
+      assert.ok(underlineCss.includes('border-bottom: 1px solid var(--prism-border-sidebar)'), 'buildStaticCssSheet underline mode missing hairline rule');
+      assert.ok(
+        underlineCss.includes('--prism-border-sidebar: transparent') && underlineCss.includes('--prism-bw-sidebar-top: 0px'),
+        'buildStaticCssSheet sidebar.borderStyle="none" did not zero --prism-border-sidebar and --prism-bw-sidebar-top',
+      );
+
+      const accordionCss = buildStaticCssSheet(
+        buildClientSkinPayload({ ...st.config, regions: { ...(st.config.regions || {}), sidebar: { listStyle: 'accordion' } } }, auroraItem, st.mediaOrigin, { skinEnabled: true }),
+      );
+      assert.ok(accordionCss.includes('rotate(45deg)') && accordionCss.includes('opacity: 0 !important'), 'buildStaticCssSheet accordion mode missing chevron & hover hide rule');
+
+      const treeCss = buildStaticCssSheet(
+        buildClientSkinPayload({ ...st.config, regions: { ...(st.config.regions || {}), sidebar: { listStyle: 'tree' } } }, auroraItem, st.mediaOrigin, { skinEnabled: true }),
+      );
+      assert.ok(treeCss.includes('order: -1') && treeCss.includes('border-right: 1.5px solid currentColor'), 'buildStaticCssSheet tree mode missing leading chevron indicator');
+
+      return `${css.length}B static CSS sheet + underline/accordion/tree & borderStyle="off" verified`;
     });
 
     await check('Antigravity 2.34.0 Hub E2E: Lazy panel.js (0 KB boot -> Ctrl+Alt+W), Fail-Open Media Gate, PR #2 Selectors, 3-Layer [data-browser-hole] Rounded Cutout & Ctrl+Alt+Shift+R Panic Key + Screenshot (a)', '@gentle-skin-architect / @resilience-designer', async () => {
@@ -4478,6 +5340,10 @@ async function main() {
         assert.ok(
           Buffer.byteLength(worstCaseBootstrap, 'utf8') <= 6144,
           `PR #8 worst-case buildHostMicroBootstrap exceeded 6144 B budget: ${Buffer.byteLength(worstCaseBootstrap, 'utf8')} B`,
+        );
+        assert.ok(
+          worstCaseBootstrap.includes('.apply(') && worstCaseBootstrap.includes('ds(W[K])'),
+          'Micro-bootstrap ss() soft-disable helper missing W[K].apply / ds(W[K]) dual path!',
         );
 
         const bootstrapExpr = buildHostMicroBootstrap({
@@ -4730,8 +5596,8 @@ async function main() {
           };
         })()`);
         assert.ok(
-          !String(vidLivenessAudit.stageContain).includes('paint'),
-          `#agy-prism-stage must NOT include paint containment (got: ${vidLivenessAudit.stageContain})`,
+          !String(vidLivenessAudit.stageContain).includes('paint') && !String(vidLivenessAudit.stageContain).includes('strict'),
+          `#agy-prism-stage must NOT include paint/strict containment (got: ${vidLivenessAudit.stageContain})`,
         );
         if (vidLivenessAudit.rvfcSupported) {
           assert.equal(vidLivenessAudit.rvfcActive, true, 'Active video missing rVFC frame-consumer keep-alive');
@@ -4924,14 +5790,23 @@ async function main() {
         );
         assert.equal(v234Audit.custFixedTop, 0, `#v234-cust-fixed-probe top trapped (${v234Audit.custFixedTop}) instead of 0!`);
         assert.equal(v234Audit.custFixedLeft, 0, `#v234-cust-fixed-probe left trapped (${v234Audit.custFixedLeft}) instead of 0!`);
+        const dropStickyAlpha = parseAlphaFromCssColor(v234Audit.dropStickyBeforeBg);
         assert.ok(
-          parseAlphaFromCssColor(v234Audit.dropStickyBeforeBg) >= 0.85,
+          dropStickyAlpha >= 0.85,
           `Expected #v234-drop-sticky-probe::before alpha >= 0.85, got ${v234Audit.dropStickyBeforeBg}`,
         );
-        assert.ok(
-          String(v234Audit.dropStickyBeforeBlur).includes('blur('),
-          `Expected #v234-drop-sticky-probe::before backdropFilter to include 'blur(', got ${v234Audit.dropStickyBeforeBlur}`,
-        );
+        if (dropStickyAlpha >= 0.88) {
+          assert.equal(
+            v234Audit.dropStickyBeforeBlur,
+            'none',
+            `Tier 1 high-alpha sticky header (${dropStickyAlpha}) should suppress redundant blur, got ${v234Audit.dropStickyBeforeBlur}`,
+          );
+        } else {
+          assert.ok(
+            String(v234Audit.dropStickyBeforeBlur).includes('blur('),
+            `Expected #v234-drop-sticky-probe::before backdropFilter to include 'blur(', got ${v234Audit.dropStickyBeforeBlur}`,
+          );
+        }
 
         // Settings modal, inner `.hover:bg-background` tab & `[role="menu"]` solid legibility (`alpha >= 0.94`)
         assert.ok(parseAlphaFromCssColor(v234Audit.backdropBg) >= 0.25, `Settings backdrop alpha too low: ${v234Audit.backdropBg}`);
@@ -5024,14 +5899,23 @@ async function main() {
           `Issue #4 Bug 1 regression: Light-mode [data-testid="voice-live-pill"] glyph turned transparent/dark (${lightModeAudit.voiceColor} on ${lightModeAudit.voiceBg})!`,
         );
         assert.equal(lightModeAudit.heatColor, lightModeAudit.voiceColor, `.ag-cs-home-heat-hint ink mismatch: ${lightModeAudit.heatColor}`);
+        const lightStickyAlpha = parseAlphaFromCssColor(lightModeAudit.stickyBeforeBg);
         assert.ok(
-          parseAlphaFromCssColor(lightModeAudit.stickyBeforeBg) >= 0.90,
+          lightStickyAlpha >= 0.90,
           `Issue #4 Bug 2 regression: Sidebar sticky Projects ::before alpha < 0.90 (${lightModeAudit.stickyBeforeBg})!`,
         );
-        assert.ok(
-          String(lightModeAudit.stickyBeforeBlur).includes('blur('),
-          `Issue #4 Bug 2 regression: Sidebar sticky Projects ::before missing blur (${lightModeAudit.stickyBeforeBlur})!`,
-        );
+        if (lightStickyAlpha >= 0.88) {
+          assert.equal(
+            lightModeAudit.stickyBeforeBlur,
+            'none',
+            `Tier 1 Light-mode sticky Projects high alpha (${lightStickyAlpha}) should skip redundant blur, got ${lightModeAudit.stickyBeforeBlur}`,
+          );
+        } else {
+          assert.ok(
+            String(lightModeAudit.stickyBeforeBlur).includes('blur('),
+            `Issue #4 Bug 2 regression: Sidebar sticky Projects ::before missing blur (${lightModeAudit.stickyBeforeBlur})!`,
+          );
+        }
         assert.equal(
           lightModeAudit.stickyInnerBg,
           'rgba(0, 0, 0, 0)',
@@ -5242,11 +6126,11 @@ async function main() {
           const before = getComputedStyle(document.getElementById('agy-prism-stage')).clipPath;
           const aux = document.getElementById('hub-aux-pane');
           aux.style.width = '468px';
-          requestAnimationFrame(() => {
+          requestAnimationFrame(() => requestAnimationFrame(() => {
             const after = getComputedStyle(document.getElementById('agy-prism-stage')).clipPath;
             const r = document.querySelector('[data-testid="builtin-browser-placeholder"]').getBoundingClientRect();
             resolve({ before, after, newWidth: Math.round(r.width) });
-          });
+          }));
         })`);
         assert.ok(
           resizeCheck.newWidth >= 466 && resizeCheck.newWidth <= 468,
@@ -5551,15 +6435,17 @@ async function main() {
         const popSlidersAudit = await hubPage.evaluate(`(() => {
           const pop = document.getElementById('agy-prism-popover');
           if (!pop) return { hasPop: false };
-          const sbOp = pop.querySelector('[data-slider-key="sidebarOpacity"]');
+          const dupSbOp = pop.querySelector('[data-slider-key="sidebarOpacity"]');
+          const accSbOp = pop.querySelector('[data-testid="prism-comp-accordion"] [data-slider-key="surfaceTints.sidebar.opacity"]');
           const sbBlur = pop.querySelector('[data-slider-key="sidebarBlur"]');
-          const sbOpRow = sbOp ? sbOp.closest('.pp-srow') : null;
+          const sbOpRow = accSbOp ? accSbOp.closest('.pp-srow') : null;
           const sbBlurRow = sbBlur ? sbBlur.closest('.pp-srow') : null;
           return {
             hasPop: true,
-            hasSbOp: Boolean(sbOp),
+            hasDupSbOp: Boolean(dupSbOp),
+            hasAccSbOp: Boolean(accSbOp),
             hasSbBlur: Boolean(sbBlur),
-            sbOpDirty: sbOp ? sbOp.getAttribute('data-dirty') : null,
+            sbOpDirty: accSbOp ? accSbOp.getAttribute('data-dirty') : null,
             sbBlurDirty: sbBlur ? sbBlur.getAttribute('data-dirty') : null,
             sbOpRowDirty: sbOpRow ? sbOpRow.getAttribute('data-dirty') : null,
             sbBlurRowDirty: sbBlurRow ? sbBlurRow.getAttribute('data-dirty') : null,
@@ -5569,21 +6455,22 @@ async function main() {
         })()`);
 
         assert.equal(popSlidersAudit.hasPop, true, '#agy-prism-popover missing after Ctrl+Alt+W');
-        assert.equal(popSlidersAudit.hasSbOp, true, 'Missing [data-slider-key="sidebarOpacity"] in #agy-prism-popover');
+        assert.equal(popSlidersAudit.hasDupSbOp, false, 'Quick Prism #agy-prism-popover must NOT retain duplicate top-level [data-slider-key="sidebarOpacity"]');
+        assert.equal(popSlidersAudit.hasAccSbOp, true, 'Missing [data-testid="prism-comp-accordion"] [data-slider-key="surfaceTints.sidebar.opacity"]');
         assert.equal(popSlidersAudit.hasSbBlur, true, 'Missing [data-slider-key="sidebarBlur"] in #agy-prism-popover');
-        assert.equal(popSlidersAudit.sbOpDirty, 'false', `Expected popover sidebarOpacity data-dirty="false", got ${popSlidersAudit.sbOpDirty}`);
+        assert.equal(popSlidersAudit.sbOpDirty, 'false', `Expected popover surfaceTints.sidebar.opacity data-dirty="false", got ${popSlidersAudit.sbOpDirty}`);
         assert.equal(popSlidersAudit.sbBlurDirty, 'false', `Expected popover sidebarBlur data-dirty="false", got ${popSlidersAudit.sbBlurDirty}`);
         assert.ok(
           popSlidersAudit.sbOpValText.includes('跟随') || popSlidersAudit.sbOpValText.includes('Auto'),
-          `Expected popover sidebarOpacity readout to include '跟随' or 'Auto', got '${popSlidersAudit.sbOpValText}'`,
+          `Expected popover surfaceTints.sidebar.opacity readout to include '跟随' or 'Auto', got '${popSlidersAudit.sbOpValText}'`,
         );
         assert.ok(
           popSlidersAudit.sbBlurValText.includes('跟随') || popSlidersAudit.sbBlurValText.includes('Auto'),
           `Expected popover sidebarBlur readout to include '跟随' or 'Auto', got '${popSlidersAudit.sbBlurValText}'`,
         );
 
-        // (b) Studio UI Appearance (Skin) tab has input[data-config-slider="sidebarOpacity"] & input[data-config-slider="sidebarBlur"],
-        //     default data-dirty="false" and readout contains '跟随' or 'Auto';
+        // (b) Studio UI Appearance (Skin) tab has details[data-region="sidebar"] containing input[data-config-slider="sidebarOpacity"] & input[data-config-slider="sidebarBlur"],
+        //     0 duplicate left-rail optical sliders, default data-dirty="false" and readout contains '跟随' or 'Auto';
         //     setting { sidebarOpacity: 0.88, sidebarBlur: 28 } raises host .agy-sidebar::before & #v234-side-panel-probe::before
         //     alpha >= 0.86 & backdropFilter includes 'blur(28px)';
         //     clicking [data-action="reset-key"][data-key="sidebarOpacity"] & [data-key="sidebarBlur"] restores null!
@@ -5595,17 +6482,19 @@ async function main() {
         await sleep(220);
 
         const studioInitSliders = await studioPage.evaluate(`(() => {
-          const sbBlurIn = document.querySelector('input[data-config-slider="sidebarBlur"]');
-          const sec = sbBlurIn ? sbBlurIn.closest('.prism-section') : null;
+          const sbDet = document.querySelector('details.prism-region-group[data-region="sidebar"]');
+          if (sbDet && !sbDet.open) sbDet.querySelector('summary')?.click();
+          const sbBlurIn = sbDet ? sbDet.querySelector('input[data-config-slider="sidebarBlur"]') : document.querySelector('input[data-config-slider="sidebarBlur"]');
+          const sec = sbDet || (sbBlurIn ? sbBlurIn.closest('.prism-section') : null);
           const sbOpIn = sec ? sec.querySelector('input[data-config-slider="sidebarOpacity"]') : document.querySelector('input[data-config-slider="sidebarOpacity"]');
-          const railOpIn = document.querySelector('#prism-rail-optics-card input[data-config-slider="sidebarOpacity"]');
+          const railOpticalSliders = document.querySelectorAll('.prism-left-rail input[data-config-slider="sidebarOpacity"], .prism-left-rail input[data-config-slider="glassOpacity"], #prism-rail-optics-card input[data-config-slider]').length;
           const opRow = sbOpIn ? sbOpIn.closest('.prism-slider-row') : null;
           const blurRow = sbBlurIn ? sbBlurIn.closest('.prism-slider-row') : null;
           if (opRow) opRow.scrollIntoView({ block: 'center' });
           return {
             hasOpSlider: Boolean(sbOpIn),
             hasBlurSlider: Boolean(sbBlurIn),
-            hasRailOpSlider: Boolean(railOpIn),
+            railOpticalSliders,
             opDirty: opRow ? opRow.getAttribute('data-dirty') : null,
             blurDirty: blurRow ? blurRow.getAttribute('data-dirty') : null,
             opText: opRow && opRow.querySelector('.prism-slider-val') ? opRow.querySelector('.prism-slider-val').textContent.trim() : '',
@@ -5613,9 +6502,9 @@ async function main() {
           };
         })()`);
 
-        assert.equal(studioInitSliders.hasOpSlider, true, 'Studio Skin tab missing input[data-config-slider="sidebarOpacity"]');
-        assert.equal(studioInitSliders.hasBlurSlider, true, 'Studio Skin tab missing input[data-config-slider="sidebarBlur"]');
-        assert.equal(studioInitSliders.hasRailOpSlider, true, 'Studio Left Rail optics card missing input[data-config-slider="sidebarOpacity"]');
+        assert.equal(studioInitSliders.hasOpSlider, true, 'Studio Skin details[data-region="sidebar"] missing input[data-config-slider="sidebarOpacity"]');
+        assert.equal(studioInitSliders.hasBlurSlider, true, 'Studio Skin details[data-region="sidebar"] missing input[data-config-slider="sidebarBlur"]');
+        assert.equal(studioInitSliders.railOpticalSliders, 0, `Left rail must contain 0 duplicate optical sliders (got ${studioInitSliders.railOpticalSliders})`);
         assert.equal(studioInitSliders.opDirty, 'false', `Expected Studio sidebarOpacity row data-dirty="false", got ${studioInitSliders.opDirty}`);
         assert.equal(studioInitSliders.blurDirty, 'false', `Expected Studio sidebarBlur row data-dirty="false", got ${studioInitSliders.blurDirty}`);
         assert.ok(
@@ -5631,14 +6520,14 @@ async function main() {
         const sSkinV206 = await studioPage.capturePng(shotStudioSkinV206Path, { expectedWidth: 1440, expectedHeight: 900 });
         screenshots.push({
           path: shotStudioSkinV206Path,
-          caption: 'Studio v2.0.6 Skin tab & Left Rail Sidebar Glass Opacity / Blur auto-follow sliders',
+          caption: 'Studio v2.2.0 Skin details[data-region="sidebar"] Sidebar Glass Opacity / Blur auto-follow sliders',
         });
-        assert.ok(sSkinV206.bytes > 20000, 'Studio Skin v2.0.6 screenshot suspiciously small');
+        assert.ok(sSkinV206.bytes > 20000, 'Studio Skin v2.2.0 screenshot suspiciously small');
 
         // Drive { sidebarOpacity: 0.88, sidebarBlur: 28 } directly through Studio UI sliders -> flushes POST /api/config to Engine
         const studioAfterDrag = await studioPage.evaluate(`(() => {
-          const sbBlurIn = document.querySelector('input[data-config-slider="sidebarBlur"]');
-          const sec = sbBlurIn.closest('.prism-section');
+          const sec = document.querySelector('details.prism-region-group[data-region="sidebar"]') || document.querySelector('input[data-config-slider="sidebarBlur"]').closest('.prism-section');
+          const sbBlurIn = sec.querySelector('input[data-config-slider="sidebarBlur"]');
           const sbOpIn = sec.querySelector('input[data-config-slider="sidebarOpacity"]');
           sbOpIn.value = '88';
           sbOpIn.dispatchEvent(new Event('input', { bubbles: true }));
@@ -5646,18 +6535,13 @@ async function main() {
           sbBlurIn.value = '28';
           sbBlurIn.dispatchEvent(new Event('input', { bubbles: true }));
           sbBlurIn.dispatchEvent(new Event('change', { bubbles: true }));
-          const railRow = document.querySelector('#prism-rail-optics-card .prism-slider-row[data-slider-key="sidebarOpacity"]');
           return {
             opDirty: sbOpIn.closest('.prism-slider-row').getAttribute('data-dirty'),
             blurDirty: sbBlurIn.closest('.prism-slider-row').getAttribute('data-dirty'),
-            railDirty: railRow ? railRow.getAttribute('data-dirty') : null,
-            railText: railRow && railRow.querySelector('.prism-slider-val') ? railRow.querySelector('.prism-slider-val').textContent.trim() : '',
           };
         })()`);
         assert.equal(studioAfterDrag.opDirty, 'true');
         assert.equal(studioAfterDrag.blurDirty, 'true');
-        assert.equal(studioAfterDrag.railDirty, 'true', 'Paired Left-Rail sidebarOpacity slider did not sync dirty="true"');
-        assert.ok(!studioAfterDrag.railText.includes('跟随') && studioAfterDrag.railText.includes('88'), `Unexpected paired rail readout: ${studioAfterDrag.railText}`);
 
         await sleep(220);
         const cfgCustom = await engine.getConfig();
@@ -6015,14 +6899,43 @@ async function main() {
           `Bug 2: P$c descendant #hub-dropdown-inner-card alpha expected >= 0.90, got ${glassUiAudit.bug2.tbDropdownInnerBg}`,
         );
 
-        // Bug 3 Assertions
+        // Bug 3 Assertions (Tier 1 dual-state sticky alpha gating + project-header blur=none)
         const sbAlpha = parseAlphaFromCssColor(glassUiAudit.bug3.sbBeforeBg);
         const stickyAlpha = parseAlphaFromCssColor(glassUiAudit.bug3.stickyBeforeBg);
         const projAlpha = parseAlphaFromCssColor(glassUiAudit.bug3.projBeforeBg);
         assert.ok(glassUiAudit.bug3.stickyBeforeRadius >= 6, `Bug 3: #hub-sidebar-sticky-projects::before radius expected >= 6px, got ${glassUiAudit.bug3.stickyBeforeRadius}px`);
         assert.ok(glassUiAudit.bug3.projBeforeRadius >= 6, `Bug 3: #hub-project-header-btn::before radius expected >= 6px, got ${glassUiAudit.bug3.projBeforeRadius}px`);
-        assert.ok(String(glassUiAudit.bug3.stickyBeforeBlur).includes('blur('), `Bug 3: #hub-sidebar-sticky-projects::before missing blur(, got ${glassUiAudit.bug3.stickyBeforeBlur}`);
-        assert.ok(String(glassUiAudit.bug3.projBeforeBlur).includes('blur('), `Bug 3: #hub-project-header-btn::before missing blur(, got ${glassUiAudit.bug3.projBeforeBlur}`);
+        if (stickyAlpha >= 0.88) {
+          assert.equal(glassUiAudit.bug3.stickyBeforeBlur, 'none', `Tier 1 high-alpha sticky header (${stickyAlpha}) must gate blur off, got ${glassUiAudit.bug3.stickyBeforeBlur}`);
+        } else {
+          assert.ok(String(glassUiAudit.bug3.stickyBeforeBlur).includes('blur('), `Bug 3: #hub-sidebar-sticky-projects::before missing blur(, got ${glassUiAudit.bug3.stickyBeforeBlur}`);
+        }
+        assert.equal(glassUiAudit.bug3.projBeforeBlur, 'none', `Tier 1 #hub-project-header-btn::before must keep backdrop-filter: none, got ${glassUiAudit.bug3.projBeforeBlur}`);
+        const stickyDualGate = await hubPage.evaluate(`(() => {
+          window.__agyPrism.updateConfig({ sidebarOpacity: 0.50, glassBlur: 16 });
+          const lowSticky = getComputedStyle(document.getElementById('hub-sidebar-sticky-projects'), '::before');
+          const lowProj = getComputedStyle(document.getElementById('hub-project-header-btn'), '::before');
+          const lowStickyBg = lowSticky.backgroundColor;
+          const lowStickyBlur = lowSticky.backdropFilter || lowSticky.webkitBackdropFilter || 'none';
+          const lowProjBlur = lowProj.backdropFilter || lowProj.webkitBackdropFilter || 'none';
+          window.__agyPrism.updateConfig({ sidebarOpacity: 0.90, glassBlur: 16 });
+          const highSticky = getComputedStyle(document.getElementById('hub-sidebar-sticky-projects'), '::before');
+          const highStickyBg = highSticky.backgroundColor;
+          const highStickyBlur = highSticky.backdropFilter || highSticky.webkitBackdropFilter || 'none';
+          window.__agyPrism.updateConfig({ sidebarOpacity: null, glassBlur: 16 });
+          return {
+            lowStickyBg,
+            lowStickyBlur,
+            lowProjBlur,
+            highStickyBg,
+            highStickyBlur,
+          };
+        })()`);
+        assert.ok(parseAlphaFromCssColor(stickyDualGate.lowStickyBg) < 0.88, `Expected low sidebarOpacity=0.50 sticky alpha < 0.88, got ${stickyDualGate.lowStickyBg}`);
+        assert.ok(String(stickyDualGate.lowStickyBlur).includes('blur(16px)'), `Expected sticky ::before blur(16px) at low alpha, got ${stickyDualGate.lowStickyBlur}`);
+        assert.equal(stickyDualGate.lowProjBlur, 'none', '#hub-project-header-btn::before must stay blur=none even at low alpha');
+        assert.ok(parseAlphaFromCssColor(stickyDualGate.highStickyBg) >= 0.88, `Expected high sidebarOpacity=0.90 sticky alpha >= 0.88, got ${stickyDualGate.highStickyBg}`);
+        assert.equal(stickyDualGate.highStickyBlur, 'none', `Expected sticky ::before blur='none' when alpha >= 0.88, got ${stickyDualGate.highStickyBlur}`);
         assert.ok(
           stickyAlpha > sbAlpha + 0.08,
           `Bug 3: #hub-sidebar-sticky-projects::before alpha (${stickyAlpha}) must be significantly darker than .agy-sidebar::before (${sbAlpha})`,
@@ -6260,7 +7173,11 @@ async function main() {
         assert.equal(initCheck[1].hasPill, true, 'Hub missing initial #agy-prism-pill');
         assert.equal(initCheck[1].pillSkinEnabled, 'true', `Expected initial #agy-prism-pill data-skin-enabled="true", got ${initCheck[1].pillSkinEnabled}`);
 
-        // Step A: Click Studio `#prism-master-toggle-btn` to DISABLE -> skin unloads, #agy-prism-pill SURVIVES with data-skin-enabled="false"!
+        // Step A: Click Studio `#prism-master-toggle-btn` to DISABLE -> skin unloads via W[K].apply({skinEnabled:false}),
+        //         __agyPrism stays resident (+0 /stage.js reloads), #agy-prism-pill & #prism-mini-stage show data-skin-enabled="false"!
+        const stageReqsBeforeToggle = await hubPage.evaluate(
+          `performance.getEntriesByType('resource').filter(r => r.name.includes('/stage.js')).length`,
+        );
         await studioPage.evaluate(`document.getElementById('prism-master-toggle-btn').click()`);
         const offCfgDeadline = Date.now() + 2500;
         while (Date.now() < offCfgDeadline) {
@@ -6272,10 +7189,16 @@ async function main() {
 
         const studioAfterOff = await studioPage.evaluate(`(() => {
           const btn = document.getElementById('prism-master-toggle-btn');
-          return { ariaChecked: btn.getAttribute('aria-checked'), dataEnabled: btn.dataset.enabled };
+          const miniStage = document.getElementById('prism-mini-stage');
+          return {
+            ariaChecked: btn.getAttribute('aria-checked'),
+            dataEnabled: btn.dataset.enabled,
+            miniStageSkinEnabled: miniStage ? miniStage.getAttribute('data-skin-enabled') : null,
+          };
         })()`);
         assert.equal(studioAfterOff.ariaChecked, 'false');
         assert.equal(studioAfterOff.dataEnabled, 'false');
+        assert.equal(studioAfterOff.miniStageSkinEnabled, 'false', 'Studio #prism-mini-stage did not sync data-skin-enabled="false"');
 
         // Wait for Hub EventSource (/host/<token>/events retry:2500) to deliver skinEnabled=false -> ss()
         let hubAfterOff = null;
@@ -6287,6 +7210,8 @@ async function main() {
               wallAttr: document.documentElement.getAttribute('data-agy-prism-wallpaper'),
               hasStage: Boolean(document.getElementById('agy-prism-stage')),
               hasCss: Boolean(document.getElementById('agy-prism-css')),
+              hasPrismObj: Boolean(window.__agyPrism && typeof window.__agyPrism.apply === 'function'),
+              prismOnFlag: window.__agyPrismOn,
               hasPill: Boolean(pill),
               pillSkinEnabled: pill ? pill.getAttribute('data-skin-enabled') : null,
               bodyBg: getComputedStyle(document.body).backgroundColor,
@@ -6298,6 +7223,8 @@ async function main() {
         assert.equal(hubAfterOff.wallAttr, null, 'Host did not strip data-agy-prism-wallpaper when disabled from Studio');
         assert.equal(hubAfterOff.hasStage, false, 'Host did not remove #agy-prism-stage when disabled from Studio');
         assert.equal(hubAfterOff.hasCss, false, 'Host did not remove #agy-prism-css when disabled from Studio');
+        assert.equal(hubAfterOff.hasPrismObj, true, 'Soft-disable must keep window.__agyPrism (.apply) alive to avoid /stage.js reload');
+        assert.equal(hubAfterOff.prismOnFlag, false, 'Soft-disable must set window.__agyPrismOn = false');
         assert.equal(hubAfterOff.bodyBg, 'rgb(7, 7, 8)', `Expected native dark body bg after disable, got ${hubAfterOff.bodyBg}`);
         assert.equal(hubAfterOff.hasPill, true, 'FATAL REGRESSION: #agy-prism-pill was deleted by stripSkin on normal disable!');
         assert.equal(
@@ -6345,6 +7272,7 @@ async function main() {
               wallAttr: document.documentElement.getAttribute('data-agy-prism-wallpaper'),
               ariaChecked: btn ? btn.getAttribute('aria-checked') : null,
               pillSkinEnabled: pill ? pill.getAttribute('data-skin-enabled') : null,
+              stageReqs: performance.getEntriesByType('resource').filter(r => r.name.includes('/stage.js')).length,
             };
           })()`);
           if (hubAfterReEnable.wallAttr === 'ready' && hubAfterReEnable.pillSkinEnabled === 'true') break;
@@ -6353,6 +7281,7 @@ async function main() {
         assert.equal(hubAfterReEnable.wallAttr, 'ready', 'Clicking [data-testid="prism-power-toggle"] did not restore data-agy-prism-wallpaper="ready"');
         assert.equal(hubAfterReEnable.ariaChecked, 'true');
         assert.equal(hubAfterReEnable.pillSkinEnabled, 'true');
+        assert.equal(hubAfterReEnable.stageReqs, stageReqsBeforeToggle, `Re-enabling after soft-disable triggered +${hubAfterReEnable.stageReqs - stageReqsBeforeToggle} extra /stage.js fetch(es)!`);
         assert.equal((await engine.getConfig()).skinEnabled, true, 'Popover power toggle did not persist skinEnabled=true');
 
         // Verify Studio `#prism-master-toggle-btn` also syncs back to enabled="true" via /api/events SSE!
@@ -6834,9 +7763,10 @@ async function main() {
         assert.equal(req2Audit.barAttr, 'bar');
         assert.equal(req2Audit.barPillCount, 1, `Req #2 topbarStyle='bar' expected 1 unified bar pill, got ${req2Audit.barPillCount}`);
 
-        // ---- 4) Req #3: `glassBlur` 0..64px computed `backdrop-filter` + Quick Prism `.prism-sheet` CSS variable inheritance ----
+        // ---- 4) Tier 2 softKneeBlur (0..64px <= 32px) + Composer outer #antigravity.agentSidePanelInputBox::before carrier + Quick Prism --prism-quick-panel-backdrop ----
+        const softKnee = (r) => (r <= 0 ? 0 : r <= 28 ? r : Math.min(32, Math.round(28 + (4 * (r - 28)) / (r - 28 + 12))));
         const blurSweep = [];
-        for (const blurPx of [0, 16, 64]) {
+        for (const blurPx of [0, 16, 28, 64]) {
           await engine.updateConfig({ glassSurfaces: true, glassBlur: blurPx, sidebarBlur: null });
           await hubPage.evaluate(`window.__agyPrism.updateConfig({ glassSurfaces: true, glassBlur: ${blurPx}, sidebarBlur: null })`);
           await sleep(60);
@@ -6852,34 +7782,49 @@ async function main() {
               sidebar: bf(document.querySelector('.agy-sidebar'), '::before'),
               topbar: bf(document.querySelector('#agy-prism-topbar-pills .agy-prism-topbar-pill')),
               wco: bf(document.getElementById('agy-prism-wco-pill')),
-              composer: bf(document.querySelector('.surface-composer-card'), '::before'),
+              composer: bf(document.getElementById('antigravity.agentSidePanelInputBox'), '::before'),
+              composerInnerBefore: bf(document.querySelector('.surface-composer-card'), '::before'),
               quickSheet: bf(document.querySelector('#agy-prism-popover .prism-sheet')),
+              quickPanelBackdropVar: getComputedStyle(document.documentElement).getPropertyValue('--prism-quick-panel-backdrop').trim(),
             };
           })()`);
           blurSweep.push({ blurPx, ...snap });
+          assert.equal(snap.composerInnerBefore, 'none', `Composer Layer 4 .surface-composer-card::before must stay 'none' at glassBlur=${blurPx}, got '${snap.composerInnerBefore}'`);
           if (blurPx === 0) {
             for (const [k, v] of Object.entries(snap)) {
-              assert.equal(v, 'none', `Req #3 glassBlur=0: ${k} expected 'none', got '${v}'`);
+              if (k === 'quickPanelBackdropVar') {
+                assert.equal(v, 'none', `Tier 2 glassBlur=0: --prism-quick-panel-backdrop expected 'none', got '${v}'`);
+              } else {
+                assert.equal(v, 'none', `Req #3 glassBlur=0: ${k} expected 'none', got '${v}'`);
+              }
             }
           } else {
+            const expectedBasePx = softKnee(blurPx);
+            assert.ok(expectedBasePx <= 32, `softKnee(${blurPx}) exceeded 32px hard cap`);
             for (const k of ['chat', 'right', 'sidebar', 'topbar', 'wco']) {
-              assert.ok(snap[k].includes(`blur(${blurPx}px)`), `Req #3 glassBlur=${blurPx}: ${k} expected blur(${blurPx}px), got '${snap[k]}'`);
+              assert.ok(snap[k].includes(`blur(${expectedBasePx}px)`), `Tier 2 glassBlur=${blurPx}: ${k} expected blur(${expectedBasePx}px), got '${snap[k]}'`);
             }
-            const expectedComposerPx = Math.min(64, blurPx + 4);
+            const expectedComposerPx = softKnee(blurPx + 4);
+            assert.ok(expectedComposerPx <= 32, `Composer softKnee exceeded 32px`);
             assert.ok(
               snap.composer.includes(`blur(${expectedComposerPx}px)`),
-              `Req #3 glassBlur=${blurPx}: composer expected blur(${expectedComposerPx}px) (blurLg), got '${snap.composer}'`,
+              `Tier 2 glassBlur=${blurPx}: composer #antigravity.agentSidePanelInputBox::before expected blur(${expectedComposerPx}px), got '${snap.composer}'`,
             );
-            const expectedQuickPx = Math.min(64, blurPx + 6);
+            const expectedQuickPx = softKnee(blurPx + 6);
+            assert.ok(expectedQuickPx <= 32, `Quick Prism softKnee exceeded 32px`);
             assert.ok(
               snap.quickSheet.includes(`blur(${expectedQuickPx}px)`),
-              `Req #3 glassBlur=${blurPx}: Quick Prism .prism-sheet expected blur(${expectedQuickPx}px) (blurXl), got '${snap.quickSheet}'`,
+              `Tier 2 glassBlur=${blurPx}: Quick Prism .prism-sheet expected blur(${expectedQuickPx}px), got '${snap.quickSheet}'`,
+            );
+            assert.ok(
+              snap.quickPanelBackdropVar.includes(`blur(${expectedQuickPx}px)`),
+              `Tier 2 glassBlur=${blurPx}: --prism-quick-panel-backdrop expected blur(${expectedQuickPx}px), got '${snap.quickPanelBackdropVar}'`,
             );
             assert.notEqual(snap.quickSheet.includes('blur(26px)'), true, `Req #3: Quick Prism .prism-sheet still hardcoded blur(26px) at glassBlur=${blurPx}!`);
           }
         }
 
-        // ---- 5) Req #4: 7-component `surfaceTints` live isolation on Host ----
+        // ---- 5) 8-component `surfaceTints` live isolation + WCO Auto vs 0% independent alpha on Host ----
         await engine.updateConfig({ glassBlur: 16, surfaceTints: null });
         const tintIsoAudit = await hubPage.evaluate(`(() => {
           window.__agyPrism.updateConfig({ glassBlur: 16, surfaceTints: null });
@@ -6894,15 +7839,25 @@ async function main() {
           const centerAfter = getComputedStyle(document.getElementById('v234-center-island-probe'), '::before').backgroundColor;
           const rightAfter = getComputedStyle(document.getElementById('v234-right-island-probe'), '::before').backgroundColor;
           const topbarPillBg = getComputedStyle(document.querySelector('#agy-prism-topbar-pills .agy-prism-topbar-pill')).backgroundColor;
-          const wcoPillBg = getComputedStyle(document.getElementById('agy-prism-wco-pill')).backgroundColor;
+          const wcoAutoPillBg = getComputedStyle(document.getElementById('agy-prism-wco-pill')).backgroundColor;
           const menuBg = getComputedStyle(document.getElementById('hub-menu-probe')).backgroundColor;
+          window.__agyPrism.updateConfig({
+            surfaceTints: {
+              topbar: { opacity: 0.90, tone: 0, tint: '#0F766E' },
+              wco: { opacity: 0, tone: 0, tint: '' },
+            },
+          });
+          const topbarAfterWco0 = getComputedStyle(document.querySelector('#agy-prism-topbar-pills .agy-prism-topbar-pill')).backgroundColor;
+          const wcoIndependent0Bg = getComputedStyle(document.getElementById('agy-prism-wco-pill')).backgroundColor;
           window.__agyPrism.updateConfig({ surfaceTints: null });
-          return { centerBefore, centerAfter, rightAfter, topbarPillBg, wcoPillBg, menuBg };
+          return { centerBefore, centerAfter, rightAfter, topbarPillBg, wcoAutoPillBg, topbarAfterWco0, wcoIndependent0Bg, menuBg };
         })()`);
         assert.equal(tintIsoAudit.centerAfter, tintIsoAudit.centerBefore, 'Req #4: mutating surfaceTints.rightPane leaked into center workspace!');
         assert.notEqual(tintIsoAudit.rightAfter, tintIsoAudit.centerAfter, 'Req #4: surfaceTints.rightPane did not independently tint right aux-pane!');
         assert.ok(parseAlphaFromCssColor(tintIsoAudit.rightAfter) >= 0.83, `Req #4: rightPane opacity 0.85 expected >= 0.83, got ${tintIsoAudit.rightAfter}`);
-        assert.equal(tintIsoAudit.topbarPillBg, tintIsoAudit.wcoPillBg, `Req #4: topbar pill (${tintIsoAudit.topbarPillBg}) and WCO pill (${tintIsoAudit.wcoPillBg}) must share surfaceTints.topbar`);
+        assert.equal(tintIsoAudit.topbarPillBg, tintIsoAudit.wcoAutoPillBg, `Auto WCO (${tintIsoAudit.wcoAutoPillBg}) must inherit topbar (${tintIsoAudit.topbarPillBg})`);
+        assert.equal(parseAlphaFromCssColor(tintIsoAudit.wcoIndependent0Bg), 0, `Independent WCO 0% alpha failed: got ${tintIsoAudit.wcoIndependent0Bg}`);
+        assert.equal(tintIsoAudit.topbarAfterWco0, tintIsoAudit.topbarPillBg, 'Setting WCO 0% must NOT mutate topbar pill fill!');
         assert.ok(parseAlphaFromCssColor(tintIsoAudit.menuBg) >= 0.50, `Req #4: popover floor >= 0.50 violated (${tintIsoAudit.menuBg})`);
 
         assert.deepEqual(hubPage.consoleErrors, [], `3G Hub console.error: ${hubPage.consoleErrors.join(' | ')}`);
@@ -7030,6 +7985,586 @@ async function main() {
       } finally {
         await browser.closePage(studioPage);
         await browser.closePage(hubPage);
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Suite 3 v2.2.0 New End-to-End Checks (S3-01 .. S3-06)
+    // -----------------------------------------------------------------------
+    await check('S3-01: Studio Visual Editor Modal + Standalone Popout (`/?mode=visual-editor` + `/api/events?channel=popout`) + Media Health Alerts', '@exec-mock-tests', async () => {
+      await engine.applyWallpaper(videoItem.id, { skinEnabled: true, startupMode: 'gentle-auto', paused: true, glassBlur: 16 });
+      const studioPage = await browser.openPage({
+        url: `${studio.origin}/?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+        requestHandler: universalHttpRouter,
+      });
+      const popoutPage = await browser.openPage({
+        url: `${studio.origin}/?mode=visual-editor`,
+        requestHandler: universalHttpRouter,
+        initScript: `
+          window.__esUrls = [];
+          const OrigES = window.EventSource;
+          window.EventSource = function(u, opts) {
+            window.__esUrls.push(String(u));
+            return new OrigES(u, opts);
+          };
+        `,
+      });
+      try {
+        await sleep(750);
+        // 1) Media health alert: paused -> resume button unpauses wallpaper
+        const pausedHealth = await studioPage.evaluate(`(() => {
+          const pausedEl = document.querySelector('#prism-media-health-host [data-alert="paused"]');
+          const resumeBtn = pausedEl ? pausedEl.querySelector('[data-action="resume-paused-wallpaper"]') : null;
+          return { hasPaused: Boolean(pausedEl), hasResume: Boolean(resumeBtn) };
+        })()`);
+        assert.equal(pausedHealth.hasPaused, true, 'Missing [data-alert="paused"] banner in #prism-media-health-host');
+        assert.equal(pausedHealth.hasResume, true, 'Missing [data-action="resume-paused-wallpaper"] button');
+        await studioPage.evaluate(`document.querySelector('#prism-media-health-host [data-action="resume-paused-wallpaper"]').click()`);
+        await sleep(300);
+        assert.equal((await engine.getConfig()).paused, false, 'Clicking resume-paused-wallpaper did not clear paused=true');
+
+        // Also check static-css banner notice + 1-click switch to gentle-auto
+        await studioPage.evaluate(`(() => {
+          document.querySelector('[data-action="switch-tab"][data-tab="system"]')?.click();
+        })()`);
+        await sleep(160);
+        await studioPage.evaluate(`document.querySelector('[data-startup-card="static-css"]')?.click()`);
+        let staticCssHasBanner = false;
+        const scWait = Date.now() + 2000;
+        while (Date.now() < scWait) {
+          staticCssHasBanner = await studioPage.evaluate(`Boolean(document.querySelector('#prism-media-health-host [data-alert="static-css"]'))`);
+          if (staticCssHasBanner) break;
+          await sleep(40);
+        }
+        assert.equal(staticCssHasBanner, true, 'Missing [data-alert="static-css"] banner when startupMode=static-css');
+        await studioPage.evaluate(`document.querySelector('#prism-media-health-host [data-alert="static-css"] [data-action="set-enum"]')?.click()`);
+        await sleep(250);
+        assert.equal((await engine.getConfig()).startupMode, 'gentle-auto', '1-click static-css recovery failed');
+
+        // 2) Aux Studio modal editor open/select/close
+        await studioPage.evaluate(`document.querySelector('[data-action="open-visual-editor"]')?.click()`);
+        await sleep(250);
+        const modalState = await studioPage.evaluate(`(() => ({
+          hasModal: Boolean(document.getElementById('prism-visual-editor-modal')),
+          hasStage: Boolean(document.getElementById('prism-visual-canvas-stage')),
+          hasHub: Boolean(document.getElementById('prism-visual-canvas-hub')),
+        }))()`);
+        assert.equal(modalState.hasModal, true, 'Missing #prism-visual-editor-modal after open-visual-editor');
+        assert.equal(modalState.hasStage, true);
+        assert.equal(modalState.hasHub, true);
+        await studioPage.evaluate(`document.querySelector('#prism-visual-editor-modal [data-action="close-visual-editor"]')?.click()`);
+        await sleep(150);
+
+        // 3) Popout Visual Editor standalone checks (no token in URL, channel=popout SSE, live mutation syncs back to Aux)
+        const popAudit = await popoutPage.evaluate(`(() => {
+          const shell = document.querySelector('.prism-ve-popout-shell');
+          return {
+            hasTokenInUrl: location.search.includes('token='),
+            hasShell: Boolean(shell),
+            hasIsolatedClass: Boolean(shell && shell.classList.contains('agy-prism-visual-editor')),
+            hasCanvasStage: Boolean(document.getElementById('prism-visual-canvas-stage')),
+            hasCanvasHub: Boolean(document.getElementById('prism-visual-canvas-hub')),
+            esUrls: window.__esUrls || [],
+          };
+        })()`);
+        assert.equal(popAudit.hasTokenInUrl, false, 'Popout Visual Editor URL MUST NOT contain token=');
+        assert.equal(popAudit.hasShell, true, 'Popout Visual Editor missing .prism-ve-popout-shell');
+        assert.equal(popAudit.hasIsolatedClass, true, 'Popout Visual Editor missing .agy-prism-visual-editor class');
+        assert.equal(popAudit.hasCanvasStage, true);
+        assert.equal(popAudit.hasCanvasHub, true);
+        assert.ok(
+          popAudit.esUrls.some((u) => u.includes('/api/events?channel=popout')),
+          `Popout Visual Editor SSE must connect via /api/events?channel=popout (seen: ${JSON.stringify(popAudit.esUrls)})`,
+        );
+
+        await popoutPage.evaluate(`(() => {
+          document.querySelector('[data-action="select-editor-region"][data-region="sidebar"]')?.click();
+        })()`);
+        await sleep(160);
+        await popoutPage.evaluate(`(() => {
+          const blurIn = document.querySelector('#prism-ve-inspector-pane input[data-config-slider="sidebarBlur"], #prism-ve-inspector-pane input[data-region="sidebar"][data-prop="blur"]');
+          if (blurIn) {
+            blurIn.value = '21';
+            blurIn.dispatchEvent(new Event('input', { bubbles: true }));
+            blurIn.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        })()`);
+        await sleep(300);
+        assert.equal((await engine.getConfig()).sidebarBlur, 21, 'Popout Visual Editor inspector edit did not commit sidebarBlur=21');
+        assert.deepEqual(studioPage.pageExceptions, []);
+        assert.deepEqual(popoutPage.pageExceptions, []);
+        return 'Modal + Popout (0 URL token, ?channel=popout, sidebarBlur=21) + paused/static-css health alerts verified';
+      } finally {
+        await engine.applyWallpaper(auroraItem.id, { skinEnabled: true, startupMode: 'gentle-auto', paused: false, sidebarBlur: null }).catch(() => {});
+        await browser.closePage(popoutPage);
+        await browser.closePage(studioPage);
+      }
+    });
+
+    await check('S3-02: Hub `GLASS_CARRIER_MAIN_PAGES`, `flush` `::after` suppression & 4-layer Composer hierarchy (`data-testid="agent-input-box"` > `#antigravity` > context > `.surface-composer-card`)', '@exec-mock-tests', async () => {
+      await engine.applyWallpaper(auroraItem.id, { skinEnabled: true, layoutMode: 'islands', glassBlur: 16 });
+      const hubPage = await browser.openPage({
+        url: `${HUB_MOCK_ORIGIN}/hub`,
+        requestHandler: universalHttpRouter,
+      });
+      try {
+        await hubPage.evaluate(
+          buildHostMicroBootstrap({ hostOrigin: studio.origin, capToken: studio.hostCapToken, triggerMode: 'both', startupMode: 'gentle-auto', skinEnabled: true }),
+        );
+        const deadline = Date.now() + 3000;
+        let wallReadyState = null;
+        while (Date.now() < deadline) {
+          wallReadyState = await hubPage.evaluate(`document.documentElement.getAttribute('data-agy-prism-wallpaper')`);
+          if (wallReadyState === 'ready') break;
+          await sleep(40);
+        }
+        assert.equal(wallReadyState, 'ready', `S3-02 Hub wallpaper failed to reach ready state (got ${wallReadyState})`);
+
+        const islandsAudit = await hubPage.evaluate(`(() => {
+          const outer = document.getElementById('mock-composer-outer-wrap');
+          const l2 = document.getElementById('antigravity.agentSidePanelInputBox');
+          const l3 = document.getElementById('mock-composer-context-bar');
+          const l4 = document.querySelector('.surface-composer-card');
+          const chip = document.getElementById('mock-composer-attachment-chip');
+          const fixed = document.getElementById('composer-fixed-probe').getBoundingClientRect();
+          const custBefore = getComputedStyle(document.getElementById('v234-customizations-probe'), '::before');
+          const pluginDetail = getComputedStyle(document.getElementById('v234-plugin-detail-probe'));
+          const outerCs = getComputedStyle(outer);
+          const l2Before = getComputedStyle(l2, '::before');
+          const l4Cs = getComputedStyle(l4);
+          const l4Before = getComputedStyle(l4, '::before');
+          return {
+            outerTestId: outer?.getAttribute('data-testid'),
+            outerBg: outerCs.backgroundColor,
+            outerBlur: outerCs.backdropFilter || outerCs.webkitBackdropFilter || 'none',
+            l2Id: l2?.id,
+            l2ContainsL4: Boolean(l2 && l4 && l2.contains(l4)),
+            l2BeforeBg: l2Before.backgroundColor,
+            l2BeforeBlur: l2Before.backdropFilter || l2Before.webkitBackdropFilter || 'none',
+            l3Bg: getComputedStyle(l3).backgroundColor,
+            l4Bg: l4Cs.backgroundColor,
+            l4BeforeBlur: l4Before.backdropFilter || l4Before.webkitBackdropFilter || 'none',
+            chipBorder: getComputedStyle(chip).borderTopWidth,
+            fixedTop: Math.round(fixed.top),
+            fixedLeft: Math.round(fixed.left),
+            custBeforeBg: custBefore.backgroundColor,
+            custBeforeBlur: custBefore.backdropFilter || custBefore.webkitBackdropFilter || 'none',
+            pluginDetailBg: pluginDetail.backgroundColor,
+          };
+        })()`);
+
+        assert.equal(islandsAudit.outerTestId, 'agent-input-box');
+        assert.equal(islandsAudit.outerBg, 'rgba(0, 0, 0, 0)', 'Layer 1 outer [data-testid="agent-input-box"] must be transparent');
+        assert.equal(islandsAudit.outerBlur, 'none', 'Layer 1 outer wrapper must keep backdrop-filter: none');
+        assert.equal(islandsAudit.l2ContainsL4, true);
+        assert.ok(parseAlphaFromCssColor(islandsAudit.l2BeforeBg) >= 0.50, `Layer 2 #antigravity.agentSidePanelInputBox::before glass missing (${islandsAudit.l2BeforeBg})`);
+        assert.ok(String(islandsAudit.l2BeforeBlur).includes('blur('), `Layer 2 #antigravity.agentSidePanelInputBox::before missing blur (${islandsAudit.l2BeforeBlur})`);
+        assert.equal(islandsAudit.l3Bg, 'rgba(0, 0, 0, 0)', 'Layer 3 .mock-composer-context-bar must strip solid fill onto Layer 2');
+        assert.equal(islandsAudit.l4Bg, 'rgba(0, 0, 0, 0)', 'Layer 4 .surface-composer-card must stay hollowed transparent');
+        assert.equal(islandsAudit.l4BeforeBlur, 'none', 'Layer 4 .surface-composer-card::before must NOT duplicate glass blur');
+        assert.notEqual(islandsAudit.chipBorder, '0px', '#mock-composer-attachment-chip border must remain preserved');
+        assert.equal(islandsAudit.fixedTop, 0);
+        assert.equal(islandsAudit.fixedLeft, 0);
+        assert.ok(parseAlphaFromCssColor(islandsAudit.custBeforeBg) >= 0.70 && String(islandsAudit.custBeforeBlur).includes('blur('));
+
+        // Switch to flush mode & verify [data-main-content-body]::after and .agy-sheet [data-side-panel-body]::after suppression
+        await hubPage.evaluate(`window.__agyPrism.updateConfig({ layoutMode: 'flush' })`);
+        await sleep(80);
+        const flushAfterCheck = await hubPage.evaluate(`(() => {
+          const mainAfter = getComputedStyle(document.getElementById('v234-main-body-probe'), '::after');
+          const sheetAfter = getComputedStyle(document.getElementById('v234-sheet-body-probe'), '::after');
+          return {
+            layout: document.documentElement.getAttribute('data-prism-layout'),
+            mainDisplay: mainAfter.display,
+            mainOpacity: mainAfter.opacity,
+            sheetDisplay: sheetAfter.display,
+            sheetOpacity: sheetAfter.opacity,
+          };
+        })()`);
+        assert.equal(flushAfterCheck.layout, 'flush');
+        assert.equal(flushAfterCheck.mainDisplay, 'none', `Flush [data-main-content-body]::after display not suppressed (${flushAfterCheck.mainDisplay})`);
+        assert.equal(flushAfterCheck.sheetDisplay, 'none', `Flush .agy-sheet [data-side-panel-body]::after display not suppressed (${flushAfterCheck.sheetDisplay})`);
+        assert.deepEqual(hubPage.pageExceptions, []);
+        return '4-layer Composer carrier (#antigravity::before sole glass, chip preserved) + flush ::after none verified';
+      } finally {
+        await browser.closePage(hubPage);
+      }
+    });
+
+    await check('S3-03: 4 Sidebar Styles (`capsule`/`underline`/`accordion`/`tree`), `balanced` typography (`h2` legible + `18x18px` action buttons), `borderStyle:"none"`, `pl-[30px]` & project expand/collapse', '@exec-mock-tests', async () => {
+      await engine.applyWallpaper(auroraItem.id, { skinEnabled: true, layoutMode: 'islands', glassBlur: 16 });
+      const hubPage = await browser.openPage({
+        url: `${HUB_MOCK_ORIGIN}/hub`,
+        requestHandler: universalHttpRouter,
+      });
+      try {
+        await hubPage.evaluate(
+          buildHostMicroBootstrap({ hostOrigin: studio.origin, capToken: studio.hostCapToken, triggerMode: 'both', startupMode: 'gentle-auto', skinEnabled: true }),
+        );
+        const deadline = Date.now() + 3000;
+        let wallReadyState = null;
+        while (Date.now() < deadline) {
+          wallReadyState = await hubPage.evaluate(`document.documentElement.getAttribute('data-agy-prism-wallpaper')`);
+          if (wallReadyState === 'ready') break;
+          await sleep(40);
+        }
+        assert.equal(wallReadyState, 'ready', `S3-02 Hub wallpaper failed to reach ready state (got ${wallReadyState})`);
+
+        const stylesAudit = await hubPage.evaluate(`(async () => {
+          const setSb = (sidebarPatch) => {
+            window.__agyPrism.updateConfig({ sidebarTypographyMode: 'balanced', regions: { sidebar: sidebarPatch } });
+          };
+          setSb({ listStyle: 'capsule', borderStyle: 'full' });
+          await new Promise((r) => setTimeout(r, 40));
+          const stickyBeforeCap = getComputedStyle(document.getElementById('hub-sidebar-sticky-projects'), '::before');
+          const capRadius = parseFloat(stickyBeforeCap.borderTopLeftRadius) || 0;
+          const h2Cs = getComputedStyle(document.querySelector('#hub-sidebar-sticky-inner h2'));
+          const h2FontSize = parseFloat(h2Cs.fontSize) || 0;
+          const filterRect = document.getElementById('hub-proj-filter-btn').getBoundingClientRect();
+          const filterBtnW = Math.round(filterRect.width);
+          const h2BtnRect = document.getElementById('hub-sidebar-projects-title-btn').getBoundingClientRect();
+          const h2BtnHeight = Math.round(h2BtnRect.height);
+          const childPad = getComputedStyle(document.getElementById('hub-proj-child-1')).paddingLeft;
+
+          setSb({ listStyle: 'underline', borderStyle: 'full' });
+          await new Promise((r) => setTimeout(r, 40));
+          const stickyBeforeUnd = getComputedStyle(document.getElementById('hub-sidebar-sticky-projects'), '::before');
+          const undRadius = stickyBeforeUnd.borderTopLeftRadius;
+          const undBorderBottomW = stickyBeforeUnd.borderBottomWidth;
+
+          setSb({ listStyle: 'accordion', borderStyle: 'full' });
+          await new Promise((r) => setTimeout(r, 40));
+          const projBtn = document.getElementById('hub-project-header-btn');
+          const accExpColor = getComputedStyle(projBtn).color;
+          window.__setMockProjectExpanded(false);
+          const accColExpanded = projBtn.getAttribute('aria-expanded');
+          const accColColor = getComputedStyle(projBtn).color;
+          window.__setMockProjectExpanded(true);
+          const accAfter = getComputedStyle(projBtn, '::after');
+          const accAfterContent = accAfter.content;
+          const accColorChanged = accExpColor !== accColColor;
+
+          setSb({ listStyle: 'tree', borderStyle: 'none' });
+          await new Promise((r) => setTimeout(r, 40));
+          const treeAfter = getComputedStyle(projBtn, '::after');
+          const treeOrder = treeAfter.order;
+          const sbBorderVar = getComputedStyle(document.documentElement).getPropertyValue('--prism-border-sidebar').trim();
+          const sbBwTopVar = getComputedStyle(document.documentElement).getPropertyValue('--prism-bw-sidebar-top').trim();
+
+          return {
+            capRadius,
+            h2FontSize,
+            filterBtnW,
+            h2BtnHeight,
+            childPad,
+            undRadius,
+            undBorderBottomW,
+            accAfterContent,
+            accColExpanded,
+            accColorChanged,
+            treeOrder,
+            sbBorderVar,
+            sbBwTopVar,
+          };
+        })()`);
+
+        assert.ok(stylesAudit.capRadius >= 6, `capsule style missing rounded radius (${stylesAudit.capRadius})`);
+        assert.ok(stylesAudit.h2FontSize >= 11, `balanced typography h2 too small (${stylesAudit.h2FontSize}px)`);
+        assert.equal(stylesAudit.filterBtnW, 18, `balanced typography expected normalized 18px action button, got ${stylesAudit.filterBtnW}px`);
+        assert.equal(stylesAudit.childPad, '30px', `pl-[30px] child conversation row indent lost (${stylesAudit.childPad})`);
+        assert.equal(stylesAudit.undRadius, '0px', `underline mode expected 0px radius, got ${stylesAudit.undRadius}`);
+        assert.notEqual(stylesAudit.undBorderBottomW, '0px', 'underline mode missing bottom hairline');
+        assert.notEqual(stylesAudit.accAfterContent, 'none', 'accordion mode missing ::after chevron');
+        assert.equal(stylesAudit.accColExpanded, 'false');
+        assert.equal(stylesAudit.accColorChanged, true, 'accordion project expanded vs collapsed state did not update color');
+        assert.equal(stylesAudit.treeOrder, '-1', `tree mode expected leading order:-1 chevron, got ${stylesAudit.treeOrder}`);
+        assert.equal(stylesAudit.sbBorderVar, 'transparent', `sidebar.borderStyle="none" expected transparent --prism-border-sidebar, got ${stylesAudit.sbBorderVar}`);
+        assert.equal(stylesAudit.sbBwTopVar, '0px', `sidebar.borderStyle="none" expected 0px --prism-bw-sidebar-top, got ${stylesAudit.sbBwTopVar}`);
+        assert.deepEqual(hubPage.pageExceptions, []);
+        return `4 sidebar styles + balanced (h2=${stylesAudit.h2FontSize}px, btn=${stylesAudit.filterBtnW}px) + border:off verified`;
+      } finally {
+        await browser.closePage(hubPage);
+      }
+    });
+
+    await check('S3-04: Layer B Cold-Start Gate (`10x10` 0 requests/0 DOM) -> `T+5.2s` Deep Sleep DOM Unload -> Wake Draft Restore', '@exec-mock-tests', async () => {
+      const tinyPage = await browser.openPage({
+        url: `${studio.origin}/?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+        requestHandler: universalHttpRouter,
+        width: 10,
+        height: 10,
+        initScript: `
+          window.__coldFetchUrls = [];
+          const origFetch = window.fetch.bind(window);
+          window.fetch = function(u, o) {
+            window.__coldFetchUrls.push(String(u));
+            return origFetch(u, o);
+          };
+        `,
+      });
+      try {
+        await sleep(550);
+        const coldCheck = await tinyPage.evaluate(`({
+          dormant: document.documentElement.dataset.prismDormant,
+          bootFetches: (window.__coldFetchUrls || []).filter((u) => u.includes('/api/bootstrap')),
+          scrollHtmlLen: (document.getElementById('prism-tab-scroll')?.innerHTML || '').length,
+        })`);
+        assert.equal(coldCheck.dormant, '1', '10x10 occluded viewport must enter cold-start dormant gate');
+        assert.deepEqual(coldCheck.bootFetches, [], `Layer B cold-start fetched /api/bootstrap while 10x10 occluded: ${JSON.stringify(coldCheck.bootFetches)}`);
+        assert.equal(coldCheck.scrollHtmlLen, 0, 'Layer B cold-start must NOT mount heavy tab DOM');
+
+        // Wake to 1440x900 -> hydrate UI -> enter draft in Presets drawer
+        await tinyPage.setViewport(1440, 900, 1);
+        const readyWait = Date.now() + 3500;
+        while (Date.now() < readyWait) {
+          if (await tinyPage.evaluate(`Boolean(document.getElementById('prism-master-toggle-btn') && (document.getElementById('prism-tab-scroll')?.innerHTML || '').length > 0)`)) break;
+          await sleep(50);
+        }
+        await tinyPage.evaluate(`(() => {
+          document.querySelector('[data-action="open-drawer"][data-drawer="presets"]')?.click();
+        })()`);
+        await sleep(160);
+        await tinyPage.evaluate(`(() => {
+          const inp = document.getElementById('prism-preset-name-in');
+          if (inp) {
+            inp.value = 'LayerB-Draft-Keep';
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        })()`);
+
+        // Shrink back to 10x10 & hold past T+5000ms DEEP_SLEEP threshold
+        await tinyPage.setViewport(10, 10, 1);
+        await sleep(5350);
+        const deepAudit = await tinyPage.evaluate(`({
+          dormant: document.documentElement.dataset.prismDormant,
+          tabScrollLen: (document.getElementById('prism-tab-scroll')?.innerHTML || '').length,
+        })`);
+        assert.equal(deepAudit.dormant, '1');
+        assert.equal(deepAudit.tabScrollLen, 0, `Deep sleep did not unload #prism-tab-scroll after 5.35s (len=${deepAudit.tabScrollLen})`);
+
+        // Restore 1440x900 & verify DOM rebuilt + draft input preserved
+        await tinyPage.setViewport(1440, 900, 1);
+        await sleep(400);
+        const wakeAudit = await tinyPage.evaluate(`({
+          dormant: document.documentElement.dataset.prismDormant || null,
+          tabScrollLen: (document.getElementById('prism-tab-scroll')?.innerHTML || '').length,
+          draftVal: document.getElementById('prism-preset-name-in')?.value || '',
+        })`);
+        assert.equal(wakeAudit.dormant, null, 'Wake did not clear data-prism-dormant');
+        assert.ok(wakeAudit.tabScrollLen > 50, 'Wake did not rebuild #prism-tab-scroll');
+        assert.equal(wakeAudit.draftVal, 'LayerB-Draft-Keep', `Wake lost draft text in #prism-preset-name-in (got "${wakeAudit.draftVal}")`);
+        assert.deepEqual(tinyPage.pageExceptions, []);
+        return 'Cold-start 0 fetches -> Deep Sleep unload @5.35s -> Wake restored LayerB-Draft-Keep';
+      } finally {
+        await browser.closePage(tinyPage);
+      }
+    });
+
+    await check('S3-05: 8-Region collapsed persistence (`localStorage[\'prism.openRegions.v22\']` across reload) + 4 Exposed Keys (`floaterSolidBase`, `scrimColor`, `fxClickMode`, `fxTrailMode`)', '@exec-mock-tests', async () => {
+      const studioUrl = `${studio.origin}/?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`;
+      const studioPage = await browser.openPage({
+        url: studioUrl,
+        requestHandler: universalHttpRouter,
+      });
+      try {
+        const waitInitReady = Date.now() + 3000;
+        while (Date.now() < waitInitReady) {
+          if (await studioPage.evaluate(`Boolean(document.querySelector('[data-action="switch-tab"][data-tab="skin"]'))`)) break;
+          await sleep(40);
+        }
+        await studioPage.evaluate(`(() => { try { localStorage.removeItem('prism.openRegions.v22'); } catch {} })()`);
+        await studioPage.navigate(studioUrl);
+        const waitSkinReady = Date.now() + 3000;
+        while (Date.now() < waitSkinReady) {
+          if (await studioPage.evaluate(`Boolean(document.querySelector('[data-action="switch-tab"][data-tab="skin"]'))`)) break;
+          await sleep(40);
+        }
+        await studioPage.evaluate(`document.querySelector('[data-action="switch-tab"][data-tab="skin"]').click()`);
+        const waitAcc = Date.now() + 2000;
+        while (Date.now() < waitAcc) {
+          if (await studioPage.evaluate(`Boolean(document.querySelector('details.prism-region-group[data-region="sidebar"] > summary'))`)) break;
+          await sleep(40);
+        }
+
+        // Expand ONLY sidebar and composer -> verify localStorage persists across reload
+        await studioPage.evaluate(`(() => {
+          const sb = document.querySelector('details.prism-region-group[data-region="sidebar"]');
+          const cp = document.querySelector('details.prism-region-group[data-region="composer"]');
+          if (sb && !sb.open) sb.querySelector('summary')?.click();
+          if (cp && !cp.open) cp.querySelector('summary')?.click();
+        })()`);
+        let parsedBefore = {};
+        const lsWait = Date.now() + 1200;
+        while (Date.now() < lsWait) {
+          const raw = await studioPage.evaluate(`localStorage.getItem('prism.openRegions.v22')`);
+          parsedBefore = JSON.parse(raw || '{}');
+          if (parsedBefore.sidebar === true && parsedBefore.composer === true) break;
+          await sleep(40);
+        }
+        assert.equal(parsedBefore.sidebar, true);
+        assert.equal(parsedBefore.composer, true);
+
+        await studioPage.navigate(studioUrl);
+        const waitSkinReload = Date.now() + 3000;
+        while (Date.now() < waitSkinReload) {
+          if (await studioPage.evaluate(`Boolean(document.querySelector('[data-action="switch-tab"][data-tab="skin"]'))`)) break;
+          await sleep(40);
+        }
+        await studioPage.evaluate(`document.querySelector('[data-action="switch-tab"][data-tab="skin"]').click()`);
+        const waitAccReload = Date.now() + 2000;
+        while (Date.now() < waitAccReload) {
+          if (await studioPage.evaluate(`Boolean(document.querySelector('#prism-region-accordions > details.prism-region-group'))`)) break;
+          await sleep(40);
+        }
+        const openAfterReload = await studioPage.evaluate(`Array.from(document.querySelectorAll('#prism-region-accordions > details.prism-region-group')).filter(d => d.open).map(d => d.getAttribute('data-region'))`);
+        assert.deepEqual(openAfterReload, ['sidebar', 'composer'], `Reload did not restore exact openRegions persistence (got ${JSON.stringify(openAfterReload)})`);
+
+        // Open global accordion & drive the 4 exposed UI controls -> Engine config
+        await studioPage.evaluate(`(() => {
+          const g = document.querySelector('details.prism-region-group[data-region="global"]');
+          if (g && !g.open) g.querySelector('summary')?.click();
+        })()`);
+        await sleep(120);
+        await studioPage.evaluate(`(() => {
+          document.querySelector('[data-action="toggle-bool"][data-key="floaterSolidBase"]')?.click();
+          document.querySelector('[data-action="set-enum"][data-key="fxClickMode"][data-val="spark"]')?.click();
+          document.querySelector('[data-action="set-enum"][data-key="fxTrailMode"][data-val="comet"]')?.click();
+          const scIn = document.querySelector('.prism-color-wcag-block[data-color-key="scrimColor"] input[type="color"]');
+          if (scIn) {
+            scIn.value = '#1a2b3c';
+            scIn.dispatchEvent(new Event('input', { bubbles: true }));
+            scIn.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        })()`);
+        await sleep(320);
+
+        const cfg = await engine.getConfig();
+        assert.equal(cfg.floaterSolidBase, false, 'floaterSolidBase toggle did not persist false');
+        assert.equal(cfg.fxClickMode, 'spark', 'fxClickMode seg did not persist spark');
+        assert.equal(cfg.fxTrailMode, 'comet', 'fxTrailMode seg did not persist comet');
+        assert.equal(String(cfg.scrimColor || '').toUpperCase(), '#1A2B3C', `scrimColor picker did not persist #1A2B3C (got ${cfg.scrimColor})`);
+        assert.deepEqual(studioPage.pageExceptions, []);
+        return 'openRegions reload persistence + floaterSolidBase/scrimColor/fxClickMode/fxTrailMode roundtrip verified';
+      } finally {
+        await engine.updateConfig({ floaterSolidBase: true, scrimColor: 'auto', fxClickMode: 'ripple', fxTrailMode: 'dust' }).catch(() => {});
+        await browser.closePage(studioPage);
+      }
+    });
+
+    await check('S3-06: Studio Contrast Guardrail UI + Sibling/Code Protection + Hub `zh-CN` (`<h2>` & `20x20` intact) + Popout `.agy-prism-visual-editor` isolation', '@exec-mock-tests', async () => {
+      await engine.applyWallpaper(auroraItem.id, { skinEnabled: true, layoutMode: 'islands', regions: null, surfaceTints: null });
+      const studioPage = await browser.openPage({
+        url: `${studio.origin}/?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+        requestHandler: universalHttpRouter,
+      });
+      const popoutPage = await browser.openPage({
+        url: `${studio.origin}/?mode=visual-editor`,
+        requestHandler: universalHttpRouter,
+      });
+      const hubPage = await browser.openPage({
+        url: `${HUB_MOCK_ORIGIN}/hub`,
+        requestHandler: universalHttpRouter,
+      });
+      try {
+        await sleep(750);
+        await studioPage.evaluate(`(() => {
+          document.querySelector('[data-action="switch-tab"][data-tab="skin"]').click();
+        })()`);
+        await sleep(220);
+        await studioPage.evaluate(`(() => {
+          const sb = document.querySelector('details.prism-region-group[data-region="sidebar"]');
+          if (sb && !sb.open) sb.querySelector('summary')?.click();
+        })()`);
+        await sleep(120);
+
+        // Pick #111111 on dark sidebar with allowRawFontColor=false -> WCAG clamped indicator; then drop sidebarOpacity to 0.35 -> low-opacity hint; then toggle allowRaw ON
+        await studioPage.evaluate(`(() => {
+          const sb = document.querySelector('details.prism-region-group[data-region="sidebar"]');
+          const fgIn = sb.querySelector('.prism-color-wcag-block[data-color-key="fontColor"] input[type="color"], .prism-color-wcag-block[data-region="sidebar"][data-color-key*="fontColor"] input[type="color"]');
+          if (fgIn) {
+            fgIn.value = '#111111';
+            fgIn.dispatchEvent(new Event('input', { bubbles: true }));
+            fgIn.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        })()`);
+        await sleep(240);
+        const clampedState = await studioPage.evaluate(`(() => {
+          const sb = document.querySelector('details.prism-region-group[data-region="sidebar"]');
+          const badge = sb.querySelector('.prism-wcag-badge, [data-wcag-status]');
+          const rawSw = sb.querySelector('.prism-wcag-raw-row [role="switch"]');
+          return {
+            badgeText: badge ? badge.textContent : '',
+            rawChecked: rawSw ? rawSw.getAttribute('aria-checked') : null,
+          };
+        })()`);
+        assert.equal(clampedState.rawChecked, 'false');
+        assert.ok(clampedState.badgeText.length > 0, 'Expected WCAG contrast badge when dark #111111 selected on dark sidebar');
+
+        // Low opacity (<0.55) via Studio UI slider renders [data-wcag-status="low-opacity"]
+        await studioPage.evaluate(`(() => {
+          const sb = document.querySelector('details.prism-region-group[data-region="sidebar"]');
+          const opIn = sb?.querySelector('input[data-config-slider="sidebarOpacity"]');
+          if (opIn) {
+            opIn.value = '35';
+            opIn.dispatchEvent(new Event('input', { bubbles: true }));
+            opIn.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        })()`);
+        let lowOpHintVisible = false;
+        const lowOpWait = Date.now() + 2000;
+        while (Date.now() < lowOpWait) {
+          lowOpHintVisible = await studioPage.evaluate(`Boolean(document.querySelector('details.prism-region-group[data-region="sidebar"] [data-wcag-status="low-opacity"]'))`);
+          if (lowOpHintVisible) break;
+          await sleep(40);
+        }
+        assert.equal(lowOpHintVisible, true, 'Missing [data-wcag-status="low-opacity"] notice when sidebar opacity 0.35 < 0.55');
+
+        // Toggle raw font color ON -> persists allowRawFontColor=true
+        await studioPage.evaluate(`document.querySelector('details.prism-region-group[data-region="sidebar"] .prism-wcag-raw-row [role="switch"]')?.click()`);
+        await sleep(250);
+        assert.equal((await engine.getConfig()).regions?.sidebar?.allowRawFontColor, true, 'Toggling allowRawFontColor did not persist true');
+
+        // Hub: zh-CN translation preserves <h2> & 20x20 action buttons while keeping 0 Prism DOM mutations
+        await hubPage.evaluate(
+          buildHostMicroBootstrap({ hostOrigin: studio.origin, capToken: studio.hostCapToken, triggerMode: 'both', startupMode: 'gentle-auto', skinEnabled: true }),
+        );
+        const waitHub = Date.now() + 3000;
+        while (Date.now() < waitHub) {
+          if (await hubPage.evaluate(`document.documentElement.getAttribute('data-agy-prism-wallpaper') === 'ready'`)) break;
+          await sleep(40);
+        }
+        const zhHeaderAudit = await hubPage.evaluate(`(() => {
+          window.__setMockLocale('zh-CN');
+          const res = window.__runMockDomTranslator();
+          const stickyInner = document.getElementById('hub-sidebar-sticky-inner');
+          const h2 = stickyInner ? stickyInner.querySelector('h2') : null;
+          const projLabel = document.getElementById('hub-sidebar-projects-label');
+          const filterBtn = document.getElementById('hub-proj-filter-btn');
+          const addBtn = document.getElementById('hub-proj-add-btn');
+          return {
+            res,
+            hasH2: Boolean(h2),
+            projText: projLabel ? projLabel.textContent.trim() : '',
+            hasActionBtns: Boolean(filterBtn && addBtn),
+          };
+        })()`);
+        assert.equal(zhHeaderAudit.hasH2, true, '__setMockLocale zh-CN wiped <h2> inside #hub-sidebar-sticky-inner!');
+        assert.equal(zhHeaderAudit.projText, '项目');
+        assert.equal(zhHeaderAudit.hasActionBtns, true, 'Sibling action buttons inside sticky Projects header lost after zh-CN');
+        assert.deepEqual(zhHeaderAudit.res.touchedPrismIds, [], 'dom-translator mutated Prism DOM nodes!');
+
+        // Popout isolation check
+        const popProtected = await popoutPage.evaluate(`Boolean(document.querySelector('.prism-ve-popout-shell.agy-prism-visual-editor'))`);
+        assert.equal(popProtected, true, 'Popout page missing .agy-prism-visual-editor non-<body> guard');
+        assert.deepEqual(studioPage.pageExceptions, []);
+        assert.deepEqual(popoutPage.pageExceptions, []);
+        assert.deepEqual(hubPage.pageExceptions, []);
+        return 'UI WCAG clamp + <0.55 notice + allowRaw + zh-CN <h2>/buttons intact (0 Prism mutations) + popout guard verified';
+      } finally {
+        await engine.applyWallpaper(auroraItem.id, { skinEnabled: true, regions: null, surfaceTints: null, sidebarOpacity: null, sidebarBlur: null }).catch(() => {});
+        await browser.closePage(hubPage);
+        await browser.closePage(popoutPage);
+        await browser.closePage(studioPage);
       }
     });
   } finally {

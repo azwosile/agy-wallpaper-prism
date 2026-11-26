@@ -159,13 +159,24 @@ export function buildWebShimScript(seedProps = {}, options = {}) {
     setTimeout(function () { notifyListenerAll(state.listener); }, 0);
   }
 
+  function stopAudioLoop() {
+    if (state.audioTimer) {
+      clearInterval(state.audioTimer);
+      state.audioTimer = null;
+    }
+  }
+
   function ensureAudioLoop() {
     if (state.audioTimer || state.audioCallbacks.length === 0) return;
+    if (state.paused || state.occluded || document.hidden) return;
     var bins = new Array(128);
     for (var i = 0; i < 128; i++) bins[i] = 0;
     var tickMs = Math.max(16, Math.round(1000 / Math.min(60, Math.max(10, state.fps || 30))));
     state.audioTimer = setInterval(function () {
-      if (state.paused || state.occluded || document.hidden) return;
+      if (state.paused || state.occluded || document.hidden) {
+        stopAudioLoop();
+        return;
+      }
       var now = Date.now();
       if (state.externalAudio && now < state.externalAudioUntil) {
         for (var j = 0; j < 128; j++) bins[j] = state.externalAudio[j] || 0;
@@ -185,10 +196,18 @@ export function buildWebShimScript(seedProps = {}, options = {}) {
     }, tickMs);
   }
 
+  function syncAudioLoop() {
+    if (state.paused || state.occluded || document.hidden || state.audioCallbacks.length === 0) {
+      stopAudioLoop();
+    } else {
+      ensureAudioLoop();
+    }
+  }
+
   window.wallpaperRegisterAudioListener = function (cb) {
     if (typeof cb !== 'function') return;
     if (state.audioCallbacks.indexOf(cb) === -1) state.audioCallbacks.push(cb);
-    ensureAudioLoop();
+    syncAudioLoop();
   };
 
   window.__weSeedProps = function (nextProps) {
@@ -210,6 +229,7 @@ export function buildWebShimScript(seedProps = {}, options = {}) {
 
   window.__weSetPaused = function (paused) {
     state.paused = Boolean(paused);
+    syncAudioLoop();
     if (state.listener && typeof state.listener.setPaused === 'function') {
       try { state.listener.setPaused(Boolean(state.paused || state.occluded)); } catch (_) {}
     }
@@ -217,6 +237,7 @@ export function buildWebShimScript(seedProps = {}, options = {}) {
 
   window.__weSetOcclusion = function (occluded) {
     state.occluded = Boolean(occluded);
+    syncAudioLoop();
     if (state.listener && typeof state.listener.setPaused === 'function') {
       try { state.listener.setPaused(Boolean(state.paused || state.occluded)); } catch (_) {}
     }
@@ -227,14 +248,16 @@ export function buildWebShimScript(seedProps = {}, options = {}) {
     if (!isFinite(n) || n <= 0) n = 30;
     state.fps = Math.min(120, Math.max(5, Math.round(n)));
     if (state.audioTimer) {
-      clearInterval(state.audioTimer);
-      state.audioTimer = null;
-      ensureAudioLoop();
+      stopAudioLoop();
+      syncAudioLoop();
     }
     if (state.listener && typeof state.listener.applyGeneralProperties === 'function') {
       try { state.listener.applyGeneralProperties({ fps: state.fps }); } catch (_) {}
     }
   };
+
+  document.addEventListener('visibilitychange', syncAudioLoop);
+  window.addEventListener('pagehide', stopAudioLoop);
 
   window.__wePushAudio = function (arr) {
     if (!arr || typeof arr.length !== 'number') return;
@@ -310,7 +333,9 @@ export function injectWebWallpaperHtml(rawHtml, { baseHref = '', seedProps = {},
  * (handles both extracted WE Scene wallpapers and the built-in Prism Aurora scene).
  */
 export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '', thumbUrl = '', audioUrl = '' } = {}) {
-  const fps = Number(config.sceneLiveFps) || 30;
+  const onBattery = Boolean(config.onBattery);
+  const baseFps = Math.max(10, Math.min(60, Number(config.sceneLiveFps) || 30));
+  const fps = onBattery ? Math.min(15, baseFps) : baseFps;
   const paused = Boolean(config.paused);
   const muted = config.muted !== false;
   const volume = Number.isFinite(Number(config.volume)) ? Math.min(1, Math.max(0, Number(config.volume))) : 0.5;
@@ -323,7 +348,9 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
     thumbUrl,
     audioUrl,
     schemeColor,
+    baseFps,
     fps,
+    onBattery,
     paused,
     muted,
     volume,
@@ -336,7 +363,7 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtmlAttr(item.title || 'Prism Live Scene')}</title>
 <script data-agy-prism="focus-guard">${buildFocusGuardScript()}</script>
-<script data-agy-prism="we-shim">${buildWebShimScript(item.wireProps || {}, { fps, paused })}</script>
+<script data-agy-prism="we-shim">${buildWebShimScript(item.wireProps || {}, { fps: baseFps, paused })}</script>
 <style>
   html, body {
     margin: 0; padding: 0; width: 100%; height: 100%;
@@ -351,7 +378,7 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
   }
   #stage-bg {
     object-fit: cover; opacity: 0; transition: opacity 420ms ease;
-    transform-origin: center center; will-change: transform;
+    transform-origin: center center;
   }
   #stage-bg.ready { opacity: 1; }
   #stage-video {
@@ -376,10 +403,14 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
   var vid = document.getElementById('stage-video');
   var aud = document.getElementById('stage-audio');
 
+  var initBaseFps = Math.max(10, Math.min(60, Number(cfg.baseFps || cfg.fps) || 30));
+  var initOnBattery = Boolean(cfg.onBattery);
   var runtime = {
     paused: Boolean(cfg.paused),
     occluded: false,
-    fps: Math.max(10, Math.min(60, Number(cfg.fps) || 30)),
+    baseFps: initBaseFps,
+    onBattery: initOnBattery,
+    fps: initOnBattery ? Math.min(15, initBaseFps) : initBaseFps,
     frames: 0,
     lastFrameAt: 0,
     pointerX: 0.5,
@@ -387,11 +418,58 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
     targetX: 0.5,
     targetY: 0.5
   };
+  var rafId = 0;
 
   window.__wp = runtime;
   window.__wpStats = function () {
-    return { frames: runtime.frames, fps: runtime.fps, paused: runtime.paused, occluded: runtime.occluded };
+    return {
+      frames: runtime.frames,
+      fps: runtime.fps,
+      onBattery: runtime.onBattery,
+      paused: runtime.paused,
+      occluded: runtime.occluded
+    };
   };
+
+  function shouldRender() {
+    return !runtime.paused && !runtime.occluded && !document.hidden;
+  }
+
+  function releaseBgWillChange() {
+    if (bgImg && bgImg.style.willChange && bgImg.style.willChange !== 'auto') {
+      bgImg.style.willChange = 'auto';
+    }
+  }
+
+  function stopRenderLoop() {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
+    releaseBgWillChange();
+  }
+
+  function startRenderLoop() {
+    if (!rafId && shouldRender()) {
+      rafId = requestAnimationFrame(render);
+    }
+  }
+
+  function playVideoSafe() {
+    if (!cfg.sceneVideoUrl || !shouldRender()) return;
+    try {
+      var p = vid.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(function () {
+          if (!vid.muted) {
+            vid.muted = true;
+            var p2 = vid.play();
+            if (p2 && typeof p2.catch === 'function') p2.catch(function () {});
+          }
+        });
+      }
+    } catch (_) {}
+  }
 
   if (cfg.thumbUrl && !cfg.isBuiltinAurora) {
     bgImg.onload = function () { bgImg.classList.add('ready'); };
@@ -403,7 +481,7 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
     vid.volume = cfg.volume;
     vid.oncanplay = function () {
       vid.classList.add('ready');
-      if (!runtime.paused && !runtime.occluded) vid.play().catch(function () {});
+      playVideoSafe();
     };
     vid.src = cfg.sceneVideoUrl;
   }
@@ -412,18 +490,40 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
     aud.muted = cfg.muted;
     aud.volume = cfg.volume;
     aud.src = cfg.audioUrl;
-    if (!cfg.muted && !runtime.paused && !runtime.occluded) {
+    if (!cfg.muted && shouldRender()) {
       aud.play().catch(function () {});
     }
   }
 
   function resize() {
-    var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    var dprCap = runtime.onBattery ? 1.0 : 1.5;
+    var dpr = Math.min(window.devicePixelRatio || 1, dprCap);
     canvas.width = Math.max(1, Math.floor(window.innerWidth * dpr));
     canvas.height = Math.max(1, Math.floor(window.innerHeight * dpr));
   }
+
+  function applyBatteryState(isOnBattery) {
+    var next = Boolean(isOnBattery);
+    runtime.onBattery = next;
+    runtime.fps = next ? Math.min(15, runtime.baseFps) : runtime.baseFps;
+    resize();
+  }
+
   window.addEventListener('resize', resize);
   resize();
+
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.getBattery === 'function') {
+      navigator.getBattery().then(function (bat) {
+        if (!bat) return;
+        var syncBat = function () { applyBatteryState(bat.charging === false); };
+        syncBat();
+        if (typeof bat.addEventListener === 'function') {
+          bat.addEventListener('chargingchange', syncBat);
+        }
+      }).catch(function () {});
+    }
+  } catch (_) {}
 
   window.addEventListener('pointermove', function (e) {
     runtime.targetX = e.clientX / Math.max(1, window.innerWidth);
@@ -443,10 +543,12 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
   }
 
   function syncMediaPlayback() {
-    var halt = runtime.paused || runtime.occluded || document.hidden;
+    var halt = !shouldRender();
+    if (halt) stopRenderLoop();
+    else startRenderLoop();
     if (cfg.sceneVideoUrl) {
       if (halt) vid.pause();
-      else vid.play().catch(function () {});
+      else playVideoSafe();
     }
     if (cfg.audioUrl) {
       if (halt || aud.muted) aud.pause();
@@ -456,7 +558,10 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
 
   window.wallpaperPropertyListener = {
     applyGeneralProperties: function (p) {
-      if (p && p.fps) runtime.fps = Math.max(10, Math.min(60, Number(p.fps) || 30));
+      if (p && p.fps) {
+        runtime.baseFps = Math.max(10, Math.min(60, Number(p.fps) || 30));
+        runtime.fps = runtime.onBattery ? Math.min(15, runtime.baseFps) : runtime.baseFps;
+      }
     },
     setPaused: function (p) {
       runtime.paused = Boolean(p);
@@ -473,12 +578,21 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
       vid.muted = m; vid.volume = v;
       aud.muted = m; aud.volume = v;
       syncMediaPlayback();
+    } else if (msg.type === 'battery') {
+      applyBatteryState(Boolean(msg.onBattery));
     }
   });
 
+  document.addEventListener('visibilitychange', syncMediaPlayback);
+  window.addEventListener('pagehide', stopRenderLoop);
+
   function render(now) {
-    requestAnimationFrame(render);
-    if (runtime.paused || runtime.occluded || document.hidden) return;
+    rafId = 0;
+    if (!shouldRender()) {
+      releaseBgWillChange();
+      return;
+    }
+    rafId = requestAnimationFrame(render);
     var minDelta = 1000 / runtime.fps;
     if (now - runtime.lastFrameAt < minDelta * 0.92) return;
     runtime.lastFrameAt = now;
@@ -517,6 +631,7 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
         ctx.fillRect(0, 0, w, h);
       }
     } else if (cfg.thumbUrl && !cfg.sceneVideoUrl) {
+      if (bgImg && bgImg.style.willChange !== 'transform') bgImg.style.willChange = 'transform';
       var kbScale = 1.045 + Math.sin(t * 0.65) * 0.015;
       var tx = (0.5 - runtime.pointerX) * 14 + Math.cos(t * 0.5) * 6;
       var ty = (0.5 - runtime.pointerY) * 10 + Math.sin(t * 0.4) * 4;
@@ -539,7 +654,7 @@ export function buildLiveSceneHtml(item = {}, config = {}, { sceneVideoUrl = '',
     }
     ctx.restore();
   }
-  requestAnimationFrame(render);
+  startRenderLoop();
 })();
 </script>
 </body>

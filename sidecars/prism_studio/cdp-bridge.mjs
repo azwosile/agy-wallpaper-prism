@@ -121,12 +121,40 @@ export function readDevToolsActivePort(profileDir) {
   }
 }
 
+const hostConfigEnabledCache = new Map();
+const MAX_HOST_CONFIG_CACHE = 16;
+
+function statFileSig(filePath) {
+  if (!filePath) return 'none';
+  try {
+    const st = statSync(filePath);
+    return `${st.mtimeMs}:${st.size}:${st.ino || 0}`;
+  } catch (err) {
+    if (err && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) return 'missing';
+    if (err && (err.code === 'EACCES' || err.code === 'EPERM')) return 'eacces';
+    return `err:${err?.code || 'unknown'}`;
+  }
+}
+
 /** Strictly read-only, fail-closed check of ~/.gemini/config/config.json for plugin & sidecar enablement. */
 export function isPluginEnabledInHostConfig(configPath, pluginRoot = '') {
+  const mf = pluginRoot ? join(resolve(pluginRoot), 'plugin.json') : '';
+  const fp =
+    configPath ||
+    join(
+      process.env.ANTIGRAVITY_CONFIG_DIR ? resolve(process.env.ANTIGRAVITY_CONFIG_DIR) : join(homedir(), '.gemini', 'config'),
+      'config.json',
+    );
+  const cacheKey = `${configPath ? '1' : '0'}|${fp}|${mf}`;
+  const sig = `${statFileSig(fp)}|${statFileSig(mf)}`;
+  const cached = hostConfigEnabledCache.get(cacheKey);
+  if (cached && cached.sig === sig) {
+    return cached.value;
+  }
+
   const checkPluginManifest = () => {
-    if (!pluginRoot) return true;
+    if (!mf) return true;
     try {
-      const mf = join(resolve(pluginRoot), 'plugin.json');
       if (!existsSync(mf)) return true;
       const parsed = JSON.parse(readFileSync(mf, 'utf8').replace(/^\uFEFF/, ''));
       return parsed?.disabled !== true;
@@ -135,26 +163,32 @@ export function isPluginEnabledInHostConfig(configPath, pluginRoot = '') {
     }
   };
 
-  const fp =
-    configPath ||
-    join(
-      process.env.ANTIGRAVITY_CONFIG_DIR ? resolve(process.env.ANTIGRAVITY_CONFIG_DIR) : join(homedir(), '.gemini', 'config'),
-      'config.json',
-    );
+  let value;
   try {
-    if (!existsSync(fp)) return checkPluginManifest();
-    const raw = JSON.parse(readFileSync(fp, 'utf8').replace(/^\uFEFF/, ''));
-    if (raw?.plugins?.[PLUGIN_ID]?.enabled === false) return false;
-    if (raw?.sidecars?.[`${PLUGIN_ID}/prism_studio`]?.enabled === false) return false;
-    return checkPluginManifest();
+    if (!existsSync(fp)) {
+      value = checkPluginManifest();
+    } else {
+      const raw = JSON.parse(readFileSync(fp, 'utf8').replace(/^\uFEFF/, ''));
+      if (raw?.plugins?.[PLUGIN_ID]?.enabled === false) value = false;
+      else if (raw?.sidecars?.[`${PLUGIN_ID}/prism_studio`]?.enabled === false) value = false;
+      else value = checkPluginManifest();
+    }
   } catch (err) {
     // In sandboxed test harnesses without ~/.gemini/config read access, fall back to plugin.json;
     // on corrupt JSON or explicit configPath read failure, fail closed (false).
     if (!configPath && err && (err.code === 'EACCES' || err.code === 'EPERM')) {
-      return checkPluginManifest();
+      value = checkPluginManifest();
+    } else {
+      value = false;
     }
-    return false;
   }
+
+  if (hostConfigEnabledCache.size >= MAX_HOST_CONFIG_CACHE && !hostConfigEnabledCache.has(cacheKey)) {
+    const oldestKey = hostConfigEnabledCache.keys().next().value;
+    if (oldestKey !== undefined) hostConfigEnabledCache.delete(oldestKey);
+  }
+  hostConfigEnabledCache.set(cacheKey, { sig, value });
+  return value;
 }
 
 /** Create a user-facing shortcut launching Antigravity with --remote-debugging-port (zero host restart). */
@@ -1164,12 +1198,42 @@ export function createCanaryController({
     unfinishedAttempts: [],
   });
 
-  const readDisk = () => {
+  let lastDiskSig = '';
+  let stateObj = null;
+
+  const statCanarySig = () => {
     try {
-      if (!existsSync(canaryPath)) return defaultCanary();
+      const st = statSync(canaryPath);
+      return `${st.mtimeMs}:${st.size}:${st.ino || 0}`;
+    } catch (err) {
+      if (err && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) return 'missing';
+      return `err:${err?.code || 'unknown'}`;
+    }
+  };
+
+  const cloneCanary = (obj) => ({
+    ...obj,
+    unfinishedAttempts: Array.isArray(obj?.unfinishedAttempts) ? [...obj.unfinishedAttempts] : [],
+  });
+
+  const readDisk = () => {
+    const sig = statCanarySig();
+    if (stateObj && sig === lastDiskSig) {
+      return cloneCanary(stateObj);
+    }
+    if (sig === 'missing') {
+      stateObj = defaultCanary();
+      lastDiskSig = 'missing';
+      return cloneCanary(stateObj);
+    }
+    try {
       const raw = JSON.parse(readFileSync(canaryPath, 'utf8').replace(/^\uFEFF/, ''));
-      if (!raw || typeof raw !== 'object') return defaultCanary();
-      return {
+      if (!raw || typeof raw !== 'object') {
+        stateObj = defaultCanary();
+        lastDiskSig = sig;
+        return cloneCanary(stateObj);
+      }
+      stateObj = {
         version: 2,
         state: ['idle', 'arming', 'healthy', 'tripped'].includes(raw.state) ? raw.state : 'idle',
         browserSessionId: String(raw.browserSessionId || ''),
@@ -1184,17 +1248,23 @@ export function createCanaryController({
           ? raw.unfinishedAttempts.map(Number).filter((n) => Number.isFinite(n) && n > 0)
           : [],
       };
+      lastDiskSig = sig;
+      return cloneCanary(stateObj);
     } catch {
-      return defaultCanary();
+      const fb = defaultCanary();
+      stateObj = fb;
+      lastDiskSig = '';
+      return cloneCanary(fb);
     }
   };
 
-  let stateObj = readDisk();
+  stateObj = readDisk();
 
   const persistFsync = (next) => {
-    stateObj = next;
-    writeFsyncJsonSync(canaryPath, next);
-    return { ...stateObj };
+    stateObj = cloneCanary(next);
+    writeFsyncJsonSync(canaryPath, stateObj);
+    lastDiskSig = statCanarySig();
+    return cloneCanary(stateObj);
   };
 
   const evaluateBoot = async (browserSessionId = '') => {
@@ -1363,6 +1433,7 @@ export const REMOVE_SKIN_EXPR = `(function(){
       ${JSON.stringify(PRISM_DOM.wcoActiveAttr || 'data-agy-prism-wco-active')},
       ${JSON.stringify(PRISM_DOM.welcomeLogoAttr || 'data-prism-welcome-logo')},
       ${JSON.stringify(PRISM_DOM.topbarStyleAttr || 'data-prism-topbar-style')},
+      ${JSON.stringify(PRISM_DOM.sidebarStyleAttr || 'data-prism-sidebar-style')},
       ${JSON.stringify(PRISM_DOM.themeAttr)},
       ${JSON.stringify(PRISM_DOM.schemeAttr)},
       ${JSON.stringify(PRISM_DOM.accentModeAttr)},
@@ -1398,9 +1469,83 @@ export const REMOVE_SKIN_EXPR = `(function(){
   return true;
 })()`;
 
+export function buildSoftDisableSkinExpr(stateRev = 0) {
+  const rev = Number.isInteger(Number(stateRev)) && Number(stateRev) > 0 ? Number(stateRev) : 0;
+  return `(function(){
+  try { window.__agyPrismOn = false; } catch (_) {}
+  var softOk = false;
+  try {
+    var api = window.${PRISM_DOM.skinGlobal};
+    if (api && typeof api.apply === 'function') {
+      api.apply({ skinEnabled: false, stateRev: ${rev} });
+      softOk = true;
+    } else if (api && typeof api.applyPayload === 'function') {
+      api.applyPayload({ skinEnabled: false, stateRev: ${rev} });
+      softOk = true;
+    }
+  } catch (_) {
+    try { if (window.${PRISM_DOM.skinGlobal} && typeof window.${PRISM_DOM.skinGlobal}.destroy === 'function') window.${PRISM_DOM.skinGlobal}.destroy(); } catch (__) {}
+  }
+  try {
+    var loader = document.getElementById('agy-prism-stage-loader');
+    if (loader) loader.remove();
+    var staticEl = document.getElementById('agy-prism-static-css');
+    if (staticEl) staticEl.remove();
+    if (!softOk) {
+      ['agy-prism-css', 'agy-prism-caret-css', 'agy-prism-stage', 'agy-prism-fx-canvas', 'agy-prism-wco-pill', 'agy-prism-topbar-pills'].forEach(function(id){
+        var n = document.getElementById(id); if (n) n.remove();
+      });
+      document.querySelectorAll('[data-agy-prism-topbar-anc],[data-agy-prism-topbar-host],[data-agy-prism-welcome-logo],[data-agy-prism-welcome-logo-pseudo]').forEach(function(el){
+        el.removeAttribute('data-agy-prism-topbar-anc');
+        el.removeAttribute('data-agy-prism-topbar-host');
+        el.removeAttribute('data-agy-prism-welcome-logo');
+        el.removeAttribute('data-agy-prism-welcome-logo-pseudo');
+      });
+      var r = document.documentElement;
+      [
+        ${JSON.stringify(PRISM_DOM.skinAttr)},
+        ${JSON.stringify(PRISM_DOM.glassAttr)},
+        ${JSON.stringify(PRISM_DOM.wallpaperAttr)},
+        ${JSON.stringify(PRISM_DOM.wcoAttr)},
+        ${JSON.stringify(PRISM_DOM.wcoActiveAttr || 'data-agy-prism-wco-active')},
+        ${JSON.stringify(PRISM_DOM.welcomeLogoAttr || 'data-prism-welcome-logo')},
+        ${JSON.stringify(PRISM_DOM.topbarStyleAttr || 'data-prism-topbar-style')},
+        ${JSON.stringify(PRISM_DOM.sidebarStyleAttr || 'data-prism-sidebar-style')},
+        ${JSON.stringify(PRISM_DOM.themeAttr)},
+        ${JSON.stringify(PRISM_DOM.schemeAttr)},
+        ${JSON.stringify(PRISM_DOM.accentModeAttr)},
+        ${JSON.stringify(PRISM_DOM.layoutAttr)},
+        ${JSON.stringify(PRISM_DOM.cornersAttr)},
+        ${JSON.stringify(PRISM_DOM.bordersAttr)},
+        ${JSON.stringify(PRISM_DOM.shadowsAttr)},
+        ${JSON.stringify(PRISM_DOM.kindAttr)},
+        'data-prism-glass',
+        'data-prism-code-mode'
+      ].forEach(function(a){ r.removeAttribute(a); });
+      if (window.electronNative && typeof window.electronNative.setTitleBarOverlay === 'function') {
+        var lt = document.body && document.body.classList && document.body.classList.contains('theme-light');
+        window.electronNative.setTitleBarOverlay({ color: lt ? '#FFFFFF' : '#131313', symbolColor: lt ? '#000000' : '#FAFAFA' });
+      }
+    }
+    var p = document.getElementById('agy-prism-pill');
+    if (p && p.dataset && p.dataset.prismLazyStub === '1') {
+      p.dataset.skinEnabled = 'false';
+      p.textContent = '\\u25C7 Prism \\u00B7 OFF';
+      p.style.color = '#94a3b8';
+      p.style.background = 'rgba(20,20,26,.52)';
+      p.style.borderColor = 'rgba(148,163,184,.28)';
+      p.style.opacity = '.78';
+    }
+  } catch (_) {}
+  return true;
+})()`;
+}
+
+export const SOFT_DISABLE_SKIN_EXPR = buildSoftDisableSkinExpr(0);
+
 export const REMOVE_PANEL_EXPR = `(function(){
   try { window.__agyPrismBootstrapped = false; } catch (_) {}
-  try { if (window.__agyPrismKt) { clearInterval(window.__agyPrismKt); window.__agyPrismKt = 0; } } catch (_) {}
+  try { if (window.__agyPrismKt) { clearTimeout(window.__agyPrismKt); clearInterval(window.__agyPrismKt); window.__agyPrismKt = 0; } } catch (_) {}
   try { if (window.__agyPrismSse) { window.__agyPrismSse.close(); window.__agyPrismSse = null; } } catch (_) {}
   try { if (window.${PRISM_DOM.panelGlobal} && typeof window.${PRISM_DOM.panelGlobal}.destroy === 'function') window.${PRISM_DOM.panelGlobal}.destroy(); } catch (_) {}
   try {
@@ -1517,28 +1662,27 @@ export function buildHostMicroBootstrap({
   const isStatic = startupMode === 'static-css' ? 1 : 0;
   const isSkinOn = skinEnabled !== false ? 1 : 0;
   return [
-    ';(function(){var W=window,D=document;if(W.top&&W!==W.top)return{ok:false};',
-    `var T=${safeJsonLiteral(capToken)},B=${safeJsonLiteral(hostPrefix)}+T,P="agy-prism-",K="__agyPrism",N=K+"Panel",BT=K+"Bootstrapped",SS=K+"Sse",KT=K+"Kt",ON=K+"On",PS=K+"PanicStrip",SM=K+"SummonPanel",SC="static-css",PL=P+"panel-loader",SL=P+"stage-loader",prevB=W[K+"HostBase"]||"",sp0=${showStubPill},de=D.documentElement,hd=D.head||de;W[ON]=!!${isSkinOn};`,
-    'function $(i){return D.getElementById(i)}function pd(e){e.preventDefault();e.stopPropagation()}function isL(n){return n&&n.dataset&&n.dataset.prismLazyStub==="1"}function ds(o){try{o&&o.destroy&&o.destroy()}catch(_){}}function rm(n){n&&n.remove()}',
-    'function sk(a){if(!a||!sp0||W[N]||!W[BT]){if(W[KT]){clearInterval(W[KT]);W[KT]=0}return}if(!W[KT])W[KT]=setInterval(function(){if(!W[BT]||W[N]||!sp0)sk(0);else ep(W[ON])},1500)}sk(0);',
-    'W[K+"HostBase"]=B;W[K+"CapToken"]=T;W[K+"RpcUrl"]=B+"/rpc";W[BT]=true;',
-    'function clr(all){if(de)Array.from(de.attributes).forEach(function(a){if(/^data-(?:agy-)?prism/.test(a.name)&&(all||a.name!=="data-agy-prism-panel"))de.removeAttribute(a.name)});try{var en=W.electronNative;if(en&&en.setTitleBarOverlay){var lt=D.body&&D.body.classList.contains("theme-light");en.setTitleBarOverlay({color:lt?"#FFFFFF":"#131313",symbolColor:lt?"#000000":"#FAFAFA"})}}catch(_){}}',
-    'function ss(){ds(W[K]);("css,"+SC+",caret-css,stage,fx-canvas,wco-pill,topbar-pills,stage-loader").split(",").forEach(function(k){rm($(P+k))});clr(0)}',
-    'function sa(){sk(0);ds(W[K]);ds(W[N]);D.querySelectorAll(\'[id^="\'+P+\'"],.prism-corner-orb\').forEach(rm);clr(1)}',
-    'function pp(p,on){if(!isL(p))return;var en=on!==false,se=en?"true":"false",d=p.dataset,s=p.style,rg="rgba(";if(d.skinEnabled===se)return;d.skinEnabled=se;p.textContent=en?"\\u25C6 Prism":"\\u25C7 Prism \\u00B7 OFF";s.color=en?"#e2e8f0":"#94a3b8";s.background=rg+"20,20,26,"+(en?".76)":".52)");s.borderColor=rg+(en?"52,211,153,.42)":"148,163,184,.28)");s.opacity=en?"1":".78"}',
-    'function clk(e){pd(e);if(e.shiftKey){W[K+"Call"]("skin.toggle",{}).catch(function(){});return}W[SM]()}',
-    'function ep(on){W[ON]=on!==false;var ex=$(P+"pill"),f=D.querySelector(".agy-composer-footer,[data-testid=\\"agent-input-box\\"] footer,.composer-bar");if(!sp0||W[N]||!D.body){if(isL(ex))rm(ex);if(W[N])sk(0);return}if(ex&&!isL(ex))return;var b=ex||D.createElement("button"),d=b.dataset,t=f||D.body,cs="all:initial;display:inline-flex;align-items:center;white-space:nowrap;flex-shrink:0;cursor:pointer;font:500 11px/18px sans-serif;padding:2px 8px;border-radius:999px;border:1px solid transparent;z-index:44;";if(!ex){b.id=P+"pill";b.className=P+"pill";b.type="button";b.title="Wallpaper Prism (Click: Panel \\u00B7 Shift+Click: Enable/Disable \\u00B7 Ctrl+Alt+W)";b.setAttribute("translate","no");d.noTranslate="true";d.agNoI18n=d.prismLazyStub="1"}else if(!b.className)b.className=P+"pill";if(b.onclick!==clk)b.onclick=clk;if(b.parentNode!==t){d.skinEnabled="";b.style.cssText=f?cs:cs+"position:fixed;right:14px;bottom:10px;";t.appendChild(b)}pp(b,W[ON])}',
-    'function sp(m){var pn=W[N];if(!pn)return;sk(0);if(m.skinVersion&&pn.version!==m.skinVersion)ld(PL,"/panel.js",1);else if(pn.syncState&&m.data)pn.syncState(m.data)}',
-    'function rpc(m,p){var o=typeof m==="string"&&m[0]==="{"?JSON.parse(m):{id:"r"+Date.now(),method:m,params:p||{}};return W.fetch(B+"/rpc",{method:"POST",headers:{"Content-Type":"application/json","X-Prism-Token":T},body:JSON.stringify(o)}).then(function(r){return r.json()}).then(function(e){if(e&&e.ok===false)throw Error(e.error||"rpc");var res=e?e.result:null;if(o.method==="skin.toggle"&&res&&typeof res.skinEnabled==="boolean"){ep(res.skinEnabled);if(!res.skinEnabled)ss();else{W[BT]=true;if(!W[K]&&!$(P+SC)){var sm=res.state&&res.state.config&&res.state.config.startupMode;if(sm===SC)css();else if(!$(SL))ld(SL,"/stage.js",1)}}}return res})}',
-    'W[K+"Call"]=rpc;W[PS]=function(w){W[BT]=false;sk(0);try{if(W[SS]){W[SS].close();W[SS]=null}}catch(_){}sa();rpc("skin.panicRestore",{reason:w||"panic"}).catch(function(){})};',
-    'function sum(){sk(0);if(W[N]&&W[N].toggle)return W[N].toggle();if($(PL))return;var p=$(P+"pill");if(isL(p))p.style.opacity=".55";ld(PL,"/panel.js?open=1",1)}',
-    'W[SM]=sum;function ld(id,u,f){var ex=$(id);if(ex){if(!f)return;rm(ex)}var s=D.createElement("script");s.id=id;s.async=true;s.onerror=function(){rm(s);if(id===PL){var p=$(P+"pill");if(isL(p)){p.dataset.skinEnabled="";pp(p,W[ON])}sk(1)}};s.src=B+u+(u.indexOf("?")>0?"&":"?")+"t="+Date.now();hd.appendChild(s)}',
-    'function css(){var l=$(P+SC);if(!l){l=D.createElement("link");l.id=P+SC;l.rel="stylesheet";hd.appendChild(l)}l.href=B+"/static.css?t="+Date.now()}',
-    'if(!W[K+"KeysBound"]){W[K+"KeysBound"]=true;var esc=[];W.addEventListener("keydown",function(e){var k=String(e.key||""),kl=k.toLowerCase(),c=(e.ctrlKey||e.metaKey)&&e.altKey;if(c&&e.shiftKey&&kl==="r"){pd(e);W[PS]("Ctrl+Alt+Shift+R");return}if(k==="Escape"&&!e.repeat){var n=Date.now();esc=esc.filter(function(t){return n-t<=900});esc.push(n);if(esc.length>=4){esc=[];pd(e);W[PS]("4x-Escape");return}}else if(k!=="Escape")esc=[];if(c&&!e.shiftKey&&kl==="w"){if(W[N]&&W[N].toggle)return;pd(e);W[SM]()}},true)}',
+    ';(()=>{var W=window,D=document;if(W.top&&W!==W.top)return{ok:!1};',
+    `var T=${safeJsonLiteral(capToken)},B=${safeJsonLiteral(hostPrefix)}+T,P="agy-prism-",K="__agyPrism",N=K+"Panel",BT=K+"Bootstrapped",SS=K+"Sse",KT=K+"Kt",ON=K+"On",PS=K+"PanicStrip",SM=K+"SummonPanel",SC="static-css",PL=P+"panel-loader",SL=P+"stage-loader",PI=P+"pill",pb=W[K+"HostBase"]||"",sb=${showStubPill},kc=0,E=D.documentElement,H=D.head||E,nw=Date.now;W[ON]=!!${isSkinOn};`,
+    'var $=i=>D.getElementById(i),pd=e=>{e.preventDefault();e.stopPropagation()},isL=n=>n&&n.dataset&&n.dataset.prismLazyStub==="1",ds=o=>{try{o&&o.destroy&&o.destroy()}catch(_){}},rm=n=>n&&n.remove(),',
+    'sk=a=>{if(!a||!sb||W[N]||!W[BT]){if(W[KT]){clearTimeout(W[KT]);clearInterval(W[KT]);W[KT]=0}kc=0;return}if(!W[KT])W[KT]=setTimeout(()=>{W[KT]=0;if(!W[BT]||W[N]||!sb)return;if(!D.hidden)kc=ep(W[ON])?kc+1:0;sk(1)},kc>5?10000:kc>3?5000:1500)},',
+    'clr=all=>{if(E)Array.from(E.attributes).forEach(a=>{if(/^data-(?:agy-)?prism/.test(a.name)&&(all||a.name!=="data-agy-prism-panel"))E.removeAttribute(a.name)});try{var en=W.electronNative;if(en&&en.setTitleBarOverlay){var lt=D.body&&D.body.classList.contains("theme-light");en.setTitleBarOverlay({color:lt?"#FFFFFF":"#131313",symbolColor:lt?"#000000":"#FAFAFA"})}}catch(_){}},',
+    'ss=r=>{W[ON]=!1;try{W[K]&&W[K].apply?W[K].apply({skinEnabled:!1,stateRev:r||0}):ds(W[K])}catch(_){ds(W[K])}("css,"+SC+",caret-css,stage,fx-canvas,wco-pill,topbar-pills,stage-loader").split(",").forEach(k=>rm($(P+k)));clr(0)},',
+    'sa=()=>{W[ON]=!1;sk(0);ds(W[K]);ds(W[N]);D.querySelectorAll(\'[id^="\'+P+\'"],.prism-corner-orb\').forEach(rm);clr(1)},',
+    'pp=(p,on)=>{if(!isL(p))return;var en=on!==!1,se=en?"true":"false",d=p.dataset,s=p.style,rg="rgba(";if(d.skinEnabled===se)return;d.skinEnabled=se;p.textContent=en?"\\u25C6 Prism":"\\u25C7 Prism \\u00B7 OFF";s.color=en?"#e2e8f0":"#94a3b8";s.background=rg+"20,20,26,"+(en?".76)":".52)");s.borderColor=rg+(en?"52,211,153,.42)":"148,163,184,.28)");s.opacity=en?"1":".78"},',
+    'clk=e=>{pd(e);if(e.shiftKey){W[K+"Call"]("skin.toggle",{}).catch(()=>{});return}W[SM]()},',
+    'ep=on=>{W[ON]=on!==!1;var ex=$(PI);if(!sb||W[N]||!D.body){if(isL(ex))rm(ex);if(W[N])sk(0);return 0}if(ex&&!isL(ex))return 1;if(ex&&ex.parentNode&&ex.parentNode!==D.body){if(ex.onclick!==clk)ex.onclick=clk;pp(ex,W[ON]);return 1}var f=D.querySelector(".agy-composer-footer,[data-testid=\\"agent-input-box\\"] footer,.composer-bar"),b=ex||D.createElement("button"),d=b.dataset,t=f||D.body,cs="all:initial;display:inline-flex;align-items:center;white-space:nowrap;flex-shrink:0;cursor:pointer;font:500 11px/18px sans-serif;padding:2px 8px;border-radius:999px;border:1px solid transparent;z-index:44;";if(!ex){b.id=b.className=PI;b.type="button";b.title="Wallpaper Prism (Click: Panel \\u00B7 Shift+Click: Enable/Disable \\u00B7 Ctrl+Alt+W)";b.setAttribute("translate","no");d.noTranslate="true";d.agNoI18n=d.prismLazyStub="1"}else if(!b.className)b.className=PI;if(b.onclick!==clk)b.onclick=clk;if(b.parentNode!==t){d.skinEnabled="";b.style.cssText=f?cs:cs+"position:fixed;right:14px;bottom:10px;";t.appendChild(b)}pp(b,W[ON]);return 0},',
+    'ld=(id,u,f)=>{var ex=$(id);if(ex){if(!f)return;rm(ex)}var s=D.createElement("script");s.id=id;s.async=!0;s.onerror=()=>{rm(s);if(id===PL){var p=$(PI);if(isL(p)){p.dataset.skinEnabled="";pp(p,W[ON])}sk(1)}};s.src=B+u+(u.indexOf("?")>0?"&":"?")+"t="+nw();H.appendChild(s)},',
+    'css=()=>{var l=$(P+SC);if(!l){l=D.createElement("link");l.id=P+SC;l.rel="stylesheet";H.appendChild(l)}l.href=B+"/static.css?t="+nw()},',
+    'sp=m=>{var pn=W[N];if(!pn)return;sk(0);if(m.skinVersion&&pn.version!==m.skinVersion)ld(PL,"/panel.js",1);else if(pn.syncState&&m.data)pn.syncState(m.data)},',
+    'rpc=(m,p)=>{var o=typeof m==="string"&&m[0]==="{"?JSON.parse(m):{id:"r"+nw(),method:m,params:p||{}};return W.fetch(B+"/rpc",{method:"POST",headers:{"Content-Type":"application/json","X-Prism-Token":T},body:JSON.stringify(o)}).then(r=>r.json()).then(e=>{if(e&&e.ok===!1)throw Error(e.error||"rpc");var res=e?e.result:null;if(o.method==="skin.toggle"&&res&&typeof res.skinEnabled==="boolean"){ep(res.skinEnabled);if(!res.skinEnabled)ss(res.stateRev);else{W[BT]=!0;if(!W[K]&&!$(P+SC)){var sm=res.state&&res.state.config&&res.state.config.startupMode;if(sm===SC)css();else if(!$(SL))ld(SL,"/stage.js",1)}}}return res})},',
+    'sum=()=>{sk(0);if(W[N]&&W[N].toggle)return W[N].toggle();if($(PL))return;var p=$(PI);if(isL(p))p.style.opacity=".55";ld(PL,"/panel.js?open=1",1)};',
+    'sk(0);W[K+"HostBase"]=B;W[K+"CapToken"]=T;W[K+"RpcUrl"]=B+"/rpc";W[BT]=!0;W[K+"Call"]=rpc;W[SM]=sum;W[PS]=w=>{W[BT]=!1;sk(0);try{if(W[SS]){W[SS].close();W[SS]=null}}catch(_){}sa();rpc("skin.panicRestore",{reason:w||"panic"}).catch(()=>{})};',
+    'if(!W[K+"KeysBound"]){W[K+"KeysBound"]=!0;var esc=[];W.addEventListener("keydown",e=>{var k=String(e.key||""),kl=k.toLowerCase(),c=(e.ctrlKey||e.metaKey)&&e.altKey;if(c&&e.shiftKey&&kl==="r"){pd(e);W[PS]("Ctrl+Alt+Shift+R");return}if(k==="Escape"&&!e.repeat){var n=nw();esc=esc.filter(t=>n-t<=900);esc.push(n);if(esc.length>=4){esc=[];pd(e);W[PS]("4x-Escape");return}}else if(k!=="Escape")esc=[];if(c&&!e.shiftKey&&kl==="w"){if(W[N]&&W[N].toggle)return;pd(e);W[SM]()}},!0)}',
     'ep(W[ON]);sk(1);',
-    'if(W.EventSource){if(!W[SS]||W[SS].readyState===2||prevB!==B){try{W[SS]&&W[SS].close()}catch(_){}try{W[SS]=new W.EventSource(B+"/events")}catch(_){}}if(W[SS])W[SS].onmessage=function(v){try{if(!W[BT])return;var m=JSON.parse(v.data),on=m.skinEnabled!==false,tm=m.data&&m.data.config&&m.data.config.triggerMode;if(typeof tm==="string")sp0=tm!=="shortcut-only"?1:0;var curP=$(P+"pill");if(!sp0&&isL(curP)){rm(curP);sk(0)}else{ep(on);sk(1)}if(!on){ss();sp(m);return}if(m.startupMode===SC){ds(W[K]);css()}else{rm($(P+SC));var sk0=W[K],okV=sk0&&(!m.skinVersion||sk0.version===m.skinVersion);if(okV&&sk0.applyPayload&&m.skinPayload)sk0.applyPayload(m.skinPayload);else{if(m.skinPayload)W.__AGY_PRISM_BOOT_PAYLOAD__=m.skinPayload;ld(SL,"/stage.js",1)}}sp(m)}catch(_){}}}',
-    `if(${isSkinOn}){var go=function(){${isStatic}?(css()):((W[K]&&W[K].version===${safeJsonLiteral(PRISM_DOM.skinVersion)})||ld(SL,"/stage.js",1))};W.requestIdleCallback?W.requestIdleCallback(go,{timeout:250}):setTimeout(go,16)}`,
-    'return{ok:true}})()',
+    'if(W.EventSource){if(!W[SS]||W[SS].readyState===2||pb!==B){try{W[SS]&&W[SS].close()}catch(_){}try{W[SS]=new W.EventSource(B+"/events")}catch(_){}}if(W[SS])W[SS].onmessage=v=>{try{if(!W[BT])return;var m=JSON.parse(v.data),on=m.skinEnabled!==!1,tm=m.data&&m.data.config&&m.data.config.triggerMode;if(typeof tm==="string")sb=tm!=="shortcut-only"?1:0;var curP=$(PI);if(!sb&&isL(curP)){rm(curP);sk(0);W[ON]=on}else{ep(on);sk(1)}if(!on){ss(m.stateRev);sp(m);return}if(m.startupMode===SC){ds(W[K]);css()}else{rm($(P+SC));var sk0=W[K],okV=sk0&&(!m.skinVersion||sk0.version===m.skinVersion);if(okV&&sk0.applyPayload&&m.skinPayload)sk0.applyPayload(m.skinPayload);else{if(m.skinPayload)W.__AGY_PRISM_BOOT_PAYLOAD__=m.skinPayload;ld(SL,"/stage.js",1)}}sp(m)}catch(_){}}}',
+    `if(${isSkinOn}){var go=()=>{${isStatic}?(css()):((W[K]&&W[K].version===${safeJsonLiteral(PRISM_DOM.skinVersion)})||ld(SL,"/stage.js",1))};W.requestIdleCallback?W.requestIdleCallback(go,{timeout:250}):setTimeout(go,16)}`,
+    'return{ok:!0}})()',
   ].join('');
 }
 
@@ -1590,6 +1734,8 @@ export function createPassiveCdpBridge({
   let timer = null;
   let stopped = false;
   let tickInFlight = null;
+  let lastBroadcastRev = 0;
+  let lastBroadcastLiveSse = 0;
 
   const isSseResponseAlive = (res) =>
     Boolean(
@@ -1625,6 +1771,8 @@ export function createPassiveCdpBridge({
       }
     }
     sseClients.clear();
+    lastBroadcastRev = 0;
+    lastBroadcastLiveSse = 0;
   };
 
   let lastStatus = {
@@ -1647,6 +1795,7 @@ export function createPassiveCdpBridge({
 
   const buildEnvelopePayload = async () => {
     const st = await getEngineState();
+    const stateRev = Number.isInteger(Number(st?.stateRev)) && Number(st.stateRev) > 0 ? Number(st.stateRev) : 0;
     const startupMode = st.config?.startupMode || 'gentle-auto';
     const skinEnabled = st.skinEnabled !== false && canary.getStatus().state !== 'tripped';
     const pluginOrigin = String(getPluginOrigin() || st.pluginOrigin || '').trim();
@@ -1655,15 +1804,21 @@ export function createPassiveCdpBridge({
           skinEnabled,
           slides: st.activeItem?.slides,
           pluginOrigin,
+          stateRev,
         })
-      : { config: st.config, activeItem: st.activeItem, mediaOrigin: st.mediaOrigin, skinEnabled };
+      : { config: st.config, activeItem: st.activeItem, mediaOrigin: st.mediaOrigin, skinEnabled, stateRev };
+    if (stateRev > 0 && skinPayload && typeof skinPayload === 'object' && !Number.isInteger(skinPayload.stateRev)) {
+      skinPayload.stateRev = stateRev;
+    }
     return {
       event: 'state',
+      stateRev,
       skinVersion: PRISM_DOM.skinVersion,
       startupMode,
       skinEnabled,
       skinPayload,
       data: {
+        stateRev,
         config: st.config,
         activeItem: st.activeItem,
         skinEnabled,
@@ -1703,6 +1858,7 @@ export function createPassiveCdpBridge({
       try { oldest.end(); } catch {}
     }
     sseClients.add(res);
+    lastBroadcastLiveSse = 0;
     res.write(`retry: 2500\ndata: ${JSON.stringify(initial)}\n\n`);
     let cleaned = false;
     let ka = null;
@@ -1867,8 +2023,18 @@ export function createPassiveCdpBridge({
     }
   };
 
-  const broadcastState = async () => {
+  const broadcastState = async ({ force = false, sseOnly = false } = {}) => {
     const envelope = await buildEnvelopePayload();
+    const liveSseBefore = countLiveSseClients();
+    if (
+      !force &&
+      envelope.stateRev > 0 &&
+      envelope.stateRev === lastBroadcastRev &&
+      liveSseBefore === lastBroadcastLiveSse &&
+      liveSseBefore > 0
+    ) {
+      return { sseDeliveredCount: liveSseBefore, skippedDuplicate: true };
+    }
     const serialized = `data: ${JSON.stringify(envelope)}\n\n`;
     let sseDeliveredCount = 0;
     for (const res of [...sseClients]) {
@@ -1887,15 +2053,27 @@ export function createPassiveCdpBridge({
         else sseClients.delete(res);
       }
     }
+    if (sseDeliveredCount > 0 && envelope.stateRev > 0) {
+      lastBroadcastRev = envelope.stateRev;
+      lastBroadcastLiveSse = sseDeliveredCount;
+    }
 
     // Fallback ephemeral push when SSE has no open socket (e.g. immediately after Restore or before EventSource opens)
-    if (sseDeliveredCount === 0 && activeTargets.size > 0) {
-      for (const [tid, entry] of [...activeTargets.entries()]) {
+    if (!sseOnly && sseDeliveredCount === 0 && activeTargets.size > 0) {
+      for (const [, entry] of [...activeTargets.entries()]) {
         if (!entry.target?.webSocketDebuggerUrl) continue;
         if (!envelope.skinEnabled) {
-          await evaluateTargetEphemeral(entry.target.webSocketDebuggerUrl, REMOVE_SKIN_EXPR).catch(() => {
-            activeTargets.delete(tid);
-          });
+          const ok = await evaluateTargetEphemeral(
+            entry.target.webSocketDebuggerUrl,
+            buildSoftDisableSkinExpr(envelope.stateRev),
+          ).catch(() => null);
+          if (!ok && !stopped) {
+            // Never silently drop target from activeTargets on transient timeout; schedule tick() to verify & recover SSE
+            const retryTimer = setTimeout(() => {
+              if (!stopped) void tick({ immediateWake: true });
+            }, 1200);
+            retryTimer.unref?.();
+          }
         } else if (envelope.startupMode === 'static-css') {
           const hostOrigin = String(getHostOrigin() || '').replace(/\/+$/, '');
           const expr = `(function(){if(window.__agyPrism&&window.__agyPrism.destroy)window.__agyPrism.destroy();var l=document.getElementById('agy-prism-static-css');if(!l){l=document.createElement('link');l.id='agy-prism-static-css';l.rel='stylesheet';(document.head||document.documentElement).appendChild(l);}l.href=${safeJsonLiteral(`${hostOrigin}/host/${capToken}/static.css?t=${Date.now()}`)};})()`;
@@ -1939,10 +2117,7 @@ export function createPassiveCdpBridge({
       return getStatus();
     }
 
-    const st = await getEngineState();
-    const startupMode = st?.config?.startupMode || 'gentle-auto';
     const canaryStatus = canary.getStatus();
-
     if (canaryStatus.state === 'tripped') {
       lastStatus = {
         ...lastStatus,
@@ -1955,6 +2130,22 @@ export function createPassiveCdpBridge({
       return getStatus();
     }
 
+    // Steady-state zero-CDP & zero-engine-state polling while SSE is connected!
+    if (!immediateWake && activeTargets.size > 0 && countLiveSseClients() > 0) {
+      lastStatus = {
+        ...lastStatus,
+        phase: 'attached',
+        cdpReachable: true,
+        pluginEnabled: true,
+        sessionAwake: true,
+        lastCheckAt: new Date().toISOString(),
+      };
+      return getStatus();
+    }
+
+    const st = await getEngineState();
+    const startupMode = st?.config?.startupMode || 'gentle-auto';
+
     // Option 1 (`manual` mode): zero boot CDP probes until explicitly awakened!
     if (startupMode === 'manual' && !sessionAwake && !immediateWake) {
       lastStatus = {
@@ -1964,19 +2155,6 @@ export function createPassiveCdpBridge({
         pluginEnabled: true,
         sessionAwake: false,
         attachedTargets: [],
-        lastCheckAt: new Date().toISOString(),
-      };
-      return getStatus();
-    }
-
-    // Steady-state zero-CDP polling while SSE is connected!
-    if (!immediateWake && activeTargets.size > 0 && countLiveSseClients() > 0) {
-      lastStatus = {
-        ...lastStatus,
-        phase: 'attached',
-        cdpReachable: true,
-        pluginEnabled: true,
-        sessionAwake: true,
         lastCheckAt: new Date().toISOString(),
       };
       return getStatus();
@@ -2137,7 +2315,7 @@ export function createPassiveCdpBridge({
       sessionAwake = true;
       sessionForcedWake = true;
       await runSerializedTick({ immediateWake: true });
-      await broadcastState();
+      await broadcastState({ force: true });
       return next;
     },
     wake: async (opts = {}) => {
@@ -2153,19 +2331,21 @@ export function createPassiveCdpBridge({
       if (!usedFastPath) {
         await runSerializedTick({ immediateWake: true });
       }
-      const bc = await broadcastState();
+      const bc = await broadcastState({ force: forceProbe });
       if (usedFastPath && (!bc || bc.sseDeliveredCount === 0)) {
         await runSerializedTick({ immediateWake: true });
-        await broadcastState();
+        await broadcastState({ force: true });
       }
       return getStatus();
     },
     reloadHostScripts: async () => {
       activeTargets.clear();
+      lastBroadcastRev = 0;
+      lastBroadcastLiveSse = 0;
       sessionAwake = true;
       sessionForcedWake = true;
       await runSerializedTick({ immediateWake: true });
-      await broadcastState();
+      await broadcastState({ force: true });
       return getStatus();
     },
     registerSseClient,

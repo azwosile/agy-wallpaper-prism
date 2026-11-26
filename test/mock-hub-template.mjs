@@ -50,6 +50,11 @@ export function buildMockAntigravityHubHtml({
       --foreground: #ffffff;
       --card: #131317;
       --card-border: rgba(255, 255, 255, 0.07);
+      --color-card-border: rgba(255, 255, 255, 0.09);
+      --card-edge: rgba(255, 255, 255, 0.08);
+      --glass: rgba(19, 19, 23, 0.78);
+      --glass-border: rgba(255, 255, 255, 0.14);
+      --glass-highlight: rgba(255, 255, 255, 0.08);
       --sidebar: #111114;
       --sidebar-muted: rgba(255, 255, 255, 0.04);
       --sidebar-secondary: rgba(255, 255, 255, 0.07);
@@ -70,6 +75,11 @@ export function buildMockAntigravityHubHtml({
       --foreground: #0f172a;
       --card: #ffffff;
       --card-border: rgba(15, 23, 42, 0.09);
+      --color-card-border: rgba(15, 23, 42, 0.11);
+      --card-edge: rgba(15, 23, 42, 0.09);
+      --glass: rgba(255, 255, 255, 0.82);
+      --glass-border: rgba(15, 23, 42, 0.12);
+      --glass-highlight: rgba(255, 255, 255, 0.65);
       --sidebar: #eeeef1;
       --sidebar-muted: rgba(15, 23, 42, 0.04);
       --sidebar-secondary: rgba(15, 23, 42, 0.07);
@@ -121,6 +131,19 @@ export function buildMockAntigravityHubHtml({
     }
     .agy-sheet[data-sheet-inset] [data-main-content-body] {
       background-color: var(--background);
+    }
+    [data-main-content-body],
+    [data-side-panel-body] {
+      position: relative;
+    }
+    [data-main-content-body]::after,
+    .agy-sheet [data-side-panel-body]::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border: 1px solid var(--card-border);
+      opacity: 0.72;
     }
 
     /* Antigravity 2.34.0+ 3-Layer WCV native hole punch-through */
@@ -344,6 +367,87 @@ export function buildMockAntigravityHubHtml({
       padding: 0 6px;
       margin-bottom: 4px;
     }
+    .mock-section-h2 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      line-height: 1.25;
+      color: inherit;
+    }
+    .mock-section-h2-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: inherit;
+      font: inherit;
+      letter-spacing: inherit;
+      text-transform: inherit;
+      cursor: pointer;
+    }
+    .mock-section-action-btn {
+      width: 20px;
+      height: 20px;
+      min-width: 20px;
+      min-height: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border-radius: 5px;
+      border: none;
+      background: transparent;
+      color: inherit;
+      font-size: 11px;
+      cursor: pointer;
+      opacity: 0.72;
+    }
+    .mock-project-btn {
+      position: relative;
+      width: 100%;
+      min-height: 32px;
+      text-align: left;
+      padding: 6px 10px;
+      border: none;
+      border-radius: 8px;
+      background-color: var(--sidebar);
+      color: inherit;
+      font: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .mock-conv-row {
+      min-height: 32px;
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .mock-conv-row.pl-\\[30px\\] {
+      padding-left: 30px;
+    }
+    .mock-row-actions {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
     .nav-item {
       display: flex;
       align-items: center;
@@ -411,15 +515,50 @@ export function buildMockAntigravityHubHtml({
       padding: 8px 28px 16px;
       flex-shrink: 0;
     }
+    .mock-composer-outer-wrap {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      flex-shrink: 0;
+    }
+    #antigravity\.agentSidePanelInputBox.surface-composer {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      padding: 1px;
+      border-radius: 16px;
+      background-color: var(--color-card-border);
+    }
+    .mock-composer-context-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px 4px;
+      font-size: 11px;
+      border-radius: 14px 14px 0 0;
+      background-color: var(--glass);
+      color: var(--foreground);
+    }
     .surface-composer-card {
       position: relative;
       padding: 12px 14px 10px;
-      border-radius: 12px;
+      border-radius: 15px;
       background-color: var(--card);
       border: 1px solid var(--card-border);
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+    .mock-composer-attachment-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      align-self: flex-start;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--card-border);
+      background-color: var(--glass);
+      font-size: 11px;
     }
     #hub-composer-input {
       width: 100%;
@@ -517,14 +656,14 @@ export function buildMockAntigravityHubHtml({
                 <button id="hub-title-menu-btn" type="button" class="hub-menu-btn" data-testid="title-menu-bar-item">Workspace</button>
                 <button id="hub-title-view-btn" type="button" class="hub-menu-btn" data-testid="title-menu-bar-item">View</button>
                 <button id="hub-title-window-btn" type="button" class="hub-menu-btn" data-testid="title-menu-bar-item">Window</button>
-                <span class="hub-badge">v2.1.0</span>
+                <span class="hub-badge">v2.2.0</span>
               </div>
               <div id="hub-title-menu-dropdown" data-browser-occluder="true" class="surface-opaque bg-sidebar" style="position:absolute;top:100%;left:14px;z-index:8000;width:200px;padding:6px 8px;pointer-events:none;visibility:hidden">
                 <div id="hub-dropdown-inner-card" style="background-color:rgba(30,32,42,0.96);padding:5px 8px;border-radius:6px">Open Workspace</div>
               </div>
               <div id="titlebar-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px;pointer-events:none;opacity:0"></div>
               <div class="hub-title-right">
-                <span>Swarm · v2.1</span>
+                <span>Swarm · v2.2</span>
                 <span>Zero-Enable CDP</span>
               </div>
             </header>
@@ -533,24 +672,48 @@ export function buildMockAntigravityHubHtml({
           <div data-testid="sidebar-split"${holeAncAttr}>
             <aside class="agy-sidebar bg-sidebar">
               <div>
-                <div id="hub-sidebar-sticky-projects" data-index="0" class="bg-sidebar" style="position: sticky; top: 0px; z-index: 10; width: 100%">
+                <div id="hub-sidebar-sticky-projects" data-index="0" data-sidebar-section-drop-id="main-section-header" class="bg-sidebar" style="position: sticky; top: 0px; z-index: 10; width: 100%">
                   <div data-testid="section-header" data-title="Projects">
-                    <div id="hub-sidebar-sticky-inner" class="group/section-header bg-sidebar nav-section-label">Projects</div>
+                    <div id="hub-sidebar-sticky-inner" class="group/section-header bg-sidebar nav-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:4px">
+                      <h2 class="mock-section-h2"><button id="hub-sidebar-projects-title-btn" type="button" class="mock-section-h2-toggle"><span id="hub-sidebar-projects-label">Projects</span></button></h2>
+                      <div style="display:inline-flex;align-items:center;gap:2px">
+                        <button id="hub-proj-filter-btn" type="button" class="mock-section-action-btn" title="Filter projects">F</button>
+                        <button id="hub-proj-add-btn" type="button" class="mock-section-action-btn" title="New project">+</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div id="hub-project-folder-wrap" class="bg-sidebar" data-index="1" data-sidebar-section-drop-id="proj-uuid-1" style="padding: 4px 0 2px">
+                <div id="hub-project-folder-wrap" class="bg-sidebar" data-index="1" data-sidebar-section-drop-id="proj-uuid-1" data-sidebar-section-collapsed="false" style="padding: 4px 0 2px">
                   <div class="group/header" style="position:relative">
-                    <button id="hub-project-header-btn" type="button" data-project-card="true" data-testid="project-header" class="rounded-lg bg-sidebar" style="width:100%;text-align:left;padding:6px 10px;border:none;color:inherit;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Antigravity plugins<div id="project-header-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px;pointer-events:none;opacity:0"></div></button>
+                    <div class="relative w-full group/headerbtn">
+                      <button id="hub-project-header-btn" type="button" data-project-card="true" data-testid="project-header" aria-expanded="true" class="rounded-lg bg-sidebar mock-project-btn"><span>Antigravity plugins</span><div id="project-header-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px;pointer-events:none;opacity:0"></div></button>
+                    </div>
+                    <div class="absolute mock-row-actions" style="position:absolute;right:6px;top:6px"><button id="hub-project-more-btn" type="button" class="mock-section-action-btn" title="Project actions">⋯</button></div>
                   </div>
                 </div>
-                <div class="nav-item active">
-                  <span>agy-wallpaper-prism</span>
-                  <span class="dot-online"></span>
+                <div id="hub-proj-child-slot-1" data-sidebar-section-id="proj-uuid-1">
+                  <div id="hub-proj-child-1" data-testid="conversation-row-sidebar" data-selected="true" class="nav-item active agy-sidebar-row mock-conv-row pl-[30px]">
+                    <span>agy-wallpaper-prism</span>
+                    <span class="dot-online"></span>
+                  </div>
                 </div>
-                <div class="nav-item"><span>antigravity-observer</span></div>
+                <div id="hub-proj-child-slot-2" data-sidebar-section-id="proj-uuid-1">
+                  <div id="hub-proj-child-2" data-testid="conversation-row-sidebar" class="nav-item agy-sidebar-row mock-conv-row pl-[30px]"><span>antigravity-observer</span></div>
+                </div>
+                <div id="hub-sidebar-sticky-conversations" data-index="2" data-sidebar-section-drop-id="conversations-section-header" class="bg-sidebar" style="position: sticky; top: 0px; z-index: 9; width: 100%; margin-top: 6px">
+                  <div data-testid="section-header" data-title="Conversations">
+                    <div id="hub-sidebar-conv-inner" class="group/section-header bg-sidebar nav-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:4px">
+                      <h2 class="mock-section-h2"><button id="hub-sidebar-conv-title-btn" type="button" class="mock-section-h2-toggle"><span id="hub-sidebar-conv-label">Conversations</span></button></h2>
+                    </div>
+                  </div>
+                </div>
+                <div id="hub-standalone-conv-row" data-testid="conversation-row-sidebar" class="nav-item agy-sidebar-row mock-conv-row">
+                  <span>Quick Prism Check</span>
+                  <span style="font-size:10.5px;opacity:0.65">Now</span>
+                </div>
               </div>
               <div>
-                <div class="nav-section-label">Swarm v2.1 Roster</div>
+                <div class="nav-section-label">Swarm v2.2 Roster</div>
                 <div class="nav-item"><span>@coordinator</span><span class="dot-online"></span></div>
                 <div class="nav-item"><span>@resilience-designer</span><span class="dot-online"></span></div>
                 <div class="nav-item"><span>@gentle-skin-architect</span><span class="dot-online"></span></div>
@@ -559,7 +722,7 @@ export function buildMockAntigravityHubHtml({
               </div>
               <div style="margin-top:auto">
                 <div class="nav-section-label">Enabled Plugins</div>
-                <div class="nav-item active"><span>◆ Wallpaper Prism</span><span style="font-size:10.5px;opacity:0.7">v2.1.0</span></div>
+                <div class="nav-item active"><span>◆ Wallpaper Prism</span><span style="font-size:10.5px;opacity:0.7">v2.2.0</span></div>
                 <div class="nav-item"><span>🐾 Gemini Neko</span><span style="font-size:10.5px;opacity:0.7">HUD</span></div>
               </div>
             </aside>
@@ -571,7 +734,7 @@ export function buildMockAntigravityHubHtml({
                 <main id="hub-main-pane" class="hub-main-pane browser-hole-opaque">
                   <section data-testid="conversation-view" data-mock-mode="chat">
                     <div class="msg-user bg-card">
-                      Verify <strong>Gentle Fail-Open v2.1</strong> on Antigravity <code>2.35.1</code>: zero-enable CDP, first-frame media gate, and synchronous <code>[data-browser-hole]</code> rounded GPU cutout.
+                      Verify <strong>Gentle Fail-Open v2.2</strong> on Antigravity <code>2.35.1</code>: zero-enable CDP, first-frame media gate, and synchronous <code>[data-browser-hole]</code> rounded GPU cutout.
                     </div>
 
                     <div class="msg-agent">
@@ -583,7 +746,7 @@ export function buildMockAntigravityHubHtml({
                         <circle cx="32" cy="32" r="24" fill="none" stroke="currentColor" stroke-width="3" />
                       </svg>
 
-                      <pre class="md-code-block"><code><span class="tok-cm">// Gentle Fail-Open v2.1: decode Frame 1 first, then punch rounded [data-browser-hole]</span>
+                      <pre class="md-code-block"><code><span class="tok-cm">// Gentle Fail-Open v2.2: decode Frame 1 first, then punch rounded [data-browser-hole]</span>
 <span class="tok-kw">export async function</span> <span class="tok-fn">mountGentlePrismStage</span>(engine, wallpaperId) {
   <span class="tok-kw">const</span> state = <span class="tok-kw">await</span> engine.<span class="tok-fn">applyWallpaper</span>(wallpaperId, {
     startupMode: <span class="tok-str">'gentle-auto'</span>,
@@ -608,19 +771,23 @@ export function buildMockAntigravityHubHtml({
                   </section>
 
                   <div class="composer-dock">
-                    <div id="antigravity" class="agentSidePanelInputBox">
-                      <div class="surface-composer-card agy-composer" data-testid="agent-input-box">
-                        <!-- Probe element: if backdrop-filter leaked onto .surface-composer-card instead of ::before, this fixed element would get trapped! -->
-                        <div id="composer-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px;pointer-events:none;opacity:0"></div>
-                        <textarea id="hub-composer-input" placeholder="Ask Antigravity or press Ctrl+Alt+W to summon Quick Prism…"></textarea>
-                        <div class="agy-composer-footer">
-                          <span class="footer-chip">Claude Opus 4.6</span>
-                          <span class="footer-chip">2.35.1 WCV</span>
-                          <button id="hub-interactive-btn" type="button" class="hub-send-btn" onclick="window.__hubInteractiveClicks=(window.__hubInteractiveClicks||0)+1">Send</button>
-                          <span id="hub-voice-live-pill" data-testid="voice-live-pill" class="bg-foreground text-background" title="Start Voice mode" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px">
-                            <svg width="12" height="12" viewBox="0 0 12 12"><path fill="currentColor" d="M5 1h2v10H5zM2 4h2v4H2zM8 3h2v6H8z"/></svg>
-                          </span>
-                          <span style="margin-left:auto;opacity:0.65;font-size:11px">Ctrl+Alt+W · Quick Prism</span>
+                    <div id="mock-composer-outer-wrap" class="mock-composer-outer-wrap" data-testid="agent-input-box">
+                      <div id="antigravity.agentSidePanelInputBox" class="surface-composer">
+                        <div id="mock-composer-context-bar" class="mock-composer-context-bar"><span>Context: agy-wallpaper-prism (v2.2.0)</span><span style="opacity:0.68">WCV 2.35.1</span></div>
+                        <div class="surface-composer-card agy-composer">
+                          <!-- Probe element: if backdrop-filter leaked onto #antigravity.agentSidePanelInputBox or .surface-composer-card instead of ::before, this fixed element would get trapped! -->
+                          <div id="composer-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px;pointer-events:none;opacity:0"></div>
+                          <div id="mock-composer-attachment-chip" data-testid="composer-attachment-chip" class="mock-composer-attachment-chip"><span>blueprint.md</span><span style="opacity:0.65">×</span></div>
+                          <textarea id="hub-composer-input" placeholder="Ask Antigravity or press Ctrl+Alt+W to summon Quick Prism…"></textarea>
+                          <div class="agy-composer-footer">
+                            <span class="footer-chip">Claude Opus 4.6</span>
+                            <span class="footer-chip">2.35.1 WCV</span>
+                            <button id="hub-interactive-btn" type="button" class="hub-send-btn" onclick="window.__hubInteractiveClicks=(window.__hubInteractiveClicks||0)+1">Send</button>
+                            <span id="hub-voice-live-pill" data-testid="voice-live-pill" class="bg-foreground text-background" title="Start Voice mode" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px">
+                              <svg width="12" height="12" viewBox="0 0 12 12"><path fill="currentColor" d="M5 1h2v10H5zM2 4h2v4H2zM8 3h2v6H8z"/></svg>
+                            </span>
+                            <span style="margin-left:auto;opacity:0.65;font-size:11px">Ctrl+Alt+W · Quick Prism</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -643,7 +810,7 @@ export function buildMockAntigravityHubHtml({
                   </div>
 
                   <div id="hub-aux-telemetry-card" class="aux-card" style="margin-top:2px">
-                    <div style="font-weight:600">Prism v2.1 Optical Telemetry</div>
+                    <div style="font-weight:600">Prism v2.2 Optical Telemetry</div>
                     <div style="opacity:0.78">Stage: z-index -1 · inert · fail-open</div>
                     <div style="opacity:0.78">Browser Cutout: GPU clip-path (12px arc)</div>
                     <div style="opacity:0.78">Code &amp; Modal Floor: WCAG Locked</div>
@@ -669,8 +836,10 @@ export function buildMockAntigravityHubHtml({
                 <div id="v234-cust-card" class="agy-card" data-testid="customization-card"></div>
                 <div id="v234-cust-fixed-probe" style="position:fixed;top:0;left:0;width:4px;height:4px"></div>
               </div>
+              <div id="v234-plugin-detail-probe" data-testid="plugin-detail" class="bg-card" style="padding:8px 12px;margin-top:6px;border-radius:8px;border:1px solid var(--card-border)">Plugin Detail</div>
             </div>
           </div>
+          <div id="v234-aux-sheet-probe" class="agy-sheet" style="position:fixed;left:-9999px;top:320px;width:160px;height:60px;pointer-events:none"><div id="v234-sheet-body-probe" data-side-panel-body="true" style="width:100%;height:100%">Sheet Body</div></div>
           <div id="v234-aux-split-probe" data-testid="aux-pane-split" style="display:flex;width:360px;height:200px">
             <div id="v234-center-island-probe" class="browser-hole-opaque" style="flex:1;display:flex;flex-direction:column">
               <div id="v234-main-header-probe" data-main-content-header="true" class="bg-background" style="height:40px">Main Header</div>
@@ -903,12 +1072,14 @@ export function buildMockAntigravityHubHtml({
         var ws = document.getElementById('hub-title-menu-btn');
         var vw = document.getElementById('hub-title-view-btn');
         var wn = document.getElementById('hub-title-window-btn');
-        var proj = document.getElementById('hub-sidebar-sticky-inner');
+        var projLabel = document.getElementById('hub-sidebar-projects-label');
+        var convLabel = document.getElementById('hub-sidebar-conv-label');
         var input = document.getElementById('hub-composer-input');
         if (ws) ws.textContent = zh ? '工作区' : 'Workspace';
         if (vw) vw.textContent = zh ? '视图' : 'View';
         if (wn) wn.textContent = zh ? '窗口' : 'Window';
-        if (proj) proj.textContent = zh ? '项目' : 'Projects';
+        if (projLabel) projLabel.textContent = zh ? '项目' : 'Projects';
+        if (convLabel) convLabel.textContent = zh ? '对话' : 'Conversations';
         if (input) {
           input.setAttribute(
             'placeholder',
@@ -918,6 +1089,13 @@ export function buildMockAntigravityHubHtml({
           );
         }
         return zh ? 'zh' : 'en';
+      };
+      window.__setMockProjectExpanded = function setMockProjectExpanded(expanded) {
+        var on = expanded !== false;
+        var btn = document.getElementById('hub-project-header-btn');
+        var wrap = document.getElementById('hub-project-folder-wrap');
+        if (btn) btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+        if (wrap) wrap.setAttribute('data-sidebar-section-collapsed', on ? 'false' : 'true');
       };
 
       // Req #6: Faithful upstream Antigravity-Chinese-Localization dom-translator.js simulation:
@@ -949,6 +1127,8 @@ export function buildMockAntigravityHubHtml({
           Local: '本地',
           All: '全部',
           None: '无',
+          'Conversations': '对话',
+          'Ask Antigravity or press Ctrl+Alt+W to summon Quick Prism…': '询问 Antigravity 或按 Ctrl+Alt+W 呼出 Quick Prism…',
           'Start Voice mode': '开启语音模式',
           'Hey bai, what should we build today?': '嘿，bai，今天想构建点什么？',
         };

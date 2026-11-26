@@ -240,12 +240,49 @@ export function bundleZeroDepEsm(entryFile) {
   return `(function(){\n'use strict';\n${ordered.join('\n\n')}\n})();`;
 }
 
+/**
+ * Deterministically inline relative CSS `@import './...';` / `@import url('./...');` rules.
+ * Pure LF, cycle-checked, deduplicated, zero external network imports allowed.
+ */
+export function inlineRelativeCss(entryCssFile) {
+  const visited = new Set();
+  const visiting = new Set();
+  const importRe = /^[ \t]*@import[ \t]+(?:url\(\s*)?['"]([^'"]+)['"]\s*\)?[ \t]*;[ \t]*$/gm;
+
+  function loadCss(filePath) {
+    const abs = resolve(filePath);
+    if (visiting.has(abs)) {
+      throw new Error(`Circular CSS @import detected: ${abs}`);
+    }
+    if (visited.has(abs)) {
+      return '';
+    }
+    if (!existsSync(abs)) {
+      throw new Error(`Missing CSS file in @import graph: ${abs}`);
+    }
+    visiting.add(abs);
+    const content = readFileSync(abs, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+    const inlined = content.replace(importRe, (_full, spec) => {
+      if (!spec.startsWith('.')) {
+        throw new Error(`External non-relative CSS @import "${spec}" not allowed in offline Studio bundle`);
+      }
+      const depAbs = resolve(dirname(abs), spec);
+      return loadCss(depAbs);
+    });
+    visiting.delete(abs);
+    visited.add(abs);
+    return inlined;
+  }
+
+  return existsSync(entryCssFile) ? loadCss(entryCssFile) : '';
+}
+
 export async function buildStudioBundle() {
   if (!existsSync(appEntry)) {
     throw new Error(`Missing Studio UI entrypoint: ${appEntry}`);
   }
 
-  const rawCss = existsSync(cssEntry) ? readFileSync(cssEntry, 'utf8').replace(/\r\n?/g, '\n') : '';
+  const rawCss = inlineRelativeCss(cssEntry);
   const heightLockCss = /#app\b[\s\S]*?height\s*:\s*100%/i.test(rawCss)
     ? ''
     : '\nhtml, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }\n';
