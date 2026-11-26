@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveDefaultPrismDataDir } from '../src/engine/store.mjs';
-import { PRISM_DOM, DEFAULT_DEBUG_PORT } from '../src/shared/schema.mjs';
+import { DEFAULT_DEBUG_PORT, PLUGIN_ID, PRISM_DOM, SIDECAR_URI } from '../src/shared/schema.mjs';
 import { buildClientSkinPayload, getHostSkinScript } from '../src/host/index.mjs';
 import { evaluateTargetEphemeral, listCdpTargets, probeCdpPort, readDevToolsActivePort, selectHubTargets } from '../sidecars/prism_studio/cdp-bridge.mjs';
 import { buildStudioBundle } from './build.mjs';
@@ -17,10 +17,387 @@ import { buildStudioBundle } from './build.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 
-export async function installLocalPlugin({ destRoot = '', skipSidecarReload = false } = {}) {
+function readJsonSafe(filePath) {
+  try {
+    if (!filePath || !existsSync(filePath)) return null;
+    const raw = readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '').trim();
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** Check whether a local PID is still alive without mutating process state. */
+export function isPidAlive(pid) {
+  const n = Number(pid);
+  if (!Number.isInteger(n) || n <= 0) return false;
+  try {
+    process.kill(n, 0);
+    return true;
+  } catch (err) {
+    return err?.code === 'EPERM';
+  }
+}
+
+/** Resolve whether skinEnabled should be treated as active before/after local sync. */
+export function resolveWasSkinEnabled({ preStatus, postStatus, preConfig, postConfig } = {}) {
+  const checks = [
+    preStatus?.skinEnabled,
+    preStatus?.config?.skinEnabled,
+    postStatus?.skinEnabled,
+    postStatus?.config?.skinEnabled,
+    preConfig?.skinEnabled,
+    postConfig?.skinEnabled,
+  ];
+  return !checks.some((v) => v === false);
+}
+
+/** Collect candidate `{ pid, port, token }` Prism sidecars from data files and recent sidecar.log lines. */
+export function collectPrismSidecarCandidates({ dataDir = '', logPath = '' } = {}) {
+  const resolvedDataDir = dataDir ? resolve(dataDir) : resolveDefaultPrismDataDir();
+  const resolvedLogPath = logPath ? resolve(logPath) : join(dirname(resolvedDataDir), 'logs', 'sidecar.log');
+  const byKey = new Map();
+  const tokenByPid = new Map();
+  const tokenByPort = new Map();
+
+  const rememberToken = (pid, port, token) => {
+    if (typeof token !== 'string' || !token) return;
+    if (pid > 0 && !tokenByPid.has(pid)) tokenByPid.set(pid, token);
+    if (port > 0 && !tokenByPort.has(port)) tokenByPort.set(port, token);
+  };
+
+  const addCandidate = (raw, source) => {
+    if (!raw || typeof raw !== 'object') return;
+    if (raw.plugin && raw.plugin !== PLUGIN_ID) return;
+    if (raw.studioUri && raw.studioUri !== SIDECAR_URI) return;
+    const port = Number(raw.port);
+    const pid = Number(raw.pid || raw.sidecarPid || 0);
+    const token = typeof raw.token === 'string' ? raw.token : '';
+    rememberToken(pid, port, token);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return;
+    const safePid = Number.isInteger(pid) && pid > 0 ? pid : 0;
+    const key = `${safePid}:${port}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      if (!existing.token && token) existing.token = token;
+      if (!existing.sources.includes(source)) existing.sources.push(source);
+      return;
+    }
+    byKey.set(key, {
+      pid: safePid,
+      port,
+      token,
+      sources: [source],
+    });
+  };
+
+  const serverInfo = readJsonSafe(join(resolvedDataDir, 'server_info.json'));
+  addCandidate(serverInfo, 'server_info.json');
+
+  const canary = readJsonSafe(join(resolvedDataDir, 'canary.json'));
+  const canaryPid = Number.isInteger(Number(canary?.sidecarPid)) && Number(canary.sidecarPid) > 0
+    ? Number(canary.sidecarPid)
+    : 0;
+  if (canary && Number(canary.port) > 0) {
+    addCandidate({ pid: canaryPid, port: canary.port, token: canary.token }, 'canary.json');
+  }
+
+  const registry = readJsonSafe(join(resolvedDataDir, 'sidecar-registry.json'));
+  const registryItems = Array.isArray(registry)
+    ? registry
+    : Array.isArray(registry?.instances)
+      ? registry.instances
+      : Array.isArray(registry?.entries)
+        ? registry.entries
+        : Array.isArray(registry?.items)
+          ? registry.items
+          : registry && typeof registry === 'object'
+            ? Object.values(registry)
+            : [];
+  for (const entry of registryItems) {
+    addCandidate(entry, 'sidecar-registry.json');
+  }
+
+  try {
+    if (existsSync(resolvedLogPath)) {
+      const rawLog = readFileSync(resolvedLogPath, 'utf8');
+      const tailSlice = rawLog.length > 262144 ? rawLog.slice(-262144) : rawLog;
+      const lines = tailSlice.split(/\r?\n/);
+      const seenLogPairs = new Set();
+      const listenRe = /\[prism_studio\]\s+listening on https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):(\d{1,5})\b[^\n]*?\bpid=(\d+)/i;
+      for (let i = lines.length - 1; i >= 0 && seenLogPairs.size < 24; i -= 1) {
+        const m = listenRe.exec(lines[i]);
+        if (!m) continue;
+        const port = Number(m[1]);
+        const pid = Number(m[2]);
+        const pairKey = `${pid}:${port}`;
+        if (seenLogPairs.has(pairKey)) continue;
+        seenLogPairs.add(pairKey);
+        addCandidate({ pid, port }, 'sidecar.log');
+      }
+    }
+  } catch {
+    /* ignore unreadable sidecar.log */
+  }
+
+  const candidates = [];
+  for (const cand of byKey.values()) {
+    if (!cand.token) {
+      cand.token = (cand.pid > 0 && tokenByPid.get(cand.pid)) || tokenByPort.get(cand.port) || '';
+    }
+    if (canaryPid > 0 && cand.pid === canaryPid && !cand.sources.includes('canary.json')) {
+      cand.sources.push('canary.json');
+    }
+    candidates.push(cand);
+  }
+
+  return {
+    candidates,
+    primaryFromInfo: serverInfo,
+    canaryPid,
+    dataDir: resolvedDataDir,
+    logPath: resolvedLogPath,
+  };
+}
+
+/** Verify candidate `{ pid, port }` identity via GET /api/status (never blind-kill by command line). */
+export async function verifyPrismSidecarStatus(candidate, { fetchImpl = fetch, timeoutMs = 800 } = {}) {
+  const port = Number(candidate?.port);
+  const expectedPid = Number(candidate?.pid);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { ok: false, reason: 'invalid_port', pid: 0, port: 0, status: null };
+  }
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const res = await fetchImpl(`${baseUrl}/api/status`, {
+    signal: AbortSignal.timeout(timeoutMs),
+  }).catch(() => null);
+  if (!res?.ok) {
+    return { ok: false, reason: res ? `http_${res.status}` : 'unreachable', pid: 0, port, status: null };
+  }
+  const st = await res.json().catch(() => null);
+  if (!st || typeof st !== 'object' || st.ok === false) {
+    return { ok: false, reason: 'invalid_status', pid: 0, port, status: null };
+  }
+  const statusPid = Number(st.pid);
+  if (!Number.isInteger(statusPid) || statusPid <= 0) {
+    return { ok: false, reason: 'missing_pid', pid: 0, port, status: st };
+  }
+  if (Number.isInteger(expectedPid) && expectedPid > 0 && statusPid !== expectedPid) {
+    return { ok: false, reason: 'pid_mismatch', pid: statusPid, port, status: st };
+  }
+  if ((st.plugin && st.plugin !== PLUGIN_ID) || (st.studioUri && st.studioUri !== SIDECAR_URI)) {
+    return { ok: false, reason: 'foreign_plugin', pid: statusPid, port, status: st };
+  }
+
+  let isPrism =
+    st.studioUri === SIDECAR_URI ||
+    st.plugin === PLUGIN_ID ||
+    (typeof st.pluginOrigin === 'string' && st.pluginOrigin.startsWith('plugin://agy-wallpaper-prism--prism_studio'));
+  if (!isPrism && st.plugin == null && st.studioUri == null && st.pluginOrigin == null) {
+    const hzRes = await fetchImpl(`${baseUrl}/api/healthz`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    }).catch(() => null);
+    const hz = hzRes?.ok ? await hzRes.json().catch(() => null) : null;
+    if (hz?.ok === true && hz?.plugin === PLUGIN_ID && Number(hz?.pid) === statusPid) {
+      isPrism = true;
+    }
+  }
+  if (!isPrism) {
+    return { ok: false, reason: 'not_prism', pid: statusPid, port, status: st };
+  }
+  return { ok: true, reason: 'verified', pid: statusPid, port, status: st };
+}
+
+/** Discover and shut down or SIGTERM verified orphan/duplicate Prism sidecars outside primary server_info.json. */
+export async function cleanupOrphanPrismSidecars({
+  dataDir = '',
+  logPath = '',
+  primaryPid = 0,
+  primaryPort = 0,
+  fetchImpl = fetch,
+  isPidAliveImpl = isPidAlive,
+  killPidImpl = (pid, sig) => process.kill(pid, sig),
+  currentPid = process.pid,
+  timeoutMs = 1200,
+} = {}) {
+  const { candidates } = collectPrismSidecarCandidates({ dataDir, logPath });
+  const cleaned = [];
+  const skipped = [];
+  const handledPids = new Set();
+
+  for (const cand of candidates) {
+    if (cand.pid > 0 && cand.pid === currentPid) {
+      skipped.push({ ...cand, reason: 'self_pid' });
+      continue;
+    }
+    if (primaryPid > 0 && cand.pid === primaryPid) {
+      skipped.push({ ...cand, reason: 'primary' });
+      continue;
+    }
+    if (primaryPort > 0 && cand.port === primaryPort) {
+      skipped.push({ ...cand, reason: 'primary_port' });
+      continue;
+    }
+    if (cand.pid > 0 && !isPidAliveImpl(cand.pid)) {
+      skipped.push({ ...cand, reason: 'not_alive' });
+      continue;
+    }
+
+    const verified = await verifyPrismSidecarStatus(cand, { fetchImpl, timeoutMs: Math.min(timeoutMs, 900) });
+    if (!verified.ok) {
+      skipped.push({ ...cand, reason: verified.reason });
+      continue;
+    }
+    const targetPid = verified.pid;
+    if (targetPid === currentPid || (primaryPid > 0 && targetPid === primaryPid) || handledPids.has(targetPid)) {
+      skipped.push({ ...cand, pid: targetPid, reason: targetPid === primaryPid ? 'primary' : 'duplicate_pid' });
+      continue;
+    }
+    if (!isPidAliveImpl(targetPid)) {
+      skipped.push({ ...cand, pid: targetPid, reason: 'not_alive' });
+      continue;
+    }
+    handledPids.add(targetPid);
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (cand.token) headers['X-Sidecar-Token'] = cand.token;
+    const sdRes = await fetchImpl(`http://127.0.0.1:${cand.port}/api/shutdown`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ preserveHostDom: true, reason: 'install_local_cleanup' }),
+      signal: AbortSignal.timeout(timeoutMs),
+    }).catch(() => null);
+
+    if (sdRes?.ok) {
+      const deadline = Date.now() + 1200;
+      while (Date.now() < deadline && isPidAliveImpl(targetPid)) {
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      if (!isPidAliveImpl(targetPid)) {
+        cleaned.push({ pid: targetPid, port: cand.port, method: 'http_shutdown', version: verified.status?.version || '' });
+        continue;
+      }
+    }
+
+    // Legacy v2.1.0 lacks POST /api/shutdown (returns 404, or 401 before route dispatch when unauthenticated)
+    const canSigterm =
+      !sdRes ||
+      sdRes.status === 404 ||
+      sdRes.status === 405 ||
+      (sdRes.status === 401 && !cand.token) ||
+      sdRes.ok;
+    if (canSigterm) {
+      let terminated = false;
+      try {
+        killPidImpl(targetPid, 'SIGTERM');
+        terminated = true;
+      } catch (err) {
+        if (err?.code === 'ESRCH') terminated = true;
+      }
+      if (terminated) {
+        cleaned.push({
+          pid: targetPid,
+          port: cand.port,
+          method: 'sigterm',
+          httpStatus: sdRes?.status || 0,
+          version: verified.status?.version || '',
+        });
+        continue;
+      }
+    }
+    skipped.push({ ...cand, pid: targetPid, reason: `shutdown_http_${sdRes?.status || 'err'}` });
+  }
+
+  return { cleaned, skipped, candidateCount: candidates.length };
+}
+
+/** Reload primary Sidecar host scripts without altering skinEnabled. */
+export async function reloadPrimarySidecar({ port, token = '', fetchImpl = fetch, timeoutMs = 1500 } = {}) {
+  const numPort = Number(port);
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['X-Sidecar-Token'] = token;
+  if (!Number.isInteger(numPort) || numPort < 1 || numPort > 65535) {
+    return { reloaded: false, state: null, headers };
+  }
+  const reloadRes = await fetchImpl(`http://127.0.0.1:${numPort}/api/host/reload`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+    signal: AbortSignal.timeout(timeoutMs),
+  }).catch(() => null);
+  const reloadJson = reloadRes?.ok ? await reloadRes.json().catch(() => null) : null;
+  let st = reloadJson?.state || null;
+  if (!st?.config) {
+    const bootRes = await fetchImpl(`http://127.0.0.1:${numPort}/api/bootstrap`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    }).catch(() => null);
+    if (bootRes?.ok) st = await bootRes.json().catch(() => null);
+  }
+  return { reloaded: Boolean(reloadRes?.ok), state: st, headers };
+}
+
+/** Wake primary Sidecar ONLY when skinEnabled was not explicitly false before/after sync. */
+export async function wakePrimarySidecarIfEnabled({
+  port,
+  token = '',
+  wasSkinEnabled = true,
+  state = null,
+  fetchImpl = fetch,
+  timeoutMs = 2500,
+} = {}) {
+  const numPort = Number(port);
+  if (!Number.isInteger(numPort) || numPort < 1 || numPort > 65535) return { woke: false };
+  if (wasSkinEnabled === false || state?.skinEnabled === false || state?.config?.skinEnabled === false) {
+    return { woke: false };
+  }
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['X-Sidecar-Token'] = token;
+  const wakeRes = await fetchImpl(`http://127.0.0.1:${numPort}/api/skin/wake`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+    signal: AbortSignal.timeout(timeoutMs),
+  }).catch(() => null);
+  return { woke: Boolean(wakeRes?.ok) };
+}
+
+/** Reload primary Sidecar scripts and conditionally wake only if skinEnabled was not false. */
+export async function syncPrimarySidecar({
+  port,
+  token = '',
+  wasSkinEnabled = true,
+  fetchImpl = fetch,
+  timeoutMs = 1500,
+} = {}) {
+  const rel = await reloadPrimarySidecar({ port, token, fetchImpl, timeoutMs });
+  const wake = await wakePrimarySidecarIfEnabled({
+    port,
+    token,
+    wasSkinEnabled,
+    state: rel.state,
+    fetchImpl,
+    timeoutMs: Math.max(timeoutMs, 2500),
+  });
+  return { ...rel, woke: wake.woke };
+}
+
+export async function installLocalPlugin({ destRoot = '', skipSidecarReload = false, dataDir = '' } = {}) {
   const indexHtml = join(repoRoot, 'sidecars', 'prism_studio', 'index.html');
   if (!existsSync(indexHtml)) {
     await buildStudioBundle();
+  }
+
+  const prismDataDir = dataDir ? resolve(dataDir) : resolveDefaultPrismDataDir();
+  let preDiskConfig = null;
+  let preStatus = null;
+  if (!destRoot && !skipSidecarReload) {
+    preDiskConfig = readJsonSafe(join(prismDataDir, 'config.json'));
+    const preInfo = readJsonSafe(join(prismDataDir, 'server_info.json'));
+    if (preInfo && Number(preInfo.port) > 0 && (!preInfo.pid || isPidAlive(preInfo.pid))) {
+      const verifiedPre = await verifyPrismSidecarStatus(preInfo, { timeoutMs: 800 });
+      if (verifiedPre.ok) preStatus = verifiedPre.status;
+    }
   }
 
   const pluginsDir = destRoot
@@ -97,36 +474,49 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
     try {
       await new Promise((r) => setTimeout(r, 650));
       const freshSkinScript = getHostSkinScript({ reload: true });
-      const serverInfoPath = join(resolveDefaultPrismDataDir(), 'server_info.json');
-      let liveBootPayload = null;
+      const postDiskConfig = readJsonSafe(join(prismDataDir, 'config.json'));
+      const postInfo = readJsonSafe(join(prismDataDir, 'server_info.json'));
+      let primaryPid = 0;
       let livePort = 0;
-      let liveHeaders = { 'Content-Type': 'application/json' };
-      if (existsSync(serverInfoPath)) {
-        const info = JSON.parse(readFileSync(serverInfoPath, 'utf8'));
-        const port = Number(info?.port);
-        if (info?.plugin === 'agy-wallpaper-prism' && Number.isInteger(port) && port > 0) {
-          livePort = port;
-          if (info.token) liveHeaders['X-Sidecar-Token'] = info.token;
-          const reloadRes = await fetch(`http://127.0.0.1:${port}/api/host/reload`, {
-            method: 'POST',
-            headers: liveHeaders,
-            body: '{}',
-            signal: AbortSignal.timeout(1500),
-          }).catch(() => null);
-          const reloadJson = reloadRes?.ok ? await reloadRes.json().catch(() => null) : null;
-          let st = reloadJson?.state || null;
-          if (!st?.config) {
-            const bootRes = await fetch(`http://127.0.0.1:${port}/api/bootstrap`, {
-              signal: AbortSignal.timeout(1500),
-            }).catch(() => null);
-            if (bootRes?.ok) st = await bootRes.json().catch(() => null);
-          }
-          if (st?.config) {
-            liveBootPayload = buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
-              skinEnabled: st.skinEnabled,
-              slides: st.activeItem?.slides,
-            });
-          }
+      let liveToken = '';
+      let postStatus = null;
+      if (postInfo && Number(postInfo.port) > 0 && (!postInfo.pid || isPidAlive(postInfo.pid))) {
+        const verifiedPrimary = await verifyPrismSidecarStatus(postInfo, { timeoutMs: 800 });
+        if (verifiedPrimary.ok) {
+          primaryPid = verifiedPrimary.pid;
+          livePort = verifiedPrimary.port;
+          liveToken = typeof postInfo.token === 'string' ? postInfo.token : '';
+          postStatus = verifiedPrimary.status;
+        }
+      }
+
+      const cleanupResult = await cleanupOrphanPrismSidecars({
+        dataDir: prismDataDir,
+        primaryPid,
+        primaryPort: livePort,
+      });
+      if (cleanupResult.cleaned.length > 0) {
+        const summary = cleanupResult.cleaned.map((c) => `${c.pid}:${c.port}(${c.method})`).join(', ');
+        console.log(`[install] Cleaned ${cleanupResult.cleaned.length} orphan/duplicate Prism sidecar(s): ${summary}`);
+      }
+
+      const wasSkinEnabled = resolveWasSkinEnabled({
+        preStatus,
+        postStatus,
+        preConfig: preDiskConfig,
+        postConfig: postDiskConfig,
+      });
+
+      let liveBootPayload = null;
+      let st = null;
+      if (livePort > 0) {
+        const rel = await reloadPrimarySidecar({ port: livePort, token: liveToken });
+        st = rel.state;
+        if (st?.config) {
+          liveBootPayload = buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
+            skinEnabled: st.skinEnabled,
+            slides: st.activeItem?.slides,
+          });
         }
       }
 
@@ -144,6 +534,7 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
             var payload = ${JSON.stringify(liveBootPayload)};
             var expectedPrefix = ${JSON.stringify(livePort ? `http://127.0.0.1:${livePort}/host/` : '')};
             var targetVer = ${JSON.stringify(PRISM_DOM.skinVersion)};
+            var wasSkinOn = ${JSON.stringify(wasSkinEnabled !== false)};
             var cur = window.__agyPrism;
             var carry = payload || (cur && typeof cur.getLastPayload === 'function' ? cur.getLastPayload() : null) || window.__AGY_PRISM_BOOT_PAYLOAD__ || null;
             if (carry) window.__AGY_PRISM_BOOT_PAYLOAD__ = carry;
@@ -205,7 +596,7 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
             }
 
             var startupMode = (carry && carry.config && carry.config.startupMode) || 'gentle-auto';
-            var skinOn = !carry || carry.skinEnabled !== false;
+            var skinOn = wasSkinOn && (!carry || carry.skinEnabled !== false);
             if (startupMode === 'static-css') {
               if (hostBase && skinOn) {
                 var linkEl = document.getElementById('agy-prism-static-css');
@@ -247,16 +638,16 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
         break;
       }
 
-      if (livePort) {
-        await fetch(`http://127.0.0.1:${livePort}/api/skin/wake`, {
-          method: 'POST',
-          headers: liveHeaders,
-          body: '{}',
-          signal: AbortSignal.timeout(2500),
-        }).catch(() => {});
+      if (livePort > 0) {
+        await wakePrimarySidecarIfEnabled({
+          port: livePort,
+          token: liveToken,
+          wasSkinEnabled,
+          state: st,
+        });
       }
 
-      if (hotReplacedTargets.length > 0 && liveBootPayload?.activeItem && liveBootPayload?.skinEnabled !== false) {
+      if (wasSkinEnabled !== false && hotReplacedTargets.length > 0 && liveBootPayload?.activeItem && liveBootPayload?.skinEnabled !== false) {
         const deadline = Date.now() + 2200;
         while (Date.now() < deadline) {
           let allReady = true;

@@ -4,7 +4,7 @@
 
 import { execFile } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, openSync, readFileSync, readSync, closeSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
@@ -336,6 +336,405 @@ function readRawBuffer(req, maxBytes = MAX_UPLOAD_BYTES) {
   });
 }
 
+function readJsonFileSafe(filePath) {
+  try {
+    if (!filePath || !existsSync(filePath)) return null;
+    return JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function isPidAlive(pid) {
+  const n = Number(pid);
+  if (!Number.isInteger(n) || n <= 0) return false;
+  try {
+    process.kill(n, 0);
+    return true;
+  } catch (err) {
+    return err?.code === 'EPERM';
+  }
+}
+
+async function waitForPidExit(pid, timeoutMs = 1500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isPidAlive(pid)) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return !isPidAlive(pid);
+}
+
+function readTailText(filePath, maxBytes = 256 * 1024) {
+  try {
+    if (!filePath || !existsSync(filePath)) return '';
+    const st = statSync(filePath);
+    if (!st.isFile() || st.size <= 0) return '';
+    const start = Math.max(0, st.size - maxBytes);
+    const len = st.size - start;
+    const fd = openSync(filePath, 'r');
+    try {
+      const buf = Buffer.alloc(len);
+      const bytesRead = readSync(fd, buf, 0, len, start);
+      return buf.subarray(0, bytesRead).toString('utf8');
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return '';
+  }
+}
+
+function readSidecarRegistryEntries(registryPath) {
+  const raw = readJsonFileSafe(registryPath);
+  if (!raw) return [];
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw.entries)
+      ? raw.entries
+      : Array.isArray(raw.instances)
+        ? raw.instances
+        : typeof raw === 'object'
+          ? Object.values(raw)
+          : [];
+  return list
+    .filter((e) => e && typeof e === 'object' && Number.isInteger(Number(e.pid)) && Number(e.pid) > 0)
+    .map((e) => ({
+      plugin: typeof e.plugin === 'string' ? e.plugin : '',
+      studioUri: typeof e.studioUri === 'string' ? e.studioUri : '',
+      pid: Number(e.pid),
+      port: Number(e.port) || 0,
+      token: typeof e.token === 'string' ? e.token : '',
+      startedAt: typeof e.startedAt === 'string' ? e.startedAt : '',
+    }));
+}
+
+function writeSidecarRegistryEntries(registryPath, entries) {
+  try {
+    mkdirSync(dirname(registryPath), { recursive: true });
+    writeFileSync(
+      registryPath,
+      `${JSON.stringify({ version: 1, updatedAt: new Date().toISOString(), entries }, null, 2)}\n`,
+      { encoding: 'utf8', mode: 0o600 },
+    );
+  } catch {
+    /* non-fatal */
+  }
+}
+
+function upsertSidecarRegistry(dataDir, entry) {
+  const registryPath = join(dataDir, 'sidecar-registry.json');
+  const existing = readSidecarRegistryEntries(registryPath);
+  const kept = existing.filter((e) => e.pid !== entry.pid && isPidAlive(e.pid));
+  kept.push(entry);
+  writeSidecarRegistryEntries(registryPath, kept.slice(-16));
+}
+
+function removeSidecarRegistryPid(dataDir, pid) {
+  const registryPath = join(dataDir, 'sidecar-registry.json');
+  if (!existsSync(registryPath)) return;
+  const existing = readSidecarRegistryEntries(registryPath);
+  const kept = existing.filter((e) => e.pid !== pid && isPidAlive(e.pid));
+  writeSidecarRegistryEntries(registryPath, kept);
+}
+
+function collectDataDirCandidates(dataDir) {
+  const byPid = new Map();
+  const merge = (pid, port, token, source) => {
+    const p = Number(pid);
+    if (!Number.isInteger(p) || p <= 0 || p === process.pid) return;
+    const prev = byPid.get(p) || { pid: p, port: 0, token: '', sources: [] };
+    const pt = Number(port);
+    if (Number.isInteger(pt) && pt > 0 && pt <= 65535) prev.port = pt;
+    if (typeof token === 'string' && token.trim()) prev.token = token.trim();
+    if (source && !prev.sources.includes(source)) prev.sources.push(source);
+    byPid.set(p, prev);
+  };
+
+  const info = readJsonFileSafe(join(dataDir, 'server_info.json'));
+  if (info && (!info.plugin || info.plugin === PLUGIN_ID)) {
+    merge(info.pid, info.port, info.token, 'server_info.json');
+  }
+
+  const canaryData = readJsonFileSafe(join(dataDir, 'canary.json'));
+  if (canaryData && canaryData.sidecarPid) {
+    merge(canaryData.sidecarPid, 0, '', 'canary.json');
+  }
+
+  for (const e of readSidecarRegistryEntries(join(dataDir, 'sidecar-registry.json'))) {
+    if ((!e.plugin || e.plugin === PLUGIN_ID) && (!e.studioUri || e.studioUri === SIDECAR_URI)) {
+      merge(e.pid, e.port, e.token, 'sidecar-registry.json');
+    }
+  }
+
+  const logText = readTailText(resolve(dataDir, '..', 'logs', 'sidecar.log'));
+  if (logText) {
+    const re = /\[prism_studio\]\s+listening\s+on\s+https?:\/\/(?:127\.0\.0\.1|localhost):(\d+)\b[^)\r\n]*?\bpid=(\d+)/gi;
+    let m;
+    while ((m = re.exec(logText)) !== null) {
+      merge(Number(m[2]), Number(m[1]), '', 'sidecar.log');
+    }
+  }
+
+  return [...byPid.values()];
+}
+
+function loopbackHttpJson({ method = 'GET', port, path = '/', headers = {}, body = null, timeoutMs = 1200 }) {
+  return new Promise((resolveReq) => {
+    let settled = false;
+    const done = (val) => {
+      if (settled) return;
+      settled = true;
+      resolveReq(val);
+    };
+    const reqHeaders = { Host: `127.0.0.1:${port}`, ...headers };
+    const payload =
+      body === null || body === undefined
+        ? null
+        : typeof body === 'string'
+          ? body
+          : JSON.stringify(body);
+    if (payload !== null && !reqHeaders['Content-Type'] && !reqHeaders['content-type']) {
+      reqHeaders['Content-Type'] = 'application/json';
+    }
+    if (payload !== null) {
+      reqHeaders['Content-Length'] = Buffer.byteLength(payload, 'utf8');
+    }
+    const req = httpRequest(
+      { hostname: '127.0.0.1', port, path, method, headers: reqHeaders },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          let json = null;
+          try {
+            json = text ? JSON.parse(text) : null;
+          } catch {
+            json = null;
+          }
+          done({
+            ok: (res.statusCode || 0) >= 200 && (res.statusCode || 0) < 300,
+            statusCode: res.statusCode || 0,
+            json,
+            text,
+          });
+        });
+        res.on('error', () => done({ ok: false, statusCode: 0, json: null, text: '' }));
+      },
+    );
+    req.setTimeout(timeoutMs, () => {
+      try { req.destroy(); } catch { /* ignore */ }
+      done({ ok: false, statusCode: 0, json: null, text: '' });
+    });
+    req.on('error', () => done({ ok: false, statusCode: 0, json: null, text: '' }));
+    if (payload !== null) req.write(payload);
+    req.end();
+  });
+}
+
+async function verifyPrismCandidate({ pid, port, token = '', timeoutMs = 1200 }) {
+  if (!Number.isInteger(pid) || pid <= 0 || !Number.isInteger(port) || port <= 0 || port > 65535) {
+    return { verified: false, reason: 'invalid_target' };
+  }
+  if (!isPidAlive(pid)) {
+    return { verified: false, reason: 'pid_dead' };
+  }
+  const headers = token ? { 'X-Sidecar-Token': token } : {};
+  const stRes = await loopbackHttpJson({ method: 'GET', port, path: '/api/status', headers, timeoutMs });
+  if (!stRes.ok || !stRes.json || stRes.json.ok !== true) {
+    return { verified: false, reason: 'status_unreachable' };
+  }
+  const data = stRes.json;
+  if (Number(data.pid) !== pid) {
+    return { verified: false, reason: 'pid_mismatch' };
+  }
+  if (data.plugin && data.plugin !== PLUGIN_ID) {
+    return { verified: false, reason: 'foreign_plugin' };
+  }
+  if (data.studioUri && data.studioUri !== SIDECAR_URI) {
+    return { verified: false, reason: 'foreign_studio_uri' };
+  }
+  if (data.studioUri === SIDECAR_URI || data.plugin === PLUGIN_ID) {
+    return { verified: true, version: String(data.version || ''), status: data };
+  }
+  const hzRes = await loopbackHttpJson({ method: 'GET', port, path: '/api/healthz', headers, timeoutMs });
+  if (hzRes.ok && hzRes.json && hzRes.json.plugin === PLUGIN_ID && Number(hzRes.json.pid) === pid) {
+    return { verified: true, version: String(hzRes.json.version || data.version || ''), status: data };
+  }
+  const hasLegacyPrismShape =
+    typeof data.skinEnabled === 'boolean' &&
+    Boolean(data.hostStatus && typeof data.hostStatus === 'object' && 'canary' in data.hostStatus) &&
+    'normalShortcutEnabled' in data;
+  if (hasLegacyPrismShape) {
+    return { verified: true, version: String(data.version || ''), legacy: true, status: data };
+  }
+  return { verified: false, reason: 'unverified_identity' };
+}
+
+function getProcessTableSnapshot({ platform = process.platform } = {}) {
+  return new Promise((resolveSnap) => {
+    if (platform === 'win32') {
+      const psExe = process.env.SystemRoot
+        ? `${process.env.SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`
+        : 'powershell.exe';
+      const cmd =
+        'Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name,CreationDate | ' +
+        "Select-Object ProcessId,ParentProcessId,Name,@{N='Ct';E={if($_.CreationDate){$_.CreationDate.ToUniversalTime().Ticks}else{0}}} | " +
+        'ConvertTo-Json -Compress';
+      execFile(
+        psExe,
+        ['-NoProfile', '-NonInteractive', '-Command', cmd],
+        { timeout: 3000, maxBuffer: 4 * 1024 * 1024, windowsHide: true, env: cleanHostEnv() },
+        (err, stdout) => {
+          if (err || !stdout) {
+            resolveSnap(null);
+            return;
+          }
+          try {
+            const parsed = JSON.parse(String(stdout).trim());
+            const list = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+            const map = new Map();
+            for (const row of list) {
+              const p = Number(row?.ProcessId);
+              if (!Number.isInteger(p) || p <= 0) continue;
+              map.set(p, {
+                pid: p,
+                ppid: Number(row?.ParentProcessId) || 0,
+                name: String(row?.Name || ''),
+                ct: Number(row?.Ct) || 0,
+              });
+            }
+            resolveSnap(map);
+          } catch {
+            resolveSnap(null);
+          }
+        },
+      );
+      return;
+    }
+    execFile(
+      'ps',
+      ['-eo', 'pid=,ppid=,comm='],
+      { timeout: 2500, maxBuffer: 2 * 1024 * 1024, env: cleanHostEnv() },
+      (err, stdout) => {
+        if (err || !stdout) {
+          resolveSnap(null);
+          return;
+        }
+        const map = new Map();
+        for (const line of String(stdout).split(/\r?\n/)) {
+          const m = /^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
+          if (!m) continue;
+          const p = Number(m[1]);
+          map.set(p, { pid: p, ppid: Number(m[2]) || 0, name: m[3], ct: 0 });
+        }
+        resolveSnap(map);
+      },
+    );
+  });
+}
+
+function isHostAncestorName(name) {
+  return /(?:antigravity|language_server)/i.test(String(name || ''));
+}
+
+function isShellWrapperName(name) {
+  return /^(?:cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?|sh|bash|zsh|conhost(?:\.exe)?)$/i.test(String(name || ''));
+}
+
+function isPidOrphanFromSnapshot(targetPid, snapshot) {
+  if (!snapshot || !(snapshot instanceof Map)) return false;
+  let cur = snapshot.get(Number(targetPid));
+  if (!cur) return false;
+  for (let depth = 0; depth < 8; depth += 1) {
+    const ppid = cur.ppid;
+    if (!ppid || ppid <= 1) return true;
+    const parent = snapshot.get(ppid);
+    if (!parent) return true;
+    if (cur.ct > 0 && parent.ct > 0 && parent.ct > cur.ct) return true;
+    if (isHostAncestorName(parent.name)) return false;
+    if (depth >= 1 && !isShellWrapperName(cur.name)) return false;
+    cur = parent;
+  }
+  return false;
+}
+
+function captureBootAncestorsFromSnapshot(selfPid, snapshot) {
+  const list = [];
+  if (Number.isInteger(process.ppid) && process.ppid > 1 && isPidAlive(process.ppid)) {
+    const pRow = snapshot?.get(process.ppid);
+    list.push({ pid: process.ppid, name: pRow?.name || 'parent', ct: pRow?.ct || 0 });
+  }
+  if (!snapshot || !(snapshot instanceof Map)) return list;
+  let cur = snapshot.get(Number(selfPid));
+  const seen = new Set(list.map((x) => x.pid));
+  for (let depth = 0; depth < 8 && cur; depth += 1) {
+    const ppid = cur.ppid;
+    if (!ppid || ppid <= 1) break;
+    const parent = snapshot.get(ppid);
+    if (!parent) break;
+    if (cur.ct > 0 && parent.ct > 0 && parent.ct > cur.ct) break;
+    if (isHostAncestorName(parent.name) && !seen.has(parent.pid)) {
+      seen.add(parent.pid);
+      list.push({ pid: parent.pid, name: parent.name, ct: parent.ct });
+    }
+    cur = parent;
+  }
+  return list;
+}
+
+async function takeoverExistingInstances(dataDir, { isProcessOrphan = null, log = () => {} } = {}) {
+  const candidates = collectDataDirCandidates(dataDir);
+  if (candidates.length === 0) return { checked: 0, shutDown: [] };
+  const liveCandidates = candidates.filter((c) => isPidAlive(c.pid) && c.port > 0);
+  if (liveCandidates.length === 0) return { checked: 0, shutDown: [] };
+
+  let procSnapshot = null;
+  const shutDown = [];
+  for (const cand of liveCandidates) {
+    const verification = await verifyPrismCandidate(cand);
+    if (!verification.verified) continue;
+
+    const reqHeaders = cand.token ? { 'X-Sidecar-Token': cand.token } : {};
+    const sdRes = await loopbackHttpJson({
+      method: 'POST',
+      port: cand.port,
+      path: '/api/shutdown',
+      headers: reqHeaders,
+      body: '{}',
+      timeoutMs: 1500,
+    });
+    if (sdRes.ok) {
+      await waitForPidExit(cand.pid, 1500);
+      shutDown.push({ pid: cand.pid, port: cand.port, mode: 'graceful' });
+      log(`Gracefully took over existing Prism sidecar pid=${cand.pid} port=${cand.port}`);
+      continue;
+    }
+
+    if (sdRes.statusCode === 404 || (sdRes.statusCode === 401 && (!cand.token || verification.legacy))) {
+      let orphan = false;
+      if (typeof isProcessOrphan === 'function') {
+        orphan = Boolean(await Promise.resolve(isProcessOrphan(cand)).catch(() => false));
+      } else {
+        if (!procSnapshot) procSnapshot = await getProcessTableSnapshot();
+        orphan = isPidOrphanFromSnapshot(cand.pid, procSnapshot);
+      }
+      if (orphan) {
+        try {
+          process.kill(cand.pid, 'SIGTERM');
+          await waitForPidExit(cand.pid, 1200);
+          shutDown.push({ pid: cand.pid, port: cand.port, mode: 'orphan-sigterm' });
+          log(`Cleaned up orphan legacy Prism sidecar pid=${cand.pid} port=${cand.port}`);
+        } catch {
+          /* ignore kill errors */
+        }
+      }
+    }
+  }
+  return { checked: liveCandidates.length, shutDown };
+}
+
 /**
  * Create and start the unified Prism Studio HTTP server + Engine + optional Passive CDP Bridge.
  */
@@ -379,6 +778,13 @@ export async function createPrismStudioServer(options = {}) {
   const explicitOptionToken = options.token !== undefined ? String(options.token || '').trim() : '';
   const effectiveAuthToken = explicitOptionToken || envAuthToken || randomBytes(32).toString('hex');
   const startedAt = new Date().toISOString();
+  const stateEpoch = options.stateEpoch
+    ? String(options.stateEpoch)
+    : `${process.pid}-${randomBytes(6).toString('hex')}`;
+  const exitOnShutdown = options.exitOnShutdown !== undefined ? Boolean(options.exitOnShutdown) : isMainEntry();
+  const orphanMonitorEnabled =
+    options.monitorParentOrphan !== undefined ? Boolean(options.monitorParentOrphan) : isMainEntry();
+  let checkOwnershipAndYield = async () => false;
   const resolvedPluginRoot = options.pluginRoot ? resolve(options.pluginRoot) : PLUGIN_ROOT;
   const updaterEnv = options.env || process.env;
   let closed = false;
@@ -663,9 +1069,11 @@ export async function createPrismStudioServer(options = {}) {
       mediaOrigin,
       pluginOrigin: getPluginOrigin(),
       studioHttpOrigin: boundOrigin,
+      plugin: PLUGIN_ID,
       pid: process.pid,
       version: PLUGIN_VERSION,
       studioUri: SIDECAR_URI,
+      stateEpoch,
       updateStatus: cachedUpdateStatus,
       updateSummary: buildUpdateSummary(cachedUpdateStatus),
     };
@@ -1189,6 +1597,8 @@ export async function createPrismStudioServer(options = {}) {
       dataDir,
       pluginRoot: resolvedPluginRoot,
       canaryController,
+      stateEpoch,
+      onOwnershipLost: () => checkOwnershipAndYield(),
       cdpPort: options.cdpPort || 0,
       pollMs: options.cdpPollMs ?? 3000,
       configPath: options.hostConfigPath || '',
@@ -1271,12 +1681,13 @@ export async function createPrismStudioServer(options = {}) {
     const pathname = urlObj.pathname;
     const reqOrigin = typeof req.headers.origin === 'string' && req.headers.origin ? req.headers.origin : '*';
 
-    // Strict preflight interception for /api/update/*, /api/healthz & /api/studio/popout BEFORE global wildcard/PNA OPTIONS
+    // Strict preflight interception for /api/update/*, /api/healthz, /api/studio/popout & /api/shutdown BEFORE global wildcard/PNA OPTIONS
     const isStrictRoute =
       pathname === '/api/healthz' ||
       pathname === '/api/update' ||
       pathname.startsWith('/api/update/') ||
-      pathname === '/api/studio/popout';
+      pathname === '/api/studio/popout' ||
+      pathname === '/api/shutdown';
     if (req.method === 'OPTIONS' && isStrictRoute) {
       const rawOrigin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
       if (!isAllowedStrictOrigin(rawOrigin)) {
@@ -1285,7 +1696,7 @@ export async function createPrismStudioServer(options = {}) {
       }
       const preflightHeaders = {
         'Access-Control-Allow-Methods':
-          pathname === '/api/update/apply' || pathname === '/api/studio/popout'
+          pathname === '/api/update/apply' || pathname === '/api/studio/popout' || pathname === '/api/shutdown'
             ? 'POST, OPTIONS'
             : 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, X-Sidecar-Token',
@@ -1339,6 +1750,7 @@ export async function createPrismStudioServer(options = {}) {
           slides: st.activeItem?.slides,
           pluginOrigin: getPluginOrigin(),
           stateRev: st.stateRev,
+          stateEpoch,
         });
         if (st.stateRev > 0 && skinPayload && typeof skinPayload === 'object' && !Number.isInteger(skinPayload.stateRev)) {
           skinPayload.stateRev = st.stateRev;
@@ -1370,6 +1782,7 @@ export async function createPrismStudioServer(options = {}) {
           slides: st.activeItem?.slides,
           pluginOrigin: getPluginOrigin(),
           stateRev: st.stateRev,
+          stateEpoch,
         });
         const css =
           typeof hostModule.buildStaticCssSheet === 'function'
@@ -1416,11 +1829,12 @@ export async function createPrismStudioServer(options = {}) {
             slides: st.activeItem?.slides,
             pluginOrigin: getPluginOrigin(),
             stateRev: rev,
+            stateEpoch,
           });
           if (rev > 0 && skinPayload && typeof skinPayload === 'object' && !Number.isInteger(skinPayload.stateRev)) {
             skinPayload.stateRev = rev;
           }
-          res.write(`retry: 2500\ndata: ${JSON.stringify({ event: 'state', stateRev: rev, skinVersion: PRISM_DOM.skinVersion, startupMode: st.config.startupMode, skinEnabled: st.skinEnabled, skinPayload, data: st })}\n\n`);
+          res.write(`retry: 2500\ndata: ${JSON.stringify({ event: 'state', stateRev: rev, stateEpoch, skinVersion: PRISM_DOM.skinVersion, startupMode: st.config.startupMode, skinEnabled: st.skinEnabled, skinPayload, data: st })}\n\n`);
           res.end();
         }
         return;
@@ -1828,6 +2242,68 @@ export async function createPrismStudioServer(options = {}) {
       return;
     }
 
+    if (req.method === 'POST' && pathname === '/api/shutdown') {
+      const rawOrigin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
+      if (!isAllowedStrictOrigin(rawOrigin)) {
+        sendStrictJson(res, 403, { ok: false, code: 'ERR_CSRF_ORIGIN', error: 'Forbidden: disallowed Origin' });
+        return;
+      }
+      if (!validateToken(req, urlObj, { headerOnly: true })) {
+        sendStrictJson(res, 401, {
+          ok: false,
+          code: 'ERR_AUTH_TOKEN_REQUIRED',
+          error: 'Unauthorized: missing or invalid X-Sidecar-Token header',
+        });
+        return;
+      }
+      const rawCt = String(req.headers['content-type'] || '').trim();
+      if (rawCt && !rawCt.toLowerCase().includes('application/json')) {
+        sendStrictJson(res, 415, {
+          ok: false,
+          code: 'ERR_INVALID_CONTENT_TYPE',
+          error: 'Unsupported Media Type: Content-Type must be application/json',
+        });
+        return;
+      }
+      try {
+        await readRawBuffer(req, 16 * 1024);
+      } catch (err) {
+        sendStrictJson(res, 413, {
+          ok: false,
+          code: 'ERR_BODY_TOO_LARGE',
+          error: err?.message || 'Request body too large',
+        });
+        return;
+      }
+      const extra = rawOrigin ? { 'Access-Control-Allow-Origin': rawOrigin, Vary: 'Origin' } : {};
+      const onFlushed = () => {
+        if (shutdownInFlight || closed) return;
+        shutdownInFlight = true;
+        const safetyExit = exitOnShutdown ? setTimeout(() => process.exit(0), 1500) : null;
+        safetyExit?.unref?.();
+        close({ preserveHostDom: true })
+          .catch(() => {})
+          .finally(() => {
+            if (safetyExit) clearTimeout(safetyExit);
+            if (exitOnShutdown) process.exit(0);
+          });
+      };
+      sendStrictJson(
+        res,
+        200,
+        {
+          ok: true,
+          shuttingDown: true,
+          plugin: PLUGIN_ID,
+          pid: process.pid,
+          preserveHostDom: true,
+        },
+        extra,
+        onFlushed,
+      );
+      return;
+    }
+
     if (req.method !== 'GET' && !validateToken(req, urlObj)) {
       sendJson(res, 401, { ok: false, error: 'Unauthorized: missing or invalid X-Sidecar-Token' });
       return;
@@ -1925,6 +2401,9 @@ export async function createPrismStudioServer(options = {}) {
       const st = await buildCanonicalState();
       sendJson(res, 200, {
         ok: true,
+        plugin: PLUGIN_ID,
+        studioUri: SIDECAR_URI,
+        stateEpoch,
         stateRev: st.stateRev,
         config: st.config,
         hostStatus: st.hostStatus,
@@ -2335,6 +2814,25 @@ export async function createPrismStudioServer(options = {}) {
     });
   });
 
+  let shutdownInFlight = false;
+  const serverInfoPath = join(dataDir, 'server_info.json');
+  let wroteServerInfo = false;
+  let ownershipTimer = null;
+  let ownershipCheckInFlight = null;
+  let bootAncestors = [];
+
+  if (orphanMonitorEnabled) {
+    const bootSnap = await getProcessTableSnapshot().catch(() => null);
+    bootAncestors = captureBootAncestorsFromSnapshot(process.pid, bootSnap);
+  }
+
+  if (options.adoptExisting !== false) {
+    await takeoverExistingInstances(dataDir, {
+      isProcessOrphan: options.isProcessOrphan || null,
+      log: options.log || (() => {}),
+    }).catch(() => {});
+  }
+
   await new Promise((resolvePromise, reject) => {
     server.once('error', reject);
     server.listen(listenPort, '127.0.0.1', () => resolvePromise());
@@ -2407,19 +2905,88 @@ export async function createPrismStudioServer(options = {}) {
     bootUpdateTimer.unref?.();
   }
 
-  const serverInfoPath = join(dataDir, 'server_info.json');
   try {
     writeFileSync(
       serverInfoPath,
       `${JSON.stringify({ plugin: PLUGIN_ID, pid: process.pid, port: actualPort, token: effectiveAuthToken, startedAt }, null, 2)}\n`,
       { encoding: 'utf8', mode: 0o600 },
     );
+    wroteServerInfo = true;
+    upsertSidecarRegistry(dataDir, {
+      plugin: PLUGIN_ID,
+      studioUri: SIDECAR_URI,
+      pid: process.pid,
+      port: actualPort,
+      token: effectiveAuthToken,
+      startedAt,
+    });
   } catch {
     /* non-fatal */
   }
 
+  checkOwnershipAndYield = async () => {
+    if (closed || shutdownInFlight || !wroteServerInfo) return false;
+    if (ownershipCheckInFlight) return ownershipCheckInFlight;
+    ownershipCheckInFlight = (async () => {
+      try {
+        if (closed || shutdownInFlight) return false;
+        const info = readJsonFileSafe(serverInfoPath);
+        const ownerPid = Number(info?.pid);
+        if (!Number.isInteger(ownerPid) || ownerPid <= 0 || ownerPid === process.pid) {
+          return false;
+        }
+        if (!isPidAlive(ownerPid)) return false;
+        const verified = await verifyPrismCandidate({
+          pid: ownerPid,
+          port: Number(info?.port),
+          token: typeof info?.token === 'string' ? info.token : '',
+          timeoutMs: 1000,
+        });
+        if (!verified.verified) return false;
+        shutdownInFlight = true;
+        const safetyExit = exitOnShutdown ? setTimeout(() => process.exit(0), 1500) : null;
+        safetyExit?.unref?.();
+        await close({ preserveHostDom: true }).catch(() => {});
+        if (safetyExit) clearTimeout(safetyExit);
+        if (exitOnShutdown) process.exit(0);
+        return true;
+      } finally {
+        ownershipCheckInFlight = null;
+      }
+    })();
+    return ownershipCheckInFlight;
+  };
+
+  const ownershipIntervalMs =
+    options.ownershipCheckIntervalMs !== undefined ? Number(options.ownershipCheckIntervalMs) : 10_000;
+  if (wroteServerInfo && Number.isFinite(ownershipIntervalMs) && ownershipIntervalMs > 0) {
+    ownershipTimer = setInterval(() => {
+      if (closed || shutdownInFlight) return;
+      void (async () => {
+        const yielded = await checkOwnershipAndYield();
+        if (yielded || closed || shutdownInFlight) return;
+        if (orphanMonitorEnabled && bootAncestors.length > 0) {
+          const deadAncestor = bootAncestors.some((anc) => !isPidAlive(anc.pid));
+          if (deadAncestor) {
+            shutdownInFlight = true;
+            const safetyExit = exitOnShutdown ? setTimeout(() => process.exit(0), 1500) : null;
+            safetyExit?.unref?.();
+            await close({ preserveHostDom: true }).catch(() => {});
+            if (safetyExit) clearTimeout(safetyExit);
+            if (exitOnShutdown) process.exit(0);
+          }
+        }
+      })().catch(() => {});
+    }, ownershipIntervalMs);
+    ownershipTimer.unref?.();
+  }
+
   close = async ({ preserveHostDom = false } = {}) => {
     closed = true;
+    if (ownershipTimer) {
+      clearInterval(ownershipTimer);
+      ownershipTimer = null;
+    }
     if (bootUpdateTimer) {
       clearTimeout(bootUpdateTimer);
       bootUpdateTimer = null;
@@ -2446,6 +3013,11 @@ export async function createPrismStudioServer(options = {}) {
     }
     if (typeof engine.close === 'function') {
       await engine.close().catch(() => {});
+    }
+    try {
+      removeSidecarRegistryPid(dataDir, process.pid);
+    } catch {
+      /* ignore */
     }
     try {
       if (existsSync(serverInfoPath)) {

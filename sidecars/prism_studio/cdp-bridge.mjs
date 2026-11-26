@@ -1680,7 +1680,7 @@ export function buildHostMicroBootstrap({
     'sk(0);W[K+"HostBase"]=B;W[K+"CapToken"]=T;W[K+"RpcUrl"]=B+"/rpc";W[BT]=!0;W[K+"Call"]=rpc;W[SM]=sum;W[PS]=w=>{W[BT]=!1;sk(0);try{if(W[SS]){W[SS].close();W[SS]=null}}catch(_){}sa();rpc("skin.panicRestore",{reason:w||"panic"}).catch(()=>{})};',
     'if(!W[K+"KeysBound"]){W[K+"KeysBound"]=!0;var esc=[];W.addEventListener("keydown",e=>{var k=String(e.key||""),kl=k.toLowerCase(),c=(e.ctrlKey||e.metaKey)&&e.altKey;if(c&&e.shiftKey&&kl==="r"){pd(e);W[PS]("Ctrl+Alt+Shift+R");return}if(k==="Escape"&&!e.repeat){var n=nw();esc=esc.filter(t=>n-t<=900);esc.push(n);if(esc.length>=4){esc=[];pd(e);W[PS]("4x-Escape");return}}else if(k!=="Escape")esc=[];if(c&&!e.shiftKey&&kl==="w"){if(W[N]&&W[N].toggle)return;pd(e);W[SM]()}},!0)}',
     'ep(W[ON]);sk(1);',
-    'if(W.EventSource){if(!W[SS]||W[SS].readyState===2||pb!==B){try{W[SS]&&W[SS].close()}catch(_){}try{W[SS]=new W.EventSource(B+"/events")}catch(_){}}if(W[SS])W[SS].onmessage=v=>{try{if(!W[BT])return;var m=JSON.parse(v.data),on=m.skinEnabled!==!1,tm=m.data&&m.data.config&&m.data.config.triggerMode;if(typeof tm==="string")sb=tm!=="shortcut-only"?1:0;var curP=$(PI);if(!sb&&isL(curP)){rm(curP);sk(0);W[ON]=on}else{ep(on);sk(1)}if(!on){ss(m.stateRev);sp(m);return}if(m.startupMode===SC){ds(W[K]);css()}else{rm($(P+SC));var sk0=W[K],okV=sk0&&(!m.skinVersion||sk0.version===m.skinVersion);if(okV&&sk0.applyPayload&&m.skinPayload)sk0.applyPayload(m.skinPayload);else{if(m.skinPayload)W.__AGY_PRISM_BOOT_PAYLOAD__=m.skinPayload;ld(SL,"/stage.js",1)}}sp(m)}catch(_){}}}',
+    'if(W.EventSource){if(!W[SS]||W[SS].readyState===2||pb!==B){try{W[SS]&&W[SS].close()}catch(_){}try{W[SS]=new W.EventSource(B+"/events")}catch(_){}}if(W[SS])W[SS].onmessage=v=>{try{if(!W[BT])return;var m=JSON.parse(v.data),on=m.skinEnabled!==!1,tm=m.data&&m.data.config&&m.data.config.triggerMode;if(m.event&&m.event!=="state")return;if(typeof tm==="string")sb=tm!=="shortcut-only"?1:0;var curP=$(PI);if(!sb&&isL(curP)){rm(curP);sk(0);W[ON]=on}else{ep(on);sk(1)}if(!on){ss(m.stateRev);sp(m);return}if(m.startupMode===SC){ds(W[K]);css()}else{rm($(P+SC));var sk0=W[K],okV=sk0&&(!m.skinVersion||sk0.version===m.skinVersion);if(okV&&sk0.applyPayload&&m.skinPayload)sk0.applyPayload(m.skinPayload);else{if(m.skinPayload)W.__AGY_PRISM_BOOT_PAYLOAD__=m.skinPayload;ld(SL,"/stage.js",1)}}sp(m)}catch(_){}}}',
     `if(${isSkinOn}){var go=()=>{${isStatic}?(css()):((W[K]&&W[K].version===${safeJsonLiteral(PRISM_DOM.skinVersion)})||ld(SL,"/stage.js",1))};W.requestIdleCallback?W.requestIdleCallback(go,{timeout:250}):setTimeout(go,16)}`,
     'return{ok:!0}})()',
   ].join('');
@@ -1709,6 +1709,8 @@ export function createPassiveCdpBridge({
   pluginRoot = '',
   canaryController = null,
   onTripSafeMode = async () => {},
+  onOwnershipLost = null,
+  stateEpoch = '',
   cdpPort = 0,
   pollMs = 3000,
   configPath = '',
@@ -1726,6 +1728,11 @@ export function createPassiveCdpBridge({
   const activeTargets = new Map(); // targetId -> { target, browserSessionId, mode, mountedAt }
   const firstReadyAt = new Map(); // targetId -> timestamp ms
   const settleTimers = new Map(); // targetId -> Timeout
+  const REBIND_BACKOFF_MS = [0, 1500, 3000, 6000, 15000];
+  const REBIND_STEADY_RESET_MS = 30_000;
+  const REBIND_CONFLICT_WINDOW_MS = 15_000;
+  const rebindStateByTarget = new Map(); // targetId -> { count, lastRebindAt, backoffUntil, timestamps }
+  const rebindTimers = new Map(); // targetId -> Timeout
   const sseClients = new Set(); // Set<ServerResponse>
   const sseCleanups = new WeakMap(); // ServerResponse -> (opts?) => void
   let sessionAwake = false;
@@ -1734,6 +1741,7 @@ export function createPassiveCdpBridge({
   let timer = null;
   let stopped = false;
   let tickInFlight = null;
+  let inOwnershipLostCallback = false;
   let lastBroadcastRev = 0;
   let lastBroadcastLiveSse = 0;
 
@@ -1793,9 +1801,23 @@ export function createPassiveCdpBridge({
     settleTimers.clear();
   };
 
+  const clearRebindTimers = () => {
+    for (const t of rebindTimers.values()) clearTimeout(t);
+    rebindTimers.clear();
+  };
+
+  const pruneSteadyRebindStates = (now = Date.now()) => {
+    for (const [tid, rState] of rebindStateByTarget.entries()) {
+      if (rState.lastRebindAt > 0 && now - rState.lastRebindAt >= REBIND_STEADY_RESET_MS) {
+        rebindStateByTarget.delete(tid);
+      }
+    }
+  };
+
   const buildEnvelopePayload = async () => {
     const st = await getEngineState();
     const stateRev = Number.isInteger(Number(st?.stateRev)) && Number(st.stateRev) > 0 ? Number(st.stateRev) : 0;
+    const resolvedEpoch = String(st?.stateEpoch || stateEpoch || '').trim();
     const startupMode = st.config?.startupMode || 'gentle-auto';
     const skinEnabled = st.skinEnabled !== false && canary.getStatus().state !== 'tripped';
     const pluginOrigin = String(getPluginOrigin() || st.pluginOrigin || '').trim();
@@ -1805,20 +1827,33 @@ export function createPassiveCdpBridge({
           slides: st.activeItem?.slides,
           pluginOrigin,
           stateRev,
+          ...(resolvedEpoch ? { stateEpoch: resolvedEpoch } : {}),
         })
-      : { config: st.config, activeItem: st.activeItem, mediaOrigin: st.mediaOrigin, skinEnabled, stateRev };
+      : {
+          config: st.config,
+          activeItem: st.activeItem,
+          mediaOrigin: st.mediaOrigin,
+          skinEnabled,
+          stateRev,
+          ...(resolvedEpoch ? { stateEpoch: resolvedEpoch } : {}),
+        };
     if (stateRev > 0 && skinPayload && typeof skinPayload === 'object' && !Number.isInteger(skinPayload.stateRev)) {
       skinPayload.stateRev = stateRev;
+    }
+    if (resolvedEpoch && skinPayload && typeof skinPayload === 'object' && !skinPayload.stateEpoch) {
+      skinPayload.stateEpoch = resolvedEpoch;
     }
     return {
       event: 'state',
       stateRev,
+      ...(resolvedEpoch ? { stateEpoch: resolvedEpoch } : {}),
       skinVersion: PRISM_DOM.skinVersion,
       startupMode,
       skinEnabled,
       skinPayload,
       data: {
         stateRev,
+        ...(resolvedEpoch ? { stateEpoch: resolvedEpoch } : {}),
         config: st.config,
         activeItem: st.activeItem,
         skinEnabled,
@@ -1848,7 +1883,7 @@ export function createPassiveCdpBridge({
       res.end();
       return;
     }
-    const MAX_HOST_SSE = 2;
+    const MAX_HOST_SSE = Math.max(4, activeTargets.size + 2);
     while (sseClients.size >= MAX_HOST_SSE) {
       const oldest = sseClients.values().next().value;
       if (!oldest) break;
@@ -1942,8 +1977,79 @@ export function createPassiveCdpBridge({
         probe.sseState === 2 ||
         (skinEnabled && startupMode !== 'static-css' && probe.skinVer !== PRISM_DOM.skinVersion));
 
+    if (probe.booted && !needsBridgeRebind) {
+      const prevRebind = rebindStateByTarget.get(target.id);
+      if (prevRebind && Date.now() - prevRebind.lastRebindAt >= REBIND_STEADY_RESET_MS) {
+        rebindStateByTarget.delete(target.id);
+        const rt = rebindTimers.get(target.id);
+        if (rt) {
+          clearTimeout(rt);
+          rebindTimers.delete(target.id);
+        }
+      }
+    }
+
     if (!probe.booted || needsBridgeRebind) {
-      if (!needsBridgeRebind && settleMs > 0) {
+      if (needsBridgeRebind) {
+        const now = Date.now();
+        let rState = rebindStateByTarget.get(target.id);
+        if (rState && now - rState.lastRebindAt >= REBIND_STEADY_RESET_MS) {
+          rebindStateByTarget.delete(target.id);
+          rState = null;
+        }
+        if (!rState) {
+          rState = { count: 0, lastRebindAt: 0, backoffUntil: 0, timestamps: [] };
+          rebindStateByTarget.set(target.id, rState);
+        }
+        const requiredDelayMs = REBIND_BACKOFF_MS[Math.min(rState.count, REBIND_BACKOFF_MS.length - 1)];
+        if (rState.count > 0) {
+          const dueAt = Math.max(rState.backoffUntil, rState.lastRebindAt + requiredDelayMs);
+          rState.backoffUntil = dueAt;
+          const waitMs = dueAt - now;
+          if (waitMs > 0) {
+            if (!rebindTimers.has(target.id)) {
+              const rt = setTimeout(() => {
+                rebindTimers.delete(target.id);
+                if (!stopped) void tick();
+              }, waitMs + 20);
+              rt.unref?.();
+              rebindTimers.set(target.id, rt);
+            }
+            return false;
+          }
+        }
+        const pendingRt = rebindTimers.get(target.id);
+        if (pendingRt) {
+          clearTimeout(pendingRt);
+          rebindTimers.delete(target.id);
+        }
+        const recent = rState.timestamps.filter((ts) => now - ts <= REBIND_CONFLICT_WINDOW_MS);
+        recent.push(now);
+        rState.timestamps = recent;
+        rState.count += 1;
+        rState.lastRebindAt = now;
+        const nextDelay = REBIND_BACKOFF_MS[Math.min(rState.count, REBIND_BACKOFF_MS.length - 1)];
+        rState.backoffUntil = now + nextDelay;
+
+        if (recent.length >= 3 && typeof onOwnershipLost === 'function') {
+          let lost = false;
+          inOwnershipLostCallback = true;
+          try {
+            lost = Boolean(
+              await Promise.resolve(
+                onOwnershipLost({ targetId: target.id, recentCount: recent.length, count: rState.count }),
+              ).catch(() => false),
+            );
+          } finally {
+            inOwnershipLostCallback = false;
+          }
+          if (stopped) return false;
+          if (lost === true) {
+            await stop({ preserveHostDom: true, skipTickWait: true }).catch(() => {});
+            return false;
+          }
+        }
+      } else if (settleMs > 0) {
         const firstSeen = firstReadyAt.get(target.id) || 0;
         const now = Date.now();
         if (!firstSeen) {
@@ -2132,6 +2238,7 @@ export function createPassiveCdpBridge({
 
     // Steady-state zero-CDP & zero-engine-state polling while SSE is connected!
     if (!immediateWake && activeTargets.size > 0 && countLiveSseClients() > 0) {
+      pruneSteadyRebindStates();
       lastStatus = {
         ...lastStatus,
         phase: 'attached',
@@ -2221,10 +2328,13 @@ export function createPassiveCdpBridge({
       }
 
       for (const h of hubs) {
+        if (stopped) break;
         if (!activeTargets.has(h.id) || immediateWake || countLiveSseClients() === 0) {
           await injectTargetOnce(h, browserSessionId, st, immediateWake).catch((err) => log(`gentle mount warn: ${err.message}`));
         }
+        if (stopped) break;
       }
+      if (stopped) return getStatus();
 
       if (activeTargets.size > 0) sessionAwake = true;
 
@@ -2241,6 +2351,7 @@ export function createPassiveCdpBridge({
         lastCheckAt: new Date().toISOString(),
       };
     } catch {
+      if (stopped) return getStatus();
       lastStatus = {
         ...lastStatus,
         phase: 'standby',
@@ -2300,6 +2411,35 @@ export function createPassiveCdpBridge({
     };
   }
 
+  async function stop({ removeSkin = true, removePanel = true, preserveHostDom = false, skipTickWait = false } = {}) {
+    stopped = true;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    clearSettleTimers();
+    clearRebindTimers();
+    rebindStateByTarget.clear();
+    closeAllSseClients();
+    if (!skipTickWait && !inOwnershipLostCallback && tickInFlight) {
+      await tickInFlight.catch(() => {});
+    }
+    if (preserveHostDom) {
+      activeTargets.clear();
+      firstReadyAt.clear();
+    } else {
+      await cleanupTargetsEphemeral({ removeSkin, removePanel });
+    }
+    lastStatus = {
+      ...lastStatus,
+      phase: 'stopped',
+      cdpReachable: false,
+      attachedTargets: [],
+      lastCheckAt: new Date().toISOString(),
+    };
+    return getStatus();
+  }
+
   return {
     canary,
     getCanary: () => canary.getStatus(),
@@ -2339,6 +2479,8 @@ export function createPassiveCdpBridge({
       return getStatus();
     },
     reloadHostScripts: async () => {
+      clearRebindTimers();
+      rebindStateByTarget.clear();
       activeTargets.clear();
       lastBroadcastRev = 0;
       lastBroadcastLiveSse = 0;
@@ -2358,29 +2500,6 @@ export function createPassiveCdpBridge({
     tick,
     getStatus,
     broadcastState,
-    async stop({ removeSkin = true, removePanel = true, preserveHostDom = false } = {}) {
-      stopped = true;
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      clearSettleTimers();
-      closeAllSseClients();
-      if (tickInFlight) await tickInFlight.catch(() => {});
-      if (preserveHostDom) {
-        activeTargets.clear();
-        firstReadyAt.clear();
-      } else {
-        await cleanupTargetsEphemeral({ removeSkin, removePanel });
-      }
-      lastStatus = {
-        ...lastStatus,
-        phase: 'stopped',
-        cdpReachable: false,
-        attachedTargets: [],
-        lastCheckAt: new Date().toISOString(),
-      };
-      return getStatus();
-    },
+    stop,
   };
 }

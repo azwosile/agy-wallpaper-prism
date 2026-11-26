@@ -3600,7 +3600,9 @@ async function main() {
     }
 
     const wakeDataDir = path.join(SCRATCH_ROOT, 'pr9-wake-data');
+    const wakeHostConfigPath = path.join(SCRATCH_ROOT, 'pr9-host-config.json');
     fs.mkdirSync(wakeDataDir, { recursive: true });
+    fs.writeFileSync(wakeHostConfigPath, JSON.stringify({ plugins: { 'agy-wallpaper-prism': { enabled: true } } }), 'utf8');
     const bridge = bridgeFactory({
       getEngineState: async () => ({
         config: { skinEnabled: true, startupMode: 'gentle-auto', liveBootDelay: 0, triggerMode: 'both' },
@@ -3616,6 +3618,7 @@ async function main() {
       capToken: 'wake-test-cap-token',
       dataDir: wakeDataDir,
       pluginRoot: REPO_ROOT,
+      configPath: wakeHostConfigPath,
       cdpPort: mockPort || 9339,
       pollMs: 0,
     });
@@ -4885,6 +4888,716 @@ async function main() {
     assert.equal(lowOpacity.color, '#111111');
 
     return `darkClamp=${darkGuard.color}(${darkGuard.ratio}:1) lightClamp=${lightGuard.color}(${lightGuard.ratio}:1) raw=${rawUnlock.color} lowAlphaWarn=true`;
+  });
+
+  await check('S2-09: Single-instance ownership, rebind backoff/yield (`preserveHostDom:true`), micro-bootstrap event filter, `/api/shutdown` auth & `install-local` OFF/identity guards', '@exec-fix-onoff-qa', async () => {
+    const { EventEmitter } = await import('node:events');
+    const { PRISM_DOM } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href);
+    const cdpMod = await import(pathToFileURL(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs')).href);
+    const { buildHostMicroBootstrap, createPassiveCdpBridge, probeCdpPort } = cdpMod;
+    const installMod = await import(pathToFileURL(path.join(REPO_ROOT, 'scripts', 'install-local.mjs')).href);
+
+    // 1) Micro-bootstrap <= 6144 B worst-case & non-state SSE event (`heartbeat`/`ping`) ignores `/stage.js` reload
+    let maxMicroBytes = 0;
+    for (const startupMode of ['gentle-auto', 'static-css', 'manual']) {
+      for (const triggerMode of ['both', 'shortcut-only']) {
+        for (const skinEnabled of [true, false]) {
+          const candidateExpr = buildHostMicroBootstrap({
+            hostOrigin: 'https://127.0.0.1:65535',
+            capToken: 'c'.repeat(64),
+            triggerMode,
+            startupMode,
+            skinEnabled,
+          });
+          maxMicroBytes = Math.max(maxMicroBytes, Buffer.byteLength(candidateExpr, 'utf8'));
+        }
+      }
+    }
+    assert.ok(maxMicroBytes <= 6144, `buildHostMicroBootstrap worst-case exceeded 6144 B: ${maxMicroBytes} B`);
+
+    const microCap = 'c'.repeat(64);
+    const microHostOrigin = 'http://127.0.0.1:58926';
+    const microBase = `${microHostOrigin}/host/${microCap}`;
+    const microSrc = buildHostMicroBootstrap({
+      hostOrigin: microHostOrigin,
+      capToken: microCap,
+      triggerMode: 'both',
+      startupMode: 'gentle-auto',
+      skinEnabled: true,
+    });
+    let microStageLoads = 0;
+    let microApplyCalls = 0;
+    const microSseClients = [];
+    class MockMicroEventSource {
+      constructor(url) {
+        this.url = url;
+        this.readyState = 1;
+        this.onmessage = null;
+        microSseClients.push(this);
+      }
+      close() {
+        this.readyState = 2;
+      }
+    }
+    const microById = new Map();
+    const mkMicroNode = (tag) => ({
+      tagName: String(tag).toUpperCase(),
+      id: '',
+      src: '',
+      href: '',
+      rel: '',
+      type: '',
+      title: '',
+      textContent: '',
+      dataset: {},
+      style: {},
+      children: [],
+      parentNode: null,
+      setAttribute() {},
+      removeAttribute() {},
+      appendChild(ch) {
+        ch.parentNode = this;
+        this.children.push(ch);
+        if (ch.id) microById.set(ch.id, ch);
+        if (ch.tagName === 'SCRIPT' && String(ch.src || '').includes('/stage.js')) {
+          microStageLoads += 1;
+        }
+        return ch;
+      },
+      remove() {
+        if (this.id) microById.delete(this.id);
+        this.parentNode = null;
+      },
+    });
+    const microDocRoot = mkMicroNode('HTML');
+    microDocRoot.attributes = [];
+    const microHead = mkMicroNode('HEAD');
+    const microBody = mkMicroNode('BODY');
+    const microDoc = {
+      documentElement: microDocRoot,
+      head: microHead,
+      body: microBody,
+      hidden: false,
+      createElement: (tag) => mkMicroNode(tag),
+      getElementById: (id) => microById.get(id) || null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+    };
+    const microWin = {
+      document: microDoc,
+      EventSource: MockMicroEventSource,
+      requestIdleCallback: (cb) => cb(),
+      addEventListener() {},
+      fetch: async () => ({ ok: true, json: async () => ({ ok: true, result: {} }) }),
+      __agyPrismHostBase: microBase,
+      __agyPrism: {
+        version: PRISM_DOM.skinVersion,
+        applyPayload() { microApplyCalls += 1; },
+        destroy() {},
+      },
+    };
+    microWin.window = microWin;
+    microWin.top = microWin;
+    try {
+      vm.runInContext(
+        microSrc,
+        vm.createContext({ window: microWin, document: microDoc, EventSource: MockMicroEventSource, setTimeout, clearTimeout, setInterval, clearInterval }),
+        { filename: 'micro-bootstrap-s209.js' },
+      );
+      assert.equal(microSseClients.length, 1, 'Micro-bootstrap did not open EventSource');
+      assert.equal(microStageLoads, 0, 'Initial micro-bootstrap unexpectedly loaded /stage.js when matching skinVersion was mounted');
+      microSseClients[0].onmessage({ data: JSON.stringify({ event: 'heartbeat', ts: Date.now() }) });
+      microSseClients[0].onmessage({ data: JSON.stringify({ event: 'ping' }) });
+      assert.equal(microStageLoads, 0, 'Non-state SSE event (heartbeat/ping) triggered /stage.js reload!');
+      assert.equal(microApplyCalls, 0, 'Non-state SSE event unexpectedly triggered applyPayload()');
+      assert.equal(microWin.__agyPrismOn, true, 'Non-state SSE event flipped __agyPrismOn to false!');
+      microSseClients[0].onmessage({
+        data: JSON.stringify({
+          event: 'state',
+          stateRev: 2,
+          skinVersion: PRISM_DOM.skinVersion,
+          startupMode: 'gentle-auto',
+          skinEnabled: true,
+          skinPayload: { skinEnabled: true, stateRev: 2, config: { triggerMode: 'both' } },
+        }),
+      });
+      assert.equal(microApplyCalls, 1, 'State SSE event failed to invoke applyPayload()');
+      assert.equal(microStageLoads, 0, 'Matching version state SSE event unexpectedly reloaded /stage.js');
+    } finally {
+      microWin.__agyPrismBootstrapped = false;
+      if (microWin.__agyPrismKt) {
+        clearTimeout(microWin.__agyPrismKt);
+        clearInterval(microWin.__agyPrismKt);
+        microWin.__agyPrismKt = 0;
+      }
+      microSseClients.forEach((c) => c.close());
+    }
+
+    // 2) Dual `createPassiveCdpBridge` concurrent conflict -> rebind backoff + `onOwnershipLost` yield (`preserveHostDom: true` -> 0 oscillation)
+    const hubBaseA = 'http://127.0.0.1:59101/host/cap-bridge-a-token';
+    const hubBaseB = 'http://127.0.0.1:59102/host/cap-bridge-b-token';
+    const hubState = {
+      booted: false,
+      hostBase: '',
+      sseState: -1,
+      skinVer: '',
+      on: null,
+      injects: [],
+      flips: 0,
+      removeSkinCalls: 0,
+      removePanelCalls: 0,
+    };
+    const handleBridgeEval = (expr) => {
+      if (expr.includes('document.readyState')) {
+        return {
+          ready: true,
+          w: 1440,
+          h: 900,
+          booted: hubState.booted,
+          hostBase: hubState.hostBase,
+          sseState: hubState.sseState,
+          skinVer: hubState.skinVer,
+          skin: hubState.booted,
+        };
+      }
+      if (expr.includes('HostBase') && expr.includes('EventSource')) {
+        const isA = expr.includes('cap-bridge-a-token');
+        const nextBase = isA ? hubBaseA : hubBaseB;
+        const nextOn = !isA;
+        if (hubState.booted && hubState.on !== nextOn) {
+          hubState.flips += 1;
+        }
+        hubState.booted = true;
+        hubState.hostBase = nextBase;
+        hubState.sseState = 1;
+        hubState.skinVer = PRISM_DOM.skinVersion;
+        hubState.on = nextOn;
+        hubState.injects.push({ who: isA ? 'A' : 'B', ts: Date.now(), on: nextOn });
+        return { ok: true };
+      }
+      if (!expr.includes('EventSource')) {
+        if (expr.includes('agy-prism-stage') || expr.includes('agy-prism-css')) hubState.removeSkinCalls += 1;
+        if (expr.includes('agy-prism-popover') || expr.includes('agy-prism-pill')) hubState.removePanelCalls += 1;
+      }
+      return true;
+    };
+    const encodeWsFrame = (text) => {
+      const payload = Buffer.from(text, 'utf8');
+      if (payload.length < 126) return Buffer.concat([Buffer.from([0x81, payload.length]), payload]);
+      const hdr = Buffer.alloc(4);
+      hdr[0] = 0x81;
+      hdr[1] = 126;
+      hdr.writeUInt16BE(payload.length, 2);
+      return Buffer.concat([hdr, payload]);
+    };
+    const dualCdpServer = http.createServer((req, res) => {
+      const addr = dualCdpServer.address();
+      const p = typeof addr === 'object' && addr ? addr.port : 0;
+      if (req.url === '/json/version') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ Browser: 'MockChrome/135.0', webSocketDebuggerUrl: `ws://127.0.0.1:${p}/devtools/browser/1` }));
+        return;
+      }
+      if (req.url === '/json/list') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify([{
+          id: 's209-hub-1',
+          type: 'page',
+          title: 'Antigravity',
+          url: 'https://127.0.0.1:9443/workbench',
+          webSocketDebuggerUrl: `ws://127.0.0.1:${p}/devtools/page/s209-hub-1`,
+        }]));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    dualCdpServer.on('upgrade', (req, socket) => {
+      const key = req.headers['sec-websocket-key'];
+      const accept = createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\n' +
+        'Upgrade: websocket\r\n' +
+        'Connection: Upgrade\r\n' +
+        `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
+      );
+      let wsBuf = Buffer.alloc(0);
+      socket.on('data', (chunk) => {
+        wsBuf = Buffer.concat([wsBuf, chunk]);
+        while (wsBuf.length >= 2) {
+          const masked = (wsBuf[1] & 0x80) !== 0;
+          let len = wsBuf[1] & 0x7f;
+          let offset = 2;
+          if (len === 126) {
+            if (wsBuf.length < 4) return;
+            len = wsBuf.readUInt16BE(2);
+            offset = 4;
+          } else if (len === 127) {
+            if (wsBuf.length < 10) return;
+            len = Number(wsBuf.readBigUInt64BE(2));
+            offset = 10;
+          }
+          const maskLen = masked ? 4 : 0;
+          if (wsBuf.length < offset + maskLen + len) return;
+          const payload = Buffer.alloc(len);
+          if (masked) {
+            const mask = wsBuf.subarray(offset, offset + 4);
+            for (let i = 0; i < len; i += 1) payload[i] = wsBuf[offset + 4 + i] ^ mask[i & 3];
+          } else {
+            wsBuf.copy(payload, 0, offset, offset + len);
+          }
+          const opcode = wsBuf[0] & 0x0f;
+          wsBuf = wsBuf.subarray(offset + maskLen + len);
+          if (opcode === 0x8) {
+            try { socket.end(); } catch {}
+            return;
+          }
+          if (opcode === 0x1) {
+            try {
+              const msg = JSON.parse(payload.toString('utf8'));
+              const val = handleBridgeEval(String(msg?.params?.expression || ''));
+              socket.write(encodeWsFrame(JSON.stringify({ id: msg.id, result: { result: { value: val } } })));
+            } catch {}
+          }
+        }
+      });
+    });
+
+    let dualMockPort = 0;
+    try {
+      await new Promise((resolveListen, rejectListen) => {
+        dualCdpServer.once('error', rejectListen);
+        dualCdpServer.listen(0, '127.0.0.1', () => {
+          dualCdpServer.removeListener('error', rejectListen);
+          resolveListen();
+        });
+      });
+      dualMockPort = dualCdpServer.address().port;
+    } catch (err) {
+      if (err?.code !== 'EACCES' && err?.code !== 'EPERM') throw err;
+    }
+
+    let dualBridgeFactory = createPassiveCdpBridge;
+    const tcpOk = dualMockPort > 0 ? Boolean((await probeCdpPort(dualMockPort, '127.0.0.1', 500))?.ok) : false;
+    if (!tcpOk) {
+      const cdpSrc = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs'), 'utf8');
+      const storeUrl = pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'store.mjs')).href;
+      const schemaUrl = pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href;
+      const patchedSrc = cdpSrc
+        .replace(
+          "import { request as httpRequest } from 'node:http';",
+          'const httpRequest = (...args) => globalThis.__prismS209HttpRequest(...args);',
+        )
+        .replace('../../src/engine/store.mjs', storeUrl)
+        .replace('../../src/shared/schema.mjs', schemaUrl);
+      const shimFile = path.join(SCRATCH_ROOT, 'cdp-bridge-s209-inproc.mjs');
+      fs.writeFileSync(shimFile, patchedSrc, 'utf8');
+      const shimMod = await import(`${pathToFileURL(shimFile).href}?t=${Date.now()}`);
+      dualBridgeFactory = shimMod.createPassiveCdpBridge;
+
+      const handleInprocWs = (socketOut, stateObj, chunk) => {
+        stateObj.buf = Buffer.concat([stateObj.buf, Buffer.from(chunk)]);
+        while (stateObj.buf.length >= 2) {
+          const masked = (stateObj.buf[1] & 0x80) !== 0;
+          let len = stateObj.buf[1] & 0x7f;
+          let offset = 2;
+          if (len === 126) {
+            if (stateObj.buf.length < 4) return;
+            len = stateObj.buf.readUInt16BE(2);
+            offset = 4;
+          } else if (len === 127) {
+            if (stateObj.buf.length < 10) return;
+            len = Number(stateObj.buf.readBigUInt64BE(2));
+            offset = 10;
+          }
+          const maskLen = masked ? 4 : 0;
+          if (stateObj.buf.length < offset + maskLen + len) return;
+          const payload = Buffer.alloc(len);
+          if (masked) {
+            const mask = stateObj.buf.subarray(offset, offset + 4);
+            for (let i = 0; i < len; i += 1) payload[i] = stateObj.buf[offset + 4 + i] ^ mask[i & 3];
+          } else {
+            stateObj.buf.copy(payload, 0, offset, offset + len);
+          }
+          const opcode = stateObj.buf[0] & 0x0f;
+          stateObj.buf = stateObj.buf.subarray(offset + maskLen + len);
+          if (opcode === 0x8) {
+            try { socketOut.push(null); } catch {}
+            return;
+          }
+          if (opcode === 0x1) {
+            try {
+              const msg = JSON.parse(payload.toString('utf8'));
+              const val = handleBridgeEval(String(msg?.params?.expression || ''));
+              socketOut.push(encodeWsFrame(JSON.stringify({ id: msg.id, result: { result: { value: val } } })));
+            } catch {}
+          }
+        }
+      };
+
+      globalThis.__prismS209HttpRequest = (opts, cb) => {
+        const listeners = new Map();
+        const reqObj = {
+          on(ev, fn) {
+            const arr = listeners.get(ev) || [];
+            arr.push(fn);
+            listeners.set(ev, arr);
+            return reqObj;
+          },
+          emit(ev, ...args) {
+            for (const fn of (listeners.get(ev) || []).slice()) fn(...args);
+          },
+          destroy() {},
+          end() {
+            queueMicrotask(() => {
+              const p = Number(opts?.port || dualMockPort || 9339);
+              const reqPath = String(opts?.path || '/');
+              if (String(opts?.headers?.Upgrade || '').toLowerCase() === 'websocket') {
+                const wsState = { buf: Buffer.alloc(0) };
+                const clientSock = new Duplex({
+                  read() {},
+                  write(chunk, _enc, done) {
+                    handleInprocWs(clientSock, wsState, chunk);
+                    done();
+                  },
+                });
+                clientSock.setNoDelay = () => clientSock;
+                reqObj.emit('upgrade', { statusCode: 101, headers: {} }, clientSock, Buffer.alloc(0));
+                return;
+              }
+              let statusCode = 404;
+              let bodyStr = '';
+              if (reqPath === '/json/version') {
+                statusCode = 200;
+                bodyStr = JSON.stringify({ Browser: 'MockChrome/135.0', webSocketDebuggerUrl: `ws://127.0.0.1:${p}/devtools/browser/1` });
+              } else if (reqPath === '/json/list') {
+                statusCode = 200;
+                bodyStr = JSON.stringify([{
+                  id: 's209-hub-1',
+                  type: 'page',
+                  title: 'Antigravity',
+                  url: 'https://127.0.0.1:9443/workbench',
+                  webSocketDebuggerUrl: `ws://127.0.0.1:${p}/devtools/page/s209-hub-1`,
+                }]);
+              }
+              const resListeners = new Map();
+              const resObj = {
+                statusCode,
+                setEncoding() {},
+                resume() {},
+                on(ev, fn) {
+                  const arr = resListeners.get(ev) || [];
+                  arr.push(fn);
+                  resListeners.set(ev, arr);
+                  return resObj;
+                },
+                emit(ev, ...args) {
+                  for (const fn of (resListeners.get(ev) || []).slice()) fn(...args);
+                },
+              };
+              if (typeof cb === 'function') cb(resObj);
+              reqObj.emit('response', resObj);
+              queueMicrotask(() => {
+                if (bodyStr) resObj.emit('data', Buffer.from(bodyStr, 'utf8'));
+                resObj.emit('end');
+              });
+            });
+          },
+        };
+        return reqObj;
+      };
+    }
+
+    const dataDirA = path.join(SCRATCH_ROOT, 's209-bridge-a');
+    const dataDirB = path.join(SCRATCH_ROOT, 's209-bridge-b');
+    const mockHostConfigPath = path.join(SCRATCH_ROOT, 's209-host-config.json');
+    fs.mkdirSync(dataDirA, { recursive: true });
+    fs.mkdirSync(dataDirB, { recursive: true });
+    fs.writeFileSync(mockHostConfigPath, JSON.stringify({ plugins: { 'agy-wallpaper-prism': { enabled: true } } }), 'utf8');
+    const ownershipLostCalls = [];
+    const bridgeB = dualBridgeFactory({
+      getEngineState: async () => ({
+        config: { skinEnabled: true, startupMode: 'gentle-auto', liveBootDelay: 0, triggerMode: 'both' },
+        activeItem: null,
+        skinEnabled: true,
+        stateRev: 2,
+      }),
+      hostScripts: { buildClientSkinPayload: () => ({ skinEnabled: true, config: {} }) },
+      getHostOrigin: () => 'http://127.0.0.1:59102',
+      capToken: 'cap-bridge-b-token',
+      dataDir: dataDirB,
+      pluginRoot: REPO_ROOT,
+      configPath: mockHostConfigPath,
+      cdpPort: dualMockPort || 9339,
+      pollMs: 0,
+    });
+    const bridgeA = dualBridgeFactory({
+      getEngineState: async () => ({
+        config: { skinEnabled: false, startupMode: 'gentle-auto', liveBootDelay: 0, triggerMode: 'both' },
+        activeItem: null,
+        skinEnabled: false,
+        stateRev: 1,
+      }),
+      hostScripts: { buildClientSkinPayload: () => ({ skinEnabled: false, config: {} }) },
+      getHostOrigin: () => 'http://127.0.0.1:59101',
+      capToken: 'cap-bridge-a-token',
+      dataDir: dataDirA,
+      pluginRoot: REPO_ROOT,
+      configPath: mockHostConfigPath,
+      cdpPort: dualMockPort || 9339,
+      pollMs: 0,
+      onOwnershipLost: (info) => {
+        ownershipLostCalls.push(info);
+        return true;
+      },
+    });
+
+    try {
+      await bridgeB.wake({ forceProbe: true });
+      bridgeB.markCanaryHealthy('s209-hub-1');
+      assert.equal(hubState.hostBase, hubBaseB, 'Bridge B failed initial mount');
+      assert.equal(hubState.on, true);
+
+      // Rebind #1 by A -> B immediately reclaims
+      await bridgeA.tick();
+      assert.equal(hubState.injects.filter((x) => x.who === 'A').length, 1);
+      await sleep(30);
+      await bridgeB.tick();
+      assert.equal(hubState.hostBase, hubBaseB);
+      assert.equal(hubState.on, true);
+
+      // Verify 600ms ping-pong is blocked by 1500ms rebind backoff
+      await sleep(620);
+      await bridgeA.tick();
+      assert.equal(hubState.injects.filter((x) => x.who === 'A').length, 1, 'Bridge A bypassed 1500ms rebind backoff at 620ms!');
+      assert.equal(hubState.on, true, 'Host ON state flipped during backoff window');
+
+      // Wait for Bridge A Rebind #2 (~1520ms), let B reclaim, then wait for Bridge A Rebind #3 (+3000ms) -> onOwnershipLost yield
+      const rebind2Deadline = Date.now() + 3000;
+      while (Date.now() < rebind2Deadline && hubState.injects.filter((x) => x.who === 'A').length < 2) {
+        await sleep(50);
+      }
+      assert.equal(hubState.injects.filter((x) => x.who === 'A').length, 2, 'Bridge A did not trigger Rebind #2 after 1500ms backoff');
+      await sleep(160);
+      await bridgeB.tick();
+      assert.equal(hubState.hostBase, hubBaseB);
+      assert.equal(hubState.on, true);
+
+      // Trigger A's poll/recovery tick during the 3000ms backoff window so its rebindTimer arms for Rebind #3
+      await bridgeA.tick();
+      assert.equal(hubState.injects.filter((x) => x.who === 'A').length, 2, 'Bridge A bypassed 3000ms rebind backoff before Rebind #3');
+
+      const yieldDeadline = Date.now() + 5000;
+      while (Date.now() < yieldDeadline && ownershipLostCalls.length === 0) {
+        await sleep(60);
+      }
+      assert.equal(ownershipLostCalls.length, 1, 'Bridge A did not invoke onOwnershipLost on 3rd conflict rebind');
+      assert.ok(ownershipLostCalls[0].recentCount >= 3, `Expected recentCount >= 3, got ${ownershipLostCalls[0].recentCount}`);
+      await sleep(40);
+      assert.equal(bridgeA.getStatus().phase, 'stopped', 'Bridge A did not stop after onOwnershipLost returned true');
+      assert.equal(hubState.removeSkinCalls, 0, 'Yielding bridge destroyed host skin DOM (preserveHostDom: true violated)');
+      assert.equal(hubState.removePanelCalls, 0, 'Yielding bridge destroyed host panel DOM (preserveHostDom: true violated)');
+
+      const flipsAfterYield = hubState.flips;
+      await sleep(650);
+      await bridgeA.tick();
+      assert.equal(hubState.flips, flipsAfterYield, 'Oscillation continued after Bridge A yielded');
+      assert.equal(hubState.on, true);
+
+      // 3) Verify MAX_HOST_SSE >= 4 (both runtime socket retention & source check)
+      const cdpBridgeSrc = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs'), 'utf8');
+      assert.match(cdpBridgeSrc, /MAX_HOST_SSE\s*=\s*Math\.max\(\s*4/, 'cdp-bridge.mjs must cap MAX_HOST_SSE >= 4');
+      const sseResList = [];
+      for (let i = 0; i < 4; i += 1) {
+        const fakeReq = new EventEmitter();
+        const fakeRes = new EventEmitter();
+        fakeRes.writableEnded = false;
+        fakeRes.destroyed = false;
+        fakeRes.socket = { destroyed: false, writable: true };
+        fakeRes.chunks = [];
+        fakeRes.write = (chunk) => { fakeRes.chunks.push(String(chunk)); return true; };
+        fakeRes.end = () => { fakeRes.writableEnded = true; };
+        await bridgeB.registerSseClient(fakeReq, fakeRes, false);
+        sseResList.push({ req: fakeReq, res: fakeRes });
+      }
+      assert.equal(sseResList.every((x) => !x.res.writableEnded), true, 'MAX_HOST_SSE < 4: at least one of 4 concurrent SSE clients was evicted');
+      const fakeReq5 = new EventEmitter();
+      const fakeRes5 = new EventEmitter();
+      fakeRes5.writableEnded = false;
+      fakeRes5.destroyed = false;
+      fakeRes5.socket = { destroyed: false, writable: true };
+      fakeRes5.write = () => true;
+      fakeRes5.end = () => { fakeRes5.writableEnded = true; };
+      await bridgeB.registerSseClient(fakeReq5, fakeRes5, false);
+      assert.equal(sseResList[0].res.writableEnded, true, 'Expected 5th SSE client to evict oldest when activeTargets=1 and MAX_HOST_SSE=4');
+      for (const x of [...sseResList.slice(1), { req: fakeReq5, res: fakeRes5 }]) {
+        x.req.emit('close');
+      }
+    } finally {
+      delete globalThis.__prismS209HttpRequest;
+      await bridgeA.stop({ preserveHostDom: true }).catch(() => {});
+      await bridgeB.stop({ preserveHostDom: true }).catch(() => {});
+      await new Promise((r) => dualCdpServer.close(() => r())).catch(() => {});
+    }
+
+    // 4) `POST /api/shutdown` strict auth (401 no header token / 403 evil Origin) & graceful shutdown (`preserveHostDom: true`)
+    const shutdownDir = path.join(SCRATCH_ROOT, 's209-shutdown-data');
+    const SD_TOK = 's209-shutdown-token-2026';
+    const sdSrv = await createPrismStudioServer({
+      dataDir: shutdownDir,
+      token: SD_TOK,
+      startCdp: false,
+      inspectShortcuts: false,
+      autoCheckUpdates: false,
+      exitOnShutdown: false,
+    });
+    try {
+      const stRes = await invokeServerInMemory(sdSrv.server, {
+        method: 'GET',
+        url: '/api/status',
+        headers: { Host: '127.0.0.1:58926' },
+      });
+      assert.equal(stRes.status, 200);
+      const stJson = stRes.json();
+      assert.equal(stJson.plugin, 'agy-wallpaper-prism');
+      assert.equal(stJson.studioUri, 'sidecar://agy-wallpaper-prism/prism_studio/');
+      assert.ok(typeof stJson.stateEpoch === 'string' && stJson.stateEpoch.length > 0, '/api/status missing stateEpoch');
+
+      const badOriginRes = await invokeServerInMemory(sdSrv.server, {
+        method: 'POST',
+        url: '/api/shutdown',
+        headers: {
+          Host: '127.0.0.1:58926',
+          Origin: 'https://evil.example',
+          'X-Sidecar-Token': SD_TOK,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      });
+      assert.equal(badOriginRes.status, 403, `Expected 403 for evil Origin on /api/shutdown, got ${badOriginRes.status}`);
+      assert.equal(badOriginRes.json().code, 'ERR_CSRF_ORIGIN');
+
+      const noTokRes = await invokeServerInMemory(sdSrv.server, {
+        method: 'POST',
+        url: `/api/shutdown?token=${SD_TOK}`,
+        headers: { Host: '127.0.0.1:58926', 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      assert.equal(noTokRes.status, 401, `Expected 401 when X-Sidecar-Token header missing on /api/shutdown, got ${noTokRes.status}`);
+      assert.equal(noTokRes.json().code, 'ERR_AUTH_TOKEN_REQUIRED');
+
+      const okSdRes = await invokeServerInMemory(sdSrv.server, {
+        method: 'POST',
+        url: '/api/shutdown',
+        headers: {
+          Host: '127.0.0.1:58926',
+          Origin: 'http://127.0.0.1:58926',
+          'X-Sidecar-Token': SD_TOK,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      });
+      assert.equal(okSdRes.status, 200, `Authorized /api/shutdown failed: ${okSdRes.text()}`);
+      const okSdJson = okSdRes.json();
+      assert.equal(okSdJson.ok, true);
+      assert.equal(okSdJson.shuttingDown, true);
+      assert.equal(okSdJson.preserveHostDom, true);
+
+      const closeDeadline = Date.now() + 1500;
+      while (Date.now() < closeDeadline && (sdSrv.server.listening || fs.existsSync(path.join(shutdownDir, 'server_info.json')))) {
+        await sleep(30);
+      }
+      assert.equal(sdSrv.server.listening, false, 'HTTP server stayed open after authorized /api/shutdown');
+      assert.equal(fs.existsSync(path.join(shutdownDir, 'server_info.json')), false, 'server_info.json was not cleaned on graceful shutdown');
+    } finally {
+      await sdSrv.close().catch(() => {});
+    }
+
+    // 5) `scripts/install-local.mjs` OFF wake guard + /api/status identity-verified orphan cleanup
+    const installSrc = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'install-local.mjs'), 'utf8');
+    assert.ok(installSrc.includes('/api/status') && installSrc.includes('SIDECAR_URI') && installSrc.includes('PLUGIN_ID'), 'install-local.mjs missing /api/status Prism identity verification');
+    assert.ok(installSrc.includes('wakePrimarySidecarIfEnabled') && installSrc.includes('wasSkinEnabled === false'), 'install-local.mjs missing OFF guard for /api/skin/wake');
+
+    const wakeCalls = [];
+    const mockSyncFetch = async (url, init = {}) => {
+      wakeCalls.push({ url: String(url), method: init.method || 'GET' });
+      if (String(url).endsWith('/api/host/reload')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, state: { skinEnabled: false, config: { skinEnabled: false } } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    };
+    const offSync = await installMod.syncPrimarySidecar({ port: 58926, token: 't', wasSkinEnabled: false, fetchImpl: mockSyncFetch });
+    assert.equal(offSync.reloaded, true);
+    assert.equal(offSync.woke, false);
+    assert.equal(wakeCalls.some((c) => c.url.includes('/api/skin/wake')), false, 'install-local woke /api/skin/wake when skinEnabled === false!');
+    assert.equal(installMod.resolveWasSkinEnabled({ preStatus: { skinEnabled: true }, preConfig: { skinEnabled: false } }), false);
+
+    const instRoot = path.join(SCRATCH_ROOT, 's209-install-cleanup', 'prism_studio');
+    const instDataDir = path.join(instRoot, 'data');
+    const instLogsDir = path.join(instRoot, 'logs');
+    fs.mkdirSync(instDataDir, { recursive: true });
+    fs.mkdirSync(instLogsDir, { recursive: true });
+    fs.writeFileSync(path.join(instDataDir, 'server_info.json'), JSON.stringify({ plugin: 'agy-wallpaper-prism', pid: 17156, port: 58926, token: 'prim-tok' }), 'utf8');
+    fs.writeFileSync(path.join(instDataDir, 'canary.json'), JSON.stringify({ sidecarPid: 24344 }), 'utf8');
+    fs.writeFileSync(path.join(instDataDir, 'sidecar-registry.json'), JSON.stringify({
+      version: 1,
+      entries: [
+        { plugin: 'agy-wallpaper-prism', studioUri: 'sidecar://agy-wallpaper-prism/prism_studio/', pid: 33001, port: 58931, token: 'reg-tok' },
+        { plugin: 'other-plugin', studioUri: 'sidecar://other-plugin/main/', pid: 44001, port: 58941, token: 'foreign-tok' },
+      ],
+    }), 'utf8');
+    fs.writeFileSync(path.join(instLogsDir, 'sidecar.log'), [
+      '[prism_studio] listening on http://127.0.0.1:53049 (media=http://127.0.0.1:53207, pid=24344)',
+      '[prism_studio] listening on http://127.0.0.1:59999 (media=http://127.0.0.1:59998, pid=55001)',
+    ].join('\n'), 'utf8');
+
+    const alivePids = new Set([17156, 24344, 33001, 44001, 55001]);
+    const killedPids = [];
+    const foreignShutdownAttempts = [];
+    const mockCleanupFetch = async (url, init = {}) => {
+      const u = String(url);
+      if (u.startsWith('http://127.0.0.1:58931/api/status')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, pid: 33001, plugin: 'agy-wallpaper-prism', studioUri: 'sidecar://agy-wallpaper-prism/prism_studio/', version: '2.2.0' }) };
+      }
+      if (u.startsWith('http://127.0.0.1:58931/api/shutdown')) {
+        assert.equal(init.headers?.['X-Sidecar-Token'], 'reg-tok');
+        alivePids.delete(33001);
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+      if (u.startsWith('http://127.0.0.1:53049/api/status')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, pid: 24344, version: '2.1.0', pluginOrigin: 'plugin://agy-wallpaper-prism--prism_studio-53049' }) };
+      }
+      if (u.startsWith('http://127.0.0.1:53049/api/shutdown')) {
+        return { ok: false, status: 404, json: async () => ({ ok: false }) };
+      }
+      if (u.startsWith('http://127.0.0.1:59999/api/status')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, pid: 55001, plugin: 'other-plugin', studioUri: 'sidecar://other-plugin/main/' }) };
+      }
+      if (u.includes('59999/api/shutdown') || u.includes('58941')) {
+        foreignShutdownAttempts.push(u);
+      }
+      return { ok: false, status: 404, json: async () => ({ ok: false }) };
+    };
+    const cleanupOut = await installMod.cleanupOrphanPrismSidecars({
+      dataDir: instDataDir,
+      primaryPid: 17156,
+      primaryPort: 58926,
+      fetchImpl: mockCleanupFetch,
+      isPidAliveImpl: (pid) => alivePids.has(Number(pid)),
+      killPidImpl: (pid, sig) => {
+        killedPids.push({ pid, sig });
+        alivePids.delete(Number(pid));
+      },
+    });
+    assert.deepEqual(foreignShutdownAttempts, [], 'Attempted shutdown on foreign plugin sidecar!');
+    assert.equal(alivePids.has(17156), true, 'Primary sidecar 17156 was killed!');
+    assert.equal(alivePids.has(44001), true, 'Foreign plugin 44001 was killed!');
+    assert.equal(alivePids.has(55001), true, 'Foreign plugin 55001 on reused port was killed!');
+    assert.equal(alivePids.has(33001), false, 'Duplicate v2.2.0 Prism 33001 was not shut down');
+    assert.equal(alivePids.has(24344), false, 'Legacy v2.1.0 orphan Prism 24344 was not killed');
+    assert.deepEqual(killedPids, [{ pid: 24344, sig: 'SIGTERM' }], 'Expected SIGTERM only on verified legacy Prism orphan 24344');
+
+    return `micro=${maxMicroBytes}B heartbeatLoads=0 yieldFlips=${hubState.flips} shutdown=403/401/200 sse>=4 cleaned=${cleanupOut.cleaned.map((c) => `${c.pid}:${c.method}`).join(',')}`;
   });
 
   // =========================================================================
