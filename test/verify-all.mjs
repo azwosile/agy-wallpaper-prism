@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.2.0
+ * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.3.0
  *
- * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.2.0 specifications across:
- *   Suite 1 — Manifest (v2.2.0), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
+ * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.2.0 + v2.3.0 specifications across:
+ *   Suite 1 — Manifest (v2.3.0), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
  *             Zero-PII Audit & SHA-256 Workspace <-> Global Plugin Sync
  *   Suite 2 — Backend Engine, DSH Parity, Co-Keyed Storage, Two-Phase `fsync` Boot Canary Circuit-Breaker
  *             (`canary.json` arming -> tripped, `/api/canary/reset`, `/api/skin/wake`), PR #6 Hardened `fetch+blob`,
@@ -197,7 +197,7 @@ function decodePngRgba(pngBuf) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  console.log('=== agy-wallpaper-prism v2.2.0 Full Verification Harness ===');
+  console.log('=== agy-wallpaper-prism v2.3.0 Full Verification Harness ===');
   fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
   fs.mkdirSync(DEFAULT_ARTIFACT_DIR, { recursive: true });
   const fixturesDir = path.join(SCRATCH_ROOT, 'fixtures');
@@ -206,33 +206,37 @@ async function main() {
   // =========================================================================
   // SUITE 1: Manifest, Bundle, Zero-Enable CDP Audit, Zero-PII & Byte Sync
   // =========================================================================
-  console.log('\n--- Suite 1: Manifest (v2.2.0), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
+  console.log('\n--- Suite 1: Manifest (v2.3.0), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
 
-  await check('plugin.json, package.json & 7-point v2.2.0 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
+  await check('plugin.json, package.json & 8-point v2.3.0 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
     const pPath = path.join(REPO_ROOT, 'plugin.json');
     const pkgPath = path.join(REPO_ROOT, 'package.json');
     const readmePath = path.join(REPO_ROOT, 'README.md');
     const schemaPath = path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs');
     const wallInjectPath = path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js');
     const panelInjectPath = path.join(REPO_ROOT, 'src', 'host', 'panel-inject.js');
+    const inspectorInjectPath = path.join(REPO_ROOT, 'src', 'host', 'inspector-inject.js');
     assert.ok(fs.existsSync(pPath), 'plugin.json missing');
     assert.ok(fs.existsSync(pkgPath), 'package.json missing');
+    assert.ok(fs.existsSync(inspectorInjectPath), 'src/host/inspector-inject.js missing');
     const raw = JSON.parse(fs.readFileSync(pPath, 'utf8'));
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
     const readme = fs.readFileSync(readmePath, 'utf8');
     const schemaSrc = fs.readFileSync(schemaPath, 'utf8');
     const wallInjectSrc = fs.readFileSync(wallInjectPath, 'utf8');
     const panelInjectSrc = fs.readFileSync(panelInjectPath, 'utf8');
+    const inspectorInjectSrc = fs.readFileSync(inspectorInjectPath, 'utf8');
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.2.0', `Expected plugin.json version 2.2.0, got ${raw.version}`);
-    assert.equal(pkg.version, '2.2.0', `Expected package.json version 2.2.0, got ${pkg.version}`);
-    assert.match(readme, /\*\*Version\*\*:\s*`2\.2\.0`/, 'Expected README.md **Version**: `2.2.0`');
-    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.2\.0'/, 'Expected schema.mjs PLUGIN_VERSION = 2.2.0');
-    assert.match(schemaSrc, /skinVersion:\s*'2\.2\.0'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.2.0');
-    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.2\.0'/, 'Expected wallpaper-inject.js VERSION = 2.2.0');
-    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.2\.0'/, 'Expected panel-inject.js VERSION = 2.2.0');
+    assert.equal(raw.version, '2.3.0', `Expected plugin.json version 2.3.0, got ${raw.version}`);
+    assert.equal(pkg.version, '2.3.0', `Expected package.json version 2.3.0, got ${pkg.version}`);
+    assert.match(readme, /\*\*Version\*\*:\s*`2\.3\.0`/, 'Expected README.md **Version**: `2.3.0`');
+    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.3\.0'/, 'Expected schema.mjs PLUGIN_VERSION = 2.3.0');
+    assert.match(schemaSrc, /skinVersion:\s*'2\.3\.0'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.3.0');
+    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.3\.0'/, 'Expected wallpaper-inject.js VERSION = 2.3.0');
+    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.3\.0'/, 'Expected panel-inject.js VERSION = 2.3.0');
+    assert.match(inspectorInjectSrc, /var VERSION\s*=\s*'2\.3\.0'/, 'Expected inspector-inject.js VERSION = 2.3.0');
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -244,7 +248,7 @@ async function main() {
       `Unexpected homepage in plugin.json: ${raw.homepage}`,
     );
     assert.ok(Array.isArray(raw.suggestedPrompts) && raw.suggestedPrompts.length <= 3, 'suggestedPrompts must be <= 3');
-    return `v${raw.version} synced across all 7 anchors, keys=${Object.keys(raw).length}/10`;
+    return `v${raw.version} synced across all 8 anchors, keys=${Object.keys(raw).length}/10`;
   });
 
   await check('Git repository branch (`main`), `origin` remote URL & working tree audit', '@resilience-designer', () => {
@@ -294,6 +298,7 @@ async function main() {
     assert.ok(md.includes('sidecar://agy-wallpaper-prism/prism_studio/'), 'Missing sidecar:// pill link');
     assert.ok(md.includes('customization://agy-wallpaper-prism'), 'Missing customization:// link');
     assert.ok(!md.includes('plugin://') && !md.includes('plugins://'), 'Dead plugin:// scheme found in SKILL.md');
+    assert.ok(md.includes('2.3.0'), 'Expected 2.3.0 version marker in SKILL.md');
     return `logo=${svg.length}B, SKILL.md valid`;
   });
 
@@ -330,9 +335,9 @@ async function main() {
     assert.ok(html.includes('prism-region-group'), 'Bundled index.html missing v2.2.0 .prism-region-group 8-region accordions');
     assert.ok(html.includes('toggle-preview-live'), 'Bundled index.html missing v2.2.0 toggle-preview-live static-first action');
     assert.ok(html.includes('agy-prism-visual-editor'), 'Bundled index.html missing v2.2.0 .agy-prism-visual-editor');
-    assert.ok(html.includes('2.2.0'), 'Bundled index.html missing inlined v2.2.0 version marker');
+    assert.ok(html.includes('2.3.0'), 'Bundled index.html missing inlined v2.3.0 version marker');
     assert.equal(html.includes('\r'), false, 'Bundled index.html must be pure LF (0 CR/CRLF)');
-    return `${Math.round(html.length / 1024)} KB inlined v2.2.0 pure-LF bundle`;
+    return `${Math.round(html.length / 1024)} KB inlined v2.3.0 pure-LF bundle`;
   });
 
   await check('Syntax check (`node --check`) across all JS/MJS entrypoints & test modules', '@resilience-designer', () => {
@@ -359,6 +364,7 @@ async function main() {
       'src/host/index.mjs',
       'src/host/wallpaper-inject.js',
       'src/host/panel-inject.js',
+      'src/host/inspector-inject.js',
       'src/studio-ui/state.mjs',
       'src/studio-ui/optics.mjs',
       'src/studio-ui/controls.mjs',
@@ -451,6 +457,7 @@ async function main() {
       'src/host/index.mjs',
       'src/host/wallpaper-inject.js',
       'src/host/panel-inject.js',
+      'src/host/inspector-inject.js',
       'src/studio-ui/state.mjs',
       'src/studio-ui/optics.mjs',
       'src/studio-ui/controls.mjs',
@@ -511,7 +518,7 @@ async function main() {
     assert.equal(handoffDiff, '', `D1 violation: docs/AI_HANDOFF.md was modified since ded7824:\n${handoffDiff.slice(0, 400)}`);
 
     const crHits = [];
-    const scanRoots = ['scripts', 'src', 'sidecars', 'skills', 'test', 'host'];
+    const scanRoots = ['scripts', 'src', 'sidecars', 'skills', 'test', 'host', 'docs'];
     const textExts = new Set(['.js', '.mjs', '.json', '.md', '.html', '.css', '.svg', '.yml', '.yaml']);
     const walkLf = (dir) => {
       if (!fs.existsSync(dir)) return;
@@ -552,7 +559,7 @@ async function main() {
     return `Micro-bootstrap ${bytes} B <= 6144 B with W[K].apply & ds(W[K])`;
   });
 
-  await check('`src/shared/i18n.mjs` 100% zh/en key parity & v2.2.0 region/preset/degrade/sidebar/editor keys', '@exec-mock-tests', async () => {
+  await check('`src/shared/i18n.mjs` 100% zh/en key parity & v2.3.0 region/preset/degrade/sidebar/editor/picker keys', '@exec-mock-tests', async () => {
     const { DICT, t } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'i18n.mjs')).href);
     const zhKeys = Object.keys(DICT.zh || {}).sort();
     const enKeys = Object.keys(DICT.en || {}).sort();
@@ -561,7 +568,7 @@ async function main() {
     assert.deepEqual(missingInEn, [], `Keys in DICT.zh missing from DICT.en: ${missingInEn.join(', ')}`);
     assert.deepEqual(missingInZh, [], `Keys in DICT.en missing from DICT.zh: ${missingInZh.join(', ')}`);
 
-    const requiredV22Keys = [
+    const requiredV23Keys = [
       'region.topbar',
       'region.wco',
       'region.sidebar',
@@ -572,13 +579,20 @@ async function main() {
       'alert.degradedToPoster',
       'preset.includeWallpaper',
       'editor.popoutBtn',
+      'editor.pickHostBtn',
+      'editor.pickHostHint',
+      'editor.pickHostCancel',
+      'editor.pickHostActiveBanner',
+      'editor.pickHostPickedToast',
+      'editor.pickHostCancelledToast',
+      'editor.pickHostUnavailable',
     ];
-    for (const rk of requiredV22Keys) {
+    for (const rk of requiredV23Keys) {
       assert.ok(typeof DICT.zh[rk] === 'string' && DICT.zh[rk].length > 0, `Missing zh key: ${rk}`);
       assert.ok(typeof DICT.en[rk] === 'string' && DICT.en[rk].length > 0, `Missing en key: ${rk}`);
     }
     assert.ok(t('alert.degradedToPoster', { reason: 'timeout' }, 'en').includes('timeout'));
-    return `${zhKeys.length} zh === ${enKeys.length} en keys (100% parity + ${requiredV22Keys.length} v2.2 keys)`;
+    return `${zhKeys.length} zh === ${enKeys.length} en keys (100% parity + ${requiredV23Keys.length} v2.2/v2.3 keys)`;
   });
 
   // =========================================================================
@@ -4202,13 +4216,13 @@ async function main() {
     );
 
     // 1) SemVer unit checks (`isNewerVersion(candidate, current)`)
-    assert.equal(compareSemver('2.2.0', '2.1.0'), 1);
-    assert.equal(compareSemver('v2.2.0', '2.2.0'), 0);
-    assert.equal(compareSemver('2.2.0-beta.1', '2.2.0'), -1);
-    assert.equal(compareSemver('2.2.0+build.42', '2.2.0'), 0);
-    assert.equal(isNewerVersion('2.2.0', '2.1.0'), true);
-    assert.equal(isNewerVersion('2.1.0', '2.2.0'), false);
-    assert.equal(isNewerVersion('2.2.0-rc.1', '2.2.0'), false);
+    assert.equal(compareSemver('2.3.0', '2.2.0'), 1);
+    assert.equal(compareSemver('v2.3.0', '2.3.0'), 0);
+    assert.equal(compareSemver('2.3.0-beta.1', '2.3.0'), -1);
+    assert.equal(compareSemver('2.3.0+build.42', '2.3.0'), 0);
+    assert.equal(isNewerVersion('2.3.0', '2.2.0'), true);
+    assert.equal(isNewerVersion('2.2.0', '2.3.0'), false);
+    assert.equal(isNewerVersion('2.3.0-rc.1', '2.3.0'), false);
     assert.equal(parseSemver('not-a-version'), null);
 
     // 2) `tar-safe.mjs` hostile archive rejection (Zip-Slip, absolute, symlink, hardlink, Windows reserved, case collision)
@@ -4276,7 +4290,7 @@ async function main() {
 
     const healthzRes = await invokeServerInMemory(studio.server, { method: 'GET', url: '/api/healthz', headers: { Host: '127.0.0.1:53040' } });
     assert.equal(healthzRes.status, 200);
-    assert.equal(healthzRes.json().version, '2.2.0');
+    assert.equal(healthzRes.json().version, '2.3.0');
     assert.notEqual(healthzRes.headers['access-control-allow-origin'], '*', '/api/healthz must NOT emit wildcard CORS');
 
     const badOriginApply = await invokeServerInMemory(studio.server, {
@@ -4312,11 +4326,11 @@ async function main() {
     assert.equal(gitCheckoutApply.status, 409, `POST /api/update/apply in .git checkout expected 409, got ${gitCheckoutApply.status}`);
     assert.equal(gitCheckoutApply.json().code, 'ERR_GIT_DEV_CHECKOUT');
 
-    // 4) Build deterministic v2.2.0 release tarball (all real runtime files) & test (a) Offline fail-safe, (b) Temp-plugin-dir swap, (c) Mid-sync rollback!
-    const pkg220Map = collectDirectoryFilesMap(REPO_ROOT);
-    const mockTarGz = createDeterministicTarGz(pkg220Map);
+    // 4) Build deterministic v2.3.0 release tarball (all real runtime files) & test (a) Offline fail-safe, (b) Temp-plugin-dir swap, (c) Mid-sync rollback!
+    const pkg230Map = collectDirectoryFilesMap(REPO_ROOT);
+    const mockTarGz = createDeterministicTarGz(pkg230Map);
     const mockSha256 = createHash('sha256').update(mockTarGz).digest('hex');
-    const mockShaText = `${mockSha256}  agy-wallpaper-prism-v2.2.0.tar.gz\n`;
+    const mockShaText = `${mockSha256}  agy-wallpaper-prism-v2.3.0.tar.gz\n`;
 
     const makeMockGhFetch = ({ offline = false } = {}) => async (url) => {
       const u = String(url || '');
@@ -4332,19 +4346,19 @@ async function main() {
           headers: new Map([['content-type', 'application/json']]),
           async json() {
             return {
-              tag_name: 'v2.2.0',
-              html_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/tag/v2.2.0',
-              body: 'Release v2.2.0 mock notes',
+              tag_name: 'v2.3.0',
+              html_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/tag/v2.3.0',
+              body: 'Release v2.3.0 mock notes',
               published_at: '2026-11-26T00:00:00Z',
               assets: [
                 {
-                  name: 'agy-wallpaper-prism-v2.2.0.tar.gz',
-                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.2.0/agy-wallpaper-prism-v2.2.0.tar.gz',
+                  name: 'agy-wallpaper-prism-v2.3.0.tar.gz',
+                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.3.0/agy-wallpaper-prism-v2.3.0.tar.gz',
                   size: mockTarGz.length,
                 },
                 {
-                  name: 'agy-wallpaper-prism-v2.2.0.tar.gz.sha256',
-                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.2.0/agy-wallpaper-prism-v2.2.0.tar.gz.sha256',
+                  name: 'agy-wallpaper-prism-v2.3.0.tar.gz.sha256',
+                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.3.0/agy-wallpaper-prism-v2.3.0.tar.gz.sha256',
                   size: Buffer.byteLength(mockShaText, 'utf8'),
                 },
               ],
@@ -4426,22 +4440,23 @@ async function main() {
       assert.notEqual(stResp.headers['access-control-allow-origin'], '*', '/api/update/status must NOT emit wildcard CORS');
       const stJson = stResp.json();
       assert.equal(stJson.hasUpdate, true, `Expected mock GitHub release hasUpdate=true, got ${JSON.stringify(stJson)}`);
-      assert.equal(stJson.latestVersion, '2.2.0');
+      assert.equal(stJson.latestVersion, '2.3.0');
       assert.equal(stJson.canAutoUpdate, true);
 
       const applyResp = await invokeServerInMemory(updSrv.server, {
         method: 'POST',
         url: '/api/update/apply',
         headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': UPD_TOKEN, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetVersion: '2.2.0' }),
+        body: JSON.stringify({ targetVersion: '2.3.0' }),
       });
       assert.equal(applyResp.status, 200, `Mock /api/update/apply expected 200, got ${applyResp.status}: ${applyResp.text()}`);
       const applyJson = applyResp.json();
       assert.equal(applyJson.ok, true);
-      assert.equal(applyJson.toVersion, '2.2.0');
-      assert.equal(JSON.parse(fs.readFileSync(path.join(swapPluginDir, 'plugin.json'), 'utf8')).version, '2.2.0');
+      assert.equal(applyJson.toVersion, '2.3.0');
+      assert.equal(JSON.parse(fs.readFileSync(path.join(swapPluginDir, 'plugin.json'), 'utf8')).version, '2.3.0');
       assert.equal(fs.readFileSync(path.join(swapPluginDir, '.prism-install-id'), 'utf8'), 'keep-this-install-id-12345\n', '.prism-install-id was NOT preserved across update swap!');
-      assert.ok(fs.existsSync(path.join(swapPluginDir, 'src', 'engine', 'updater.mjs')), 'New v2.2.0 file missing after swap');
+      assert.ok(fs.existsSync(path.join(swapPluginDir, 'src', 'engine', 'updater.mjs')), 'New v2.3.0 file missing after swap');
+      assert.ok(fs.existsSync(path.join(swapPluginDir, 'src', 'host', 'inspector-inject.js')), 'New v2.3.0 inspector-inject.js missing after swap');
     } finally {
       await updSrv.close().catch(() => {});
     }
@@ -4471,7 +4486,7 @@ async function main() {
       },
     });
     await assert.rejects(
-      () => rbUpdater.applyUpdate({ targetVersion: '2.2.0' }),
+      () => rbUpdater.applyUpdate({ targetVersion: '2.3.0' }),
       (err) => err && (err.code === 'ENOSPC' || String(err.message || '').includes('Simulated disk full')),
       'Mid-sync ENOSPC failure must reject after synchronous rollback',
     );
@@ -4479,7 +4494,7 @@ async function main() {
     assert.equal(JSON.parse(fs.readFileSync(path.join(rbPluginDir, 'plugin.json'), 'utf8')).version, '2.1.0', 'Rollback did not restore original plugin.json 2.1.0!');
     assert.equal(fs.readFileSync(path.join(rbPluginDir, '.prism-install-id'), 'utf8'), 'keep-this-install-id-12345\n', 'Rollback did not preserve .prism-install-id!');
 
-    return `SemVer + ${hostileCases.length} hostile tar rejections + Host 403 + Origin 403/Token 401/CT 415/Git 409 + offline fail-safe + swap (2.1.0->2.2.0) & ENOSPC rollback verified`;
+    return `SemVer + ${hostileCases.length} hostile tar rejections + Host 403 + Origin 403/Token 401/CT 415/Git 409 + offline fail-safe + swap (2.1.0->2.3.0) & ENOSPC rollback verified`;
   });
 
   await check('Req #7: `scripts/pack-release.mjs` 3-Artifact Release Bundle (`.tar.gz` + `.sha256` + `.zip`) & `dist/` Gitignore', '@exec-build-release / @exec-tests', async () => {
@@ -4492,8 +4507,8 @@ async function main() {
 
     const scratchDist = path.join(SCRATCH_ROOT, 'dist-verify');
     const pack = await packReleaseBundle({ sourceRoot: REPO_ROOT, outDir: scratchDist, skipBuild: true });
-    assert.equal(pack.version, '2.2.0');
-    assert.equal(pack.tag, 'v2.2.0');
+    assert.equal(pack.version, '2.3.0');
+    assert.equal(pack.tag, 'v2.3.0');
     assert.ok(fs.existsSync(pack.tarPath), 'Missing .tar.gz release artifact');
     assert.ok(fs.existsSync(pack.shaPath), 'Missing .tar.gz.sha256 release artifact');
     assert.ok(fs.existsSync(pack.zipPath), 'Missing .zip release artifact');
@@ -4508,11 +4523,13 @@ async function main() {
     assert.equal(zipBuf.readUInt32LE(0), 0x04034b50, 'ZIP missing PK\\x03\\x04 Local File Header magic');
     assert.ok(zipBuf.includes(Buffer.from([0x50, 0x4b, 0x05, 0x06])), 'ZIP missing PK\\x05\\x06 EOCD signature');
 
-    validateTarGzArchive(tarBuf, { expectedVersion: '2.2.0' });
+    validateTarGzArchive(tarBuf, { expectedVersion: '2.3.0' });
     const extractDir = path.join(SCRATCH_ROOT, 'dist-extract');
     extractSafeTarGz({ tarGzBuffer: tarBuf, destDir: extractDir });
-    const staged = validateStagedPlugin({ stageDir: extractDir, currentVersion: '2.1.0', requireNewerVersion: true });
-    assert.equal(staged.version, '2.2.0');
+    const staged = validateStagedPlugin({ stageDir: extractDir, currentVersion: '2.2.0', requireNewerVersion: true });
+    assert.equal(staged.version, '2.3.0');
+    assert.ok(staged.requiredFiles.includes('src/host/inspector-inject.js'), 'tar-safe REQUIRED_RUNTIME_FILES missing src/host/inspector-inject.js');
+    assert.ok(fs.existsSync(path.join(extractDir, 'src', 'host', 'inspector-inject.js')), 'Extracted bundle missing src/host/inspector-inject.js');
 
     // Verify `dist/` is gitignored so running `node scripts/pack-release.mjs` keeps working tree clean
     const ignored = execFileSync('git', ['check-ignore', 'dist/'], { cwd: REPO_ROOT, stdio: 'pipe' }).toString('utf8').trim();
@@ -5820,6 +5837,673 @@ async function main() {
     assert.deepEqual(killedPids, [{ pid: 24344, sig: 'SIGTERM' }], 'Expected SIGTERM only on verified legacy Prism orphan 24344');
 
     return `micro=${maxMicroBytes}B heartbeatLoads=0 yieldFlips=${hubState.flips} shutdown=403/401/200 sse>=4 cleaned=${cleanupOut.cleaned.map((c) => `${c.pid}:${c.method}`).join(',')}`;
+  });
+
+  await check('S2-10: `v2.3.0` CDP Live Host Region Picker E2E (`/host/<cap>/inspector.js`, `/api/inspector/{pick,cancel}` auth, live/static-css/manual + V1/V4, RPC 400/200, dual-SSE `aux`+`popout`, bootstrap <=6144B)', '@exec-v23-manifests', async () => {
+    const { REGION_IDS, SKIN_REGION_KEYS, PRISM_DOM } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href
+    );
+    assert.equal(PRISM_DOM.inspectorGlobal, '__agyPrismInspector', 'Missing PRISM_DOM.inspectorGlobal');
+    assert.strictEqual(SKIN_REGION_KEYS, REGION_IDS, 'SKIN_REGION_KEYS must alias REGION_IDS');
+    assert.equal(REGION_IDS.length, 8);
+
+    const { buildHostMicroBootstrap, buildInspectorCancelExpr, createPassiveCdpBridge, probeCdpPort } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs')).href
+    );
+
+    // 1) Confirm `buildHostMicroBootstrap` remains <= 6,144 B (0 B delta vs 6,121 B)
+    let maxMicroBytes = 0;
+    for (const startupMode of ['gentle-auto', 'static-css', 'manual']) {
+      for (const triggerMode of ['both', 'shortcut-only']) {
+        for (const skinEnabled of [true, false]) {
+          const expr = buildHostMicroBootstrap({
+            hostOrigin: 'https://127.0.0.1:65535',
+            capToken: 'c'.repeat(64),
+            triggerMode,
+            startupMode,
+            skinEnabled,
+          });
+          maxMicroBytes = Math.max(maxMicroBytes, Buffer.byteLength(expr, 'utf8'));
+        }
+      }
+    }
+    assert.ok(maxMicroBytes <= 6144, `buildHostMicroBootstrap exceeded 6144 B cap: ${maxMicroBytes} B`);
+
+    // 2) `GET /host/<capToken>/inspector.js` (403 bad token vs 200 valid token + security headers + boot JSON)
+    const badInsJs = await invokeServerInMemory(studio.server, {
+      method: 'GET',
+      url: '/host/invalid-token-0123456789abcdef/inspector.js',
+      headers: { Host: '127.0.0.1:53040' },
+    });
+    assert.equal(badInsJs.status, 403, `Expected 403 for bad inspector.js capToken, got ${badInsJs.status}`);
+
+    const okInsJs = await invokeServerInMemory(studio.server, {
+      method: 'GET',
+      url: `/host/${encodeURIComponent(studio.hostCapToken)}/inspector.js`,
+      headers: { Host: '127.0.0.1:53040', Origin: 'https://127.0.0.1:9443' },
+    });
+    assert.equal(okInsJs.status, 200, `GET /host/<cap>/inspector.js returned ${okInsJs.status}: ${okInsJs.text()}`);
+    assert.match(String(okInsJs.headers['content-type'] || ''), /javascript/i);
+    assert.ok(String(okInsJs.headers['cache-control'] || '').includes('no-store'), 'inspector.js missing Cache-Control: no-store');
+    assert.equal(okInsJs.headers['x-content-type-options'], 'nosniff', 'inspector.js missing X-Content-Type-Options: nosniff');
+    const insJsBody = okInsJs.text();
+    assert.ok(insJsBody.includes('window.__AGY_PRISM_INSPECTOR_BOOT__'), 'inspector.js missing __AGY_PRISM_INSPECTOR_BOOT__');
+    assert.ok(insJsBody.includes(`/host/${studio.hostCapToken}/rpc`), 'inspector.js boot JSON missing rpcUrl');
+    assert.ok(insJsBody.includes('__agyPrismInspector'), 'inspector.js missing __agyPrismInspector runtime');
+
+    // 3) Strict auth matrix (`403`/`401`/`415`/`204` OPTIONS) on `/api/inspector/pick` & `/api/inspector/cancel`
+    for (const route of ['/api/inspector/pick', '/api/inspector/cancel']) {
+      const badHost = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: route,
+        headers: { Host: 'evil.attacker.example:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      assert.equal(badHost.status, 403, `${route} bad Host expected 403, got ${badHost.status}`);
+      assert.equal(badHost.json().code, 'ERR_DNS_REBINDING');
+
+      const badOrigin = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: route,
+        headers: {
+          Host: '127.0.0.1:53040',
+          Origin: 'https://evil.example',
+          'X-Sidecar-Token': SIDECAR_TEST_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      });
+      assert.equal(badOrigin.status, 403, `${route} bad Origin expected 403, got ${badOrigin.status}`);
+      assert.equal(badOrigin.json().code, 'ERR_CSRF_ORIGIN');
+      assert.equal(badOrigin.headers['access-control-allow-origin'], undefined);
+
+      const queryTok = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: `${route}?token=${encodeURIComponent(SIDECAR_TEST_TOKEN)}`,
+        headers: { Host: '127.0.0.1:53040', 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      assert.equal(queryTok.status, 401, `${route} ?token= query without header expected 401, got ${queryTok.status}`);
+      assert.equal(queryTok.json().code, 'ERR_AUTH_TOKEN_REQUIRED');
+
+      const badCt = await invokeServerInMemory(studio.server, {
+        method: 'POST',
+        url: route,
+        headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'text/plain' },
+        body: '{}',
+      });
+      assert.equal(badCt.status, 415, `${route} text/plain expected 415, got ${badCt.status}`);
+
+      const optPreflight = await invokeServerInMemory(studio.server, {
+        method: 'OPTIONS',
+        url: route,
+        headers: { Host: '127.0.0.1:53040', Origin: 'http://127.0.0.1:53040' },
+      });
+      assert.equal(optPreflight.status, 204, `${route} OPTIONS preflight expected 204, got ${optPreflight.status}`);
+      assert.ok(String(optPreflight.headers['access-control-allow-methods'] || '').includes('POST'));
+    }
+
+    // When CDP bridge is unavailable (`startCdp: false` on `studio.server`), `/api/inspector/pick` returns 503 ERR_CDP_UNAVAILABLE
+    const cdpUnavailRes = await invokeServerInMemory(studio.server, {
+      method: 'POST',
+      url: '/api/inspector/pick',
+      headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': SIDECAR_TEST_TOKEN, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(cdpUnavailRes.status, 503, `Expected 503 ERR_CDP_UNAVAILABLE when startCdp=false, got ${cdpUnavailRes.status}`);
+    assert.equal(cdpUnavailRes.json().code, 'ERR_CDP_UNAVAILABLE');
+
+    // 4) Live Mock CDP Target Server + `createPrismStudioServer` E2E (`gentle-auto`, `static-css`, `manual`, V1, V4, RPC & Dual-SSE)
+    let cdpReqCount = 0;
+    let mockHubTargets = [];
+    const evaluatedExprs = [];
+    const handleCdpEval = (expr) => {
+      evaluatedExprs.push(expr);
+      if (expr.includes('document.readyState')) {
+        return { ready: true, w: 1440, h: 900, booted: false, hostBase: '', sseState: -1, skinVer: '', skin: false };
+      }
+      if (expr.includes('agy-prism-inspector-loader')) {
+        return { ok: true, mounted: true };
+      }
+      return true;
+    };
+    const encodeS210Ws = (text) => {
+      const payload = Buffer.from(text, 'utf8');
+      if (payload.length < 126) return Buffer.concat([Buffer.from([0x81, payload.length]), payload]);
+      const hdr = Buffer.alloc(4);
+      hdr[0] = 0x81;
+      hdr[1] = 126;
+      hdr.writeUInt16BE(payload.length, 2);
+      return Buffer.concat([hdr, payload]);
+    };
+    const s210CdpServer = http.createServer((req, res) => {
+      cdpReqCount += 1;
+      const addr = s210CdpServer.address();
+      const p = typeof addr === 'object' && addr ? addr.port : 0;
+      if (req.url === '/json/version') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ Browser: 'MockChrome/135.0', webSocketDebuggerUrl: `ws://127.0.0.1:${p}/devtools/browser/1` }));
+        return;
+      }
+      if (req.url === '/json/list') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(mockHubTargets));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    s210CdpServer.on('upgrade', (req, socket) => {
+      const key = req.headers['sec-websocket-key'];
+      const accept = createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+        `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
+      );
+      let wsBuf = Buffer.alloc(0);
+      socket.on('data', (chunk) => {
+        wsBuf = Buffer.concat([wsBuf, chunk]);
+        while (wsBuf.length >= 2) {
+          const masked = (wsBuf[1] & 0x80) !== 0;
+          let len = wsBuf[1] & 0x7f;
+          let offset = 2;
+          if (len === 126) {
+            if (wsBuf.length < 4) return;
+            len = wsBuf.readUInt16BE(2);
+            offset = 4;
+          } else if (len === 127) {
+            if (wsBuf.length < 10) return;
+            len = Number(wsBuf.readBigUInt64BE(2));
+            offset = 10;
+          }
+          const maskLen = masked ? 4 : 0;
+          if (wsBuf.length < offset + maskLen + len) return;
+          const payload = Buffer.alloc(len);
+          if (masked) {
+            const mask = wsBuf.subarray(offset, offset + 4);
+            for (let i = 0; i < len; i += 1) payload[i] = wsBuf[offset + 4 + i] ^ mask[i & 3];
+          } else {
+            wsBuf.copy(payload, 0, offset, offset + len);
+          }
+          const opcode = wsBuf[0] & 0x0f;
+          wsBuf = wsBuf.subarray(offset + maskLen + len);
+          if (opcode === 0x8) {
+            try { socket.end(); } catch {}
+            return;
+          }
+          if (opcode === 0x1) {
+            try {
+              const msg = JSON.parse(payload.toString('utf8'));
+              const val = handleCdpEval(String(msg?.params?.expression || ''));
+              socket.write(encodeS210Ws(JSON.stringify({ id: msg.id, result: { result: { value: val } } })));
+            } catch {}
+          }
+        }
+      });
+    });
+
+    let s210MockPort = 0;
+    try {
+      await new Promise((resolveListen, rejectListen) => {
+        s210CdpServer.once('error', rejectListen);
+        s210CdpServer.listen(0, '127.0.0.1', () => {
+          s210CdpServer.removeListener('error', rejectListen);
+          resolveListen();
+        });
+      });
+      s210MockPort = s210CdpServer.address().port;
+    } catch (err) {
+      if (err?.code !== 'EACCES' && err?.code !== 'EPERM') throw err;
+    }
+    const tcpOk = s210MockPort > 0 ? Boolean((await probeCdpPort(s210MockPort, '127.0.0.1', 500))?.ok) : false;
+
+    const prevDisableCdp = process.env.AGY_PRISM_DISABLE_CDP;
+    delete process.env.AGY_PRISM_DISABLE_CDP;
+
+    const s210HostCfg = path.join(SCRATCH_ROOT, 's210-host-config.json');
+    fs.writeFileSync(s210HostCfg, JSON.stringify({ plugins: { 'agy-wallpaper-prism': { enabled: true } } }), 'utf8');
+    const s210V1DataDir = path.join(SCRATCH_ROOT, 's210-v1-data');
+    const s210V1ProfileDir = path.join(SCRATCH_ROOT, 's210-v1-profile');
+    const s210DataDir = path.join(SCRATCH_ROOT, 's210-data');
+    const s210ProfileDir = path.join(SCRATCH_ROOT, 's210-profile');
+    fs.mkdirSync(s210V1DataDir, { recursive: true });
+    fs.mkdirSync(s210V1ProfileDir, { recursive: true });
+    fs.mkdirSync(s210DataDir, { recursive: true });
+    fs.mkdirSync(s210ProfileDir, { recursive: true });
+    fs.writeFileSync(path.join(s210V1ProfileDir, 'DevToolsActivePort'), `${s210MockPort || 9339}\n/devtools/browser/mock\n`, 'utf8');
+
+    const S210_TOK = 's210-inspector-token-2026';
+    let s210Srv = null;
+    let s210FallbackBridge = null;
+    const sseWatchers = [];
+    const openSseWatcher = (srv, channel) =>
+      new Promise((resolve, reject) => {
+        const ssePath = channel === 'popout' ? '/api/events?channel=popout' : '/api/events';
+        const socket = new Duplex({
+          read() {},
+          write(_chunk, _enc, cb) {
+            cb();
+          },
+        });
+        socket.remoteAddress = '127.0.0.1';
+        socket.writable = true;
+        socket.readable = true;
+        socket.setNoDelay = () => socket;
+
+        const req = new IncomingMessage(socket);
+        req.method = 'GET';
+        req.url = ssePath;
+        req.httpVersion = '1.1';
+        req.httpVersionMajor = 1;
+        req.httpVersionMinor = 1;
+        req.headers = { host: '127.0.0.1:53040', accept: 'text/event-stream', connection: 'keep-alive' };
+
+        const res = new ServerResponse(req);
+        let buf = '';
+        let opened = false;
+        let closed = false;
+        const markClosed = () => {
+          closed = true;
+        };
+        const watcher = {
+          channel,
+          getText: () => buf,
+          clear: () => {
+            buf = '';
+          },
+          isClosed: () => closed,
+          close: () => {
+            markClosed();
+            req.emit('close');
+            res.emit('close');
+          },
+        };
+        res.write = function patchedWrite(chunk, encoding, cb) {
+          if (chunk) buf += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+          if (!opened && buf.includes('event: state') && buf.includes('\n\n')) {
+            opened = true;
+            sseWatchers.push(watcher);
+            resolve(watcher);
+          }
+          if (typeof encoding === 'function') encoding();
+          else if (typeof cb === 'function') cb();
+          return true;
+        };
+        res.end = function patchedEnd(chunk, encoding, cb) {
+          if (chunk && typeof chunk !== 'function') buf += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+          markClosed();
+          res.emit('finish');
+          res.emit('close');
+          if (typeof chunk === 'function') chunk();
+          else if (typeof encoding === 'function') encoding();
+          else if (typeof cb === 'function') cb();
+          return res;
+        };
+        res.on('error', (err) => {
+          if (!opened) reject(err);
+          markClosed();
+        });
+        srv.server.emit('request', req, res);
+        queueMicrotask(() => req.push(null));
+      });
+
+    try {
+      if (tcpOk) {
+        // 4a) Guardrail V1: explicit `cdpPort > 0` MUST NOT fall back to `DevToolsActivePort`
+        const v1Srv = await createPrismStudioServer({
+          dataDir: s210V1DataDir,
+          token: 's210-v1-tok',
+          startCdp: true,
+          cdpPort: 1,
+          cdpPollMs: 0,
+          profileDir: s210V1ProfileDir,
+          hostConfigPath: s210HostCfg,
+          autoCheckUpdates: false,
+          inspectShortcuts: false,
+        });
+        try {
+          cdpReqCount = 0;
+          const v1Res = await invokeServerInMemory(v1Srv.server, {
+            method: 'POST',
+            url: '/api/inspector/pick',
+            headers: {
+              Host: '127.0.0.1:53040',
+              Origin: 'http://127.0.0.1:53040',
+              'X-Sidecar-Token': 's210-v1-tok',
+              'Content-Type': 'application/json',
+            },
+            body: '{}',
+          });
+          assert.equal(v1Res.status, 503, `V1 expected 503 ERR_CDP_UNAVAILABLE, got ${v1Res.status}: ${v1Res.text()}`);
+          assert.equal(v1Res.json().code, 'ERR_CDP_UNAVAILABLE');
+          assert.equal(cdpReqCount, 0, 'Guardrail V1 violated: explicit cdpPort=1 probed DevToolsActivePort!');
+        } finally {
+          await v1Srv.close().catch(() => {});
+        }
+
+        s210Srv = await createPrismStudioServer({
+          dataDir: s210DataDir,
+          token: S210_TOK,
+          startCdp: true,
+          cdpPort: s210MockPort,
+          cdpPollMs: 0,
+          profileDir: s210ProfileDir,
+          hostConfigPath: s210HostCfg,
+          autoCheckUpdates: false,
+          inspectShortcuts: false,
+        });
+      } else {
+        // Sandboxed TCP fallback: inproc shim for cdp-bridge HTTP/WS + V1 probe verification
+        const cdpSrc = fs.readFileSync(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs'), 'utf8');
+        const storeUrl = pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'store.mjs')).href;
+        const schemaUrl = pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href;
+        const patchedSrc = cdpSrc
+          .replace("import { request as httpRequest } from 'node:http';", 'const httpRequest = (...args) => globalThis.__prismS210HttpRequest(...args);')
+          .replace('../../src/engine/store.mjs', storeUrl)
+          .replace('../../src/shared/schema.mjs', schemaUrl);
+        const shimFile = path.join(SCRATCH_ROOT, 'cdp-bridge-s210-inproc.mjs');
+        fs.writeFileSync(shimFile, patchedSrc, 'utf8');
+        const shimMod = await import(`${pathToFileURL(shimFile).href}?t=${Date.now()}`);
+        const handleInprocWs = (socketOut, stateObj, chunk) => {
+          stateObj.buf = Buffer.concat([stateObj.buf, Buffer.from(chunk)]);
+          while (stateObj.buf.length >= 2) {
+            const masked = (stateObj.buf[1] & 0x80) !== 0;
+            let len = stateObj.buf[1] & 0x7f;
+            let offset = 2;
+            if (len === 126) { len = stateObj.buf.readUInt16BE(2); offset = 4; }
+            const maskLen = masked ? 4 : 0;
+            if (stateObj.buf.length < offset + maskLen + len) return;
+            const payload = Buffer.alloc(len);
+            if (masked) {
+              const mask = stateObj.buf.subarray(offset, offset + 4);
+              for (let i = 0; i < len; i += 1) payload[i] = stateObj.buf[offset + 4 + i] ^ mask[i & 3];
+            } else {
+              stateObj.buf.copy(payload, 0, offset, offset + len);
+            }
+            const opcode = stateObj.buf[0] & 0x0f;
+            stateObj.buf = stateObj.buf.subarray(offset + maskLen + len);
+            if (opcode === 0x1) {
+              const msg = JSON.parse(payload.toString('utf8'));
+              const val = handleCdpEval(String(msg?.params?.expression || ''));
+              socketOut.push(encodeS210Ws(JSON.stringify({ id: msg.id, result: { result: { value: val } } })));
+            }
+          }
+        };
+        globalThis.__prismS210HttpRequest = (opts, cb) => {
+          const listeners = new Map();
+          const reqObj = {
+            on(ev, fn) { const arr = listeners.get(ev) || []; arr.push(fn); listeners.set(ev, arr); return reqObj; },
+            emit(ev, ...args) { for (const fn of (listeners.get(ev) || []).slice()) fn(...args); },
+            destroy() {},
+            end() {
+              queueMicrotask(() => {
+                const portNum = Number(opts?.port || 0);
+                if (portNum === 1) { reqObj.emit('error', Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })); return; }
+                cdpReqCount += 1;
+                if (String(opts?.headers?.Upgrade || '').toLowerCase() === 'websocket') {
+                  const wsState = { buf: Buffer.alloc(0) };
+                  const clientSock = new Duplex({ read() {}, write(chunk, _e, done) { handleInprocWs(clientSock, wsState, chunk); done(); } });
+                  clientSock.setNoDelay = () => clientSock;
+                  reqObj.emit('upgrade', { statusCode: 101, headers: {} }, clientSock, Buffer.alloc(0));
+                  return;
+                }
+                const reqPath = String(opts?.path || '/');
+                const bodyStr = reqPath === '/json/version'
+                  ? JSON.stringify({ Browser: 'MockChrome/135.0', webSocketDebuggerUrl: 'ws://127.0.0.1:9339/devtools/browser/1' })
+                  : reqPath === '/json/list' ? JSON.stringify(mockHubTargets) : '';
+                const resListeners = new Map();
+                const resObj = {
+                  statusCode: bodyStr ? 200 : 404,
+                  setEncoding() {},
+                  resume() {},
+                  on(ev, fn) { const arr = resListeners.get(ev) || []; arr.push(fn); resListeners.set(ev, arr); return resObj; },
+                  emit(ev, ...args) { for (const fn of (resListeners.get(ev) || []).slice()) fn(...args); },
+                };
+                if (typeof cb === 'function') cb(resObj);
+                reqObj.emit('response', resObj);
+                queueMicrotask(() => {
+                  if (bodyStr) resObj.emit('data', Buffer.from(bodyStr, 'utf8'));
+                  resObj.emit('end');
+                });
+              });
+            },
+          };
+          return reqObj;
+        };
+        const v1Bridge = shimMod.createPassiveCdpBridge({
+          getEngineState: () => ({ config: { startupMode: 'manual' }, skinEnabled: false }),
+          hostScripts: { buildClientSkinPayload: () => ({}) },
+          getHostOrigin: () => 'http://127.0.0.1:53040',
+          capToken: 'v1-cap',
+          dataDir: s210V1DataDir,
+          pluginRoot: REPO_ROOT,
+          configPath: s210HostCfg,
+          profileDir: s210V1ProfileDir,
+          cdpPort: 1,
+          pollMs: 0,
+        });
+        cdpReqCount = 0;
+        const v1Out = await v1Bridge.startInspectorPick({ hostOrigin: 'http://127.0.0.1:53040', capToken: 'v1-cap' });
+        assert.equal(v1Out.ok, false);
+        assert.equal(v1Out.code, 'ERR_CDP_UNAVAILABLE');
+        assert.equal(cdpReqCount, 0, 'Guardrail V1 violated in shim');
+        await v1Bridge.stop({ preserveHostDom: true }).catch(() => {});
+
+        let srvRef = null;
+        s210FallbackBridge = shimMod.createPassiveCdpBridge({
+          getEngineState: () => srvRef.engine.getState ? srvRef.engine.getState() : { config: srvRef.engine.getConfig(), skinEnabled: srvRef.engine.getConfig()?.skinEnabled },
+          hostScripts: { buildClientSkinPayload: () => ({}) },
+          getHostOrigin: () => srvRef.origin,
+          capToken: 'fallback-cap',
+          dataDir: s210DataDir,
+          pluginRoot: REPO_ROOT,
+          configPath: s210HostCfg,
+          profileDir: s210ProfileDir,
+          cdpPort: 9339,
+          pollMs: 0,
+        });
+        s210Srv = await createPrismStudioServer({
+          dataDir: s210DataDir,
+          token: S210_TOK,
+          startCdp: false,
+          inspectorController: s210FallbackBridge,
+          hostConfigPath: s210HostCfg,
+          autoCheckUpdates: false,
+          inspectShortcuts: false,
+        });
+        srvRef = s210Srv;
+      }
+
+      const authHeaders = {
+        Host: '127.0.0.1:53040',
+        Origin: 'http://127.0.0.1:53040',
+        'X-Sidecar-Token': S210_TOK,
+        'Content-Type': 'application/json',
+      };
+
+      // 4b) Empty Hub target list -> 404 ERR_NO_HUB_TARGETS
+      mockHubTargets = [];
+      const noTargetRes = await invokeServerInMemory(s210Srv.server, {
+        method: 'POST',
+        url: '/api/inspector/pick',
+        headers: authHeaders,
+        body: '{}',
+      });
+      assert.equal(noTargetRes.status, 404, `Expected 404 ERR_NO_HUB_TARGETS, got ${noTargetRes.status}: ${noTargetRes.text()}`);
+      assert.equal(noTargetRes.json().code, 'ERR_NO_HUB_TARGETS');
+
+      // 4c) Ready Hub target + Dual-Channel SSE (`aux` + `popout`) across `gentle-auto`, `static-css`, and `manual`
+      const wsPort = s210MockPort || 9339;
+      mockHubTargets = [{
+        id: 's210-hub-1',
+        type: 'page',
+        title: 'Antigravity',
+        url: 'https://127.0.0.1:9443/workbench',
+        webSocketDebuggerUrl: `ws://127.0.0.1:${wsPort}/devtools/page/s210-hub-1`,
+      }];
+
+      const auxSse = await openSseWatcher(s210Srv, 'aux');
+      const popoutSse = await openSseWatcher(s210Srv, 'popout');
+
+      for (const mode of ['gentle-auto', 'static-css', 'manual']) {
+        await s210Srv.engine.updateConfig({ startupMode: mode, skinEnabled: mode !== 'manual' });
+        evaluatedExprs.length = 0;
+        auxSse.clear();
+        popoutSse.clear();
+
+        const pickRes = await invokeServerInMemory(s210Srv.server, {
+          method: 'POST',
+          url: '/api/inspector/pick',
+          headers: authHeaders,
+          body: '{}',
+        });
+        assert.equal(pickRes.status, 200, `POST /api/inspector/pick (${mode}) failed: ${pickRes.text()}`);
+        const pickJson = pickRes.json();
+        assert.equal(pickJson.ok, true);
+        assert.equal(pickJson.active, true);
+        assert.equal(pickJson.targetCount, 1);
+        assert.ok(
+          evaluatedExprs.some((e) => e.includes('agy-prism-inspector-loader') && e.includes(`/host/${s210Srv.hostCapToken}/inspector.js`)),
+          `(${mode}) evaluateTargetEphemeral did not inject <script id="agy-prism-inspector-loader">`,
+        );
+
+        const stRes = await invokeServerInMemory(s210Srv.server, {
+          method: 'GET',
+          url: '/api/status',
+          headers: { Host: '127.0.0.1:53040' },
+        });
+        assert.equal(stRes.json().inspectorStatus?.active, true, `(${mode}) /api/status inspectorStatus.active !== true`);
+
+        const cancelRes = await invokeServerInMemory(s210Srv.server, {
+          method: 'POST',
+          url: '/api/inspector/cancel',
+          headers: authHeaders,
+          body: '{}',
+        });
+        assert.equal(cancelRes.status, 200);
+        assert.equal(cancelRes.json().cancelled, true);
+        assert.equal(cancelRes.json().active, false);
+        assert.ok(
+          evaluatedExprs.some((e) => e.includes('agy-prism-inspector-overlay') && e.includes('studio-cancel')),
+          `(${mode}) cancelInspectorPick did not evaluate cleanup expr`,
+        );
+
+        const sseWait = Date.now() + 800;
+        while (Date.now() < sseWait) {
+          if (auxSse.getText().includes('event: inspector-cancelled') && popoutSse.getText().includes('event: inspector-cancelled')) break;
+          await sleep(20);
+        }
+        assert.ok(auxSse.getText().includes('event: inspector-cancelled'), `(${mode}) aux SSE missed inspector-cancelled`);
+        assert.ok(popoutSse.getText().includes('event: inspector-cancelled'), `(${mode}) popout SSE missed inspector-cancelled`);
+      }
+
+      // 4d) `/host/<capToken>/rpc` `inspector.picked`: invalid `regionId` -> 400 ERR_INVALID_REGION (0 SSE) vs valid -> 200 + dual-channel SSE
+      await s210Srv.engine.updateConfig({ startupMode: 'static-css', skinEnabled: true });
+      await invokeServerInMemory(s210Srv.server, {
+        method: 'POST',
+        url: '/api/inspector/pick',
+        headers: authHeaders,
+        body: '{}',
+      });
+      await sleep(30);
+      auxSse.clear();
+      popoutSse.clear();
+
+      for (const badRegion of ['', 'invalid-zone', '__proto__', 123]) {
+        const badRpc = await invokeServerInMemory(s210Srv.server, {
+          method: 'POST',
+          url: `/host/${encodeURIComponent(s210Srv.hostCapToken)}/rpc`,
+          headers: { Host: '127.0.0.1:53040', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: 'bad-pick', method: 'inspector.picked', params: { regionId: badRegion } }),
+        });
+        assert.equal(badRpc.status, 400, `Invalid regionId=${JSON.stringify(badRegion)} expected 400, got ${badRpc.status}`);
+        assert.equal(badRpc.json().ok, false);
+        assert.equal(badRpc.json().code, 'ERR_INVALID_REGION');
+      }
+      await sleep(40);
+      assert.equal(auxSse.getText().includes('inspector-picked'), false, 'Invalid regionId broadcast inspector-picked to aux SSE!');
+      assert.equal(popoutSse.getText().includes('inspector-picked'), false, 'Invalid regionId broadcast inspector-picked to popout SSE!');
+
+      const validRpc = await invokeServerInMemory(s210Srv.server, {
+        method: 'POST',
+        url: `/host/${encodeURIComponent(s210Srv.hostCapToken)}/rpc`,
+        headers: { Host: '127.0.0.1:53040', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'ok-pick',
+          method: 'inspector.picked',
+          params: { regionId: 'composer', matchedBy: 'composer:dom', selector: '#antigravity.agentSidePanelInputBox' },
+        }),
+      });
+      assert.equal(validRpc.status, 200, `Valid inspector.picked RPC failed: ${validRpc.text()}`);
+      assert.equal(validRpc.json().ok, true);
+      assert.equal(validRpc.json().result?.regionId, 'composer');
+
+      const pickedDeadline = Date.now() + 800;
+      while (Date.now() < pickedDeadline) {
+        if (auxSse.getText().includes('event: inspector-picked') && popoutSse.getText().includes('event: inspector-picked')) break;
+        await sleep(20);
+      }
+      assert.ok(auxSse.getText().includes('event: inspector-picked') && auxSse.getText().includes('"regionId":"composer"'), 'Aux SSE did not receive inspector-picked composer');
+      assert.ok(popoutSse.getText().includes('event: inspector-picked') && popoutSse.getText().includes('"regionId":"composer"'), 'Popout SSE did not receive inspector-picked composer');
+
+      const stAfterPick = await invokeServerInMemory(s210Srv.server, {
+        method: 'GET',
+        url: '/api/status',
+        headers: { Host: '127.0.0.1:53040' },
+      });
+      assert.equal(stAfterPick.json().inspectorStatus?.active, false, 'inspectorStatus.active should clear after inspector.picked');
+      assert.equal(stAfterPick.json().inspectorStatus?.lastPickedRegion, 'composer');
+
+      // 4e) `/host/<capToken>/rpc` `inspector.cancelled` -> dual-channel SSE & clear active
+      await invokeServerInMemory(s210Srv.server, { method: 'POST', url: '/api/inspector/pick', headers: authHeaders, body: '{}' });
+      await sleep(30);
+      auxSse.clear();
+      popoutSse.clear();
+      const cancelRpc = await invokeServerInMemory(s210Srv.server, {
+        method: 'POST',
+        url: `/host/${encodeURIComponent(s210Srv.hostCapToken)}/rpc`,
+        headers: { Host: '127.0.0.1:53040', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'cancel-1', method: 'inspector.cancelled', params: { reason: 'escape' } }),
+      });
+      assert.equal(cancelRpc.status, 200);
+      assert.equal(cancelRpc.json().ok, true);
+      const cancelWait = Date.now() + 800;
+      while (Date.now() < cancelWait) {
+        if (auxSse.getText().includes('event: inspector-cancelled') && popoutSse.getText().includes('event: inspector-cancelled')) break;
+        await sleep(20);
+      }
+      assert.ok(auxSse.getText().includes('event: inspector-cancelled') && auxSse.getText().includes('"reason":"escape"'));
+      assert.ok(popoutSse.getText().includes('event: inspector-cancelled') && popoutSse.getText().includes('"reason":"escape"'));
+
+      const stAfterCancel = await invokeServerInMemory(s210Srv.server, { method: 'GET', url: '/api/status', headers: { Host: '127.0.0.1:53040' } });
+      assert.equal(stAfterCancel.json().inspectorStatus?.active, false);
+
+      // 4f) Guardrail V4: `manual` mode `stop({ preserveHostDom: false })` clears `lastInspectorTargets` & cleans host overlay
+      await s210Srv.engine.updateConfig({ startupMode: 'manual', skinEnabled: false });
+      await invokeServerInMemory(s210Srv.server, { method: 'POST', url: '/api/inspector/pick', headers: authHeaders, body: '{}' });
+      evaluatedExprs.length = 0;
+      for (const w of sseWatchers) w.close();
+      await s210Srv.close({ preserveHostDom: false });
+      s210Srv = null;
+      if (s210FallbackBridge) {
+        await s210FallbackBridge.stop({ preserveHostDom: false }).catch(() => {});
+      }
+      assert.ok(
+        evaluatedExprs.some((e) => e.includes('agy-prism-inspector-overlay') && e.includes('teardown')),
+        'Guardrail V4: stop() did not evaluate inspector teardown across lastInspectorTargets in manual mode',
+      );
+      assert.ok(buildInspectorCancelExpr('teardown').includes('agy-prism-inspector-overlay'));
+    } finally {
+      for (const w of sseWatchers) { try { w.close(); } catch {} }
+      delete globalThis.__prismS210HttpRequest;
+      if (s210FallbackBridge) await s210FallbackBridge.stop({ preserveHostDom: true }).catch(() => {});
+      if (s210Srv) await s210Srv.close().catch(() => {});
+      if (prevDisableCdp === undefined) delete process.env.AGY_PRISM_DISABLE_CDP;
+      else process.env.AGY_PRISM_DISABLE_CDP = prevDisableCdp;
+      await new Promise((r) => s210CdpServer.close(() => r())).catch(() => {});
+    }
+
+    return `inspector.js(403/200+no-store+nosniff) + strict(403/401/415/204) + V1 + 503/404 + live/static-css/manual + RPC(400/200) + dual-SSE + V4 + boot=${maxMicroBytes}B`;
   });
 
   // =========================================================================
@@ -9500,6 +10184,809 @@ async function main() {
         await browser.closePage(hubPage);
         await browser.closePage(popoutPage);
         await browser.closePage(studioPage);
+      }
+    });
+
+    await check('S3-07: `v2.3.0` Inspector Script VM (V2 `boot.rpcUrl`, detach guard, 0 `<body>` mutations, `pointer-events:none`, 8-region `hitTestAt`, Esc/right-click) + Studio UI Picker & V3 `Escape` Priority E2E', '@exec-v23-manifests', async () => {
+      // ---- Part A: Pure `vm.Script` + Mock DOM test of `src/host/inspector-inject.js` ----
+      const inspectorSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'inspector-inject.js'), 'utf8');
+      const compiledInspector = new vm.Script(inspectorSrc, { filename: 'src/host/inspector-inject.js' });
+
+      const splitSimpleChain = (s) => {
+        const parts = [];
+        let cur = '';
+        let depthP = 0;
+        let depthB = 0;
+        for (let i = 0; i < s.length; i += 1) {
+          const ch = s[i];
+          if (ch === '(') depthP += 1;
+          else if (ch === ')' && depthP > 0) depthP -= 1;
+          else if (ch === '[') depthB += 1;
+          else if (ch === ']' && depthB > 0) depthB -= 1;
+          if (depthP === 0 && depthB === 0 && (ch === '>' || /\s/.test(ch))) {
+            if (cur) { parts.push(cur); cur = ''; }
+            if (ch === '>') parts.push('>');
+          } else {
+            cur += ch;
+          }
+        }
+        if (cur) parts.push(cur);
+        const tokens = [];
+        for (let i = 0; i < parts.length; i += 1) {
+          if (parts[i] === '>') continue;
+          const prevIsGt = i > 0 && parts[i - 1] === '>';
+          tokens.push({ sel: parts[i], comb: tokens.length === 0 ? null : prevIsGt ? '>' : ' ' });
+        }
+        return tokens;
+      };
+      const splitTopCommas = (s) => {
+        const out = [];
+        let cur = '';
+        let depthP = 0;
+        let depthB = 0;
+        for (let i = 0; i < s.length; i += 1) {
+          const ch = s[i];
+          if (ch === '(') depthP += 1;
+          else if (ch === ')' && depthP > 0) depthP -= 1;
+          else if (ch === '[') depthB += 1;
+          else if (ch === ']' && depthB > 0) depthB -= 1;
+          if (ch === ',' && depthP === 0 && depthB === 0) {
+            if (cur.trim()) out.push(cur.trim());
+            cur = '';
+          } else {
+            cur += ch;
+          }
+        }
+        if (cur.trim()) out.push(cur.trim());
+        return out;
+      };
+      const matchSingleCompound = (el, compound) => {
+        if (!el || el.nodeType !== 1) return false;
+        let rest = compound.trim();
+        while (rest.length > 0) {
+          if (rest.startsWith(':not(')) {
+            let d = 1; let i = 5;
+            while (i < rest.length && d > 0) { if (rest[i] === '(') d += 1; else if (rest[i] === ')') d -= 1; i += 1; }
+            const inner = rest.slice(5, i - 1);
+            if (matchSelectorList(el, inner)) return false;
+            rest = rest.slice(i);
+            continue;
+          }
+          if (rest.startsWith(':is(')) {
+            let d = 1; let i = 4;
+            while (i < rest.length && d > 0) { if (rest[i] === '(') d += 1; else if (rest[i] === ')') d -= 1; i += 1; }
+            const inner = rest.slice(4, i - 1);
+            if (!matchSelectorList(el, inner)) return false;
+            rest = rest.slice(i);
+            continue;
+          }
+          if (rest.startsWith(':first-child')) {
+            const kids = el.parentNode?.children || [];
+            if (kids[0] !== el) return false;
+            rest = rest.slice(12);
+            continue;
+          }
+          if (rest.startsWith(':last-child')) {
+            const kids = el.parentNode?.children || [];
+            if (kids[kids.length - 1] !== el) return false;
+            rest = rest.slice(11);
+            continue;
+          }
+          if (rest.startsWith('[')) {
+            const endB = rest.indexOf(']');
+            const expr = rest.slice(1, endB);
+            const eqIdx = expr.indexOf('=');
+            if (eqIdx === -1) {
+              if (!el.hasAttribute(expr.trim())) return false;
+            } else {
+              const isSub = expr[eqIdx - 1] === '*';
+              const attr = (isSub ? expr.slice(0, eqIdx - 1) : expr.slice(0, eqIdx)).trim();
+              const expected = expr.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+              const actual = el.getAttribute(attr);
+              if (actual === null) return false;
+              if (isSub ? !actual.includes(expected) : actual !== expected) return false;
+            }
+            rest = rest.slice(endB + 1);
+            continue;
+          }
+          if (rest.startsWith('#')) {
+            const m = /^#((?:\\.|[A-Za-z0-9_-])+)/.exec(rest);
+            if (!m) return false;
+            const idVal = m[1].replace(/\\/g, '');
+            if (el.id !== idVal) return false;
+            rest = rest.slice(m[0].length);
+            continue;
+          }
+          if (rest.startsWith('.')) {
+            const m = /^\.([A-Za-z0-9_-]+)/.exec(rest);
+            if (!m) return false;
+            const clsList = String(el.className || '').split(/\s+/).filter(Boolean);
+            if (!clsList.includes(m[1])) return false;
+            rest = rest.slice(m[0].length);
+            continue;
+          }
+          if (rest.startsWith('*')) {
+            rest = rest.slice(1);
+            continue;
+          }
+          const tm = /^[A-Za-z][A-Za-z0-9_-]*/.exec(rest);
+          if (!tm) return false;
+          if (String(el.tagName || '').toLowerCase() !== tm[0].toLowerCase()) return false;
+          rest = rest.slice(tm[0].length);
+        }
+        return true;
+      };
+      const matchComplex = (el, complexSel) => {
+        const toks = splitSimpleChain(complexSel);
+        if (toks.length === 0) return false;
+        if (!matchSingleCompound(el, toks[toks.length - 1].sel)) return false;
+        let cur = el;
+        for (let i = toks.length - 1; i > 0; i -= 1) {
+          const comb = toks[i].comb;
+          const parentSel = toks[i - 1].sel;
+          if (comb === '>') {
+            cur = cur.parentElement;
+            if (!cur || !matchSingleCompound(cur, parentSel)) return false;
+          } else {
+            let anc = cur.parentElement;
+            let hit = false;
+            while (anc) {
+              if (matchSingleCompound(anc, parentSel)) { hit = true; break; }
+              anc = anc.parentElement;
+            }
+            if (!hit) return false;
+            cur = anc;
+          }
+        }
+        return true;
+      };
+      function matchSelectorList(el, selList) {
+        if (!el || el.nodeType !== 1 || !selList) return false;
+        for (const s of splitTopCommas(selList)) {
+          if (matchComplex(el, s)) return true;
+        }
+        return false;
+      }
+
+      let vmBodyMutations = 0;
+      const vmDocRoot = {};
+      const mkVmEl = (tag, { id = '', className = '', attrs = {}, rect = null, style = {} } = {}) => {
+        const attrMap = new Map(Object.entries(attrs));
+        const el = {
+          nodeType: 1,
+          tagName: String(tag).toUpperCase(),
+          id,
+          _className: className,
+          get className() { return this._className; },
+          set className(v) {
+            if (this._isBody) vmBodyMutations += 1;
+            this._className = String(v);
+          },
+          textContent: '',
+          children: [],
+          parentNode: null,
+          get parentElement() { return this.parentNode && this.parentNode.nodeType === 1 ? this.parentNode : null; },
+          style: { ...style },
+          _rect: rect,
+          setAttribute(k, v) {
+            if (this._isBody) vmBodyMutations += 1;
+            attrMap.set(String(k), String(v));
+          },
+          getAttribute(k) { return attrMap.has(String(k)) ? attrMap.get(String(k)) : null; },
+          hasAttribute(k) { return attrMap.has(String(k)); },
+          removeAttribute(k) {
+            if (this._isBody) vmBodyMutations += 1;
+            attrMap.delete(String(k));
+          },
+          appendChild(ch) {
+            ch.parentNode = this;
+            this.children.push(ch);
+            return ch;
+          },
+          removeChild(ch) {
+            const idx = this.children.indexOf(ch);
+            if (idx >= 0) this.children.splice(idx, 1);
+            ch.parentNode = null;
+            return ch;
+          },
+          remove() {
+            if (this.parentNode) this.parentNode.removeChild(this);
+          },
+          getBoundingClientRect() {
+            return this._rect || { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 };
+          },
+          matches(sel) { return matchSelectorList(this, sel); },
+          closest(sel) {
+            let cur = this;
+            while (cur && cur.nodeType === 1) {
+              if (matchSelectorList(cur, sel)) return cur;
+              cur = cur.parentElement;
+            }
+            return null;
+          },
+          querySelector(sel) {
+            return this.querySelectorAll(sel)[0] || null;
+          },
+          querySelectorAll(sel) {
+            const out = [];
+            const walk = (node) => {
+              for (const ch of node.children) {
+                if (matchSelectorList(ch, sel)) out.push(ch);
+                walk(ch);
+              }
+            };
+            walk(this);
+            return out;
+          },
+        };
+        return el;
+      };
+
+      const mkRectObj = (l, t, w, h) => ({ left: l, top: t, width: w, height: h, right: l + w, bottom: t + h });
+      const vmHtml = mkVmEl('HTML', { rect: mkRectObj(0, 0, 1440, 900) });
+      vmDocRoot.root = vmHtml;
+      const vmHead = mkVmEl('HEAD');
+      const vmBody = mkVmEl('BODY', { rect: mkRectObj(0, 0, 1440, 900) });
+      vmBody._isBody = true;
+      vmHtml.appendChild(vmHead);
+      vmHtml.appendChild(vmBody);
+
+      const vmShell = mkVmEl('DIV', { className: 'agy-shell', rect: mkRectObj(0, 0, 1440, 900) });
+      const vmTopbar = mkVmEl('HEADER', { attrs: { 'data-testid': 'title-menu-bar' }, rect: mkRectObj(0, 0, 1440, 35) });
+      const vmHiddenDropdown = mkVmEl('DIV', {
+        id: 'hub-title-menu-dropdown',
+        className: 'surface-opaque bg-sidebar',
+        attrs: { 'data-browser-occluder': 'true' },
+        rect: mkRectObj(14, 35, 200, 90),
+        style: { visibility: 'hidden', display: 'block', opacity: '1' },
+      });
+      vmTopbar.appendChild(vmHiddenDropdown);
+      const vmSplit = mkVmEl('DIV', { attrs: { 'data-testid': 'sidebar-split' }, rect: mkRectObj(0, 35, 1440, 865) });
+      const vmSidebar = mkVmEl('DIV', { rect: mkRectObj(0, 35, 228, 865) });
+      const vmAuxSplit = mkVmEl('DIV', { attrs: { 'data-testid': 'aux-pane-split' }, rect: mkRectObj(228, 35, 1212, 865) });
+      const vmWorkspace = mkVmEl('MAIN', { rect: mkRectObj(228, 35, 802, 865) });
+      const vmCard = mkVmEl('DIV', { className: 'msg-user bg-card', rect: mkRectObj(260, 220, 420, 110) });
+      const vmComposerOuter = mkVmEl('DIV', { attrs: { 'data-testid': 'agent-input-box' }, rect: mkRectObj(256, 740, 746, 130) });
+      const vmComposerInner = mkVmEl('DIV', { id: 'antigravity.agentSidePanelInputBox', rect: mkRectObj(258, 742, 742, 126) });
+      const vmComposerBtn = mkVmEl('BUTTON', { id: 'vm-host-btn', rect: mkRectObj(500, 800, 60, 26) });
+      vmComposerInner.appendChild(vmComposerBtn);
+      vmComposerOuter.appendChild(vmComposerInner);
+      vmWorkspace.appendChild(vmCard);
+      vmWorkspace.appendChild(vmComposerOuter);
+      const vmRightPane = mkVmEl('ASIDE', { rect: mkRectObj(1030, 35, 410, 865) });
+      vmAuxSplit.appendChild(vmWorkspace);
+      vmAuxSplit.appendChild(vmRightPane);
+      vmSplit.appendChild(vmSidebar);
+      vmSplit.appendChild(vmAuxSplit);
+      const vmPopover = mkVmEl('DIV', {
+        id: 'vm-visible-popover',
+        className: 'agy-popover',
+        attrs: { role: 'menu' },
+        rect: mkRectObj(40, 80, 200, 130),
+        style: { display: 'block', visibility: 'visible', opacity: '1' },
+      });
+      vmShell.appendChild(vmTopbar);
+      vmShell.appendChild(vmSplit);
+      vmBody.appendChild(vmShell);
+      vmBody.appendChild(vmPopover);
+
+      const findById = (n, id) => {
+        if (n.id === id) return n;
+        for (const ch of n.children) {
+          const hit = findById(ch, id);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const vmListeners = new Map();
+      const vmFetchCalls = [];
+      let staleCallCount = 0;
+      const vmDoc = {
+        documentElement: vmHtml,
+        head: vmHead,
+        body: vmBody,
+        createElement: (t) => mkVmEl(t),
+        getElementById: (id) => findById(vmHtml, id),
+        contains: (target) => {
+          let c = target;
+          while (c) {
+            if (c === vmHtml) return true;
+            c = c.parentNode;
+          }
+          return false;
+        },
+        querySelector: (sel) => vmHtml.querySelector(sel),
+        querySelectorAll: (sel) => vmHtml.querySelectorAll(sel),
+        elementsFromPoint: (x, y) => {
+          const hits = [];
+          const walk = (node) => {
+            const r = node.getBoundingClientRect();
+            if (node.nodeType === 1 && r.width >= 2 && r.height >= 2 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+              hits.push(node);
+            }
+            for (const ch of node.children) walk(ch);
+          };
+          walk(vmBody);
+          return hits.reverse();
+        },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+      const vmWin = {
+        document: vmDoc,
+        innerWidth: 1440,
+        innerHeight: 900,
+        navigator: {
+          language: 'zh-CN',
+          windowControlsOverlay: {
+            visible: true,
+            getTitlebarAreaRect: () => ({ x: 0, y: 0, width: 1300, height: 35, left: 0, top: 0, right: 1300, bottom: 35 }),
+          },
+        },
+        getComputedStyle: (el) => ({
+          display: el?.style?.display || 'block',
+          visibility: el?.style?.visibility || 'visible',
+          opacity: el?.style?.opacity || '1',
+          getPropertyValue: () => '',
+        }),
+        addEventListener(type, fn, opts) {
+          const arr = vmListeners.get(type) || [];
+          arr.push({ fn, capture: Boolean(opts === true || opts?.capture) });
+          vmListeners.set(type, arr);
+        },
+        removeEventListener(type, fn, opts) {
+          const cap = Boolean(opts === true || opts?.capture);
+          const arr = vmListeners.get(type) || [];
+          vmListeners.set(type, arr.filter((e) => !(e.fn === fn && e.capture === cap)));
+        },
+        requestAnimationFrame: (cb) => setTimeout(cb, 0),
+        cancelAnimationFrame: (id) => clearTimeout(id),
+        setTimeout,
+        clearTimeout,
+        __AGY_PRISM_INSPECTOR_BOOT__: {
+          rpcUrl: 'http://127.0.0.1:58999/host/fresh-v23-token/rpc',
+          capToken: 'fresh-v23-token',
+          lang: 'zh',
+          timeoutMs: 30000,
+        },
+        __agyPrismCall: () => {
+          staleCallCount += 1;
+          return Promise.resolve({ ok: false });
+        },
+        fetch: async (url, init) => {
+          vmFetchCalls.push({ url: String(url), headers: init?.headers || {}, body: JSON.parse(String(init?.body || '{}')) });
+          return { ok: true, json: async () => ({ ok: true }) };
+        },
+      };
+      vmWin.window = vmWin;
+      vmWin.top = vmWin;
+      const vmCtx = vm.createContext({
+        window: vmWin,
+        document: vmDoc,
+        navigator: vmWin.navigator,
+        getComputedStyle: vmWin.getComputedStyle,
+        setTimeout,
+        clearTimeout,
+        Date,
+        Math,
+        Number,
+        String,
+        Boolean,
+        Promise,
+      });
+      const dispatchVmWin = (type, extra = {}) => {
+        const ev = {
+          type,
+          clientX: 0,
+          clientY: 0,
+          button: 0,
+          key: '',
+          target: vmComposerBtn,
+          defaultPrevented: false,
+          stopImmediateCount: 0,
+          preventDefault() { this.defaultPrevented = true; },
+          stopPropagation() {},
+          stopImmediatePropagation() { this.stopImmediateCount += 1; },
+          ...extra,
+        };
+        for (const entry of [...(vmListeners.get(type) || [])]) {
+          entry.fn(ev);
+        }
+        return ev;
+      };
+
+      compiledInspector.runInContext(vmCtx);
+      assert.equal(vmWin.__agyPrismInspector.version, '2.3.0');
+      assert.equal(vmWin.__agyPrismInspector.active(), true);
+      assert.equal(vmHtml.getAttribute('data-agy-prism-inspector'), 'picking');
+      assert.equal(vmBodyMutations, 0, `#15 CN l10n violated: inspector mutated <body> ${vmBodyMutations} times!`);
+
+      const vmOverlay = vmDoc.getElementById('agy-prism-inspector-overlay');
+      const vmHud = vmDoc.getElementById('agy-prism-inspector-hud');
+      assert.ok(vmOverlay && vmHud, 'Missing inspector overlay or HUD');
+      assert.equal(vmOverlay.style.pointerEvents, 'none');
+      assert.equal(vmHud.style.pointerEvents, 'none');
+      assert.equal(vmOverlay.className, 'agy-prism-inspector-overlay');
+      assert.equal(vmHud.className, 'agy-prism-inspector-hud');
+      assert.equal(vmOverlay.getAttribute('translate'), 'no');
+      assert.equal(vmOverlay.getAttribute('data-ag-no-i18n'), '1');
+
+      // 8-region hitTestAt + hidden popover skip
+      const expectedHits = [
+        [100, 120, 'popover'],
+        [1360, 16, 'wco'],
+        [500, 16, 'topbar'],
+        [520, 810, 'composer'],
+        [340, 260, 'card'],
+        [100, 400, 'sidebar'],
+        [1200, 200, 'rightPane'],
+        [600, 500, 'workspace'],
+      ];
+      for (const [hx, hy, expRegion] of expectedHits) {
+        const hit = vmWin.__agyPrismInspector.hitTestAt(hx, hy);
+        assert.equal(hit?.regionId, expRegion, `hitTestAt(${hx}, ${hy}) expected "${expRegion}", got ${JSON.stringify(hit)}`);
+      }
+      // Hidden dropdown at (25, 45) must NOT match popover; it falls through to sidebar
+      assert.notEqual(vmWin.__agyPrismInspector.hitTestAt(25, 45)?.regionId, 'popover', 'Hidden #hub-title-menu-dropdown must be skipped');
+
+      // Capture left-click on composer -> Guardrail V2 boot.rpcUrl + self-teardown
+      const clickEv = dispatchVmWin('click', { clientX: 520, clientY: 810, button: 0, target: vmComposerBtn });
+      assert.equal(clickEv.defaultPrevented, true);
+      assert.ok(clickEv.stopImmediateCount >= 1);
+      assert.equal(staleCallCount, 0, 'Guardrail V2 violated: fell back to stale __agyPrismCall instead of boot.rpcUrl!');
+      assert.equal(vmFetchCalls.length, 1);
+      assert.equal(vmFetchCalls[0].url, 'http://127.0.0.1:58999/host/fresh-v23-token/rpc');
+      assert.equal(vmFetchCalls[0].body.method, 'inspector.picked');
+      assert.equal(vmFetchCalls[0].body.params.regionId, 'composer');
+      assert.equal(vmWin.__agyPrismInspector, undefined);
+
+      // Re-run -> Escape cancel
+      compiledInspector.runInContext(vmCtx);
+      const escEv = dispatchVmWin('keydown', { key: 'Escape' });
+      assert.equal(escEv.defaultPrevented, true);
+      assert.equal(vmFetchCalls.length, 2);
+      assert.equal(vmFetchCalls[1].body.method, 'inspector.cancelled');
+      assert.equal(vmFetchCalls[1].body.params.reason, 'escape');
+
+      // Re-run -> right-click pointerdown cancel + contextmenu swallow
+      compiledInspector.runInContext(vmCtx);
+      const rDownEv = dispatchVmWin('pointerdown', { clientX: 500, clientY: 500, button: 2 });
+      assert.equal(rDownEv.defaultPrevented, true);
+      assert.equal(vmFetchCalls.length, 3);
+      assert.equal(vmFetchCalls[2].body.method, 'inspector.cancelled');
+      assert.equal(vmFetchCalls[2].body.params.reason, 'contextmenu');
+      const lateCtxEv = dispatchVmWin('contextmenu', { clientX: 500, clientY: 500 });
+      assert.equal(lateCtxEv.defaultPrevented, true, 'Late contextmenu after right-click cancel should be swallowed once');
+
+      // Re-run -> Guardrail V2 overlay detach guard (external panic strip removes overlay -> never swallow next click!)
+      compiledInspector.runInContext(vmCtx);
+      vmDoc.getElementById('agy-prism-inspector-overlay').remove();
+      const postDetachClick = dispatchVmWin('click', { clientX: 520, clientY: 810, button: 0, target: vmComposerBtn });
+      assert.equal(postDetachClick.defaultPrevented, false, 'Guardrail V2 detach guard failed: swallowed click after overlay removal!');
+      assert.equal(vmWin.__agyPrismInspector, undefined, 'Guardrail V2 detach guard did not tear down singleton');
+
+      // ---- Part B: `src/studio-ui/` Integration & Guardrail V3 Audit ----
+      const stateUiSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'studio-ui', 'state.mjs'), 'utf8');
+      const appUiSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'studio-ui', 'app.mjs'), 'utf8');
+      const skinUiSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'studio-ui', 'tabs', 'skin-regions.mjs'), 'utf8');
+      const canvasUiSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'studio-ui', 'editor', 'visual-canvas.mjs'), 'utf8');
+
+      assert.ok(stateUiSrc.includes('export async function startInspectorPick'), 'state.mjs missing startInspectorPick');
+      assert.ok(stateUiSrc.includes('export async function cancelInspectorPick'), 'state.mjs missing cancelInspectorPick');
+      assert.ok(stateUiSrc.includes('inspectorPicking: false'), 'state.mjs store missing inspectorPicking');
+      assert.match(stateUiSrc, /if\s*\(\s*s\.inspectorStatus\s*&&\s*typeof\s+s\.inspectorStatus\s*===\s*['"]object['"]\s*\)/, 'state.mjs missing Guardrail V3 inspectorStatus object check');
+
+      assert.ok(appUiSrc.includes("addEventListener('inspector-picked'"), 'app.mjs missing inspector-picked SSE listener');
+      assert.ok(appUiSrc.includes("addEventListener('inspector-cancelled'"), 'app.mjs missing inspector-cancelled SSE listener');
+      assert.ok(appUiSrc.includes("addEventListener('inspector-status'"), 'app.mjs missing inspector-status SSE listener');
+      assert.ok(appUiSrc.includes('startInspectorPick') && appUiSrc.includes('cancelInspectorPick'), 'app.mjs missing picker action handlers');
+      const escBlockMatch = /if\s*\(\s*e\.key\s*===\s*['"]Escape['"]\s*\)\s*\{([\s\S]{0,600})/.exec(appUiSrc);
+      assert.ok(escBlockMatch, 'app.mjs missing Escape handler');
+      const idxInsEsc = escBlockMatch[1].indexOf('store.inspectorPicking');
+      const idxModEsc = escBlockMatch[1].indexOf('store.editorModalOpen');
+      const idxArmEsc = escBlockMatch[1].indexOf('store.armedConfirm');
+      assert.ok(idxInsEsc !== -1 && idxModEsc !== -1 && idxInsEsc < idxModEsc && idxInsEsc < idxArmEsc, 'Guardrail V3 violated: store.inspectorPicking must be checked BEFORE editorModalOpen and armedConfirm on Escape');
+
+      assert.ok(skinUiSrc.includes('pick-host-region') && skinUiSrc.includes('cancel-host-pick') && skinUiSrc.includes('prism-skin-picker-banner'));
+      assert.ok(canvasUiSrc.includes('pick-host-region') && canvasUiSrc.includes('cancel-host-pick') && canvasUiSrc.includes('prism-ve-picker-banner'));
+
+      // ---- Part C: Headless Chrome E2E (`live` + `static-css` + CN L10n + Studio/Popout + V3 `Escape` Priority) ----
+      const s307DataDir = path.join(SCRATCH_ROOT, 's307-studio-data');
+      fs.mkdirSync(s307DataDir, { recursive: true });
+      const S307_TOK = 's307-picker-e2e-token';
+      const s307PickEvents = [];
+      const s307CancelReasons = [];
+      const s307Srv = await createPrismStudioServer({
+        dataDir: s307DataDir,
+        token: S307_TOK,
+        startCdp: false,
+        autoCheckUpdates: false,
+        inspectShortcuts: false,
+        inspectorController: {
+          async startInspectorPick() {
+            s307PickEvents.push(Date.now());
+            return { ok: true, targetCount: 1 };
+          },
+          async cancelInspectorPick(opts = {}) {
+            s307CancelReasons.push(String(opts?.reason || 'studio-cancel'));
+            return { ok: true, cancelled: true, targetCount: 1 };
+          },
+        },
+      });
+      const s307Lib = await s307Srv.engine.listLibrary({ refresh: true });
+      const s307Items = Array.isArray(s307Lib) ? s307Lib : s307Lib.items || [];
+      const s307Aurora = s307Items.find((i) => String(i.id || '').includes('100001')) || s307Items[0] || auroraItem;
+      await s307Srv.engine.applyWallpaper(s307Aurora.id, {
+        skinEnabled: true,
+        startupMode: 'gentle-auto',
+        layoutMode: 'islands',
+        glassBlur: 16,
+      });
+      const s307MediaOrigin = s307Srv.engine.getMediaOrigin();
+      const s307MediaServer = s307Srv.engine?.mediaServer?.server || s307Srv.engine?._mediaServer?.server;
+      const s307Router = async (reqInfo) => {
+        const u = new URL(reqInfo.url);
+        const orig = `${u.protocol}//${u.host}`;
+        if (orig === s307Srv.origin) {
+          const res = await invokeServerInMemory(s307Srv.server, {
+            method: reqInfo.method,
+            url: `${u.pathname}${u.search}`,
+            headers: reqInfo.headers,
+            body: reqInfo.postData,
+          });
+          return { status: res.status, headers: res.headers, body: res.body };
+        }
+        if (s307MediaServer && orig === s307MediaOrigin) {
+          const res = await invokeServerInMemory(s307MediaServer, {
+            method: reqInfo.method,
+            url: `${u.pathname}${u.search}`,
+            headers: reqInfo.headers,
+            body: reqInfo.postData,
+          });
+          return { status: res.status, headers: res.headers, body: res.body };
+        }
+        return universalHttpRouter(reqInfo);
+      };
+
+      const esSpyInit = `
+        window.__s307EsList = [];
+        window.__s307EsEvents = [];
+        const OrigES = window.EventSource;
+        window.EventSource = function(u, opts) {
+          const es = new OrigES(u, opts);
+          const origAdd = es.addEventListener.bind(es);
+          es.__prismListeners = {};
+          es.addEventListener = function(type, fn, o) {
+            if (!es.__prismListeners[type]) es.__prismListeners[type] = [];
+            es.__prismListeners[type].push(fn);
+            window.__s307EsEvents.push(type);
+            return origAdd(type, fn, o);
+          };
+          window.__s307EsList.push(es);
+          return es;
+        };
+      `;
+
+      const s307StudioPage = await browser.openPage({
+        url: `${s307Srv.origin}/?token=${encodeURIComponent(S307_TOK)}`,
+        requestHandler: s307Router,
+        initScript: esSpyInit,
+      });
+      const s307PopoutPage = await browser.openPage({
+        url: `${s307Srv.origin}/?mode=visual-editor`,
+        requestHandler: s307Router,
+        initScript: esSpyInit,
+      });
+      const s307HubPage = await browser.openPage({
+        url: `${HUB_MOCK_ORIGIN}/hub`,
+        requestHandler: s307Router,
+      });
+
+      try {
+        await sleep(750);
+
+        // 1) Guardrail V3 in real Studio Chrome: open Visual Editor Modal -> start pick -> press Esc -> cancels pick WITHOUT closing modal!
+        await s307StudioPage.evaluate(`document.querySelector('[data-action="open-visual-editor"]')?.click()`);
+        await sleep(160);
+        await s307StudioPage.evaluate(`document.querySelector('#prism-visual-editor-modal [data-action="pick-host-region"]')?.click()`);
+        await sleep(180);
+        const pickingModalBeforeEsc = await s307StudioPage.evaluate(`({
+          hasModal: Boolean(document.getElementById('prism-visual-editor-modal')),
+          hasBanner: Boolean(document.getElementById('prism-ve-picker-banner')),
+          esEvents: window.__s307EsEvents || [],
+        })`);
+        assert.equal(pickingModalBeforeEsc.hasModal, true);
+        assert.equal(pickingModalBeforeEsc.hasBanner, true, 'Visual Editor Modal did not show #prism-ve-picker-banner while picking');
+        assert.equal(s307PickEvents.length, 1);
+        assert.ok(pickingModalBeforeEsc.esEvents.includes('inspector-picked'), 'Studio EventSource missing inspector-picked listener');
+
+        await s307StudioPage.pressKey({ key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+        await sleep(180);
+        const modalAfterEsc = await s307StudioPage.evaluate(`({
+          hasModal: Boolean(document.getElementById('prism-visual-editor-modal')),
+          hasBanner: Boolean(document.getElementById('prism-ve-picker-banner')),
+        })`);
+        assert.equal(modalAfterEsc.hasBanner, false, 'Escape did not cancel inspector picking banner');
+        assert.equal(modalAfterEsc.hasModal, true, 'Guardrail V3 failed in Chrome: Escape closed Visual Editor Modal instead of cancelling picker only!');
+        assert.ok(s307CancelReasons.includes('escape'), 'Escape did not send POST /api/inspector/cancel with reason=escape');
+        await s307StudioPage.evaluate(`document.querySelector('#prism-visual-editor-modal [data-action="close-visual-editor"]')?.click()`);
+        await sleep(120);
+
+        // 2) Live Mode Hub E2E: boot skin -> inject `/host/<cap>/inspector.js` -> CN L10n 0 mutations -> real CDP click on #hub-interactive-btn
+        await s307HubPage.evaluate(
+          buildHostMicroBootstrap({ hostOrigin: s307Srv.origin, capToken: s307Srv.hostCapToken, triggerMode: 'both', startupMode: 'gentle-auto', skinEnabled: true }),
+        );
+        const liveWait = Date.now() + 3000;
+        while (Date.now() < liveWait) {
+          if (await s307HubPage.evaluate(`document.documentElement.getAttribute('data-agy-prism-wallpaper') === 'ready'`)) break;
+          await sleep(40);
+        }
+        await s307HubPage.evaluate(`(() => {
+          const s = document.createElement('script');
+          s.id = 'agy-prism-inspector-loader';
+          s.src = ${JSON.stringify(`${s307Srv.origin}/host/${s307Srv.hostCapToken}/inspector.js?t=${Date.now()}`)};
+          document.head.appendChild(s);
+        })()`);
+        const insReadyWait = Date.now() + 2500;
+        while (Date.now() < insReadyWait) {
+          if (await s307HubPage.evaluate(`Boolean(window.__agyPrismInspector && window.__agyPrismInspector.active())`)) break;
+          await sleep(30);
+        }
+        const liveInsAudit = await s307HubPage.evaluate(`(() => {
+          const ov = document.getElementById('agy-prism-inspector-overlay');
+          const hud = document.getElementById('agy-prism-inspector-hud');
+          const l10n = window.__runMockDomTranslator();
+          const btn = document.getElementById('hub-interactive-btn').getBoundingClientRect();
+          return {
+            active: window.__agyPrismInspector.active(),
+            htmlAttr: document.documentElement.getAttribute('data-agy-prism-inspector'),
+            bodyAttr: document.body.getAttribute('data-agy-prism-inspector'),
+            ovPe: ov ? getComputedStyle(ov).pointerEvents : '',
+            hudPe: hud ? getComputedStyle(hud).pointerEvents : '',
+            l10nTouched: l10n.touchedPrismIds,
+            btnX: Math.round(btn.left + btn.width / 2),
+            btnY: Math.round(btn.top + btn.height / 2),
+          };
+        })()`);
+        assert.equal(liveInsAudit.active, true);
+        assert.equal(liveInsAudit.htmlAttr, 'picking');
+        assert.equal(liveInsAudit.bodyAttr, null);
+        assert.equal(liveInsAudit.ovPe, 'none');
+        assert.equal(liveInsAudit.hudPe, 'none');
+        assert.equal(liveInsAudit.l10nTouched.includes('agy-prism-inspector-overlay'), false);
+        assert.equal(liveInsAudit.l10nTouched.includes('agy-prism-inspector-hud'), false);
+
+        // Real CDP mouse click on #hub-interactive-btn inside composer -> intercepted (0 host clicks), picks composer!
+        await s307HubPage.call('Input.dispatchMouseEvent', {
+          type: 'mousePressed',
+          x: liveInsAudit.btnX,
+          y: liveInsAudit.btnY,
+          button: 'left',
+          clickCount: 1,
+        });
+        await s307HubPage.call('Input.dispatchMouseEvent', {
+          type: 'mouseReleased',
+          x: liveInsAudit.btnX,
+          y: liveInsAudit.btnY,
+          button: 'left',
+          clickCount: 1,
+        });
+        let pickedRegionCommitted = '';
+        const pickRpcWait = Date.now() + 1800;
+        while (Date.now() < pickRpcWait) {
+          const srvPickedRes = await invokeServerInMemory(s307Srv.server, { method: 'GET', url: '/api/status', headers: { Host: '127.0.0.1:53040' } });
+          pickedRegionCommitted = srvPickedRes.json().inspectorStatus?.lastPickedRegion || '';
+          if (pickedRegionCommitted === 'composer') break;
+          await sleep(30);
+        }
+        const afterHubPick = await s307HubPage.evaluate(`({
+          clicks: window.__hubInteractiveClicks || 0,
+          hasIns: Boolean(window.__agyPrismInspector),
+          hasOv: Boolean(document.getElementById('agy-prism-inspector-overlay')),
+        })`);
+        assert.equal(afterHubPick.clicks, 0, 'Inspector failed to suppress host button click inside composer!');
+        assert.equal(afterHubPick.hasIns, false);
+        assert.equal(afterHubPick.hasOv, false);
+        assert.equal(pickedRegionCommitted, 'composer', 'Hub CDP click did not commit inspector.picked=composer to Sidecar RPC');
+
+        // 3) Static-CSS Mode Hub E2E (no wallpaper-inject.js) + 8-region hitTestAt + Escape cancel
+        await s307HubPage.navigate(`${HUB_MOCK_ORIGIN}/hub`);
+        await sleep(180);
+        await s307HubPage.evaluate(`(() => {
+          window.__setMockWco({ visible: true, x: 0, y: 0, width: 1300, height: 35 });
+          window.__setMockTopbarDropdownOpen(true);
+          const s = document.createElement('script');
+          s.id = 'agy-prism-inspector-loader';
+          s.src = ${JSON.stringify(`${s307Srv.origin}/host/${s307Srv.hostCapToken}/inspector.js?t=${Date.now()}`)};
+          document.head.appendChild(s);
+        })()`);
+        const staticWait = Date.now() + 2500;
+        while (Date.now() < staticWait) {
+          if (await s307HubPage.evaluate(`Boolean(window.__agyPrismInspector && window.__agyPrismInspector.active())`)) break;
+          await sleep(30);
+        }
+        const staticAudit = await s307HubPage.evaluate(`(() => {
+          const ins = window.__agyPrismInspector;
+          const rectCenter = (sel) => {
+            const el = document.querySelector(sel);
+            const r = el.getBoundingClientRect();
+            return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];
+          };
+          const [cx, cy] = rectCenter('#antigravity\\\\.agentSidePanelInputBox');
+          const [kx, ky] = rectCenter('.msg-user');
+          const [sx, sy] = rectCenter('.agy-sidebar');
+          const rpRect = document.getElementById('hub-aux-pane').getBoundingClientRect();
+          const [rx, ry] = [Math.round(rpRect.left + rpRect.width / 2), Math.round(rpRect.top + 20)];
+          const cvRect = document.querySelector('#hub-main-pane [data-testid="conversation-view"]').getBoundingClientRect();
+          const [wx, wy] = [Math.round(cvRect.left + 12), Math.round(cvRect.top + 12)];
+          const [px, py] = rectCenter('#hub-title-menu-dropdown');
+          return {
+            hasWallpaperSkin: Boolean(window.__agyPrism),
+            wco: ins.hitTestAt(1360, 16)?.regionId,
+            topbar: ins.hitTestAt(600, 16)?.regionId,
+            popover: ins.hitTestAt(px, py)?.regionId,
+            composer: ins.hitTestAt(cx, cy)?.regionId,
+            card: ins.hitTestAt(kx, ky)?.regionId,
+            sidebar: ins.hitTestAt(sx, sy)?.regionId,
+            rightPane: ins.hitTestAt(rx, ry)?.regionId,
+            workspace: ins.hitTestAt(wx, wy)?.regionId,
+          };
+        })()`);
+        assert.equal(staticAudit.hasWallpaperSkin, false, 'static-css test expected wallpaper-inject.js absent');
+        assert.equal(staticAudit.wco, 'wco');
+        assert.equal(staticAudit.topbar, 'topbar');
+        assert.equal(staticAudit.popover, 'popover');
+        assert.equal(staticAudit.composer, 'composer');
+        assert.equal(staticAudit.card, 'card');
+        assert.equal(staticAudit.sidebar, 'sidebar');
+        assert.equal(staticAudit.rightPane, 'rightPane');
+        assert.equal(staticAudit.workspace, 'workspace');
+
+        await s307HubPage.pressKey({ key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+        await sleep(180);
+        assert.equal(await s307HubPage.evaluate(`Boolean(window.__agyPrismInspector)`), false, 'Escape did not disarm static-css inspector');
+
+        // 4) Studio & Popout SSE `inspector-picked` routing (`card -> workspace` accordion + Popout region selection)
+        const auxAccResult = await s307StudioPage.evaluate(`(() => {
+          const es = (window.__s307EsList || [])[0];
+          const fns = es?.__prismListeners?.['inspector-picked'] || [];
+          fns.forEach((fn) => fn(new MessageEvent('inspector-picked', { data: JSON.stringify({ regionId: 'card', source: 'host-picker' }) })));
+          const det = document.querySelector('details.prism-region-group[data-region="workspace"]');
+          const pickBtn = document.querySelector('[data-action="pick-host-region"]');
+          return {
+            listenerCount: fns.length,
+            hasPickBtn: Boolean(pickBtn),
+            workspaceOpen: Boolean(det && det.open),
+          };
+        })()`);
+        assert.ok(auxAccResult.listenerCount >= 1 && auxAccResult.hasPickBtn);
+        assert.equal(auxAccResult.workspaceOpen, true, 'inspector-picked=card did not open workspace accordion in Studio');
+
+        const popoutSelResult = await s307PopoutPage.evaluate(`(() => {
+          const es = (window.__s307EsList || [])[0];
+          const fns = es?.__prismListeners?.['inspector-picked'] || [];
+          fns.forEach((fn) => fn(new MessageEvent('inspector-picked', { data: JSON.stringify({ regionId: 'composer', source: 'host-picker' }) })));
+          const selChip = document.querySelector('[data-action="select-editor-region"][data-region="composer"].is-selected');
+          return {
+            listenerCount: fns.length,
+            composerSelected: Boolean(selChip),
+          };
+        })()`);
+        assert.ok(popoutSelResult.listenerCount >= 1);
+        assert.equal(popoutSelResult.composerSelected, true, 'inspector-picked=composer did not select composer in Popout');
+
+        assert.deepEqual(s307StudioPage.pageExceptions, []);
+        assert.deepEqual(s307PopoutPage.pageExceptions, []);
+        assert.deepEqual(s307HubPage.pageExceptions, []);
+        assert.deepEqual(s307StudioPage.consoleErrors, []);
+        assert.deepEqual(s307PopoutPage.consoleErrors, []);
+        assert.deepEqual(s307HubPage.consoleErrors, []);
+        return 'VM(V2+8-region+detach-guard+0-body-mut) + Studio DAG/V3 + Chrome(live+static-css+Esc+SSE) verified';
+      } finally {
+        await browser.closePage(s307HubPage);
+        await browser.closePage(s307PopoutPage);
+        await browser.closePage(s307StudioPage);
+        await s307Srv.close().catch(() => {});
       }
     });
   } finally {

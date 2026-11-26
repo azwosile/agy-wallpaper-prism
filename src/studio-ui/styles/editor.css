@@ -605,3 +605,118 @@
   padding-bottom: 4px;
   border-bottom: 1px solid var(--prism-border-hairline);
 }
+
+/* ==========================================================================
+   Phase 2: CDP Live Host Region Picker Button, Banner & Focus Pulse
+   ========================================================================== */
+.prism-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-color: rgba(var(--prism-accent-rgb), 0.34);
+  background: rgba(var(--prism-accent-rgb), 0.09);
+  color: var(--prism-fg);
+  transition: background var(--prism-dur-fast) ease, border-color var(--prism-dur-fast) ease, box-shadow var(--prism-dur-fast) ease;
+}
+
+.prism-picker-btn:hover:not(:disabled) {
+  background: rgba(var(--prism-accent-rgb), 0.17);
+  border-color: rgba(var(--prism-accent-rgb), 0.62);
+}
+
+.prism-picker-btn.is-busy {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.prism-picker-btn.is-picking {
+  background: rgba(var(--prism-accent-rgb), 0.22);
+  border-color: var(--prism-accent);
+  color: var(--prism-fg);
+  font-weight: 600;
+  animation: prism-picker-pulse 1.5s ease-in-out infinite;
+}
+
+.prism-picker-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid rgba(var(--prism-accent-rgb), 0.42);
+  background: rgba(var(--prism-accent-rgb), 0.11);
+  color: var(--prism-fg);
+}
+
+.prism-ve-picker-banner {
+  flex: 0 0 auto;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  padding: 6px 12px;
+}
+
+.prism-picker-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.prism-picker-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--prism-accent);
+  animation: prism-picker-dot-pulse 1.3s ease-in-out infinite;
+}
+
+.prism-picker-banner-text {
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--prism-fg);
+}
+
+.prism-ve-pick-highlight {
+  animation: prism-ve-pick-flash 1.35s var(--prism-ease-out) 1;
+}
+
+@keyframes prism-picker-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(var(--prism-accent-rgb), 0.34);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(var(--prism-accent-rgb), 0.12);
+  }
+}
+
+@keyframes prism-picker-dot-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--prism-accent-rgb), 0.55);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 5px rgba(var(--prism-accent-rgb), 0);
+  }
+}
+
+@keyframes prism-ve-pick-flash {
+  0% {
+    box-shadow: 0 0 0 3px rgba(var(--prism-accent-rgb), 0.72), 0 0 16px rgba(var(--prism-accent-rgb), 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--prism-accent-rgb), 0);
+  }
+}
+
+html[data-prism-dormant="1"] .prism-picker-btn.is-picking,
+html[data-prism-dormant="1"] .prism-picker-pulse-dot {
+  animation: none;
+}

@@ -456,6 +456,7 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
     join('src', 'host', 'index.mjs'),
     join('src', 'host', 'wallpaper-inject.js'),
     join('src', 'host', 'panel-inject.js'),
+    join('src', 'host', 'inspector-inject.js'),
     join('host', 'cli.mjs'),
   ];
 
@@ -520,7 +521,7 @@ export async function installLocalPlugin({ destRoot = '', skipSidecarReload = fa
         }
       }
 
-      // Force-replace in-memory `window.__agyPrism` & `window.__agyPrismPanel` even on same-version (`2.2.0 -> 2.2.0`) hot installs
+      // Force-replace in-memory `window.__agyPrism` & `window.__agyPrismPanel` even on same-version (`2.3.0 -> 2.3.0`) hot installs
       const pf = readDevToolsActivePort();
       const cdpPorts = [...new Set([pf?.port, DEFAULT_DEBUG_PORT].filter((n) => Number.isInteger(n) && n > 0))];
       const hotReplacedTargets = [];

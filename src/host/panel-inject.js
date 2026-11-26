@@ -1,4 +1,4 @@
-// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.2.0).
+// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.3.0).
 //
 // Self-contained ES2020 browser IIFE injected over CDP alongside `wallpaper-inject.js`.
 // Strictly isolated inside `#agy-prism-popover` (`all: initial; position: fixed; z-index: 45`)
@@ -9,7 +9,7 @@
 (function agyPrismPanelMain() {
   'use strict';
 
-  var VERSION = '2.2.0';
+  var VERSION = '2.3.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   try {

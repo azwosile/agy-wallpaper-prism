@@ -1549,14 +1549,89 @@ export const REMOVE_PANEL_EXPR = `(function(){
   try { if (window.__agyPrismSse) { window.__agyPrismSse.close(); window.__agyPrismSse = null; } } catch (_) {}
   try { if (window.${PRISM_DOM.panelGlobal} && typeof window.${PRISM_DOM.panelGlobal}.destroy === 'function') window.${PRISM_DOM.panelGlobal}.destroy(); } catch (_) {}
   try {
-    ['agy-prism-popover', 'agy-prism-popover-css', 'agy-prism-pill', 'agy-prism-pill-css', 'agy-prism-panel-loader'].forEach(function(id){
+    var ins = window[${safeJsonLiteral(PRISM_DOM.inspectorGlobal || '__agyPrismInspector')}];
+    if (ins && typeof ins.cancel === 'function') ins.cancel({ silent: true, reason: 'removed' });
+  } catch (_) {}
+  try {
+    ['agy-prism-popover', 'agy-prism-popover-css', 'agy-prism-pill', 'agy-prism-pill-css', 'agy-prism-panel-loader', 'agy-prism-inspector-overlay', 'agy-prism-inspector-hud', 'agy-prism-inspector-css', 'agy-prism-inspector-loader'].forEach(function(id){
       var n = document.getElementById(id); if (n) n.remove();
     });
-    if (document.documentElement) document.documentElement.removeAttribute('data-agy-prism-panel');
+    if (document.documentElement) {
+      document.documentElement.removeAttribute('data-agy-prism-panel');
+      document.documentElement.removeAttribute('data-agy-prism-inspector');
+    }
     document.querySelectorAll('.' + ${JSON.stringify(PRISM_DOM.cornerOrbClass)}).forEach(function(el){ el.remove(); });
   } catch (_) {}
   return true;
 })()`;
+
+/**
+ * Ephemeral 1-shot inspector mount expression (0 B added to `buildHostMicroBootstrap`).
+ * Accepts either `{ hostOrigin, capToken, sessionId, lang }` or `{ inspectorUrl, rpcUrl, capToken }`.
+ */
+export function buildInspectorMountExpr({
+  hostOrigin = '',
+  capToken = '',
+  sessionId = '',
+  lang = '',
+  inspectorUrl = '',
+  rpcUrl = '',
+} = {}) {
+  const cleanOrigin = String(hostOrigin || '').trim().replace(/\/+$/, '');
+  const cleanToken = String(capToken || '').trim();
+  let resolvedInspectorUrl = String(inspectorUrl || '').trim();
+  if (!resolvedInspectorUrl && cleanOrigin && cleanToken) {
+    const qs = new URLSearchParams();
+    qs.set('t', String(Date.now()));
+    if (sessionId) qs.set('sessionId', String(sessionId));
+    if (lang) qs.set('lang', String(lang));
+    resolvedInspectorUrl = `${cleanOrigin}/host/${cleanToken}/inspector.js?${qs.toString()}`;
+  }
+  const resolvedRpcUrl =
+    String(rpcUrl || '').trim() || (cleanOrigin && cleanToken ? `${cleanOrigin}/host/${cleanToken}/rpc` : '');
+  return `(function(){
+  if (window.top && window !== window.top) return { ok: false, reason: 'subframe' };
+  if (!document.body) return { ok: false, reason: 'no_body' };
+  if (!${JSON.stringify(Boolean(resolvedInspectorUrl))}) return { ok: false, reason: 'missing_url' };
+  if (${JSON.stringify(Boolean(resolvedRpcUrl))}) {
+    window.__agyPrismRpcUrl = ${safeJsonLiteral(resolvedRpcUrl)};
+    window.__agyPrismCapToken = ${safeJsonLiteral(cleanToken)};
+  }
+  var prev = document.getElementById('agy-prism-inspector-loader');
+  if (prev) prev.remove();
+  var s = document.createElement('script');
+  s.id = 'agy-prism-inspector-loader';
+  s.async = true;
+  s.src = ${safeJsonLiteral(resolvedInspectorUrl)};
+  (document.head || document.documentElement).appendChild(s);
+  return { ok: true, mounted: true };
+})()`;
+}
+
+/**
+ * Ephemeral 1-shot inspector cancellation & DOM cleanup expression.
+ * Accepts either a reason string or `{ reason }`.
+ */
+export function buildInspectorCancelExpr(arg = 'studio-cancel') {
+  const reason =
+    typeof arg === 'string'
+      ? arg.trim() || 'studio-cancel'
+      : String(arg?.reason || 'studio-cancel').trim() || 'studio-cancel';
+  const inspectorGlobalKey = PRISM_DOM.inspectorGlobal || '__agyPrismInspector';
+  return `(function(){
+  try {
+    var ins = window[${safeJsonLiteral(inspectorGlobalKey)}];
+    if (ins && typeof ins.cancel === 'function') {
+      ins.cancel({ silent: true, reason: ${safeJsonLiteral(reason)} });
+    }
+  } catch (_) {}
+  ['agy-prism-inspector-overlay', 'agy-prism-inspector-hud', 'agy-prism-inspector-css', 'agy-prism-inspector-loader'].forEach(function(id){
+    var n = document.getElementById(id); if (n) n.remove();
+  });
+  if (document.documentElement) document.documentElement.removeAttribute('data-agy-prism-inspector');
+  return true;
+})()`;
+}
 
 /**
  * Installs a universal `window.__agyPrismCall` bridge supporting:
@@ -1727,6 +1802,7 @@ export function createPassiveCdpBridge({
     });
 
   const activeTargets = new Map(); // targetId -> { target, browserSessionId, mode, mountedAt }
+  const lastInspectorTargets = new Map(); // targetId -> target (tracks inspector targets across manual/static-css modes)
   const firstReadyAt = new Map(); // targetId -> timestamp ms
   const settleTimers = new Map(); // targetId -> Timeout
   const REBIND_BACKOFF_MS = [0, 1500, 3000, 6000, 15000];
@@ -1828,6 +1904,7 @@ export function createPassiveCdpBridge({
     rebindStateByTarget.clear();
     closeAllSseClients();
     activeTargets.clear();
+    lastInspectorTargets.clear();
     firstReadyAt.clear();
     lastStatus = {
       ...lastStatus,
@@ -1985,7 +2062,7 @@ export function createPassiveCdpBridge({
     res.on('error', () => cleanup());
   };
 
-  const candidatePorts = async (st) => {
+  const candidatePorts = async (st, { allowAnyActivePort = false } = {}) => {
     if (Number.isInteger(Number(cdpPort)) && Number(cdpPort) > 0) {
       return [Number(cdpPort)];
     }
@@ -1994,7 +2071,7 @@ export function createPassiveCdpBridge({
     const pf = readDevToolsActivePort(profileDir);
     // Never hijack shared port 9222 uninvited on cold boot unless configured or manually awakened,
     // while still honoring ephemeral ports written by Antigravity (--remote-debugging-port=0).
-    if (pf?.port && (pf.port !== 9222 || pf.port === configured || sessionForcedWake)) {
+    if (pf?.port && (allowAnyActivePort || pf.port !== 9222 || pf.port === configured || sessionForcedWake)) {
       set.add(pf.port);
     }
     return [...set].filter((n) => Number.isInteger(n) && n > 0 && n <= 65535);
@@ -2163,15 +2240,30 @@ export function createPassiveCdpBridge({
 
   const cleanupTargetsEphemeral = async ({ removeSkin = true, removePanel = true } = {}) => {
     const entries = [...activeTargets.values()];
+    const extraInspectorTargets = [...lastInspectorTargets.values()];
     activeTargets.clear();
     firstReadyAt.clear();
     clearSettleTimers();
+    if (removePanel) lastInspectorTargets.clear();
+    const seenUrls = new Set();
     for (const entry of entries) {
+      const wsUrl = entry.target?.webSocketDebuggerUrl;
+      if (!wsUrl) continue;
+      seenUrls.add(wsUrl);
       const exprs = [];
       if (removeSkin) exprs.push(REMOVE_SKIN_EXPR);
       if (removePanel) exprs.push(REMOVE_PANEL_EXPR);
-      if (exprs.length > 0 && entry.target?.webSocketDebuggerUrl) {
-        await evaluateTargetEphemeral(entry.target.webSocketDebuggerUrl, exprs.join(';')).catch(() => {});
+      if (exprs.length > 0) {
+        await evaluateTargetEphemeral(wsUrl, exprs.join(';')).catch(() => {});
+      }
+    }
+    if (removePanel && extraInspectorTargets.length > 0) {
+      const cancelExpr = buildInspectorCancelExpr({ reason: 'teardown' });
+      for (const t of extraInspectorTargets) {
+        const wsUrl = t?.webSocketDebuggerUrl;
+        if (!wsUrl || seenUrls.has(wsUrl)) continue;
+        seenUrls.add(wsUrl);
+        await evaluateTargetEphemeral(wsUrl, cancelExpr).catch(() => {});
       }
     }
   };
@@ -2461,6 +2553,175 @@ export function createPassiveCdpBridge({
     };
   }
 
+  const probeTier2HubTargets = async () => {
+    const st = await Promise.resolve().then(() => getEngineState()).catch(() => null);
+    const ports = await candidatePorts(st, { allowAnyActivePort: true });
+    let activeProbe = null;
+    for (const p of ports) {
+      const pr = await probeCdpPort(p);
+      if (pr.ok) {
+        activeProbe = pr;
+        break;
+      }
+    }
+    if (!activeProbe) {
+      return {
+        ok: false,
+        statusCode: 503,
+        code: 'ERR_CDP_UNAVAILABLE',
+        error: 'Antigravity CDP bridge is unavailable — enable Normal Shortcut Auto-Load or launch with --remote-debugging-port=9339',
+      };
+    }
+    const targets = await listCdpTargets(activeProbe.port, activeProbe.host || '127.0.0.1').catch(() => []);
+    const hubs = selectHubTargets(targets);
+    if (hubs.length === 0) {
+      return {
+        ok: false,
+        statusCode: 404,
+        code: 'ERR_NO_HUB_TARGETS',
+        error: 'CDP port reachable, but no Antigravity Hub target found',
+      };
+    }
+    const readyHubs = [];
+    for (const h of hubs) {
+      if (!h?.webSocketDebuggerUrl) continue;
+      const probe = await evaluateTargetEphemeral(h.webSocketDebuggerUrl, HUB_READINESS_PROBE_EXPR).catch(() => null);
+      if (probe?.ready) {
+        readyHubs.push(h);
+      }
+    }
+    if (readyHubs.length === 0) {
+      return {
+        ok: false,
+        statusCode: 404,
+        code: 'ERR_NO_HUB_TARGETS',
+        error: 'Antigravity Hub target is not ready yet',
+      };
+    }
+    return { ok: true, targets: readyHubs };
+  };
+
+  /**
+   * Inject the ephemeral live region picker across live, static-css, manual, and skinEnabled: false modes.
+   */
+  const startInspectorPick = async ({
+    hostOrigin = '',
+    capToken: overrideCap = '',
+    sessionId = '',
+    lang = '',
+    timeoutMs = 45000,
+  } = {}) => {
+    if (stopped) {
+      return { ok: false, statusCode: 503, code: 'ERR_CDP_UNAVAILABLE', error: 'CDP bridge stopped' };
+    }
+    if (!isPluginEnabledInHostConfig(configPath, pluginRoot)) {
+      return {
+        ok: false,
+        statusCode: 409,
+        code: 'ERR_PLUGIN_DISABLED',
+        error: 'Plugin is disabled in Antigravity host config',
+      };
+    }
+    const resolvedOrigin = String(hostOrigin || getHostOrigin() || '').trim().replace(/\/+$/, '');
+    const resolvedCap = String(overrideCap || capToken || '').trim();
+    if (!resolvedOrigin || !resolvedCap) {
+      return {
+        ok: false,
+        statusCode: 503,
+        code: 'ERR_CDP_UNAVAILABLE',
+        error: 'Host bridge origin or capability token is unavailable',
+      };
+    }
+
+    const st = await Promise.resolve().then(() => getEngineState()).catch(() => null);
+    const resolvedLang = String(lang || st?.config?.language || 'auto').trim() || 'auto';
+    const expr = buildInspectorMountExpr({
+      hostOrigin: resolvedOrigin,
+      capToken: resolvedCap,
+      sessionId,
+      lang: resolvedLang,
+    });
+
+    const mountOnTargets = async (targets) => {
+      const mounted = [];
+      for (const t of targets) {
+        if (stopped || !t?.webSocketDebuggerUrl) continue;
+        const res = await evaluateTargetEphemeral(t.webSocketDebuggerUrl, expr, {
+          timeoutMs: Math.min(4000, Number(timeoutMs) || 4000),
+        }).catch(() => null);
+        if (res === true || res?.ok === true) {
+          mounted.push(t);
+        }
+      }
+      return mounted;
+    };
+
+    // Tier 1: cached activeTargets (fast path when live/static-css already attached)
+    const tier1Candidates = [...activeTargets.values()]
+      .map((e) => e?.target)
+      .filter((t) => Boolean(t?.webSocketDebuggerUrl));
+    let mountedTargets = tier1Candidates.length > 0 ? await mountOnTargets(tier1Candidates) : [];
+
+    // Tier 2: on-demand ephemeral probe (handles manual mode, empty activeTargets, or stale WS URLs)
+    if (mountedTargets.length === 0) {
+      const tier2 = await probeTier2HubTargets();
+      if (!tier2.ok) return tier2;
+      mountedTargets = await mountOnTargets(tier2.targets);
+    }
+
+    if (mountedTargets.length === 0) {
+      return {
+        ok: false,
+        statusCode: 502,
+        code: 'ERR_INSPECTOR_INJECT_FAILED',
+        error: 'Failed to inject region inspector into Antigravity Hub target',
+      };
+    }
+
+    lastInspectorTargets.clear();
+    for (const t of mountedTargets) {
+      lastInspectorTargets.set(String(t.id || t.webSocketDebuggerUrl), t);
+    }
+    return {
+      ok: true,
+      targetCount: mountedTargets.length,
+      targets: mountedTargets.map((t) => ({ id: String(t.id || ''), url: String(t.url || '') })),
+    };
+  };
+
+  /**
+   * Cancel active host region picker overlays across activeTargets and lastInspectorTargets.
+   */
+  const cancelInspectorPick = async (arg = {}) => {
+    const reason =
+      typeof arg === 'string'
+        ? arg.trim() || 'studio-cancel'
+        : String(arg?.reason || 'studio-cancel').trim() || 'studio-cancel';
+    const targetMap = new Map();
+    for (const entry of activeTargets.values()) {
+      const t = entry?.target;
+      if (t?.webSocketDebuggerUrl) {
+        targetMap.set(String(t.id || t.webSocketDebuggerUrl), t);
+      }
+    }
+    for (const [k, t] of lastInspectorTargets.entries()) {
+      if (t?.webSocketDebuggerUrl && !targetMap.has(k)) {
+        targetMap.set(k, t);
+      }
+    }
+    lastInspectorTargets.clear();
+    if (targetMap.size === 0) {
+      return { ok: true, cancelled: false, targetCount: 0 };
+    }
+    const expr = buildInspectorCancelExpr({ reason });
+    let clearedCount = 0;
+    for (const t of targetMap.values()) {
+      const ok = await evaluateTargetEphemeral(t.webSocketDebuggerUrl, expr).catch(() => null);
+      if (ok) clearedCount += 1;
+    }
+    return { ok: true, cancelled: clearedCount > 0, targetCount: clearedCount };
+  };
+
   async function stop({ removeSkin = true, removePanel = true, preserveHostDom = false, skipTickWait = false } = {}) {
     stopped = true;
     if (timer) {
@@ -2477,8 +2738,10 @@ export function createPassiveCdpBridge({
     if (preserveHostDom) {
       activeTargets.clear();
       firstReadyAt.clear();
+      lastInspectorTargets.clear();
     } else {
       await cleanupTargetsEphemeral({ removeSkin, removePanel });
+      lastInspectorTargets.clear();
     }
     if (lastStatus.phase !== 'superseded') {
       lastStatus = {
@@ -2542,6 +2805,8 @@ export function createPassiveCdpBridge({
       await broadcastState({ force: true });
       return getStatus();
     },
+    startInspectorPick,
+    cancelInspectorPick,
     registerSseClient,
     async start() {
       stopped = false;

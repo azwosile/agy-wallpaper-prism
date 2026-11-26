@@ -351,6 +351,15 @@ export const store = {
   canvasShowEmptyLogo: false,
   canvasPreviewTheme: null, // null (follow config) | 'dark' | 'light'
 
+  // Phase 2 CDP Live Host Region Picker state
+  inspectorPicking: false,
+  inspectorBusy: false,
+  inspectorSessionId: '',
+  inspectorTargetCount: 0,
+  inspectorLastPicked: '',
+  inspectorLastPickedAt: 0,
+  inspectorError: '',
+
   // 2-step inline confirmation (never window.confirm / alert)
   armedConfirm: null, // { key, timer }
   toasts: [],
@@ -1437,6 +1446,20 @@ export function ingestServerState(payload, { forceConfig = false } = {}) {
     store.sessionAwake = s.hostStatus.sessionAwake;
   }
 
+  // Guardrail V3: ONLY sync inspectorPicking when payload provides an object `inspectorStatus`
+  if (s.inspectorStatus && typeof s.inspectorStatus === 'object') {
+    const nextActive = Boolean(s.inspectorStatus.active);
+    store.inspectorPicking = nextActive;
+    store.inspectorSessionId = String(s.inspectorStatus.sessionId || '');
+    store.inspectorTargetCount = Number(s.inspectorStatus.targetCount) || 0;
+    if (typeof s.inspectorStatus.lastPickedRegion === 'string' && s.inspectorStatus.lastPickedRegion) {
+      store.inspectorLastPicked = s.inspectorStatus.lastPickedRegion;
+    }
+    if (!nextActive) {
+      store.inspectorBusy = false;
+    }
+  }
+
   const autoSrc = (s.autostart && typeof s.autostart === 'object' ? s.autostart : null) || {};
   const hsSrc = (s.hostStatus && typeof s.hostStatus === 'object' ? s.hostStatus : null) || {};
   if ('normalShortcutEnabled' in s || 'normalShortcutEnabled' in autoSrc || 'normalShortcutEnabled' in hsSrc) {
@@ -1525,6 +1548,74 @@ export function setArmedConfirm(key) {
   }, 6000);
   store.armedConfirm = { key, timer };
   hooks.renderActiveSurface();
+}
+
+// ============================================================================
+// Phase 2: CDP Live Host Region Picker Actions
+// ============================================================================
+export async function startInspectorPick() {
+  if (store.inspectorBusy) {
+    return { ok: false, busy: true };
+  }
+  if (store.inspectorPicking) {
+    return cancelInspectorPick('studio-cancel');
+  }
+  store.inspectorBusy = true;
+  store.inspectorError = '';
+  hooks.renderActiveSurface();
+  try {
+    const res = await apiJson('/api/inspector/pick', {
+      method: 'POST',
+      body: { lang: curLocale() },
+      timeoutMs: 8000,
+    });
+    store.inspectorBusy = false;
+    store.inspectorPicking = Boolean(res?.active ?? true);
+    store.inspectorSessionId = String(res?.sessionId || res?.inspectorStatus?.sessionId || '');
+    store.inspectorTargetCount = Number(res?.targetCount ?? res?.inspectorStatus?.targetCount) || 1;
+    store.inspectorError = '';
+    hooks.renderActiveSurface();
+    return res;
+  } catch (err) {
+    const code = String(err?.code || err?.data?.code || '');
+    const isUnavailableCode =
+      code === 'ERR_CDP_UNAVAILABLE' ||
+      code === 'ERR_NO_HUB_TARGETS' ||
+      code === 'ERR_PLUGIN_DISABLED' ||
+      code === 'ERR_INSPECTOR_INJECT_FAILED';
+    const msg = isUnavailableCode
+      ? tr('editor.pickHostUnavailable')
+      : err?.message || tr('editor.pickHostUnavailable');
+    store.inspectorBusy = false;
+    store.inspectorPicking = false;
+    store.inspectorSessionId = '';
+    store.inspectorTargetCount = 0;
+    store.inspectorError = msg;
+    showToast(msg, 'warn', 4800);
+    hooks.renderActiveSurface();
+    return { ok: false, code, error: msg };
+  }
+}
+
+export async function cancelInspectorPick(reason = 'studio-cancel') {
+  const cleanReason = typeof reason === 'string' && reason.trim() ? reason.trim().slice(0, 64) : 'studio-cancel';
+  const wasPicking = Boolean(store.inspectorPicking || store.inspectorBusy);
+  store.inspectorPicking = false;
+  store.inspectorBusy = false;
+  store.inspectorSessionId = '';
+  store.inspectorTargetCount = 0;
+  if (wasPicking) {
+    hooks.renderActiveSurface();
+  }
+  try {
+    return await apiJson('/api/inspector/cancel', {
+      method: 'POST',
+      body: { reason: cleanReason },
+      timeoutMs: 5000,
+    });
+  } catch {
+    return { ok: false, cancelled: false, reason: cleanReason };
+  }
 }
 
 // ============================================================================

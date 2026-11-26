@@ -1,4 +1,4 @@
-// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.2.0).
+// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.3.0).
 //
 // Gentle Fail-Open ES2020 browser IIFE loaded post-hydration (`stage.js`) or in headless verification harnesses.
 // Zero `Page.enable`/`Runtime.enable`, zero `app.asar` modifications, `z-index: -1` inert stage,
@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.2.0';
+  var VERSION = '2.3.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -336,7 +336,7 @@
     WCO_PILL_ID +
     '):not(#' +
     TOPBAR_PILLS_ID +
-    '):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
+    '):not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-hud):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
 
   var SIBLING_DESCENDANT_EXCLUDE =
     ':not(#agy-prism-pill):not(#agy-prism-pill *)' +
@@ -347,7 +347,9 @@
     ':not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-capsule *)' +
     ':not(#ag-usage-monitor-portal):not(#ag-usage-monitor-portal *)' +
     ':not(#deck-metrics-strip):not(#deck-metrics-strip *)' +
-    ':not(#agy-prism-popover):not(#agy-prism-popover *)';
+    ':not(#agy-prism-popover):not(#agy-prism-popover *)' +
+    ':not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-overlay *)' +
+    ':not(#agy-prism-inspector-hud):not(#agy-prism-inspector-hud *)';
 
   var COMPOSER_DESCENDANT_EXCLUDE =
     ':not(#antigravity\\.agentSidePanelInputBox):not(#antigravity\\.agentSidePanelInputBox *)' +
@@ -458,11 +460,13 @@
     '[role="dialog"]', '[role="alertdialog"]', '[role="menu"]', '[role="listbox"]', '[role="tooltip"]',
     '.agy-dialog', '.settings-modal-container', '[data-testid="media-modal"]', '[data-radix-popper-content-wrapper]',
     '#' + STAGE_ID, '#agy-prism-popover', '#agy-prism-pill', '#' + WCO_PILL_ID, '#' + TOPBAR_PILLS_ID,
+    '#agy-prism-inspector-overlay', '#agy-prism-inspector-hud',
     '#gemini-neko-pet-root', '#ag-usage-monitor-capsule', '#ag-context-meter', '#deck-metrics-strip',
   ].join(', ');
 
   var WELCOME_LOGO_OBS_IGNORE_ANCESTOR = [
     '#' + STAGE_ID, '#agy-prism-popover', '#agy-prism-pill', '#' + WCO_PILL_ID, '#' + TOPBAR_PILLS_ID,
+    '#agy-prism-inspector-overlay', '#agy-prism-inspector-hud',
     '#gemini-neko-pet-root', '#ag-usage-monitor-capsule', '#ag-context-meter', '#deck-metrics-strip',
     '[data-testid="sidebar-split"] > div:first-child', '.agy-sidebar',
     '[data-side-panel-body]', '[data-side-panel-strip]',

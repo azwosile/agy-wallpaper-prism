@@ -1,4 +1,4 @@
-// Host injection script loader & client skin payload builder for agy-wallpaper-prism v2.2.0.
+// Host injection script loader & client skin payload builder for agy-wallpaper-prism v2.3.0.
 // Consumed by `sidecars/prism_studio/main.mjs`, `cdp-bridge.mjs`, and `test/verify-all.mjs`.
 
 import { readFileSync } from 'node:fs';
@@ -27,9 +27,11 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SKIN_SCRIPT_PATH = join(__dirname, 'wallpaper-inject.js');
 const PANEL_SCRIPT_PATH = join(__dirname, 'panel-inject.js');
+const INSPECTOR_SCRIPT_PATH = join(__dirname, 'inspector-inject.js');
 
 let cachedSkinScript = null;
 let cachedPanelScript = null;
+let cachedInspectorScript = null;
 
 /** Return the raw ES2020 IIFE source of `wallpaper-inject.js` (`window.__agyPrism`). */
 export function getHostSkinScript({ reload = false } = {}) {
@@ -45,6 +47,14 @@ export function getHostPanelScript({ reload = false } = {}) {
     cachedPanelScript = readFileSync(PANEL_SCRIPT_PATH, 'utf8');
   }
   return cachedPanelScript;
+}
+
+/** Return the raw ES2020 IIFE source of `inspector-inject.js` (`window.__agyPrismInspector`). */
+export function getHostInspectorScript({ reload = false } = {}) {
+  if (!cachedInspectorScript || reload) {
+    cachedInspectorScript = readFileSync(INSPECTOR_SCRIPT_PATH, 'utf8');
+  }
+  return cachedInspectorScript;
 }
 
 function resolveMediaUrl(rawUrl, mediaOrigin) {
@@ -181,10 +191,10 @@ const TYPO_PROTECT_EX =
   ':not(pre, pre *, code, code *, .monaco-editor, .monaco-editor *, .xterm, .xterm *, svg, svg *)';
 
 const SIBLING_EXCLUDE =
-  ':not(#gemini-neko-pet-root):not(#gemini-neko-observer-modal):not(#gemini-neko-stats-bar):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(#agy-prism-stage):not(#agy-prism-wco-pill):not(#agy-prism-topbar-pills):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
+  ':not(#gemini-neko-pet-root):not(#gemini-neko-observer-modal):not(#gemini-neko-stats-bar):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(#agy-prism-stage):not(#agy-prism-wco-pill):not(#agy-prism-topbar-pills):not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-hud):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
 
 const SIBLING_DESCENDANT_EXCLUDE =
-  ':not(#agy-prism-pill):not(#agy-prism-pill *):not(#gemini-neko-pet-root):not(#gemini-neko-pet-root *):not(#gemini-neko-observer-modal):not(#gemini-neko-observer-modal *):not(#gemini-neko-stats-bar):not(#gemini-neko-stats-bar *):not(#ag-context-meter):not(#ag-context-meter *):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-capsule *):not(#ag-usage-monitor-portal):not(#ag-usage-monitor-portal *):not(#deck-metrics-strip):not(#deck-metrics-strip *):not(#agy-prism-popover):not(#agy-prism-popover *)';
+  ':not(#agy-prism-pill):not(#agy-prism-pill *):not(#gemini-neko-pet-root):not(#gemini-neko-pet-root *):not(#gemini-neko-observer-modal):not(#gemini-neko-observer-modal *):not(#gemini-neko-stats-bar):not(#gemini-neko-stats-bar *):not(#ag-context-meter):not(#ag-context-meter *):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-capsule *):not(#ag-usage-monitor-portal):not(#ag-usage-monitor-portal *):not(#deck-metrics-strip):not(#deck-metrics-strip *):not(#agy-prism-popover):not(#agy-prism-popover *):not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-overlay *):not(#agy-prism-inspector-hud):not(#agy-prism-inspector-hud *)';
 
 const COMPOSER_DESCENDANT_EXCLUDE =
   ':not(#antigravity\\.agentSidePanelInputBox):not(#antigravity\\.agentSidePanelInputBox *):not([data-testid="agent-input-box"]):not([data-testid="agent-input-box"] *):not(.surface-composer-card):not(.surface-composer-card *):not(.agy-composer):not(.agy-composer *)';
@@ -1604,7 +1614,7 @@ export function buildStaticCssSheet(payload = {}) {
       payload.skinEnabled === 0 ||
       (payload.config && (payload.config.skinEnabled === false || payload.config.skinEnabled === 0)))
   ) {
-    return '/* agy-wallpaper-prism v2.2.0 static-css: skin disabled */\n';
+    return '/* agy-wallpaper-prism v2.3.0 static-css: skin disabled */\n';
   }
   const rawCfg = payload?.config && typeof payload.config === 'object' ? payload.config : payload || DEFAULT_CONFIG;
   const activeItem = payload?.activeItem && typeof payload.activeItem === 'object' ? payload.activeItem : null;
@@ -1807,7 +1817,7 @@ ${multiClusterChildSel}::before {
 
   const solidPopoversList = SOLID_POPOVERS.join(', ');
 
-  return `/* agy-wallpaper-prism v2.2.0 zero-JS static-css sheet */
+  return `/* agy-wallpaper-prism v2.3.0 zero-JS static-css sheet */
 :root, body.dark, html.dark body {
 ${buildPolarityTokenVarsCss(cfg, darkTok, false)}
   --prism-static-wall: ${wallBgDark};
