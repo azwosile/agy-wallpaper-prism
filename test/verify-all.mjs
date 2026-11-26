@@ -1482,6 +1482,14 @@ async function main() {
           blob: async () => new Blob([new Uint8Array(16)]),
         };
       }
+      if (u.includes('fetch-fail-fallback.mp4')) {
+        return {
+          ok: false,
+          status: 502,
+          headers: { get: () => null },
+          blob: async () => new Blob([]),
+        };
+      }
       const payloadBytes = new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
       return {
         ok: true,
@@ -1619,7 +1627,7 @@ async function main() {
       );
       assert.equal(prism.status().videoSrc, createdBlobUrls[1]);
 
-      // 3) >256 MiB Content-Length video with thumbUrl gracefully degrades to <img> poster keeping data-agy-prism-wallpaper="ready"
+      // 3) 300 MiB Content-Length video is NOT gated by a memory cap and plays directly via fetch+blob
       stepStartMs = Date.now();
       prism.applyPayload({
         skinEnabled: true,
@@ -1632,13 +1640,39 @@ async function main() {
         },
       });
       await sleep(40);
-      assert.ok(revokedBlobUrls.includes(createdBlobUrls[1]), 'Expected second video blob URL to be revoked when poster fallback commits');
-      assert.equal(prism.status().wallpaperReady, true, 'Expected >256MB video with thumbUrl to stay wallpaperReady=true via poster fallback');
-      assert.equal(prism.status().degradedToPoster, true, 'Expected degradedToPoster=true when oversized video falls back to poster');
+      assert.ok(revokedBlobUrls.includes(createdBlobUrls[1]), 'Expected second video blob URL to be revoked when 300 MiB video switches to blob playback');
+      const stOversize = prism.status();
+      assert.equal(stOversize.wallpaperReady, true, 'Expected 300 MiB video to stay wallpaperReady=true via uncapped fetch+blob');
+      assert.equal(stOversize.degradedToPoster, false, 'Expected degradedToPoster=false when 300 MiB video plays directly via blob:');
+      assert.equal(stOversize.degradeReason, '', 'Expected empty degradeReason when 300 MiB video plays directly via blob:');
+      assert.equal(docRoot.getAttribute('data-agy-prism-wallpaper'), 'ready');
+      assert.equal(stOversize.videoSrc, createdBlobUrls[2], `Expected 300 MiB video to commit blob URL ${createdBlobUrls[2]}, got ${stOversize.videoSrc}`);
+      const stageElOversize = mockDoc.getElementById('agy-prism-stage');
+      const oversizeVideos = stageElOversize.querySelectorAll('video');
+      assert.equal(oversizeVideos.length, 1, 'Expected 300 MiB video to mount <video> directly without poster downgrade');
+      assert.ok(String(oversizeVideos[0].src || '').startsWith('blob:'), `Expected blob: <video>.src for 300 MiB video, got: ${oversizeVideos[0].src}`);
+      assert.equal(stageElOversize.querySelectorAll('img').length, 0, 'Expected zero poster <img> when 300 MiB blob playback succeeds');
+
+      // 3b) Non-404 fetch failure (e.g. HTTP 502) without mseFmp4Url gracefully degrades to <img> poster keeping data-agy-prism-wallpaper="ready"
+      stepStartMs = Date.now();
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { fxEnabled: true, switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-vid-fetch-fail',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/tok3b/fetch-fail-fallback.mp4',
+          thumbUrl: 'http://127.0.0.1:49152/preview/tok3b/poster-ok.png',
+        },
+      });
+      await sleep(40);
+      assert.ok(revokedBlobUrls.includes(createdBlobUrls[2]), 'Expected 300 MiB video blob URL to be revoked when poster fallback commits');
+      assert.equal(prism.status().wallpaperReady, true, 'Expected non-404 fetch failure with thumbUrl to stay wallpaperReady=true via poster fallback');
+      assert.equal(prism.status().degradedToPoster, true, 'Expected degradedToPoster=true when non-404 fetch failure falls back to poster');
       assert.ok(String(prism.status().degradeReason || '').length > 0, 'Expected non-empty degradeReason on poster degradation');
       assert.equal(docRoot.getAttribute('data-agy-prism-wallpaper'), 'ready');
       const stageEl = mockDoc.getElementById('agy-prism-stage');
-      assert.equal(stageEl.querySelectorAll('video').length, 0, 'Oversized <video> element must be removed during poster fallback');
+      assert.equal(stageEl.querySelectorAll('video').length, 0, 'Failed <video> element must be removed during poster fallback');
       const posterImgs = stageEl.querySelectorAll('img');
       assert.equal(posterImgs.length, 1, 'Expected fallback <img class="agy-prism-media-el"> in stage');
       assert.deepEqual(directHttpImgSrcs, [], 'https: host MUST NOT assign http://127.0.0.1 directly to poster <img>.src');
@@ -1669,7 +1703,7 @@ async function main() {
       assert.ok(fx404, '#agy-prism-fx-canvas node still managed by fxEnabled');
       assert.equal(fx404.style.display, 'none', '#agy-prism-fx-canvas MUST be display:none when wallpaperReady=false');
 
-      return `0ms fetch+blob (${fetchCalls[0].elapsedMs}ms) + ${revokedBlobUrls.length} blob revocations + >256MB poster degrade/reason + 404 fail-open & fx hidden`;
+      return `0ms fetch+blob (${fetchCalls[0].elapsedMs}ms) + ${revokedBlobUrls.length} blob revocations + 300MiB uncapped blob + non-404 poster degrade/reason + 404 fail-open & fx hidden`;
     } finally {
       prism.destroy();
     }
@@ -2839,6 +2873,14 @@ async function main() {
       if (u.includes('tok971-404') && method === 'HEAD') {
         return { ok: false, status: 404, headers: { get: () => null } };
       }
+      if (u.includes('huge-971mb-fail.mp4')) {
+        return {
+          ok: false,
+          status: 503,
+          headers: { get: () => null },
+          blob: async () => new Blob([]),
+        };
+      }
       if (u.includes('huge-971mb.mp4')) {
         return {
           ok: true,
@@ -3061,7 +3103,39 @@ async function main() {
       );
 
       // 2D) Simulated 971 MB video Scenario 2: `pluginMediaUrl` HEAD 404 -> skips plaintext http:// iframe
-      //     (0ms, NO 15.5s Chrome 152 hang!) -> content-length 1018167296 triggers MediaSource `/mse-fmp4/` streaming!
+      //     (0ms, NO 15.5s Chrome 152 hang!) -> when fetch succeeds (`content-length: 1018167296`), uncapped
+      //     `MAX_BLOB_MEDIA_BYTES = Infinity` plays directly via `blob:` (`videoTransport === 'blob'`);
+      //     when fetch hits a non-404 failure (e.g. HTTP 503) and `mseFmp4Url` is present, falls back to MediaSource `/mse-fmp4/`.
+      stepStartMs = Date.now();
+      prism.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'cut', accentMode: 'cobalt' },
+        activeItem: {
+          id: 'vm-v207-971mb-blob',
+          kind: 'video',
+          mediaUrl: 'http://127.0.0.1:49152/media/tok971a/huge-971mb.mp4',
+          pluginMediaUrl: 'plugin://agy-wallpaper-prism--prism_studio-53040/media-proxy/media/tok971-404',
+          videoStageUrl: 'http://127.0.0.1:49152/video-stage/tok971a',
+          mseFmp4Url: 'http://127.0.0.1:49152/mse-fmp4/tok971a',
+          thumbUrl: 'http://127.0.0.1:49152/preview/tok971a/poster.png',
+        },
+      });
+      await sleep(60);
+      const stBlob971 = prism.status();
+      assert.equal(stBlob971.wallpaperReady, true, '971 MB uncapped blob video did not become ready');
+      assert.equal(stBlob971.videoTransport, 'blob', `Expected videoTransport="blob" for uncapped 971 MB fetch+blob, got ${stBlob971.videoTransport}`);
+      assert.ok(String(stBlob971.videoSrc || '').startsWith('blob:'), `Expected blob: videoSrc for 971 MB video, got ${stBlob971.videoSrc}`);
+      assert.equal(
+        mockDoc.getElementById('agy-prism-stage').querySelectorAll('video').length,
+        1,
+        '971 MB blob video should render <video> directly',
+      );
+      assert.deepEqual(
+        createdIframeSrcs,
+        [],
+        `Real MediaSource https: env must NOT mount plaintext http:// video-stage iframe (seen: ${createdIframeSrcs.join(', ')})`,
+      );
+
       stepStartMs = Date.now();
       prism.applyPayload({
         skinEnabled: true,
@@ -3069,7 +3143,7 @@ async function main() {
         activeItem: {
           id: 'vm-v207-971mb-mse',
           kind: 'video',
-          mediaUrl: 'http://127.0.0.1:49152/media/tok971b/huge-971mb.mp4',
+          mediaUrl: 'http://127.0.0.1:49152/media/tok971b/huge-971mb-fail.mp4',
           pluginMediaUrl: 'plugin://agy-wallpaper-prism--prism_studio-53040/media-proxy/media/tok971-404',
           videoStageUrl: 'http://127.0.0.1:49152/video-stage/tok971b',
           mseFmp4Url: 'http://127.0.0.1:49152/mse-fmp4/tok971b',
@@ -3078,8 +3152,8 @@ async function main() {
       });
       await sleep(80);
       const stMse = prism.status();
-      assert.equal(stMse.wallpaperReady, true, '971 MB MediaSource /mse-fmp4/ video did not become ready');
-      assert.equal(stMse.videoTransport, 'mse', `Expected videoTransport="mse", got ${stMse.videoTransport}`);
+      assert.equal(stMse.wallpaperReady, true, '971 MB MediaSource /mse-fmp4/ fallback video did not become ready');
+      assert.equal(stMse.videoTransport, 'mse', `Expected videoTransport="mse" after non-404 blob fetch failure, got ${stMse.videoTransport}`);
       assert.equal(mseAppendedChunks.length, 2, `Expected 2 SourceBuffer chunks pumped from /mse-fmp4/, got ${mseAppendedChunks.length}`);
       assert.ok(mseEndOfStreamCount >= 1, 'Expected MediaSource.endOfStream() after stream completion');
       assert.equal(
@@ -4681,7 +4755,7 @@ async function main() {
     return 'popout 403/401/415 + 0 URL token + studioHttpOrigin + visual-editor CSP frame-ancestors none vs Aux / verified';
   });
 
-  await check('S2-05: Feedback #11 playback resilience (`P1..P5` preset `paused:false`, muted autoplay fallback & 48 MiB blob guard)', '@exec-mock-tests', async () => {
+  await check('S2-05: Feedback #11 playback resilience (`P1..P5` preset `paused:false`, muted autoplay fallback & uncapped blob with MSE/poster error fallback)', '@exec-mock-tests', async () => {
     const { FACTORY_PRESETS, SCENE_PRESETS } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href);
     const { buildLiveSceneHtml } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'engine', 'runtime', 'web-shim.mjs')).href);
 
@@ -4695,8 +4769,17 @@ async function main() {
     assert.ok(sceneHtml.includes('playVideoSafe') && sceneHtml.includes('muted = true'), 'buildLiveSceneHtml missing muted autoplay fallback in playVideoSafe()');
 
     const wallSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
-    assert.match(wallSrc, /MAX_BLOB_MEDIA_BYTES\s*=\s*48\s*\*\s*1024\s*\*\s*1024/, 'Expected MAX_BLOB_MEDIA_BYTES = 48 * 1024 * 1024');
-    return '7/7 FACTORY_PRESETS paused:false + eco paused:true + playVideoSafe muted fallback + 48 MiB blob cap verified';
+    assert.match(wallSrc, /var\s+MAX_BLOB_MEDIA_BYTES\s*=\s*Infinity\s*;/, 'Expected uncapped MAX_BLOB_MEDIA_BYTES = Infinity');
+    assert.ok(
+      !/MAX_BLOB_MEDIA_BYTES\s*=\s*48\s*\*\s*1024\s*\*\s*1024/.test(wallSrc),
+      'MAX_BLOB_MEDIA_BYTES must not enforce the legacy 48 MiB size cap',
+    );
+    assert.match(
+      wallSrc,
+      /var\s+isMissingAsset\s*=\s*httpStatus\s*===\s*404\s*\|\|\s*httpStatus\s*===\s*403\s*\|\|\s*httpStatus\s*===\s*410[\s\S]{0,400}mountMseStreamVideo[\s\S]{0,400}fallbackToPoster/,
+      'Expected non-404 blob fetch failures to retain MSE / poster fallback while keeping 404/403/410 fail-open',
+    );
+    return '7/7 FACTORY_PRESETS paused:false + eco paused:true + playVideoSafe muted fallback + uncapped blob (Infinity) & MSE/poster error fallback verified';
   });
 
   await check('S2-06: `?static=1` & `X-Prism-Animated-Preview: 1`, `mp4-vfs` `pinned<=8`, deferred scan & `MSE_MAX_CONCURRENCY = 2`', '@exec-mock-tests', async () => {

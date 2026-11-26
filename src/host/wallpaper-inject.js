@@ -4608,8 +4608,8 @@
     }
   }
 
-  var MAX_BLOB_MEDIA_BYTES = 48 * 1024 * 1024;
-  var BLOB_FETCH_TIMEOUT_MS = 20000;
+  var MAX_BLOB_MEDIA_BYTES = Infinity;
+  var BLOB_FETCH_TIMEOUT_MS = 60000;
 
   function isCrossSchemeLoopbackUrl(url) {
     return Boolean(
@@ -4630,8 +4630,8 @@
 
   // Antigravity 2.34.0 (Chrome 152) serves the main hub on `https://127.0.0.1:<port>`, where direct
   // `<video>`/`<audio>` `type:"Media"` requests to `http://127.0.0.1:<mediaPort>` stall indefinitely at
-  // `readyState === 0`. Zero-delay `fetch()` -> `blob:` bypasses the Media loader hang with a 20s timeout
-  // and 48 MiB safety cap.
+  // `readyState === 0`. Zero-delay `fetch()` -> `blob:` bypasses the Media loader hang with a 60s timeout
+  // and uncapped in-memory Blob playback (falling back to MSE/poster only on non-404 errors or timeouts).
   function attachLoopbackMediaSrc(el, url, opts) {
     if (!el || !url) return;
     opts = opts || {};
@@ -4667,15 +4667,10 @@
 
       W.fetch(url, ac ? { signal: ac.signal } : undefined)
         .then(function (res) {
-          if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : 0));
-          var lenHeader = res.headers && typeof res.headers.get === 'function' ? Number(res.headers.get('content-length')) : 0;
-          if (Number.isFinite(lenHeader) && lenHeader > MAX_BLOB_MEDIA_BYTES) {
-            try {
-              if (ac) ac.abort();
-            } catch (_) {}
-            var capErr = new Error('Media exceeds blob cap');
-            capErr.code = 'BLOB_CAP_EXCEEDED';
-            throw capErr;
+          if (!res || !res.ok) {
+            var httpErr = new Error('HTTP ' + (res ? res.status : 0));
+            httpErr.status = res ? Number(res.status || 0) : 0;
+            throw httpErr;
           }
           return res.blob();
         })
@@ -4688,11 +4683,6 @@
           }
           if (!blob || blob.size <= 0) {
             throw new Error('Empty media blob');
-          }
-          if (blob.size > MAX_BLOB_MEDIA_BYTES) {
-            var capErr = new Error('Media exceeds blob cap');
-            capErr.code = 'BLOB_CAP_EXCEEDED';
-            throw capErr;
           }
           var blobUrl = W.URL.createObjectURL(blob);
           if (!isCurrent()) {
@@ -4718,7 +4708,7 @@
           el.__prismFetchTimer = 0;
           el.__prismFetchingBlob = false;
           if (!isCurrent()) return;
-          if (err && err.name === 'AbortError' && !el.__prismTimedOut) return;
+          if (err && err.name === 'AbortError' && !el.__prismTimedOut && ac && ac.signal && ac.signal.aborted) return;
           if (typeof opts.onError === 'function') opts.onError(err);
         });
     };
@@ -4791,13 +4781,10 @@
 
       W.fetch(url, ac ? { signal: ac.signal } : undefined)
         .then(function (res) {
-          if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : 0));
-          var lenHeader = res.headers && typeof res.headers.get === 'function' ? Number(res.headers.get('content-length')) : 0;
-          if (Number.isFinite(lenHeader) && lenHeader > MAX_BLOB_MEDIA_BYTES) {
-            try {
-              if (ac) ac.abort();
-            } catch (_) {}
-            throw new Error('Image exceeds blob cap');
+          if (!res || !res.ok) {
+            var httpErr = new Error('HTTP ' + (res ? res.status : 0));
+            httpErr.status = res ? Number(res.status || 0) : 0;
+            throw httpErr;
           }
           return res.blob();
         })
@@ -4808,7 +4795,7 @@
             img.__prismFetchingBlob = false;
             return;
           }
-          if (!blob || blob.size <= 0 || blob.size > MAX_BLOB_MEDIA_BYTES) {
+          if (!blob || blob.size <= 0) {
             throw new Error('Invalid image blob');
           }
           var blobUrl = W.URL.createObjectURL(blob);
@@ -4833,7 +4820,7 @@
           img.__prismFetchTimer = 0;
           img.__prismFetchingBlob = false;
           if (!isCurrent()) return;
-          if (err && err.name === 'AbortError' && !img.__prismTimedOut) return;
+          if (err && err.name === 'AbortError' && !img.__prismTimedOut && ac && ac.signal && ac.signal.aborted) return;
           triggerFail();
         });
     };
@@ -4865,7 +4852,7 @@
     img.src = url;
   }
 
-  // Streaming MediaSource (MSE) fMP4 player for >256 MiB videos (e.g. 971 MB / 4 GB) under `https:` hosts.
+  // Streaming MediaSource (MSE) fMP4 fallback player under `https:` hosts when loopback Blob fetch fails or times out.
   // Pumps chunks from `/mse-fmp4/<token>` into SourceBuffer with rolling frame eviction so RAM stays <32 MiB.
   function mountMseStreamVideo(video, mseUrl, wrap, isStaleFn, onVideoDecoded, fallbackToPoster) {
     var isStale = typeof isStaleFn === 'function' ? isStaleFn : function () { return destroyed; };
@@ -6102,7 +6089,7 @@
             state.pendingMediaTimer = setTimeout(function () {
               state.pendingMediaTimer = 0;
               if (settledPoster) return;
-              if (posterImg.__prismFetchingBlob && posterWaitTicks < 8) {
+              if (posterImg.__prismFetchingBlob && posterWaitTicks < 20) {
                 posterWaitTicks += 1;
                 armPosterGuard(3000);
               } else {
@@ -6186,13 +6173,17 @@
               return;
             }
             if (video.__prismFetchingBlob || video.__prismMseLoading) {
-              if (blobWaitTicks < 16) {
+              if (blobWaitTicks < 40) {
                 blobWaitTicks += 1;
                 armPendingVideoGuard(1500);
                 return;
               }
               if (video.__prismMseActive) {
                 fallbackToPoster('mse-load-timeout');
+              } else if (mseFmp4Url && typeof W.MediaSource === 'function') {
+                mountMseStreamVideo(video, mseFmp4Url, nextWrap, isStaleVid, onVideoDecoded, fallbackToPoster);
+              } else if (item && item.thumbUrl) {
+                fallbackToPoster('blob-fetch-timeout');
               } else {
                 onVideoFailed();
               }
@@ -6231,13 +6222,16 @@
           isStale: isStaleVid,
           onReady: syncMediaPlaybackState,
           onError: function (err) {
-            if (err && err.code === 'BLOB_CAP_EXCEEDED') {
+            var httpStatus = err && Number(err.status);
+            var isMissingAsset = httpStatus === 404 || httpStatus === 403 || httpStatus === 410;
+            if (!isMissingAsset) {
               if (mseFmp4Url && typeof W.MediaSource === 'function') {
                 mountMseStreamVideo(video, mseFmp4Url, nextWrap, isStaleVid, onVideoDecoded, fallbackToPoster);
                 return;
               }
               if (item && item.thumbUrl) {
-                fallbackToPoster('blob-cap-no-mse');
+                var isTimeout = Boolean(video.__prismTimedOut || (err && err.name === 'AbortError'));
+                fallbackToPoster(isTimeout ? 'blob-fetch-timeout' : 'blob-fetch-fallback');
                 return;
               }
             }
