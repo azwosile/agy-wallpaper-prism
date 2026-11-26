@@ -3789,6 +3789,145 @@ async function main() {
     return `selectHubTargets bilingual + ${wakeNote} + /preload.js & iframe __agyDomTranslatorInitialized guards`;
   });
 
+  await check('Sidecar Owner Fencing: superseded server abdication, `server_info.json` preservation & 600ms SSE recovery loop breaker', '@exec-sidecar / @exec-tests', async () => {
+    const { createPassiveCdpBridge } = await import(
+      pathToFileURL(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs')).href
+    );
+    const fencingDataDir = path.join(SCRATCH_ROOT, 'owner-fencing-data');
+    fs.mkdirSync(fencingDataDir, { recursive: true });
+    const infoPath = path.join(fencingDataDir, 'server_info.json');
+
+    // 1) Multi-instance `createPrismStudioServer` owner fencing & safe `server_info.json` cleanup
+    let supersededCalled = false;
+    let supersededReason = '';
+    const prevDisableCdp = process.env.AGY_PRISM_DISABLE_CDP;
+    delete process.env.AGY_PRISM_DISABLE_CDP;
+    let instanceA = null;
+    let instanceB = null;
+    try {
+      instanceA = await createPrismStudioServer({
+        dataDir: fencingDataDir,
+        token: 'fence-tok-a',
+        startCdp: true,
+        cdpPort: 1,
+        cdpPollMs: 0,
+        profileDir: fencingDataDir,
+        autoCheckUpdates: false,
+        inspectShortcuts: false,
+        onSuperseded: (reason) => {
+          supersededCalled = true;
+          supersededReason = String(reason || '');
+        },
+      });
+      const infoAfterA = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
+      assert.equal(infoAfterA.instanceId, instanceA.instanceId, 'Expected server_info.json instanceId to match Instance A');
+      assert.equal(infoAfterA.port, instanceA.port, 'Expected server_info.json port to match Instance A');
+
+      instanceB = await createPrismStudioServer({
+        dataDir: fencingDataDir,
+        token: 'fence-tok-b',
+        startCdp: true,
+        cdpPort: 1,
+        cdpPollMs: 0,
+        profileDir: fencingDataDir,
+        autoCheckUpdates: false,
+        inspectShortcuts: false,
+      });
+
+      const infoAfterB = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
+      assert.equal(infoAfterB.instanceId, instanceB.instanceId, 'Expected server_info.json instanceId to update to Instance B');
+      assert.equal(infoAfterB.port, instanceB.port, 'Expected server_info.json port to update to Instance B');
+
+      await instanceA.cdpBridge.tick();
+      const deadline = Date.now() + 2500;
+      while (!supersededCalled && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.equal(supersededCalled, true, 'Instance A did not invoke onSuperseded when Instance B took ownership');
+      assert.equal(supersededReason, 'owner_changed_on_tick', `Unexpected supersede reason: ${supersededReason}`);
+      assert.equal(fs.existsSync(infoPath), true, 'Superseded Instance A deleted active server_info.json!');
+      const infoAfterYield = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
+      assert.equal(infoAfterYield.instanceId, instanceB.instanceId, 'server_info.json no longer matches Instance B after A yielded');
+      assert.equal(infoAfterYield.port, instanceB.port);
+    } finally {
+      if (prevDisableCdp === undefined) delete process.env.AGY_PRISM_DISABLE_CDP;
+      else process.env.AGY_PRISM_DISABLE_CDP = prevDisableCdp;
+      if (instanceA) await instanceA.close({ preserveHostDom: true }).catch(() => {});
+      if (instanceB) await instanceB.close().catch(() => {});
+    }
+    assert.equal(fs.existsSync(infoPath), false, 'Authoritative Instance B should remove server_info.json on clean close()');
+
+    // 2) Direct `createPassiveCdpBridge` SSE-disconnect fencing (breaks 600ms hijack loop)
+    const bridgeDir = path.join(SCRATCH_ROOT, 'owner-fencing-bridge');
+    fs.mkdirSync(bridgeDir, { recursive: true });
+    let owned = true;
+    let engineStateCalls = 0;
+    let bridgeLostReason = '';
+    const bridge = createPassiveCdpBridge({
+      getEngineState: async () => {
+        engineStateCalls += 1;
+        return {
+          config: { skinEnabled: true, startupMode: 'gentle-auto', liveBootDelay: 0, triggerMode: 'both' },
+          activeItem: null,
+          skinEnabled: true,
+          mediaOrigin: 'http://127.0.0.1:49152',
+        };
+      },
+      hostScripts: {
+        buildClientSkinPayload: () => ({ skinEnabled: true, config: {} }),
+        buildStaticCssSheet: () => '',
+      },
+      getHostOrigin: () => studio.origin,
+      capToken: 'fence-bridge-cap',
+      dataDir: bridgeDir,
+      pluginRoot: REPO_ROOT,
+      cdpPort: 1,
+      pollMs: 0,
+      isAuthoritativeOwner: () => owned,
+      onOwnershipLost: (reason) => {
+        bridgeLostReason = String(reason || '');
+      },
+    });
+    const reqHandlers = new Map();
+    const resHandlers = new Map();
+    const mockReq = {
+      on: (ev, fn) => {
+        const arr = reqHandlers.get(ev) || [];
+        arr.push(fn);
+        reqHandlers.set(ev, arr);
+      },
+      emit: (ev, ...args) => {
+        for (const fn of (reqHandlers.get(ev) || []).slice()) fn(...args);
+      },
+    };
+    const mockRes = {
+      writableEnded: false,
+      destroyed: false,
+      socket: { destroyed: false, writable: true },
+      write: () => true,
+      end: () => { mockRes.writableEnded = true; },
+      on: (ev, fn) => {
+        const arr = resHandlers.get(ev) || [];
+        arr.push(fn);
+        resHandlers.set(ev, arr);
+      },
+    };
+    try {
+      await bridge.registerSseClient(mockReq, mockRes, false);
+      assert.equal(engineStateCalls, 1, 'Expected 1 initial engine state read on SSE register');
+      owned = false;
+      mockReq.emit('close');
+      assert.equal(bridge.getStatus().phase, 'superseded', `Expected phase=superseded, got ${bridge.getStatus().phase}`);
+      assert.equal(bridgeLostReason, 'owner_changed_on_sse_close');
+      await new Promise((r) => setTimeout(r, 750));
+      assert.equal(engineStateCalls, 1, 'Superseded bridge scheduled 600ms SSE recovery tick instead of yielding!');
+    } finally {
+      await bridge.stop({ preserveHostDom: true }).catch(() => {});
+    }
+
+    return 'Multi-instance server_info fencing + preserved owner file + 600ms SSE loop breaker verified';
+  });
+
   await check('Issue #10 + Req #4: Pure-Optical `SCENE_PRESETS`, 7-Component `surfaceTints` + `resolveComponentDefaultAlpha` & 128/128 WCAG AA (>= 4.5:1) Matrix', '@exec-shared / @exec-host-skin / @exec-tests', async () => {
     const {
       SCENE_PRESETS,
