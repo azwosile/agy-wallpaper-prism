@@ -231,12 +231,12 @@ async function main() {
     assert.equal(raw.name, 'agy-wallpaper-prism');
     assert.equal(raw.version, '2.4.1', `Expected plugin.json version 2.4.1, got ${raw.version}`);
     assert.equal(pkg.version, '2.4.1', `Expected package.json version 2.4.1, got ${pkg.version}`);
-    assert.match(readme, /\*\*Version\*\*:\s*`2\.4\.0`/, 'Expected README.md **Version**: `2.4.1`');
-    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.4\.0'/, 'Expected schema.mjs PLUGIN_VERSION = 2.4.1');
-    assert.match(schemaSrc, /skinVersion:\s*'2\.4\.0'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.4.1');
-    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.4\.0'/, 'Expected wallpaper-inject.js VERSION = 2.4.1');
-    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.4\.0'/, 'Expected panel-inject.js VERSION = 2.4.1');
-    assert.match(inspectorInjectSrc, /var VERSION\s*=\s*'2\.4\.0'/, 'Expected inspector-inject.js VERSION = 2.4.1');
+    assert.match(readme, /\*\*Version\*\*:\s*`2\.4\.1`/, 'Expected README.md **Version**: `2.4.1`');
+    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.4\.1'/, 'Expected schema.mjs PLUGIN_VERSION = 2.4.1');
+    assert.match(schemaSrc, /skinVersion:\s*'2\.4\.1'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.4.1');
+    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.4\.1'/, 'Expected wallpaper-inject.js VERSION = 2.4.1');
+    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.4\.1'/, 'Expected panel-inject.js VERSION = 2.4.1');
+    assert.match(inspectorInjectSrc, /var VERSION\s*=\s*'2\.4\.1'/, 'Expected inspector-inject.js VERSION = 2.4.1');
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
