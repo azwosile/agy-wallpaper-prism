@@ -10349,6 +10349,133 @@ async function main() {
         assert.ok(liveTxt.includes('../scene-image/s307-hd-scene'), 'scene-live must reference relative ../scene-image/');
         assert.ok(liveTxt.includes('runtime.onBattery ? 1.0 : 2.0'), 'scene-live DPR cap should be 2.0');
 
+        // 2b) Transparent overlay rejection + custom-shader multi-layer preview.jpg fallback
+        const makeTestPng = (w, h, colorType, filterByte, pixelFiller) => {
+          const crc32Buf = (buf) => {
+            let c = 0xffffffff;
+            for (const b of buf) {
+              c ^= b;
+              for (let k = 0; k < 8; k += 1) c = (c >>> 1) ^ (c & 1 ? 0xedb88320 : 0);
+            }
+            return (c ^ 0xffffffff) >>> 0;
+          };
+          const pngChunk = (type, data) => {
+            const t = Buffer.from(type, 'ascii');
+            const len = Buffer.alloc(4);
+            len.writeUInt32BE(data.length, 0);
+            const body = Buffer.concat([t, data]);
+            const crc = Buffer.alloc(4);
+            crc.writeUInt32BE(crc32Buf(body), 0);
+            return Buffer.concat([len, body, crc]);
+          };
+          const ihdr = Buffer.alloc(13);
+          ihdr.writeUInt32BE(w, 0);
+          ihdr.writeUInt32BE(h, 4);
+          ihdr[8] = 8;
+          ihdr[9] = colorType;
+          const bpp = colorType === 6 ? 4 : 3;
+          const rows = [];
+          for (let y = 0; y < h; y += 1) {
+            const row = Buffer.alloc(1 + w * bpp, 0);
+            row[0] = filterByte;
+            pixelFiller(row, y, w, bpp);
+            rows.push(row);
+          }
+          const idat = zlib.deflateSync(Buffer.concat(rows));
+          return Buffer.concat([
+            Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+            pngChunk('IHDR', ihdr),
+            pngChunk('IDAT', idat),
+            pngChunk('IEND', Buffer.alloc(0)),
+          ]);
+        };
+
+        const tmpLayeredDir = path.join(SCRATCH_ROOT, 's308-layered-scene');
+        fs.mkdirSync(path.join(tmpLayeredDir, 'materials'), { recursive: true });
+        fs.mkdirSync(path.join(tmpLayeredDir, 'models'), { recursive: true });
+        const previewJpgAbs = path.join(tmpLayeredDir, 'preview.jpg');
+        fs.writeFileSync(previewJpgAbs, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9]));
+
+        // Larger 128x128 Paeth-filtered nearly-transparent RGBA overlay vs smaller 64x64 opaque RGB background
+        // (both >= 64px & >= 256 bytes so inspectSceneContainer includes them)
+        const overlayPng = makeTestPng(128, 128, 6, 4, (row, y, w, bpp) => {
+          for (let x = 0; x < w; x += 1) {
+            row[1 + x * bpp] = (x * 17 + y * 31) & 0xff;
+            row[1 + x * bpp + 1] = (x * 29 + y * 13) & 0xff;
+            row[1 + x * bpp + 2] = (x * 43 + y * 7) & 0xff;
+            row[1 + x * bpp + 3] = 0;
+          }
+        });
+        const bgRgbPng = makeTestPng(64, 64, 2, 0, (row, y, w, bpp) => {
+          for (let x = 0; x < w; x += 1) {
+            row[1 + x * bpp] = (x * 11 + y * 19) & 0xff;
+            row[1 + x * bpp + 1] = (x * 23 + y * 37) & 0xff;
+            row[1 + x * bpp + 2] = (x * 41 + y * 53) & 0xff;
+          }
+        });
+        fs.writeFileSync(
+          path.join(tmpLayeredDir, 'materials', 'hud_overlay.tex'),
+          buildTex({ format: 0, texW: 128, texH: 128, imgW: 128, imgH: 128, ver: 3, fif: 13, payload: overlayPng }),
+        );
+        fs.writeFileSync(
+          path.join(tmpLayeredDir, 'materials', 'base_bg.tex'),
+          buildTex({ format: 0, texW: 64, texH: 64, imgW: 64, imgH: 64, ver: 3, fif: 13, payload: bgRgbPng }),
+        );
+        fs.writeFileSync(
+          path.join(tmpLayeredDir, 'models', 'base_bg.json'),
+          JSON.stringify({ material: 'materials/base_bg.json' }),
+        );
+        fs.writeFileSync(
+          path.join(tmpLayeredDir, 'models', 'hud_overlay.json'),
+          JSON.stringify({ material: 'materials/hud_overlay.json' }),
+        );
+        fs.writeFileSync(
+          path.join(tmpLayeredDir, 'materials', 'base_bg.json'),
+          JSON.stringify({ passes: [{ shader: 'dragon_theme', textures: ['base_bg'] }] }),
+        );
+        fs.writeFileSync(
+          path.join(tmpLayeredDir, 'materials', 'hud_overlay.json'),
+          JSON.stringify({ passes: [{ shader: 'dragon_hud', textures: ['hud_overlay'] }] }),
+        );
+        fs.writeFileSync(
+          path.join(tmpLayeredDir, 'scene.json'),
+          JSON.stringify({
+            objects: [
+              { id: 1, name: 'BG', image: 'models/base_bg.json' },
+              { id: 2, name: 'HUD', image: 'models/hud_overlay.json' },
+            ],
+          }),
+        );
+
+        const exNoPreview = extractSceneImagePayload(tmpLayeredDir, { hasPreview: false });
+        assert.equal(exNoPreview?.width, 64, 'must reject 128x128 transparent overlay and pick 64x64 opaque base_bg');
+        assert.equal(exNoPreview?.height, 64);
+        const exWithPreview = extractSceneImagePayload(tmpLayeredDir, { hasPreview: true });
+        assert.equal(exWithPreview, null, 'custom-shader multi-layer scene must fall back to preview.jpg when available');
+
+        srvS307.registerEntry({
+          id: 's308-layered-custom-shader',
+          title: 'S308 Layered Custom Shader',
+          kind: 'scene',
+          source: 'local',
+          sceneMode: 'live',
+          schemeColor: '#dae3f4',
+          _fs: {
+            projectDir: tmpLayeredDir,
+            primaryAbs: null,
+            previewAbs: previewJpgAbs,
+            slidesAbs: [],
+            sceneContainerAbs: tmpLayeredDir,
+            hasSceneVideo: false,
+            hasSceneImage: true,
+            hasSceneAudio: false,
+            looseAudioAbs: null,
+            webEntryRel: '',
+          },
+        });
+        const rLayeredImg = await invokeServerInMemory(srvS307.server, { method: 'GET', url: '/scene-image/s308-layered-custom-shader' });
+        assert.equal(rLayeredImg.status, 404, '/scene-image/ must return 404 for custom-shader multi-layer scene with preview.jpg');
+
         const regWeb = srvS307.registerFile('s307-web-1', webHtmlFile, 'web');
         assert.ok(regWeb.webUrl);
         const rWebProxy = await invokeServerInMemory(srvS307.server, {

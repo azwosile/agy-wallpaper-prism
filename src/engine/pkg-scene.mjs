@@ -14,7 +14,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { deflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
 import {
   closeSync,
   existsSync,
@@ -721,6 +721,103 @@ function sniffEncodedImageMagic(bytes) {
   return null;
 }
 
+function estimateRgbaOpaqueRatio(rgba, width, height) {
+  if (!rgba || width <= 0 || height <= 0 || rgba.byteLength < width * height * 4) return 1;
+  const stepX = Math.max(1, Math.floor(width / 128));
+  const stepY = Math.max(1, Math.floor(height / 128));
+  let opaque = 0;
+  let total = 0;
+  for (let y = 0; y < height; y += stepY) {
+    const rowOff = y * width * 4;
+    for (let x = 0; x < width; x += stepX) {
+      total += 1;
+      if (rgba[rowOff + x * 4 + 3] >= 128) opaque += 1;
+    }
+  }
+  return total > 0 ? opaque / total : 1;
+}
+
+function estimatePngOpaqueRatio(pngBytes) {
+  try {
+    const buf = Buffer.isBuffer(pngBytes) ? pngBytes : Buffer.from(pngBytes.buffer, pngBytes.byteOffset, pngBytes.byteLength);
+    if (buf.length < 33) return 1;
+    if (
+      buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4e || buf[3] !== 0x47 ||
+      buf[4] !== 0x0d || buf[5] !== 0x0a || buf[6] !== 0x1a || buf[7] !== 0x0a
+    ) {
+      return 1;
+    }
+    const ihdrLen = buf.readUInt32BE(8);
+    if (ihdrLen < 13 || buf.toString('ascii', 12, 16) !== 'IHDR') return 1;
+    const width = buf.readUInt32BE(16);
+    const height = buf.readUInt32BE(20);
+    const bitDepth = buf[24];
+    const colorType = buf[25];
+    if (colorType !== 6 && colorType !== 4) return 1;
+    if (bitDepth !== 8 || width <= 0 || height <= 0 || (width * height) > MAX_TEX_IMAGE_PIXELS) return 1;
+
+    const idats = [];
+    let pos = 8;
+    while (pos + 12 <= buf.length) {
+      const len = buf.readUInt32BE(pos);
+      const type = buf.toString('ascii', pos + 4, pos + 8);
+      if (pos + 12 + len > buf.length) break;
+      if (type === 'IDAT') idats.push(buf.subarray(pos + 8, pos + 8 + len));
+      else if (type === 'IEND') break;
+      pos += 12 + len;
+    }
+    if (idats.length === 0) return 1;
+
+    const bpp = colorType === 6 ? 4 : 2;
+    const stride = width * bpp;
+    const expectedLen = height * (stride + 1);
+    const raw = inflateSync(Buffer.concat(idats));
+    if (raw.length < expectedLen) return 1;
+
+    const stepX = Math.max(1, Math.floor(width / 128));
+    const stepY = Math.max(1, Math.floor(height / 128));
+    let prev = new Uint8Array(stride);
+    let cur = new Uint8Array(stride);
+    let opaque = 0;
+    let total = 0;
+
+    for (let y = 0; y < height; y += 1) {
+      const filter = raw[y * (stride + 1)];
+      const rs = y * (stride + 1) + 1;
+      for (let i = 0; i < stride; i += 1) {
+        const x = raw[rs + i];
+        const a = i >= bpp ? cur[i - bpp] : 0;
+        const b = prev[i];
+        const c = i >= bpp ? prev[i - bpp] : 0;
+        let v = x;
+        if (filter === 1) v = (x + a) & 255;
+        else if (filter === 2) v = (x + b) & 255;
+        else if (filter === 3) v = (x + ((a + b) >> 1)) & 255;
+        else if (filter === 4) {
+          const pa = Math.abs(b - c);
+          const pb = Math.abs(a - c);
+          const pc = Math.abs(a + b - 2 * c);
+          const pr = (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);
+          v = (x + pr) & 255;
+        }
+        cur[i] = v;
+      }
+      if ((y % stepY) === 0) {
+        for (let x = 0; x < width; x += stepX) {
+          total += 1;
+          if (cur[x * bpp + (bpp - 1)] >= 128) opaque += 1;
+        }
+      }
+      const tmp = prev;
+      prev = cur;
+      cur = tmp;
+    }
+    return total > 0 ? opaque / total : 1;
+  } catch {
+    return 1;
+  }
+}
+
 /**
  * Parse a Wallpaper Engine `.tex` binary and extract its primary static image
  * (supports embedded PNG/JPEG/WebP plus raw/LZ4 RGBA8888, DXT1, DXT3, and DXT5).
@@ -781,12 +878,15 @@ export function extractImageFromTexBytes(texInput) {
 
     const magic = sniffEncodedImageMagic(payload);
     if (magic) {
+      const outBytes = Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength);
+      const opaqueRatio = magic.mime === 'image/png' ? estimatePngOpaqueRatio(outBytes) : 1;
       return {
-        bytes: Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength),
+        bytes: outBytes,
         mime: magic.mime,
         ext: magic.ext,
         width: outW,
         height: outH,
+        opaqueRatio,
       };
     }
 
@@ -825,6 +925,7 @@ export function extractImageFromTexBytes(texInput) {
     const finalW = outW > 0 && outW <= mipW ? outW : mipW;
     const finalH = outH > 0 && outH <= mipH ? outH : mipH;
     const cropped = cropRgba(rgba, mipW, mipH, finalW, finalH);
+    const opaqueRatio = estimateRgbaOpaqueRatio(cropped, finalW, finalH);
     const pngBytes = encodeRgbaToPng(cropped, finalW, finalH);
     return {
       bytes: pngBytes,
@@ -832,6 +933,7 @@ export function extractImageFromTexBytes(texInput) {
       ext: '.png',
       width: finalW,
       height: finalH,
+      opaqueRatio,
     };
   } catch {
     return null;
@@ -981,6 +1083,152 @@ function scoreTexImageCandidate(width, height) {
   return area * bonus * aspectPenalty;
 }
 
+const STANDARD_IMAGE_SHADER_RE = /^(genericimage\d*|image|flat|simple|combine|passthrough)$/i;
+
+function normalizeSceneRelPath(relPath) {
+  return String(relPath || '').trim().replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+}
+
+function normalizeSceneTexKeys(texName) {
+  let clean = normalizeSceneRelPath(texName);
+  if (!clean) return [];
+  if (!clean.endsWith('.tex')) clean = `${clean}.tex`;
+  const withMaterials = clean.startsWith('materials/') ? clean : `materials/${clean}`;
+  const slashIdx = withMaterials.lastIndexOf('/');
+  const base = slashIdx >= 0 ? withMaterials.slice(slashIdx + 1) : withMaterials;
+  return withMaterials === base ? [withMaterials] : [withMaterials, base];
+}
+
+function resolveLooseSceneAsset(rootDir, realRoot, relPath) {
+  const cleanRel = normalizeSceneRelPath(relPath);
+  if (!cleanRel) return null;
+  const full = resolve(rootDir, cleanRel);
+  try {
+    const lst = lstatSync(full);
+    if (!lst.isFile() || lst.isSymbolicLink() || lst.size > 2 * 1024 * 1024) return null;
+    const real = realpathSync(full);
+    if (real !== realRoot && !real.startsWith(realRoot + sep)) return null;
+    return readFileSync(full, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function inspectSceneManifestLayers(fileOrDirAbs) {
+  const empty = {
+    hasManifest: false,
+    visibleTexPaths: new Set(),
+    hiddenOnlyTexPaths: new Set(),
+    customShaderTexPaths: new Set(),
+    baseLayerTexPaths: new Set(),
+    distinctVisibleTexCount: 0,
+  };
+  let st;
+  try {
+    st = lstatSync(fileOrDirAbs);
+    if (st.isSymbolicLink()) return empty;
+  } catch {
+    return empty;
+  }
+
+  let readJsonEntry = null;
+  let pkgEntriesByPath = null;
+  if (st.isFile() && fileOrDirAbs.toLowerCase().endsWith('.pkg')) {
+    try {
+      const entries = parsePkgFile(fileOrDirAbs);
+      pkgEntriesByPath = new Map();
+      for (const e of entries) {
+        pkgEntriesByPath.set(normalizeSceneRelPath(e.path), e);
+      }
+      readJsonEntry = (relPath) => {
+        const entry = pkgEntriesByPath.get(normalizeSceneRelPath(relPath));
+        if (!entry || entry.length > 2 * 1024 * 1024) return null;
+        try {
+          return JSON.parse(readPkgFileEntry(fileOrDirAbs, entry).toString('utf8'));
+        } catch {
+          return null;
+        }
+      };
+    } catch {
+      return empty;
+    }
+  } else {
+    const rootDir = st.isDirectory() ? resolve(fileOrDirAbs) : resolve(fileOrDirAbs, '..');
+    let realRoot = rootDir;
+    try { realRoot = realpathSync(rootDir); } catch { /* ignore */ }
+    readJsonEntry = (relPath) => {
+      const raw = resolveLooseSceneAsset(rootDir, realRoot, relPath);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    };
+  }
+
+  const sceneJson = readJsonEntry('scene.json');
+  if (!sceneJson || !Array.isArray(sceneJson.objects)) return empty;
+
+  const visibleTexPaths = new Set();
+  const hiddenTexPaths = new Set();
+  const customShaderTexPaths = new Set();
+  const baseLayerTexPaths = new Set();
+  const visibleCanonicalTexSet = new Set();
+  let visibleObjIndex = 0;
+
+  for (const obj of sceneJson.objects) {
+    if (!obj || typeof obj.image !== 'string' || !obj.image.trim()) continue;
+    const model = readJsonEntry(obj.image);
+    if (!model || typeof model.material !== 'string' || !model.material.trim()) continue;
+    const material = readJsonEntry(model.material);
+    if (!material || !Array.isArray(material.passes)) continue;
+
+    const isVisible = obj.visible !== false;
+    if (isVisible) visibleObjIndex += 1;
+
+    for (const pass of material.passes) {
+      if (!pass || !Array.isArray(pass.textures)) continue;
+      const shaderName = typeof pass.shader === 'string' ? pass.shader.trim() : '';
+      const isCustomShader = Boolean(
+        shaderName &&
+        !shaderName.toLowerCase().startsWith('effects/') &&
+        !STANDARD_IMAGE_SHADER_RE.test(shaderName)
+      );
+
+      for (const texRef of pass.textures) {
+        if (typeof texRef !== 'string' || !texRef.trim()) continue;
+        const keys = normalizeSceneTexKeys(texRef);
+        if (keys.length === 0) continue;
+        if (isVisible) {
+          visibleCanonicalTexSet.add(keys[0]);
+          for (const k of keys) {
+            visibleTexPaths.add(k);
+            if (visibleObjIndex <= 2) baseLayerTexPaths.add(k);
+            if (isCustomShader) customShaderTexPaths.add(k);
+          }
+        } else {
+          for (const k of keys) hiddenTexPaths.add(k);
+        }
+      }
+    }
+  }
+
+  const hiddenOnlyTexPaths = new Set();
+  for (const k of hiddenTexPaths) {
+    if (!visibleTexPaths.has(k)) hiddenOnlyTexPaths.add(k);
+  }
+
+  return {
+    hasManifest: true,
+    visibleTexPaths,
+    hiddenOnlyTexPaths,
+    customShaderTexPaths,
+    baseLayerTexPaths,
+    distinctVisibleTexCount: visibleCanonicalTexSet.size,
+  };
+}
+
 /**
  * Inspect a packed `scene.pkg` file OR a loose scene project directory:
  * - Locates the highest-scoring embedded MP4 animation (`TEXB0004` or packaged `.mp4`)
@@ -1010,8 +1258,7 @@ export function inspectSceneContainer(fileOrDirAbs) {
         .sort((a, b) => b.length - a.length)[0] || null;
 
       let videoSource = directMp4 ? { kind: 'pkg-mp4', entry: directMp4 } : null;
-      let imageSource = null;
-      let bestImageScore = 0;
+      const imageCandidates = [];
 
       for (const cand of texCandidates.slice(0, 16)) {
         try {
@@ -1024,10 +1271,14 @@ export function inspectSceneContainer(fileOrDirAbs) {
             }
             if (probed.status === 'image') {
               const score = scoreTexImageCandidate(probed.width, probed.height);
-              if (score > bestImageScore) {
-                bestImageScore = score;
-                imageSource = { kind: 'pkg-tex-img', entry: cand, width: probed.width, height: probed.height };
-              }
+              imageCandidates.push({
+                kind: 'pkg-tex-img',
+                entry: cand,
+                relPath: cand.path,
+                width: probed.width,
+                height: probed.height,
+                score,
+              });
               continue;
             }
             if (probed.status === 'unsupported') continue;
@@ -1043,6 +1294,9 @@ export function inspectSceneContainer(fileOrDirAbs) {
         } catch { /* skip unreadable tex */ }
       }
 
+      imageCandidates.sort((a, b) => b.score - a.score);
+      const imageSource = imageCandidates[0] || null;
+
       return {
         containerKind: 'pkg',
         entriesCount: entries.length,
@@ -1050,6 +1304,7 @@ export function inspectSceneContainer(fileOrDirAbs) {
         videoSource,
         hasImage: Boolean(imageSource),
         imageSource,
+        imageCandidates,
         hasAudio: Boolean(audioEntry),
         audioEntry,
       };
@@ -1088,7 +1343,7 @@ export function inspectSceneContainer(fileOrDirAbs) {
         const lower = name.toLowerCase();
         const relPosix = relative(rootDir, full).split(sep).join('/');
         if (lower.endsWith('.tex') && !isLikelyMaskOrHelper(relPosix) && lst.size >= 256) {
-          texFiles.push({ full, size: lst.size });
+          texFiles.push({ full, relPosix, size: lst.size });
         } else if (lower.endsWith('.mp4') && !isLikelyMaskOrHelper(relPosix)) {
           mp4Files.push({ full, size: lst.size });
         } else if (AUDIO_EXT_RE.test(lower)) {
@@ -1104,8 +1359,7 @@ export function inspectSceneContainer(fileOrDirAbs) {
   audioFiles.sort((a, b) => b.size - a.size);
 
   let videoSource = mp4Files[0] ? { kind: 'loose-mp4', absPath: mp4Files[0].full } : null;
-  let imageSource = null;
-  let bestImageScore = 0;
+  const imageCandidates = [];
 
   for (const cand of texFiles.slice(0, 16)) {
     try {
@@ -1125,10 +1379,14 @@ export function inspectSceneContainer(fileOrDirAbs) {
       }
       if (probed.status === 'image') {
         const score = scoreTexImageCandidate(probed.width, probed.height);
-        if (score > bestImageScore) {
-          bestImageScore = score;
-          imageSource = { kind: 'loose-tex-img', absPath: cand.full, width: probed.width, height: probed.height };
-        }
+        imageCandidates.push({
+          kind: 'loose-tex-img',
+          absPath: cand.full,
+          relPath: cand.relPosix,
+          width: probed.width,
+          height: probed.height,
+          score,
+        });
         continue;
       }
       if (probed.status === 'unsupported') continue;
@@ -1142,6 +1400,9 @@ export function inspectSceneContainer(fileOrDirAbs) {
     } catch { /* ignore */ }
   }
 
+  imageCandidates.sort((a, b) => b.score - a.score);
+  const imageSource = imageCandidates[0] || null;
+
   return {
     containerKind: 'loose',
     entriesCount: texFiles.length + mp4Files.length + audioFiles.length,
@@ -1149,6 +1410,7 @@ export function inspectSceneContainer(fileOrDirAbs) {
     videoSource,
     hasImage: Boolean(imageSource),
     imageSource,
+    imageCandidates,
     hasAudio: Boolean(audioFiles[0]),
     audioAbsPath: audioFiles[0] ? audioFiles[0].full : null,
   };
@@ -1204,12 +1466,16 @@ export function extractSceneVideoPayload(fileOrDirAbs, opts = {}) {
 }
 
 /**
- * Extract the highest-resolution static background `.tex` image from a Scene container.
- * When `opts.cacheDir` is provided, persists to `<cacheDir>/scene-media/<hash>.img.<ext>`
+ * Extract the highest-scoring opaque static background `.tex` image from a Scene container.
+ * Rejects mostly-transparent overlay/HUD textures and avoids splitting custom-shader multi-layer
+ * scenes when a composited `preview.jpg` is available.
+ * When `opts.cacheDir` is provided, persists to `<cacheDir>/scene-media/<hash>.img.v2.<p1|p0>.<ext>`
  * so subsequent plays stream directly from disk.
  */
 export function extractSceneImagePayload(fileOrDirAbs, opts = {}) {
   const cacheDir = typeof opts?.cacheDir === 'string' ? opts.cacheDir.trim() : '';
+  const hasPreview = Boolean(opts?.hasPreview);
+  const previewTag = hasPreview ? 'p1' : 'p0';
   const containerHash = cacheDir ? computeSceneContainerHash(fileOrDirAbs) : '';
   const cachedExts = [
     { ext: '.png', mime: 'image/png' },
@@ -1219,7 +1485,7 @@ export function extractSceneImagePayload(fileOrDirAbs, opts = {}) {
 
   if (cacheDir && containerHash) {
     for (const item of cachedExts) {
-      const p = join(cacheDir, 'scene-media', `${containerHash}.img${item.ext}`);
+      const p = join(cacheDir, 'scene-media', `${containerHash}.img.v2.${previewTag}${item.ext}`);
       if (existsSync(p)) {
         try {
           const st = statSync(p);
@@ -1232,37 +1498,73 @@ export function extractSceneImagePayload(fileOrDirAbs, opts = {}) {
   }
 
   const info = inspectSceneContainer(fileOrDirAbs);
-  if (!info.hasImage || !info.imageSource) return null;
-  const is = info.imageSource;
+  const candidates = Array.isArray(info.imageCandidates) && info.imageCandidates.length > 0
+    ? info.imageCandidates
+    : (info.hasImage && info.imageSource ? [info.imageSource] : []);
+  if (candidates.length === 0) return null;
 
-  let extracted = null;
-  if (is.kind === 'loose-tex-img') {
-    extracted = extractImageFromTexBytes(readFileSync(is.absPath));
-  } else if (is.kind === 'pkg-tex-img') {
-    const raw = readPkgFileEntry(fileOrDirAbs, is.entry);
-    extracted = extractImageFromTexBytes(raw);
+  const manifest = inspectSceneManifestLayers(fileOrDirAbs);
+  let best = null;
+
+  for (const cand of candidates.slice(0, 12)) {
+    let extracted = null;
+    try {
+      if (cand.kind === 'loose-tex-img') {
+        extracted = extractImageFromTexBytes(readFileSync(cand.absPath));
+      } else if (cand.kind === 'pkg-tex-img') {
+        const raw = readPkgFileEntry(fileOrDirAbs, cand.entry);
+        extracted = extractImageFromTexBytes(raw);
+      }
+    } catch {
+      extracted = null;
+    }
+    if (!extracted || !extracted.bytes || extracted.bytes.byteLength < 64) continue;
+
+    const opaqueRatio = Number.isFinite(extracted.opaqueRatio) ? extracted.opaqueRatio : 1;
+    if (opaqueRatio < 0.25) continue;
+
+    const baseScore = scoreTexImageCandidate(extracted.width, extracted.height);
+    const opacityMult = opaqueRatio >= 0.9 ? 1.0 : opaqueRatio >= 0.5 ? 0.25 : 0.08;
+    const key = normalizeSceneRelPath(cand.relPath || cand.entry?.path || '');
+    const hiddenMult = manifest.hasManifest && manifest.hiddenOnlyTexPaths.has(key) ? 0.02 : 1.0;
+    const baseLayerMult = manifest.hasManifest && manifest.baseLayerTexPaths.has(key) && opaqueRatio >= 0.9 ? 1.35 : 1.0;
+    const adjustedScore = baseScore * opacityMult * hiddenMult * baseLayerMult;
+
+    if (!best || adjustedScore > best.adjustedScore) {
+      best = { extracted, key, opaqueRatio, adjustedScore };
+    }
   }
-  if (!extracted || !extracted.bytes || extracted.bytes.byteLength < 64) return null;
+
+  if (!best) return null;
+
+  if (
+    hasPreview &&
+    manifest.hasManifest &&
+    manifest.customShaderTexPaths.has(best.key) &&
+    manifest.distinctVisibleTexCount >= 2
+  ) {
+    return null;
+  }
 
   if (cacheDir && containerHash) {
-    const outPath = join(cacheDir, 'scene-media', `${containerHash}.img${extracted.ext}`);
-    if (persistBufferAtomically(outPath, extracted.bytes)) {
+    const outPath = join(cacheDir, 'scene-media', `${containerHash}.img.v2.${previewTag}${best.extracted.ext}`);
+    if (persistBufferAtomically(outPath, best.extracted.bytes)) {
       return {
         kind: 'file',
         absPath: outPath,
-        mime: extracted.mime,
-        width: extracted.width,
-        height: extracted.height,
+        mime: best.extracted.mime,
+        width: best.extracted.width,
+        height: best.extracted.height,
         cached: false,
       };
     }
   }
   return {
     kind: 'buffer',
-    bytes: extracted.bytes,
-    mime: extracted.mime,
-    width: extracted.width,
-    height: extracted.height,
+    bytes: best.extracted.bytes,
+    mime: best.extracted.mime,
+    width: best.extracted.width,
+    height: best.extracted.height,
   };
 }
 

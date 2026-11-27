@@ -1458,9 +1458,10 @@ export async function createMediaServer(opts = {}) {
       let mtimeTag = '0';
       try { mtimeTag = String(Math.trunc(statSync(fsMeta.sceneContainerAbs).mtimeMs)); } catch { /* ignore */ }
       const cacheDir = cacheDirGetter();
+      const hasPreview = Boolean(fsMeta.previewAbs);
       const payload = getCachedSceneBuffer(
-        `img:${token}:${mtimeTag}:${cacheDir ? 'disk' : 'mem'}`,
-        () => extractSceneImagePayload(fsMeta.sceneContainerAbs, { cacheDir }),
+        `img2:${token}:${mtimeTag}:${cacheDir ? 'disk' : 'mem'}:${hasPreview ? 'p1' : 'p0'}`,
+        () => extractSceneImagePayload(fsMeta.sceneContainerAbs, { cacheDir, hasPreview }),
       );
       if (!payload) {
         sendJson(req, res, 404, { error: 'No static image texture inside scene container' });
