@@ -832,6 +832,7 @@ export async function createPrismStudioServer(options = {}) {
   let actualPort = listenPort;
   let closed = false;
   let stateRev = 1;
+  let introPreviewNonce = 0;
   let deferredPushDepth = 0;
   let lastStudioBroadcastRev = 0;
   const bumpStateRev = () => {
@@ -1101,6 +1102,7 @@ export async function createPrismStudioServer(options = {}) {
   const buildCanonicalState = async ({ includeAutostart = true } = {}) => {
     let config;
     let activeItem = null;
+    let introItem = null;
     let presets = [];
     let stats = {};
     let mediaOrigin = '';
@@ -1111,6 +1113,7 @@ export async function createPrismStudioServer(options = {}) {
       if (p && typeof p === 'object' && p.config) {
         config = p.config;
         activeItem = p.activeItem ?? null;
+        introItem = p.introItem ?? null;
         presets = Array.isArray(p.presets) ? p.presets : [];
         stats = p.stats && typeof p.stats === 'object' ? p.stats : {};
         mediaOrigin = String(p.mediaOrigin || '');
@@ -1119,6 +1122,7 @@ export async function createPrismStudioServer(options = {}) {
     if (!config) {
       config = await engine.getConfig();
       activeItem = await resolveActiveItem(config);
+      introItem = typeof engine.getIntroItem === 'function' ? await engine.getIntroItem() : null;
       const lib = await normalizeLibrary(false);
       stats = lib.stats;
       const presetsRaw = typeof engine.listPresets === 'function' ? await engine.listPresets() : [];
@@ -1179,6 +1183,8 @@ export async function createPrismStudioServer(options = {}) {
       stateRev,
       config,
       activeItem,
+      introItem,
+      introPreviewNonce,
       skinEnabled: config.skinEnabled !== false && canary.state !== 'tripped',
       canary,
       sessionAwake,
@@ -1562,6 +1568,16 @@ export async function createPrismStudioServer(options = {}) {
   };
 
   const rpcHandlers = {
+    'intro.preview': async () => {
+      const cur = await buildCanonicalState({ includeAutostart: false });
+      if (!cur.introItem) {
+        return { ok: false, error: 'No intro media configured' };
+      }
+      introPreviewNonce += 1;
+      bumpStateRev();
+      await pushToHost();
+      return { ok: true, introPreviewNonce };
+    },
     'state.get': () => buildCanonicalState(),
     'bootstrap.get': () => buildCanonicalState(),
     'library.list': async (params = {}) => normalizeLibrary(Boolean(params.refresh)),
@@ -2009,6 +2025,8 @@ export async function createPrismStudioServer(options = {}) {
         const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
           skinEnabled: st.skinEnabled,
           slides: st.activeItem?.slides,
+          introItem: st.introItem || null,
+          introPreviewNonce: st.introPreviewNonce || 0,
           pluginOrigin: getPluginOrigin(),
           stateRev: st.stateRev,
           stateEpoch,
@@ -2072,6 +2090,8 @@ export async function createPrismStudioServer(options = {}) {
         const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
           skinEnabled: st.skinEnabled,
           slides: st.activeItem?.slides,
+          introItem: st.introItem || null,
+          introPreviewNonce: st.introPreviewNonce || 0,
           pluginOrigin: getPluginOrigin(),
           stateRev: st.stateRev,
           stateEpoch,
@@ -2125,6 +2145,8 @@ export async function createPrismStudioServer(options = {}) {
           const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
             skinEnabled: st.skinEnabled,
             slides: st.activeItem?.slides,
+            introItem: st.introItem || null,
+            introPreviewNonce: st.introPreviewNonce || 0,
             pluginOrigin: getPluginOrigin(),
             stateRev: rev,
             stateEpoch,
@@ -2995,6 +3017,44 @@ export async function createPrismStudioServer(options = {}) {
     }
 
     // ---- POST APIs ----
+    if (req.method === 'POST' && pathname === '/api/intro/upload') {
+      const queryFilename = urlObj.searchParams.get('filename') || '';
+      const queryTitle = urlObj.searchParams.get('title') || '';
+      const ct = String(req.headers['content-type'] || '').toLowerCase();
+
+      let uploadRes;
+      if (ct.includes('application/json')) {
+        const body = await readJsonBody(req, 80 * 1024 * 1024);
+        const filename = String(body.filename || queryFilename || 'intro.mp4');
+        const title = String(body.title || queryTitle || '');
+        let buf;
+        if (typeof body.dataUrl === 'string' && body.dataUrl.includes(',')) {
+          buf = Buffer.from(body.dataUrl.split(',')[1], 'base64');
+        } else if (typeof body.base64 === 'string') {
+          buf = Buffer.from(body.base64, 'base64');
+        } else {
+          throw new Error('Missing binary body or dataUrl');
+        }
+        uploadRes = await engine.uploadIntroVideo({ filename, contentType: ct, streamOrBuffer: buf, title });
+      } else {
+        uploadRes = await engine.uploadIntroVideo({
+          filename: queryFilename || 'intro.mp4',
+          contentType: ct || 'application/octet-stream',
+          streamOrBuffer: req,
+          title: queryTitle,
+        });
+      }
+      bumpStateRev();
+      await pushToHost();
+      const state = await buildCanonicalState();
+      sendJson(res, 200, {
+        ok: true,
+        introItem: uploadRes?.introItem || state.introItem || null,
+        state,
+      });
+      return;
+    }
+
     if (req.method === 'POST' && pathname === '/api/upload') {
       const queryFilename = urlObj.searchParams.get('filename') || '';
       const queryTitle = urlObj.searchParams.get('title') || '';
@@ -3046,6 +3106,28 @@ export async function createPrismStudioServer(options = {}) {
         const state = await buildCanonicalState();
         void pushToHost();
         sendJson(res, 200, { ok: true, stateRev: state.stateRev, state });
+        return;
+      }
+
+      if (pathname === '/api/intro/clear') {
+        await withDeferredPush(() => engine.clearIntroVideo(), { ensureRevBump: true });
+        await pushToHost();
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, introItem: null, stateRev: state.stateRev, state });
+        return;
+      }
+
+      if (pathname === '/api/intro/preview') {
+        const cur = await buildCanonicalState({ includeAutostart: false });
+        if (!cur.introItem) {
+          sendJson(res, 400, { ok: false, code: 'ERR_INTRO_NO_MEDIA', error: 'No intro media configured' });
+          return;
+        }
+        introPreviewNonce += 1;
+        bumpStateRev();
+        await pushToHost();
+        const state = await buildCanonicalState();
+        sendJson(res, 200, { ok: true, introPreviewNonce, stateRev: state.stateRev, state });
         return;
       }
 

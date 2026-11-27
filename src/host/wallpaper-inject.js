@@ -1,4 +1,4 @@
-// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.4.0).
+// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.5.0).
 //
 // Gentle Fail-Open ES2020 browser IIFE loaded post-hydration (`stage.js`) or in headless verification harnesses.
 // Zero `Page.enable`/`Runtime.enable`, zero `app.asar` modifications, `z-index: -1` inert stage,
@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.4.0';
+  var VERSION = '2.5.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -18,6 +18,7 @@
   var API_KEY = '__agyPrism';
   var BINDING_KEY = '__agyPrismCall';
   var STAGE_ID = 'agy-prism-stage';
+  var INTRO_OVERLAY_ID = 'agy-prism-intro-overlay';
   var STYLE_ID = 'agy-prism-css';
   var STATIC_STYLE_ID = 'agy-prism-static-css';
   var CARET_STYLE_ID = 'agy-prism-caret-css';
@@ -336,7 +337,7 @@
     WCO_PILL_ID +
     '):not(#' +
     TOPBAR_PILLS_ID +
-    '):not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-hud):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
+    '):not(#' + INTRO_OVERLAY_ID + '):not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-hud):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
 
   var SIBLING_DESCENDANT_EXCLUDE =
     ':not(#agy-prism-pill):not(#agy-prism-pill *)' +
@@ -348,6 +349,7 @@
     ':not(#ag-usage-monitor-portal):not(#ag-usage-monitor-portal *)' +
     ':not(#deck-metrics-strip):not(#deck-metrics-strip *)' +
     ':not(#agy-prism-popover):not(#agy-prism-popover *)' +
+    ':not(#' + INTRO_OVERLAY_ID + '):not(#' + INTRO_OVERLAY_ID + ' *)' +
     ':not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-overlay *)' +
     ':not(#agy-prism-inspector-hud):not(#agy-prism-inspector-hud *)';
 
@@ -1850,6 +1852,12 @@
     rawCfg: {},
     cfg: {},
     item: null,
+    introItem: null,
+    introOverlay: null,
+    introActive: false,
+    introCleanups: [],
+    introTimers: [],
+    lastIntroPreviewNonce: 0,
     mediaOrigin: '',
     slides: [],
     slideIdx: 0,
@@ -2414,6 +2422,17 @@
       fxTrailMode: String(c.fxTrailMode || 'dust').toLowerCase(),
       parallaxEnabled: bool(c.parallaxEnabled, false),
       parallaxStrength: clamp(num(c.parallaxStrength, 12), 0, 40),
+      introEnabled: bool(c.introEnabled, false),
+      introSourceMode: String(c.introSourceMode || 'wallpaper').toLowerCase() === 'custom' ? 'custom' : 'wallpaper',
+      introWallpaperId: String(c.introWallpaperId || '').trim(),
+      introDurationSec: clamp(Math.round(num(c.introDurationSec, 5)), 0, 30),
+      introFadeOutMs: clamp(Math.round(num(c.introFadeOutMs, 600)), 200, 2000),
+      introMuted: bool(c.introMuted, true),
+      introVolume: clamp(num(c.introVolume, 0.7), 0, 1),
+      introSkippable: bool(c.introSkippable, true),
+      introFit: String(c.introFit || 'cover').toLowerCase() === 'contain' ? 'contain' : 'cover',
+      introShowProgress: bool(c.introShowProgress, true),
+      language: String(c.language || 'zh').toLowerCase(),
     };
   }
 
@@ -9454,8 +9473,304 @@
     }
   }
 
+  function clearIntroTimersAndCleanups() {
+    var i;
+    for (i = 0; i < state.introTimers.length; i += 1) {
+      try { clearTimeout(state.introTimers[i]); } catch (_) {}
+    }
+    state.introTimers = [];
+    for (i = 0; i < state.introCleanups.length; i += 1) {
+      try { state.introCleanups[i](); } catch (_) {}
+    }
+    state.introCleanups = [];
+  }
+
+  function dismissIntroOverlay(immediate) {
+    clearIntroTimersAndCleanups();
+    var ov = state.introOverlay || doc.getElementById(INTRO_OVERLAY_ID);
+    state.introActive = false;
+    if (!ov) {
+      state.introOverlay = null;
+      return;
+    }
+    var finalize = function () {
+      try {
+        if (ov.__prismIntroWrap) disposeWrap(ov.__prismIntroWrap);
+      } catch (_) {}
+      try {
+        if (ov.parentNode) ov.parentNode.removeChild(ov);
+      } catch (_) {}
+      if (state.introOverlay === ov) state.introOverlay = null;
+    };
+    if (immediate) {
+      finalize();
+      return;
+    }
+    var fadeMs = clamp(num(state.cfg && state.cfg.introFadeOutMs, 600), 200, 2000);
+    try {
+      ov.style.pointerEvents = 'none';
+      ov.style.transition = 'opacity ' + fadeMs + 'ms cubic-bezier(0.22, 1, 0.36, 1)';
+      ov.style.opacity = '0';
+    } catch (_) {}
+    var t = setTimeout(finalize, fadeMs + 40);
+    state.introTimers.push(t);
+  }
+
+  function playIntroOverlay(item, cfg, opts) {
+    if (destroyed || !state.skinEnabled || !doc.body) return false;
+    var isPreview = Boolean(opts && opts.isPreview);
+    if (!item || typeof item !== 'object') return false;
+    if (!isPreview) {
+      if (!cfg || !cfg.introEnabled) return false;
+      if (W.__agyPrismIntroPlayed) return false;
+      W.__agyPrismIntroPlayed = true;
+    }
+
+    dismissIntroOverlay(true);
+
+    var fadeMs = clamp(num(cfg && cfg.introFadeOutMs, 600), 200, 2000);
+    var durSec = clamp(Math.round(num(cfg && cfg.introDurationSec, 5)), 0, 30);
+    var skippable = cfg ? cfg.introSkippable !== false : true;
+    var showProgress = cfg ? cfg.introShowProgress !== false : true;
+    var fit = cfg && cfg.introFit === 'contain' ? 'contain' : 'cover';
+    var muted = cfg ? cfg.introMuted !== false : true;
+    var volume = clamp(num(cfg && cfg.introVolume, 0.7), 0, 1);
+    var isZh = !(cfg && cfg.language === 'en');
+
+    var ov = doc.createElement('div');
+    ov.id = INTRO_OVERLAY_ID;
+    ov.setAttribute('data-browser-occluder', 'true');
+    ov.setAttribute('data-agy-prism-intro', 'active');
+    ov.setAttribute('translate', 'no');
+    ov.setAttribute('data-no-translate', 'true');
+    ov.setAttribute('data-ag-no-i18n', '1');
+    ov.style.cssText =
+      'position:fixed;inset:0;z-index:2147483640;background:#050507;overflow:hidden;' +
+      'opacity:1;pointer-events:' + (skippable ? 'auto' : 'none') + ';' +
+      'transition:opacity ' + fadeMs + 'ms cubic-bezier(0.22,1,0.36,1);';
+
+    var wrap = doc.createElement('div');
+    wrap.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;overflow:hidden;';
+    wrap.__prismAbortControllers = [];
+    wrap.__prismBlobUrls = [];
+    ov.__prismIntroWrap = wrap;
+    ov.appendChild(wrap);
+
+    var dismissed = false;
+    var finishIntro = function (instant) {
+      if (dismissed) return;
+      dismissed = true;
+      dismissIntroOverlay(Boolean(instant));
+    };
+
+    var kind = String(item.kind || 'video').toLowerCase();
+    var hasVideo =
+      kind === 'video' ||
+      (kind === 'scene' && (item.sceneMode === 'video' || item.sceneMode === 'scene-video') && Boolean(item.sceneVideoUrl || item.mediaUrl));
+    var effectiveDurMs = durSec > 0 ? durSec * 1000 : (hasVideo ? 60000 : 5000);
+
+    var armProgressAndTimer = function (ms) {
+      if (showProgress && ms > 0 && ms <= 60000) {
+        var barTrack = doc.createElement('div');
+        barTrack.style.cssText =
+          'position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,0.14);z-index:3;pointer-events:none;';
+        var barFill = doc.createElement('div');
+        barFill.style.cssText =
+          'height:100%;width:0%;background:rgba(' + (state.accentRgbStr || '102, 157, 246') + ',0.95);' +
+          'transition:width ' + ms + 'ms linear;';
+        barTrack.appendChild(barFill);
+        ov.appendChild(barTrack);
+        var raf = W.requestAnimationFrame ? W.requestAnimationFrame(function () { barFill.style.width = '100%'; }) : 0;
+        if (!raf) {
+          var tBar = setTimeout(function () { barFill.style.width = '100%'; }, 30);
+          state.introTimers.push(tBar);
+        }
+      }
+      var endTimer = setTimeout(function () { finishIntro(false); }, ms);
+      state.introTimers.push(endTimer);
+    };
+
+    if (hasVideo) {
+      var video = doc.createElement('video');
+      video.playsInline = true;
+      video.autoplay = true;
+      video.muted = muted;
+      video.volume = volume;
+      video.loop = durSec > 0;
+      video.preload = 'auto';
+      video.style.cssText =
+        'position:absolute;inset:0;width:100%;height:100%;object-fit:' + fit + ';background:#050507;display:block;';
+      wrap.appendChild(video);
+
+      var firstFrameReady = false;
+      var markFrameReady = function () {
+        if (firstFrameReady || dismissed) return;
+        firstFrameReady = true;
+        if (durSec > 0) {
+          armProgressAndTimer(durSec * 1000);
+        } else {
+          var vDur = Number(video.duration);
+          var safeMs = Number.isFinite(vDur) && vDur > 0.2 ? Math.min(60000, Math.round(vDur * 1000)) : 60000;
+          armProgressAndTimer(safeMs);
+        }
+      };
+
+      video.addEventListener('loadeddata', markFrameReady, { once: true });
+      video.addEventListener('playing', markFrameReady, { once: true });
+      video.addEventListener('ended', function () {
+        if (durSec === 0) finishIntro(false);
+      });
+      // Fail-Open watchdog: if intro video cannot decode within 4.5s, dismiss cleanly
+      var decodeWatchdog = setTimeout(function () {
+        if (!firstFrameReady && !dismissed) finishIntro(true);
+      }, 4500);
+      state.introTimers.push(decodeWatchdog);
+
+      var pluginUrl = String(item.pluginMediaUrl || '').trim();
+      var directUrl = String(item.mediaUrl || item.sceneVideoUrl || '').trim();
+      var triedFallback = false;
+      var tryPlay = function () {
+        try {
+          var pr = video.play();
+          if (pr && typeof pr.catch === 'function') {
+            pr.catch(function () {
+              // Autoplay with audio blocked -> gracefully mute & retry so intro never stalls
+              if (!video.muted) {
+                video.muted = true;
+                try {
+                  var pr2 = video.play();
+                  if (pr2 && typeof pr2.catch === 'function') pr2.catch(function () {});
+                } catch (_) {}
+              }
+            });
+          }
+        } catch (_) {}
+      };
+
+      var tryFallbackOrDismiss = function () {
+        if (firstFrameReady || dismissed) return;
+        if (!triedFallback && directUrl && video.src !== directUrl) {
+          triedFallback = true;
+          attachLoopbackMediaSrc(video, directUrl, {
+            wrap: wrap,
+            preferDirect: !isCrossSchemeLoopbackMediaUrl(directUrl),
+            onReady: tryPlay,
+            onError: function () { finishIntro(true); },
+          });
+          tryPlay();
+          return;
+        }
+        finishIntro(true);
+      };
+
+      video.addEventListener('error', tryFallbackOrDismiss);
+
+      if (directUrl && (/^(data:|blob:)/i.test(directUrl) || isCrossSchemeLoopbackMediaUrl(directUrl))) {
+        triedFallback = true;
+        attachLoopbackMediaSrc(video, directUrl, {
+          wrap: wrap,
+          preferDirect: !isCrossSchemeLoopbackMediaUrl(directUrl),
+          onReady: tryPlay,
+          onError: function () { finishIntro(true); },
+        });
+      } else if (pluginUrl && W.location && W.location.protocol === 'https:') {
+        attachLoopbackMediaSrc(video, pluginUrl, {
+          wrap: wrap,
+          onReady: tryPlay,
+          onError: tryFallbackOrDismiss,
+        });
+      } else if (directUrl || pluginUrl) {
+        var chosen = directUrl || pluginUrl;
+        if (chosen === directUrl) triedFallback = true;
+        attachLoopbackMediaSrc(video, chosen, {
+          wrap: wrap,
+          onReady: tryPlay,
+          onError: tryFallbackOrDismiss,
+        });
+      } else {
+        finishIntro(true);
+        return false;
+      }
+      tryPlay();
+    } else if (kind === 'web' && (item.pluginWebUrl || item.webUrl)) {
+      var iframe = doc.createElement('iframe');
+      iframe.src = String(item.pluginWebUrl || item.webUrl);
+      iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+      iframe.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0;background:#050507;pointer-events:none;';
+      wrap.appendChild(iframe);
+      armProgressAndTimer(effectiveDurMs);
+    } else if (kind === 'scene' && (item.pluginSceneLiveUrl || item.sceneLiveUrl)) {
+      var sFrame = doc.createElement('iframe');
+      sFrame.src = String(item.pluginSceneLiveUrl || item.sceneLiveUrl);
+      sFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+      sFrame.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0;background:#050507;pointer-events:none;';
+      wrap.appendChild(sFrame);
+      armProgressAndTimer(effectiveDurMs);
+    } else {
+      var imgUrl = String(item.sceneImageUrl || item.mediaUrl || item.thumbUrl || '').trim();
+      if (!imgUrl) {
+        finishIntro(true);
+        return false;
+      }
+      var img = doc.createElement('img');
+      img.alt = '';
+      img.style.cssText =
+        'position:absolute;inset:0;width:100%;height:100%;object-fit:' + fit + ';display:block;' +
+        'transform:scale(1.06);transition:transform ' + effectiveDurMs + 'ms ease-out;';
+      wrap.appendChild(img);
+      attachLoopbackImageSrc(img, imgUrl, {
+        wrap: wrap,
+        onLoad: function () {
+          try { img.style.transform = 'scale(1.0)'; } catch (_) {}
+        },
+        onError: function () { finishIntro(true); },
+      });
+      armProgressAndTimer(effectiveDurMs);
+    }
+
+    if (skippable && showProgress) {
+      var skipBtn = doc.createElement('button');
+      skipBtn.type = 'button';
+      skipBtn.setAttribute('data-testid', 'prism-intro-skip');
+      skipBtn.textContent = isZh ? '跳过开场动画 · Esc' : 'Skip Intro · Esc';
+      skipBtn.style.cssText =
+        'position:absolute;right:20px;bottom:18px;z-index:4;padding:6px 14px;border-radius:999px;' +
+        'border:1px solid rgba(255,255,255,0.22);background:rgba(12,12,16,0.68);color:#F4F4F8;' +
+        'font-size:12px;font-family:system-ui,-apple-system,sans-serif;cursor:pointer;' +
+        'backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);';
+      skipBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        finishIntro(false);
+      });
+      ov.appendChild(skipBtn);
+    }
+
+    if (skippable) {
+      var onOverlayClick = function () { finishIntro(false); };
+      var onKeyDown = function (ev) {
+        var key = ev && ev.key;
+        if (key === 'Escape' || key === ' ' || key === 'Enter') {
+          try { ev.preventDefault(); ev.stopPropagation(); } catch (_) {}
+          finishIntro(false);
+        }
+      };
+      ov.addEventListener('click', onOverlayClick);
+      W.addEventListener('keydown', onKeyDown, true);
+      state.introCleanups.push(function () {
+        try { ov.removeEventListener('click', onOverlayClick); } catch (_) {}
+        try { W.removeEventListener('keydown', onKeyDown, true); } catch (_) {}
+      });
+    }
+
+    state.introOverlay = ov;
+    state.introActive = true;
+    doc.body.appendChild(ov);
+    return true;
+  }
+
   function teardownSkinDomOnly() {
     state.mediaMountSeq += 1;
+    dismissIntroOverlay(true);
     clearLifecycleTimers();
     clearRootWatchdogTimers();
     state._watchdogReported = false;
@@ -9736,6 +10051,7 @@
     }
     var nextItemId = state.item && state.item.id ? String(state.item.id) : '';
     if (typeof p.mediaOrigin === 'string') state.mediaOrigin = p.mediaOrigin;
+    if (p.introItem !== undefined) state.introItem = p.introItem;
     if (Array.isArray(p.slides)) {
       state.slides = p.slides.slice();
     } else if (nextItemId !== prevItemId || !(state.item && state.item.slidesUrl)) {
@@ -9776,6 +10092,13 @@
           .catch(function () {});
       }
       mountStageMedia(false);
+      var reqIntroNonce = Number(p.introPreviewNonce || 0);
+      if (reqIntroNonce > state.lastIntroPreviewNonce) {
+        state.lastIntroPreviewNonce = reqIntroNonce;
+        if (state.introItem) playIntroOverlay(state.introItem, state.cfg, { isPreview: true });
+      } else if (state.cfg.introEnabled && state.introItem && !W.__agyPrismIntroPlayed) {
+        playIntroOverlay(state.introItem, state.cfg, { isPreview: false });
+      }
       attachWatchers();
       evaluateAutoPause();
       syncLifecycleTimers();
@@ -10158,6 +10481,13 @@
       wcoSig: state.lastWcoSig,
       holeClip: state.lastHoleClip,
       stagePresent: Boolean(doc.getElementById(STAGE_ID)),
+      intro: {
+        enabled: Boolean(state.cfg && state.cfg.introEnabled),
+        active: Boolean(state.introActive),
+        played: Boolean(W.__agyPrismIntroPlayed),
+        sourceMode: (state.cfg && state.cfg.introSourceMode) || 'wallpaper',
+        hasMedia: Boolean(state.introItem),
+      },
       stylePresent: Boolean(doc.getElementById(STYLE_ID)),
       checks: checks,
     };
@@ -10225,6 +10555,12 @@
     stepSlideshow: stepSlideshow,
     setPaused: setPaused,
     syncBrowserHoles: syncBrowserHoleCutout,
+    previewIntro: function () {
+      return playIntroOverlay(state.introItem, state.cfg, { isPreview: true });
+    },
+    dismissIntro: function (immediate) {
+      dismissIntroOverlay(Boolean(immediate));
+    },
     heal: heal,
     status: status,
     receive: receive,

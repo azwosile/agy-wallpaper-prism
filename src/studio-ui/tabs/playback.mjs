@@ -91,6 +91,239 @@ export function renderPlaylistPickerGridHtml(visibleItems = null, pickedIds = nu
   `;
 }
 
+function renderOpeningAnimationSection(eff, isZh) {
+  const cfg = store.config || DEFAULT_CONFIG;
+  const enabled = Boolean(cfg.introEnabled);
+  const sourceMode = cfg.introSourceMode === 'custom' ? 'custom' : 'wallpaper';
+  const showAll = Boolean(store.introShowAllKinds);
+  const allItems = Array.isArray(store.items) ? store.items : [];
+  const dynamicKinds = new Set(['video', 'scene', 'web']);
+  const candidateItems = showAll ? allItems : allItems.filter((it) => dynamicKinds.has(String(it.kind || '').toLowerCase()));
+  const selectedWallId = String(cfg.introWallpaperId || '').trim();
+  const selectedWall = selectedWallId ? allItems.find((it) => it.id === selectedWallId) || null : null;
+  const customName = String(cfg.introCustomVideoName || '').trim();
+  const customPath = String(cfg.introCustomVideoPath || '').trim();
+  const hasIntroMedia = sourceMode === 'custom' ? Boolean(customPath || store.introItem) : Boolean(selectedWall || store.introItem);
+  const durSec = Number(cfg.introDurationSec ?? DEFAULT_CONFIG.introDurationSec);
+
+  const selectedWallThumb = selectedWall
+    ? withStaticPreviewParam(selectedWall.thumbUrl || (selectedWall.kind === 'image' ? selectedWall.mediaUrl : ''))
+    : '';
+
+  return `
+      <!-- Opening Animation (v2.5.0: Optional, OFF by default) -->
+      <details id="prism-intro-section" class="prism-section" open>
+        <summary>
+          <div class="prism-section-title-wrap">
+            <span class="prism-section-chevron">▶</span>
+            <span>🎬 ${esc(tr('intro.sectionTitle'))}</span>
+            <span class="prism-intro-badge ${enabled ? 'is-on' : ''}">${esc(enabled ? tr('intro.badgeOn') : tr('intro.badgeOff'))}</span>
+          </div>
+          <button type="button" class="prism-btn prism-btn-sm"
+                  data-action="reset-module" data-keys="introEnabled,introSourceMode,introDurationSec,introFadeOutMs,introMuted,introVolume,introSkippable,introFit,introShowProgress">↺</button>
+        </summary>
+        <div class="prism-section-body">
+          ${renderSwitchRow({
+            key: 'introEnabled',
+            label: tr('intro.enable'),
+            hint: tr('intro.enableHint'),
+            checked: enabled,
+          })}
+
+          ${renderSegRow({
+            key: 'introSourceMode',
+            label: tr('intro.sourceMode'),
+            value: sourceMode,
+            options: [
+              { value: 'wallpaper', label: tr('intro.sourceWallpaper') },
+              { value: 'custom', label: tr('intro.sourceCustom') },
+            ],
+          })}
+
+          ${
+            sourceMode === 'wallpaper'
+              ? `
+            <div class="prism-intro-card">
+              <div class="prism-intro-card-head">
+                <span class="prism-ctl-label">${esc(tr('intro.selectedWallpaper'))}</span>
+                <button type="button" class="prism-btn prism-btn-sm" data-action="use-active-intro-wallpaper">
+                  ✦ ${esc(tr('intro.useActiveWallpaper'))}
+                </button>
+              </div>
+              ${
+                selectedWall
+                  ? `
+                <div class="prism-intro-selected-row">
+                  ${
+                    selectedWallThumb
+                      ? `<img class="prism-intro-selected-thumb" src="${esc(selectedWallThumb)}" alt="" onerror="this.remove()" />`
+                      : `<div class="prism-intro-selected-thumb prism-intro-thumb-fallback">🎬</div>`
+                  }
+                  <div class="prism-intro-selected-meta">
+                    <div class="prism-intro-selected-title">${esc(selectedWall.title || selectedWall.id)}</div>
+                    <div class="prism-ctl-hint">${esc(String(selectedWall.kind || 'video').toUpperCase())} · ${esc(selectedWall.source || 'local')}</div>
+                  </div>
+                </div>
+              `
+                  : `<div class="prism-ctl-hint">${esc(tr('intro.noWallpaperSelected'))}</div>`
+              }
+              <div class="prism-intro-picker-bar">
+                <span class="prism-ctl-hint">${esc(tr('intro.pickerHint'))} (${candidateItems.length})</span>
+                <button type="button" class="prism-chip ${showAll ? 'is-active' : ''}" data-action="toggle-intro-all-kinds">
+                  ${esc(tr('intro.showAllKinds'))}
+                </button>
+              </div>
+              <div class="prism-intro-picker-grid">
+                ${
+                  candidateItems.length === 0
+                    ? `<div class="prism-ctl-hint" style="padding:8px;grid-column:1/-1">${esc(tr('lib.empty'))}</div>`
+                    : candidateItems
+                        .slice(0, 36)
+                        .map((it) => {
+                          const picked = it.id === selectedWallId;
+                          const rawThumb = it.thumbUrl || (it.kind === 'image' ? it.mediaUrl : '');
+                          const thumb = rawThumb ? withStaticPreviewParam(rawThumb) : '';
+                          return `
+                            <button type="button" class="prism-mini-pick-item ${picked ? 'is-picked' : ''}"
+                                    data-action="pick-intro-wallpaper" data-id="${esc(it.id)}" title="${esc(it.title || it.id)}">
+                              ${
+                                thumb
+                                  ? `<img loading="lazy" decoding="async" src="${esc(thumb)}" alt="" onerror="this.remove()" />`
+                                  : `<div style="aspect-ratio:16/10;background:rgba(var(--prism-accent-rgb),0.18)"></div>`
+                              }
+                              <div class="prism-mini-pick-name">${picked ? '✓ ' : ''}${esc(it.title || it.id)}</div>
+                            </button>
+                          `;
+                        })
+                        .join('')
+                }
+              </div>
+            </div>
+          `
+              : `
+            <div class="prism-intro-card">
+              <div class="prism-intro-card-head">
+                <span class="prism-ctl-label">${esc(tr('intro.customVideoTitle'))}</span>
+                <button type="button" class="prism-btn prism-btn-sm prism-btn-primary"
+                        data-action="trigger-intro-upload" ${store.introUploading ? 'disabled' : ''}>
+                  ${store.introUploading ? esc(tr('intro.uploading')) : `＋ ${esc(tr('intro.uploadBtn'))}`}
+                </button>
+              </div>
+              <div class="prism-ctl-hint">${esc(tr('intro.uploadHint'))}</div>
+              ${
+                customPath
+                  ? `
+                <div class="prism-intro-selected-row">
+                  <div class="prism-intro-selected-thumb prism-intro-thumb-fallback">🎞</div>
+                  <div class="prism-intro-selected-meta">
+                    <div class="prism-intro-selected-title">${esc(customName || customPath)}</div>
+                    <div class="prism-ctl-hint">${esc(tr('intro.sourceCustom'))}</div>
+                  </div>
+                  <button type="button" class="prism-btn prism-btn-sm" data-action="clear-intro-video" title="${esc(tr('intro.clearCustom'))}">✕</button>
+                </div>
+              `
+                  : `<div class="prism-ctl-hint">${esc(tr('intro.noCustomVideo'))}</div>`
+              }
+            </div>
+          `
+          }
+
+          ${renderSliderRow({
+            key: 'introDurationSec',
+            label: tr('intro.duration'),
+            value: durSec,
+            defaultValue: DEFAULT_CONFIG.introDurationSec,
+            min: 0,
+            max: 30,
+            step: 1,
+            suffix: durSec === 0 ? ` (${tr('intro.durationFull')})` : ' s',
+          })}
+          <div class="prism-ctl-row">
+            <span class="prism-ctl-hint">${esc(isZh ? '快捷时长' : 'Quick Duration')}</span>
+            <div class="prism-seg">
+              ${[
+                { v: 0, l: tr('intro.durationFull') },
+                { v: 3, l: '3s' },
+                { v: 5, l: '5s' },
+                { v: 8, l: '8s' },
+                { v: 12, l: '12s' },
+              ]
+                .map(
+                  (o) => `
+                <button type="button" class="prism-seg-btn ${durSec === o.v ? 'is-active' : ''}"
+                        data-action="set-num" data-key="introDurationSec" data-val="${o.v}">${esc(o.l)}</button>
+              `,
+                )
+                .join('')}
+            </div>
+          </div>
+
+          ${renderSliderRow({
+            key: 'introFadeOutMs',
+            label: tr('intro.fadeOut'),
+            value: cfg.introFadeOutMs ?? DEFAULT_CONFIG.introFadeOutMs,
+            defaultValue: DEFAULT_CONFIG.introFadeOutMs,
+            min: 200,
+            max: 2000,
+            step: 50,
+            suffix: ' ms',
+          })}
+
+          ${renderSegRow({
+            key: 'introFit',
+            label: tr('intro.fit'),
+            value: cfg.introFit || 'cover',
+            options: [
+              { value: 'cover', label: tr('intro.fitCover') },
+              { value: 'contain', label: tr('intro.fitContain') },
+            ],
+          })}
+
+          ${renderSwitchRow({
+            key: 'introMuted',
+            label: tr('intro.muted'),
+            checked: cfg.introMuted !== false,
+          })}
+
+          ${
+            cfg.introMuted === false
+              ? renderSliderRow({
+                  key: 'introVolume',
+                  label: tr('intro.volume'),
+                  value: Math.round(Number(cfg.introVolume ?? 0.7) * 100),
+                  defaultValue: 70,
+                  min: 0,
+                  max: 100,
+                  step: 5,
+                  suffix: '%',
+                  scale: 100,
+                })
+              : ''
+          }
+
+          ${renderSwitchRow({
+            key: 'introSkippable',
+            label: tr('intro.skippable'),
+            checked: cfg.introSkippable !== false,
+          })}
+
+          ${renderSwitchRow({
+            key: 'introShowProgress',
+            label: tr('intro.showProgress'),
+            checked: cfg.introShowProgress !== false,
+          })}
+
+          <div class="prism-ctl-row" style="margin-top:6px">
+            <button id="prism-intro-preview-btn" type="button" class="prism-btn prism-btn-primary" style="width:100%"
+                    data-action="preview-intro" ${!hasIntroMedia ? 'disabled' : ''}>
+              ▶ ${esc(tr('intro.previewBtn'))}
+            </button>
+          </div>
+        </div>
+      </details>
+  `;
+}
+
 export function renderPlaybackTab() {
   const eff = getEffectiveConfig();
   const isZh = curLocale() === 'zh';
@@ -124,6 +357,8 @@ export function renderPlaybackTab() {
     ${healthAlerts ? `<div class="prism-health-alerts">${healthAlerts}</div>` : ''}
 
     <div class="prism-settings-columns">
+      ${renderOpeningAnimationSection(eff, isZh)}
+
       <!-- Switch Transitions & Slideshow -->
       <details class="prism-section" open>
         <summary>

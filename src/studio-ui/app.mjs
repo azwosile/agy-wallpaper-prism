@@ -1243,6 +1243,7 @@ function bootPrismStudioApp() {
       <input id="prism-upload-input" type="file" hidden multiple
              accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.mp4,.webm,.mkv,.avi,.mov" />
       <input id="prism-preset-import-input" type="file" hidden accept=".json,application/json" />
+      <input id="prism-intro-video-input" type="file" hidden accept="video/*,.mp4,.webm,.mov,.mkv,.m4v,.ogv" />
     `;
 
     app.dataset.prismReady = 'true';
@@ -1373,6 +1374,37 @@ function bootPrismStudioApp() {
 
     store.uploading = false;
     renderActiveSurface();
+  }
+
+  async function uploadIntroVideoFile(file) {
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      showToast(`${file.name}: ${tx('uploadTooLarge')}`, 'danger');
+      return;
+    }
+    store.introUploading = true;
+    renderActiveSurface();
+    try {
+      const title = file.name.replace(/\.[^.]+$/, '');
+      const qs = new URLSearchParams({ filename: file.name, title }).toString();
+      const res = await apiFetch(`/api/intro/upload?${qs}`, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || `Intro upload HTTP ${res.status}`);
+      }
+      if (data.state) ingestServerState(data.state);
+      if (data.introItem) store.introItem = data.introItem;
+      showToast(tr('intro.uploadDone'), 'ok');
+    } catch (err) {
+      showToast(err.message || 'Intro upload failed', 'danger');
+    } finally {
+      store.introUploading = false;
+      renderActiveSurface();
+    }
   }
 
   async function reloadLibrary(refresh = true) {
@@ -2275,6 +2307,13 @@ function bootPrismStudioApp() {
         return;
       }
 
+      if (tEl.id === 'prism-intro-video-input' && tEl instanceof HTMLInputElement) {
+        const file = tEl.files?.[0];
+        tEl.value = '';
+        if (file) await uploadIntroVideoFile(file);
+        return;
+      }
+
       if (tEl.id === 'prism-preset-import-input' && tEl instanceof HTMLInputElement) {
         const file = tEl.files?.[0];
         tEl.value = '';
@@ -3085,6 +3124,54 @@ function bootPrismStudioApp() {
         }
         case 'trigger-upload': {
           document.getElementById('prism-upload-input')?.click();
+          break;
+        }
+        case 'trigger-intro-upload': {
+          document.getElementById('prism-intro-video-input')?.click();
+          break;
+        }
+        case 'clear-intro-video': {
+          try {
+            const res = await apiJson('/api/intro/clear', { method: 'POST', body: {} });
+            if (res?.state) ingestServerState(res.state);
+            store.introItem = null;
+            showToast(tr('intro.cleared'), 'ok');
+          } catch (err) {
+            showToast(err.message || 'Clear failed', 'danger');
+          }
+          renderActiveSurface();
+          break;
+        }
+        case 'pick-intro-wallpaper': {
+          const wid = actEl.dataset.id || '';
+          if (!wid) break;
+          queueConfigPatch({ introSourceMode: 'wallpaper', introWallpaperId: wid }, true, false);
+          renderActiveSurface();
+          break;
+        }
+        case 'use-active-intro-wallpaper': {
+          const activeId = getActiveId();
+          if (!activeId) {
+            showToast(tr('intro.previewNeedMedia'), 'warn');
+            break;
+          }
+          queueConfigPatch({ introSourceMode: 'wallpaper', introWallpaperId: activeId }, true, false);
+          renderActiveSurface();
+          break;
+        }
+        case 'toggle-intro-all-kinds': {
+          store.introShowAllKinds = !store.introShowAllKinds;
+          renderActiveSurface();
+          break;
+        }
+        case 'preview-intro': {
+          try {
+            const res = await apiJson('/api/intro/preview', { method: 'POST', body: {} });
+            if (res?.state) ingestServerState(res.state);
+            showToast(tr('intro.previewSent'), 'ok');
+          } catch (err) {
+            showToast(err.message || tr('intro.previewNeedMedia'), 'warn');
+          }
           break;
         }
         case 'refresh-library': {

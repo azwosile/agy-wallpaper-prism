@@ -2681,3 +2681,84 @@ button, input, select, textarea {
 @import './styles/preview.css';
 @import './styles/regions.css';
 @import './styles/editor.css';
+/* v2.5.0 Opening Animation configuration card & dynamic wallpaper picker */
+.prism-intro-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--prism-fg-muted);
+  background: rgba(var(--prism-pt-rgb, 255, 255, 255), 0.08);
+  border: 1px solid rgba(var(--prism-pt-rgb, 255, 255, 255), 0.12);
+}
+.prism-intro-badge.is-on {
+  color: var(--prism-accent);
+  background: rgba(var(--prism-accent-rgb), 0.16);
+  border-color: rgba(var(--prism-accent-rgb), 0.36);
+}
+.prism-intro-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(var(--prism-pt-rgb, 255, 255, 255), 0.035);
+  border: 1px solid rgba(var(--prism-pt-rgb, 255, 255, 255), 0.09);
+}
+.prism-intro-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.prism-intro-selected-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(var(--prism-accent-rgb), 0.09);
+  border: 1px solid rgba(var(--prism-accent-rgb), 0.24);
+}
+.prism-intro-selected-thumb {
+  width: 56px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+.prism-intro-thumb-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+.prism-intro-selected-meta {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.prism-intro-selected-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--prism-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prism-intro-picker-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.prism-intro-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+  max-height: 184px;
+  overflow-y: auto;
+  padding-right: 2px;
+}

@@ -5258,6 +5258,87 @@ html[data-prism-dormant="1"] .prism-picker-pulse-dot {
   animation: none;
 }
 
+/* v2.5.0 Opening Animation configuration card & dynamic wallpaper picker */
+.prism-intro-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--prism-fg-muted);
+  background: rgba(var(--prism-pt-rgb, 255, 255, 255), 0.08);
+  border: 1px solid rgba(var(--prism-pt-rgb, 255, 255, 255), 0.12);
+}
+.prism-intro-badge.is-on {
+  color: var(--prism-accent);
+  background: rgba(var(--prism-accent-rgb), 0.16);
+  border-color: rgba(var(--prism-accent-rgb), 0.36);
+}
+.prism-intro-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(var(--prism-pt-rgb, 255, 255, 255), 0.035);
+  border: 1px solid rgba(var(--prism-pt-rgb, 255, 255, 255), 0.09);
+}
+.prism-intro-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.prism-intro-selected-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(var(--prism-accent-rgb), 0.09);
+  border: 1px solid rgba(var(--prism-accent-rgb), 0.24);
+}
+.prism-intro-selected-thumb {
+  width: 56px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+.prism-intro-thumb-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+.prism-intro-selected-meta {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.prism-intro-selected-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--prism-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prism-intro-picker-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.prism-intro-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+  max-height: 184px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
 
 </style>
 </head>
@@ -5278,13 +5359,13 @@ const __prism_mod_2 = (function() {
 // Shared across src/engine, src/host, src/studio-ui, sidecars/prism_studio, and test/verify-all.
 const PLUGIN_ID = 'agy-wallpaper-prism';
 const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-const PLUGIN_VERSION = '2.4.0';
+const PLUGIN_VERSION = '2.5.0';
 const SIDECAR_ID = 'prism_studio';
 const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 const DEFAULT_DEBUG_PORT = 9339;
 const PRISM_DOM = Object.freeze({
-  skinVersion: '2.4.0',
+  skinVersion: '2.5.0',
   skinAttr: 'data-agy-prism-skin',
   glassAttr: 'data-agy-prism-glass',
   wallpaperAttr: 'data-agy-prism-wallpaper',
@@ -5305,6 +5386,7 @@ const PRISM_DOM = Object.freeze({
   kindAttr: 'data-prism-kind',
   styleId: 'agy-prism-css',
   stageId: 'agy-prism-stage',
+  introOverlayId: 'agy-prism-intro-overlay',
   popoverId: 'agy-prism-popover',
   popoverStyleId: 'agy-prism-popover-css',
   pillId: 'agy-prism-pill',
@@ -5340,6 +5422,8 @@ const BORDER_STYLES = Object.freeze(['full', 'bottom', 'none']);
 const SIDEBAR_LIST_STYLES = Object.freeze(['capsule', 'underline', 'accordion', 'tree']);
 const SIDEBAR_TYPOGRAPHY_MODES = Object.freeze(['balanced', 'native']);
 const LIBRARY_ANIMATED_THUMB_MODES = Object.freeze(['off', 'hover', 'always']);
+const INTRO_SOURCE_MODES = Object.freeze(['wallpaper', 'custom']);
+const INTRO_FIT_MODES = Object.freeze(['cover', 'contain']);
 const CJK_SAFE_FONT_PRESETS = Object.freeze([
   Object.freeze({ id: 'system', value: '', labelKey: 'region.font.followSystem' }),
   Object.freeze({ id: 'yahei', value: "'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif", labelKey: 'region.font.yahei' }),
@@ -6310,6 +6394,20 @@ const DEFAULT_CONFIG = Object.freeze({
   pauseOnFullscreen: false,
   desktopSync: false,
 
+  // Opening Animation (Optional, OFF by default; supports Wallpaper Engine dynamic wallpapers or custom user video)
+  introEnabled: false,
+  introSourceMode: 'wallpaper',
+  introWallpaperId: '',
+  introCustomVideoPath: '',
+  introCustomVideoName: '',
+  introDurationSec: 5,
+  introFadeOutMs: 600,
+  introMuted: true,
+  introVolume: 0.7,
+  introSkippable: true,
+  introFit: 'cover',
+  introShowProgress: true,
+
   // Playlists, Library Curation & Per-Wallpaper Memory
   rotationEnabled: false,
   rotationSeeded: false,
@@ -6434,6 +6532,15 @@ const RESET_SCOPES = Object.freeze({
     'rotationOrder',
     'rotationTrigger',
     'rotationInterval',
+    'introEnabled',
+    'introSourceMode',
+    'introDurationSec',
+    'introFadeOutMs',
+    'introMuted',
+    'introVolume',
+    'introSkippable',
+    'introFit',
+    'introShowProgress',
   ]),
 });
 const PER_WALLPAPER_OVERRIDE_KEYS = Object.freeze([
@@ -7591,6 +7698,19 @@ function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     pauseOnFullscreen: bool(merged.pauseOnFullscreen, DEFAULT_CONFIG.pauseOnFullscreen),
     desktopSync: bool(merged.desktopSync, DEFAULT_CONFIG.desktopSync),
 
+    introEnabled: bool(merged.introEnabled, DEFAULT_CONFIG.introEnabled),
+    introSourceMode: oneOf(merged.introSourceMode, INTRO_SOURCE_MODES, DEFAULT_CONFIG.introSourceMode),
+    introWallpaperId: String(merged.introWallpaperId || '').trim().slice(0, 200),
+    introCustomVideoPath: String(merged.introCustomVideoPath || '').trim().slice(0, 1024),
+    introCustomVideoName: String(merged.introCustomVideoName || '').trim().slice(0, 200),
+    introDurationSec: num(merged.introDurationSec, DEFAULT_CONFIG.introDurationSec, 0, 30, 0),
+    introFadeOutMs: num(merged.introFadeOutMs, DEFAULT_CONFIG.introFadeOutMs, 200, 2000, 0),
+    introMuted: bool(merged.introMuted, DEFAULT_CONFIG.introMuted),
+    introVolume: num(merged.introVolume, DEFAULT_CONFIG.introVolume, 0, 1, 2),
+    introSkippable: bool(merged.introSkippable, DEFAULT_CONFIG.introSkippable),
+    introFit: oneOf(merged.introFit, INTRO_FIT_MODES, DEFAULT_CONFIG.introFit),
+    introShowProgress: bool(merged.introShowProgress, DEFAULT_CONFIG.introShowProgress),
+
     rotationEnabled: bool(merged.rotationEnabled, DEFAULT_CONFIG.rotationEnabled),
     rotationSeeded: bool(merged.rotationSeeded, DEFAULT_CONFIG.rotationSeeded),
     rotationGroupId: String(merged.rotationGroupId || '').trim().slice(0, 80),
@@ -7665,7 +7785,7 @@ function resolveEffectiveConfig(config = DEFAULT_CONFIG, wallpaperId = config.ac
   return sanitizeConfig(filtered, clean);
 }
 
-return { getValidRegionIdSet: getValidRegionIdSet, createDefaultRegionEntry: createDefaultRegionEntry, createDefaultRegions: createDefaultRegions, createDefaultSurfaceTints: createDefaultSurfaceTints, nullableNum: nullableNum, sanitizeFontFamily: sanitizeFontFamily, sanitizeSidebarRadius: sanitizeSidebarRadius, hexToRgbTriplet: hexToRgbTriplet, contrastFgForHex: contrastFgForHex, hexToRgbArray: hexToRgbArray, rgbArrayToHex: rgbArrayToHex, relLumRgb: relLumRgb, contrastRatioRgb: contrastRatioRgb, enforceFgContrastRgb: enforceFgContrastRgb, resolveRegionFgColor: resolveRegionFgColor, resolveSchemeTokens: resolveSchemeTokens, stripOpticalFromRegionEntry: stripOpticalFromRegionEntry, sanitizeRegionEntry: sanitizeRegionEntry, mergeRegionsPatch: mergeRegionsPatch, sanitizeRegions: sanitizeRegions, projectSurfaceTintsFromRegions: projectSurfaceTintsFromRegions, sanitizeSurfaceTints: sanitizeSurfaceTints, resolveRegionEffectiveStyle: resolveRegionEffectiveStyle, resolveComponentDefaultAlpha: resolveComponentDefaultAlpha, sanitizeConfig: sanitizeConfig, applyResetScope: applyResetScope, resolveEffectiveConfig: resolveEffectiveConfig, PLUGIN_ID: PLUGIN_ID, PLUGIN_DISPLAY_NAME: PLUGIN_DISPLAY_NAME, PLUGIN_VERSION: PLUGIN_VERSION, SIDECAR_ID: SIDECAR_ID, SIDECAR_URI: SIDECAR_URI, CUSTOMIZATION_URI: CUSTOMIZATION_URI, DEFAULT_DEBUG_PORT: DEFAULT_DEBUG_PORT, PRISM_DOM: PRISM_DOM, STARTUP_MODES: STARTUP_MODES, CANARY_STATES: CANARY_STATES, WALLPAPER_KINDS: WALLPAPER_KINDS, LIBRARY_KINDS: LIBRARY_KINDS, CONTENT_RATINGS: CONTENT_RATINGS, LAYOUT_MODES: LAYOUT_MODES, TOPBAR_STYLES: TOPBAR_STYLES, CORNER_STYLES: CORNER_STYLES, BORDER_MODES: BORDER_MODES, THEME_MODES: THEME_MODES, CODE_READABILITY_MODES: CODE_READABILITY_MODES, FIT_MODES: FIT_MODES, FILTER_PRESETS: FILTER_PRESETS, SWITCH_TRANSITIONS: SWITCH_TRANSITIONS, SWITCH_DIRECTIONS: SWITCH_DIRECTIONS, SWITCH_SPEEDS: SWITCH_SPEEDS, ROTATION_ORDERS: ROTATION_ORDERS, ROTATION_TRIGGERS: ROTATION_TRIGGERS, TRIGGER_MODES: TRIGGER_MODES, LANGUAGES: LANGUAGES, SIDEBAR_RADII: SIDEBAR_RADII, SIDEBAR_RADIUS_RANGE: SIDEBAR_RADIUS_RANGE, BORDER_STYLES: BORDER_STYLES, SIDEBAR_LIST_STYLES: SIDEBAR_LIST_STYLES, SIDEBAR_TYPOGRAPHY_MODES: SIDEBAR_TYPOGRAPHY_MODES, LIBRARY_ANIMATED_THUMB_MODES: LIBRARY_ANIMATED_THUMB_MODES, CJK_SAFE_FONT_PRESETS: CJK_SAFE_FONT_PRESETS, COLOR_SCHEMES: COLOR_SCHEMES, COLOR_SCHEME_IDS: COLOR_SCHEME_IDS, ACCENT_MODES: ACCENT_MODES, ACCENT_PRESETS: ACCENT_PRESETS, REGION_IDS: REGION_IDS, SURFACE_TINT_COMPONENTS: SURFACE_TINT_COMPONENTS, GLASS_COMPONENT_IDS: GLASS_COMPONENT_IDS, SKIN_REGION_KEYS: SKIN_REGION_KEYS, GLASS_STYLES: GLASS_STYLES, ZERO_BLUR_BY_DEFAULT_REGIONS: ZERO_BLUR_BY_DEFAULT_REGIONS, SURFACE_TINT_BOUNDS: SURFACE_TINT_BOUNDS, REGION_FONT_SIZE_BOUNDS: REGION_FONT_SIZE_BOUNDS, REGION_FIELD_BOUNDS: REGION_FIELD_BOUNDS, REGION_OPTICAL_KEYS: REGION_OPTICAL_KEYS, REGION_STRUCTURAL_KEYS: REGION_STRUCTURAL_KEYS, SIDEBAR_REGION_EXTRA_KEYS: SIDEBAR_REGION_EXTRA_KEYS, DEFAULT_REGION_ENTRY: DEFAULT_REGION_ENTRY, DEFAULT_SIDEBAR_REGION_ENTRY: DEFAULT_SIDEBAR_REGION_ENTRY, DEFAULT_REGIONS: DEFAULT_REGIONS, DEFAULT_SURFACE_TINT_ENTRY: DEFAULT_SURFACE_TINT_ENTRY, DEFAULT_SURFACE_TINTS: DEFAULT_SURFACE_TINTS, SCENE_PRESETS: SCENE_PRESETS, SCENE_PRESET_IDS: SCENE_PRESET_IDS, FACTORY_PRESETS: FACTORY_PRESETS, DEFAULT_CONFIG: DEFAULT_CONFIG, RESET_SCOPES: RESET_SCOPES, PER_WALLPAPER_OVERRIDE_KEYS: PER_WALLPAPER_OVERRIDE_KEYS, FAST_OPTICAL_KEYS: FAST_OPTICAL_KEYS, FAST_OPTICAL_KEYS_MAP: FAST_OPTICAL_KEYS_MAP, FONT_FAMILY_FORBIDDEN_CHARS_RE: FONT_FAMILY_FORBIDDEN_CHARS_RE, FONT_FAMILY_FORBIDDEN_KW_RE: FONT_FAMILY_FORBIDDEN_KW_RE, FONT_FAMILY_TOKEN_RE: FONT_FAMILY_TOKEN_RE };
+return { getValidRegionIdSet: getValidRegionIdSet, createDefaultRegionEntry: createDefaultRegionEntry, createDefaultRegions: createDefaultRegions, createDefaultSurfaceTints: createDefaultSurfaceTints, nullableNum: nullableNum, sanitizeFontFamily: sanitizeFontFamily, sanitizeSidebarRadius: sanitizeSidebarRadius, hexToRgbTriplet: hexToRgbTriplet, contrastFgForHex: contrastFgForHex, hexToRgbArray: hexToRgbArray, rgbArrayToHex: rgbArrayToHex, relLumRgb: relLumRgb, contrastRatioRgb: contrastRatioRgb, enforceFgContrastRgb: enforceFgContrastRgb, resolveRegionFgColor: resolveRegionFgColor, resolveSchemeTokens: resolveSchemeTokens, stripOpticalFromRegionEntry: stripOpticalFromRegionEntry, sanitizeRegionEntry: sanitizeRegionEntry, mergeRegionsPatch: mergeRegionsPatch, sanitizeRegions: sanitizeRegions, projectSurfaceTintsFromRegions: projectSurfaceTintsFromRegions, sanitizeSurfaceTints: sanitizeSurfaceTints, resolveRegionEffectiveStyle: resolveRegionEffectiveStyle, resolveComponentDefaultAlpha: resolveComponentDefaultAlpha, sanitizeConfig: sanitizeConfig, applyResetScope: applyResetScope, resolveEffectiveConfig: resolveEffectiveConfig, PLUGIN_ID: PLUGIN_ID, PLUGIN_DISPLAY_NAME: PLUGIN_DISPLAY_NAME, PLUGIN_VERSION: PLUGIN_VERSION, SIDECAR_ID: SIDECAR_ID, SIDECAR_URI: SIDECAR_URI, CUSTOMIZATION_URI: CUSTOMIZATION_URI, DEFAULT_DEBUG_PORT: DEFAULT_DEBUG_PORT, PRISM_DOM: PRISM_DOM, STARTUP_MODES: STARTUP_MODES, CANARY_STATES: CANARY_STATES, WALLPAPER_KINDS: WALLPAPER_KINDS, LIBRARY_KINDS: LIBRARY_KINDS, CONTENT_RATINGS: CONTENT_RATINGS, LAYOUT_MODES: LAYOUT_MODES, TOPBAR_STYLES: TOPBAR_STYLES, CORNER_STYLES: CORNER_STYLES, BORDER_MODES: BORDER_MODES, THEME_MODES: THEME_MODES, CODE_READABILITY_MODES: CODE_READABILITY_MODES, FIT_MODES: FIT_MODES, FILTER_PRESETS: FILTER_PRESETS, SWITCH_TRANSITIONS: SWITCH_TRANSITIONS, SWITCH_DIRECTIONS: SWITCH_DIRECTIONS, SWITCH_SPEEDS: SWITCH_SPEEDS, ROTATION_ORDERS: ROTATION_ORDERS, ROTATION_TRIGGERS: ROTATION_TRIGGERS, TRIGGER_MODES: TRIGGER_MODES, LANGUAGES: LANGUAGES, SIDEBAR_RADII: SIDEBAR_RADII, SIDEBAR_RADIUS_RANGE: SIDEBAR_RADIUS_RANGE, BORDER_STYLES: BORDER_STYLES, SIDEBAR_LIST_STYLES: SIDEBAR_LIST_STYLES, SIDEBAR_TYPOGRAPHY_MODES: SIDEBAR_TYPOGRAPHY_MODES, LIBRARY_ANIMATED_THUMB_MODES: LIBRARY_ANIMATED_THUMB_MODES, INTRO_SOURCE_MODES: INTRO_SOURCE_MODES, INTRO_FIT_MODES: INTRO_FIT_MODES, CJK_SAFE_FONT_PRESETS: CJK_SAFE_FONT_PRESETS, COLOR_SCHEMES: COLOR_SCHEMES, COLOR_SCHEME_IDS: COLOR_SCHEME_IDS, ACCENT_MODES: ACCENT_MODES, ACCENT_PRESETS: ACCENT_PRESETS, REGION_IDS: REGION_IDS, SURFACE_TINT_COMPONENTS: SURFACE_TINT_COMPONENTS, GLASS_COMPONENT_IDS: GLASS_COMPONENT_IDS, SKIN_REGION_KEYS: SKIN_REGION_KEYS, GLASS_STYLES: GLASS_STYLES, ZERO_BLUR_BY_DEFAULT_REGIONS: ZERO_BLUR_BY_DEFAULT_REGIONS, SURFACE_TINT_BOUNDS: SURFACE_TINT_BOUNDS, REGION_FONT_SIZE_BOUNDS: REGION_FONT_SIZE_BOUNDS, REGION_FIELD_BOUNDS: REGION_FIELD_BOUNDS, REGION_OPTICAL_KEYS: REGION_OPTICAL_KEYS, REGION_STRUCTURAL_KEYS: REGION_STRUCTURAL_KEYS, SIDEBAR_REGION_EXTRA_KEYS: SIDEBAR_REGION_EXTRA_KEYS, DEFAULT_REGION_ENTRY: DEFAULT_REGION_ENTRY, DEFAULT_SIDEBAR_REGION_ENTRY: DEFAULT_SIDEBAR_REGION_ENTRY, DEFAULT_REGIONS: DEFAULT_REGIONS, DEFAULT_SURFACE_TINT_ENTRY: DEFAULT_SURFACE_TINT_ENTRY, DEFAULT_SURFACE_TINTS: DEFAULT_SURFACE_TINTS, SCENE_PRESETS: SCENE_PRESETS, SCENE_PRESET_IDS: SCENE_PRESET_IDS, FACTORY_PRESETS: FACTORY_PRESETS, DEFAULT_CONFIG: DEFAULT_CONFIG, RESET_SCOPES: RESET_SCOPES, PER_WALLPAPER_OVERRIDE_KEYS: PER_WALLPAPER_OVERRIDE_KEYS, FAST_OPTICAL_KEYS: FAST_OPTICAL_KEYS, FAST_OPTICAL_KEYS_MAP: FAST_OPTICAL_KEYS_MAP, FONT_FAMILY_FORBIDDEN_CHARS_RE: FONT_FAMILY_FORBIDDEN_CHARS_RE, FONT_FAMILY_FORBIDDEN_KW_RE: FONT_FAMILY_FORBIDDEN_KW_RE, FONT_FAMILY_TOKEN_RE: FONT_FAMILY_TOKEN_RE };
 })();
 
 const __prism_mod_4 = (function() {
@@ -7883,6 +8003,43 @@ const DICT = Object.freeze({
     'play.sceneLive': '启用 WebGL 实时场景渲染',
     'play.sceneFps': '场景渲染帧率上限',
     'play.sceneAutoQuality': '帧率不足时自动降级画质',
+
+    // Opening Animation (v2.5.0)
+    'intro.sectionTitle': '开场动画',
+    'intro.badgeOff': '默认关闭',
+    'intro.badgeOn': '已开启',
+    'intro.enable': '启用开场动画',
+    'intro.enableHint': '每次打开 Antigravity 窗口时播放一次全屏开场动画，默认关闭；点击或按 Esc 可随时跳过。',
+    'intro.sourceMode': '动画来源',
+    'intro.sourceWallpaper': 'Wallpaper 动态壁纸',
+    'intro.sourceCustom': '自定义视频',
+    'intro.useActiveWallpaper': '选用当前壁纸',
+    'intro.selectedWallpaper': '当前已选开场壁纸',
+    'intro.noWallpaperSelected': '尚未选择开场壁纸，请从下方动态壁纸库中选择或点击“选用当前壁纸”。',
+    'intro.pickerHint': '优先展示动态壁纸（视频 / Scene / Web）',
+    'intro.showAllKinds': '显示全部类型',
+    'intro.customVideoTitle': '自定义开场视频',
+    'intro.uploadBtn': '选择 / 上传本地视频',
+    'intro.uploading': '正在上传视频…',
+    'intro.uploadHint': '支持 MP4 / WebM / MOV / MKV / M4V / OGV（最大 512 MiB），独立存储不会混入壁纸库。',
+    'intro.noCustomVideo': '尚未添加自定义视频，点击上方按钮从本地选择视频文件。',
+    'intro.clearCustom': '移除视频',
+    'intro.uploadDone': '开场动画视频已导入',
+    'intro.cleared': '已移除自定义开场视频',
+    'intro.duration': '播放时长',
+    'intro.durationFull': '播完自动结束',
+    'intro.fadeOut': '淡出过渡',
+    'intro.fit': '画面适配',
+    'intro.fitCover': '铺满裁切',
+    'intro.fitContain': '完整适应',
+    'intro.muted': '静音播放（推荐，防止浏览器拦截自动播放）',
+    'intro.volume': '开场音量',
+    'intro.skippable': '允许点击或按 Esc / 空格跳过',
+    'intro.showProgress': '显示底部进度条与跳过按钮',
+    'intro.previewBtn': '立即在宿主窗口预览',
+    'intro.previewSent': '已在 Antigravity 宿主窗口触发开场动画预览',
+    'intro.previewNeedMedia': '请先选择一张壁纸或上传自定义视频后再预览',
+    'intro.skipLabel': '跳过开场动画 · Esc',
     'play.volume': '壁纸音频音量',
     'play.autoPause': '智能节能与焦点生命周期',
     'play.pauseOnHidden': '窗口最小化或切至后台时自动暂停 (1.2s 防抖)',
@@ -8392,6 +8549,43 @@ const DICT = Object.freeze({
     'play.sceneLive': 'Live WebGL Scene Rendering',
     'play.sceneFps': 'Scene Render FPS Cap',
     'play.sceneAutoQuality': 'Auto-scale quality when FPS drops',
+
+    // Opening Animation (v2.5.0)
+    'intro.sectionTitle': 'Opening Animation',
+    'intro.badgeOff': 'Off by default',
+    'intro.badgeOn': 'Enabled',
+    'intro.enable': 'Enable opening animation',
+    'intro.enableHint': 'Plays a fullscreen intro once per Antigravity window launch (disabled by default). Click or press Esc anytime to skip.',
+    'intro.sourceMode': 'Animation source',
+    'intro.sourceWallpaper': 'Wallpaper Engine / Library',
+    'intro.sourceCustom': 'Custom Video',
+    'intro.useActiveWallpaper': 'Use Active Wallpaper',
+    'intro.selectedWallpaper': 'Selected intro wallpaper',
+    'intro.noWallpaperSelected': 'No intro wallpaper selected yet. Pick a dynamic wallpaper below or click "Use Active Wallpaper".',
+    'intro.pickerHint': 'Showing dynamic wallpapers (Video / Scene / Web)',
+    'intro.showAllKinds': 'Show all types',
+    'intro.customVideoTitle': 'Custom intro video',
+    'intro.uploadBtn': 'Choose / Upload Local Video',
+    'intro.uploading': 'Uploading video…',
+    'intro.uploadHint': 'Supports MP4 / WebM / MOV / MKV / M4V / OGV (up to 512 MiB). Stored separately without cluttering your wallpaper library.',
+    'intro.noCustomVideo': 'No custom intro video added yet. Click above to import a local video file.',
+    'intro.clearCustom': 'Remove video',
+    'intro.uploadDone': 'Intro video imported',
+    'intro.cleared': 'Custom intro video removed',
+    'intro.duration': 'Play duration',
+    'intro.durationFull': 'Play to end',
+    'intro.fadeOut': 'Fade-out transition',
+    'intro.fit': 'Video fit',
+    'intro.fitCover': 'Cover (Fill)',
+    'intro.fitContain': 'Contain (Fit)',
+    'intro.muted': 'Mute audio (recommended for reliable autoplay)',
+    'intro.volume': 'Intro volume',
+    'intro.skippable': 'Allow click or Esc / Space to skip',
+    'intro.showProgress': 'Show bottom progress bar & skip pill',
+    'intro.previewBtn': 'Preview Intro in Host Window',
+    'intro.previewSent': 'Opening animation preview triggered in Antigravity host',
+    'intro.previewNeedMedia': 'Select a wallpaper or upload a custom video before previewing',
+    'intro.skipLabel': 'Skip Intro · Esc',
     'play.volume': 'Wallpaper Audio Volume',
     'play.autoPause': 'Smart Power & Focus Lifecycle',
     'play.pauseOnHidden': 'Auto-pause when window minimized or hidden (1.2s debounce)',
@@ -8986,6 +9180,9 @@ const store = {
   config: sanitizeConfig(DEFAULT_CONFIG),
   skinEnabled: true,
   activeItem: null,
+  introItem: null,
+  introUploading: false,
+  introShowAllKinds: false,
   items: [],
   presets: [...FACTORY_PRESETS],
   hostStatus: { debuggable: false, attached: false, cdpPort: DEFAULT_DEBUG_PORT, targets: 0 },
@@ -10110,6 +10307,9 @@ function ingestServerState(payload, { forceConfig = false } = {}) {
     }
   }
 
+  if ('introItem' in s) {
+    store.introItem = s.introItem || null;
+  }
   if ('activeItem' in s) {
     store.activeItem = s.activeItem || null;
   } else if (store.config.activeWallpaperId && store.items.length > 0) {
@@ -15229,6 +15429,239 @@ function renderPlaylistPickerGridHtml(visibleItems = null, pickedIds = null, pic
     </div>
   `;
 }
+
+function renderOpeningAnimationSection(eff, isZh) {
+  const cfg = store.config || DEFAULT_CONFIG;
+  const enabled = Boolean(cfg.introEnabled);
+  const sourceMode = cfg.introSourceMode === 'custom' ? 'custom' : 'wallpaper';
+  const showAll = Boolean(store.introShowAllKinds);
+  const allItems = Array.isArray(store.items) ? store.items : [];
+  const dynamicKinds = new Set(['video', 'scene', 'web']);
+  const candidateItems = showAll ? allItems : allItems.filter((it) => dynamicKinds.has(String(it.kind || '').toLowerCase()));
+  const selectedWallId = String(cfg.introWallpaperId || '').trim();
+  const selectedWall = selectedWallId ? allItems.find((it) => it.id === selectedWallId) || null : null;
+  const customName = String(cfg.introCustomVideoName || '').trim();
+  const customPath = String(cfg.introCustomVideoPath || '').trim();
+  const hasIntroMedia = sourceMode === 'custom' ? Boolean(customPath || store.introItem) : Boolean(selectedWall || store.introItem);
+  const durSec = Number(cfg.introDurationSec ?? DEFAULT_CONFIG.introDurationSec);
+
+  const selectedWallThumb = selectedWall
+    ? withStaticPreviewParam(selectedWall.thumbUrl || (selectedWall.kind === 'image' ? selectedWall.mediaUrl : ''))
+    : '';
+
+  return `
+      <!-- Opening Animation (v2.5.0: Optional, OFF by default) -->
+      <details id="prism-intro-section" class="prism-section" open>
+        <summary>
+          <div class="prism-section-title-wrap">
+            <span class="prism-section-chevron">▶</span>
+            <span>🎬 ${esc(tr('intro.sectionTitle'))}</span>
+            <span class="prism-intro-badge ${enabled ? 'is-on' : ''}">${esc(enabled ? tr('intro.badgeOn') : tr('intro.badgeOff'))}</span>
+          </div>
+          <button type="button" class="prism-btn prism-btn-sm"
+                  data-action="reset-module" data-keys="introEnabled,introSourceMode,introDurationSec,introFadeOutMs,introMuted,introVolume,introSkippable,introFit,introShowProgress">↺</button>
+        </summary>
+        <div class="prism-section-body">
+          ${renderSwitchRow({
+            key: 'introEnabled',
+            label: tr('intro.enable'),
+            hint: tr('intro.enableHint'),
+            checked: enabled,
+          })}
+
+          ${renderSegRow({
+            key: 'introSourceMode',
+            label: tr('intro.sourceMode'),
+            value: sourceMode,
+            options: [
+              { value: 'wallpaper', label: tr('intro.sourceWallpaper') },
+              { value: 'custom', label: tr('intro.sourceCustom') },
+            ],
+          })}
+
+          ${
+            sourceMode === 'wallpaper'
+              ? `
+            <div class="prism-intro-card">
+              <div class="prism-intro-card-head">
+                <span class="prism-ctl-label">${esc(tr('intro.selectedWallpaper'))}</span>
+                <button type="button" class="prism-btn prism-btn-sm" data-action="use-active-intro-wallpaper">
+                  ✦ ${esc(tr('intro.useActiveWallpaper'))}
+                </button>
+              </div>
+              ${
+                selectedWall
+                  ? `
+                <div class="prism-intro-selected-row">
+                  ${
+                    selectedWallThumb
+                      ? `<img class="prism-intro-selected-thumb" src="${esc(selectedWallThumb)}" alt="" onerror="this.remove()" />`
+                      : `<div class="prism-intro-selected-thumb prism-intro-thumb-fallback">🎬</div>`
+                  }
+                  <div class="prism-intro-selected-meta">
+                    <div class="prism-intro-selected-title">${esc(selectedWall.title || selectedWall.id)}</div>
+                    <div class="prism-ctl-hint">${esc(String(selectedWall.kind || 'video').toUpperCase())} · ${esc(selectedWall.source || 'local')}</div>
+                  </div>
+                </div>
+              `
+                  : `<div class="prism-ctl-hint">${esc(tr('intro.noWallpaperSelected'))}</div>`
+              }
+              <div class="prism-intro-picker-bar">
+                <span class="prism-ctl-hint">${esc(tr('intro.pickerHint'))} (${candidateItems.length})</span>
+                <button type="button" class="prism-chip ${showAll ? 'is-active' : ''}" data-action="toggle-intro-all-kinds">
+                  ${esc(tr('intro.showAllKinds'))}
+                </button>
+              </div>
+              <div class="prism-intro-picker-grid">
+                ${
+                  candidateItems.length === 0
+                    ? `<div class="prism-ctl-hint" style="padding:8px;grid-column:1/-1">${esc(tr('lib.empty'))}</div>`
+                    : candidateItems
+                        .slice(0, 36)
+                        .map((it) => {
+                          const picked = it.id === selectedWallId;
+                          const rawThumb = it.thumbUrl || (it.kind === 'image' ? it.mediaUrl : '');
+                          const thumb = rawThumb ? withStaticPreviewParam(rawThumb) : '';
+                          return `
+                            <button type="button" class="prism-mini-pick-item ${picked ? 'is-picked' : ''}"
+                                    data-action="pick-intro-wallpaper" data-id="${esc(it.id)}" title="${esc(it.title || it.id)}">
+                              ${
+                                thumb
+                                  ? `<img loading="lazy" decoding="async" src="${esc(thumb)}" alt="" onerror="this.remove()" />`
+                                  : `<div style="aspect-ratio:16/10;background:rgba(var(--prism-accent-rgb),0.18)"></div>`
+                              }
+                              <div class="prism-mini-pick-name">${picked ? '✓ ' : ''}${esc(it.title || it.id)}</div>
+                            </button>
+                          `;
+                        })
+                        .join('')
+                }
+              </div>
+            </div>
+          `
+              : `
+            <div class="prism-intro-card">
+              <div class="prism-intro-card-head">
+                <span class="prism-ctl-label">${esc(tr('intro.customVideoTitle'))}</span>
+                <button type="button" class="prism-btn prism-btn-sm prism-btn-primary"
+                        data-action="trigger-intro-upload" ${store.introUploading ? 'disabled' : ''}>
+                  ${store.introUploading ? esc(tr('intro.uploading')) : `＋ ${esc(tr('intro.uploadBtn'))}`}
+                </button>
+              </div>
+              <div class="prism-ctl-hint">${esc(tr('intro.uploadHint'))}</div>
+              ${
+                customPath
+                  ? `
+                <div class="prism-intro-selected-row">
+                  <div class="prism-intro-selected-thumb prism-intro-thumb-fallback">🎞</div>
+                  <div class="prism-intro-selected-meta">
+                    <div class="prism-intro-selected-title">${esc(customName || customPath)}</div>
+                    <div class="prism-ctl-hint">${esc(tr('intro.sourceCustom'))}</div>
+                  </div>
+                  <button type="button" class="prism-btn prism-btn-sm" data-action="clear-intro-video" title="${esc(tr('intro.clearCustom'))}">✕</button>
+                </div>
+              `
+                  : `<div class="prism-ctl-hint">${esc(tr('intro.noCustomVideo'))}</div>`
+              }
+            </div>
+          `
+          }
+
+          ${renderSliderRow({
+            key: 'introDurationSec',
+            label: tr('intro.duration'),
+            value: durSec,
+            defaultValue: DEFAULT_CONFIG.introDurationSec,
+            min: 0,
+            max: 30,
+            step: 1,
+            suffix: durSec === 0 ? ` (${tr('intro.durationFull')})` : ' s',
+          })}
+          <div class="prism-ctl-row">
+            <span class="prism-ctl-hint">${esc(isZh ? '快捷时长' : 'Quick Duration')}</span>
+            <div class="prism-seg">
+              ${[
+                { v: 0, l: tr('intro.durationFull') },
+                { v: 3, l: '3s' },
+                { v: 5, l: '5s' },
+                { v: 8, l: '8s' },
+                { v: 12, l: '12s' },
+              ]
+                .map(
+                  (o) => `
+                <button type="button" class="prism-seg-btn ${durSec === o.v ? 'is-active' : ''}"
+                        data-action="set-num" data-key="introDurationSec" data-val="${o.v}">${esc(o.l)}</button>
+              `,
+                )
+                .join('')}
+            </div>
+          </div>
+
+          ${renderSliderRow({
+            key: 'introFadeOutMs',
+            label: tr('intro.fadeOut'),
+            value: cfg.introFadeOutMs ?? DEFAULT_CONFIG.introFadeOutMs,
+            defaultValue: DEFAULT_CONFIG.introFadeOutMs,
+            min: 200,
+            max: 2000,
+            step: 50,
+            suffix: ' ms',
+          })}
+
+          ${renderSegRow({
+            key: 'introFit',
+            label: tr('intro.fit'),
+            value: cfg.introFit || 'cover',
+            options: [
+              { value: 'cover', label: tr('intro.fitCover') },
+              { value: 'contain', label: tr('intro.fitContain') },
+            ],
+          })}
+
+          ${renderSwitchRow({
+            key: 'introMuted',
+            label: tr('intro.muted'),
+            checked: cfg.introMuted !== false,
+          })}
+
+          ${
+            cfg.introMuted === false
+              ? renderSliderRow({
+                  key: 'introVolume',
+                  label: tr('intro.volume'),
+                  value: Math.round(Number(cfg.introVolume ?? 0.7) * 100),
+                  defaultValue: 70,
+                  min: 0,
+                  max: 100,
+                  step: 5,
+                  suffix: '%',
+                  scale: 100,
+                })
+              : ''
+          }
+
+          ${renderSwitchRow({
+            key: 'introSkippable',
+            label: tr('intro.skippable'),
+            checked: cfg.introSkippable !== false,
+          })}
+
+          ${renderSwitchRow({
+            key: 'introShowProgress',
+            label: tr('intro.showProgress'),
+            checked: cfg.introShowProgress !== false,
+          })}
+
+          <div class="prism-ctl-row" style="margin-top:6px">
+            <button id="prism-intro-preview-btn" type="button" class="prism-btn prism-btn-primary" style="width:100%"
+                    data-action="preview-intro" ${!hasIntroMedia ? 'disabled' : ''}>
+              ▶ ${esc(tr('intro.previewBtn'))}
+            </button>
+          </div>
+        </div>
+      </details>
+  `;
+}
 function renderPlaybackTab() {
   const eff = getEffectiveConfig();
   const isZh = curLocale() === 'zh';
@@ -15262,6 +15695,8 @@ function renderPlaybackTab() {
     ${healthAlerts ? `<div class="prism-health-alerts">${healthAlerts}</div>` : ''}
 
     <div class="prism-settings-columns">
+      ${renderOpeningAnimationSection(eff, isZh)}
+
       <!-- Switch Transitions & Slideshow -->
       <details class="prism-section" open>
         <summary>
@@ -18571,6 +19006,7 @@ function bootPrismStudioApp() {
       <input id="prism-upload-input" type="file" hidden multiple
              accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.mp4,.webm,.mkv,.avi,.mov" />
       <input id="prism-preset-import-input" type="file" hidden accept=".json,application/json" />
+      <input id="prism-intro-video-input" type="file" hidden accept="video/*,.mp4,.webm,.mov,.mkv,.m4v,.ogv" />
     `;
 
     app.dataset.prismReady = 'true';
@@ -18701,6 +19137,37 @@ function bootPrismStudioApp() {
 
     store.uploading = false;
     renderActiveSurface();
+  }
+
+  async function uploadIntroVideoFile(file) {
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      showToast(`${file.name}: ${tx('uploadTooLarge')}`, 'danger');
+      return;
+    }
+    store.introUploading = true;
+    renderActiveSurface();
+    try {
+      const title = file.name.replace(/\.[^.]+$/, '');
+      const qs = new URLSearchParams({ filename: file.name, title }).toString();
+      const res = await apiFetch(`/api/intro/upload?${qs}`, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || `Intro upload HTTP ${res.status}`);
+      }
+      if (data.state) ingestServerState(data.state);
+      if (data.introItem) store.introItem = data.introItem;
+      showToast(tr('intro.uploadDone'), 'ok');
+    } catch (err) {
+      showToast(err.message || 'Intro upload failed', 'danger');
+    } finally {
+      store.introUploading = false;
+      renderActiveSurface();
+    }
   }
 
   async function reloadLibrary(refresh = true) {
@@ -19603,6 +20070,13 @@ function bootPrismStudioApp() {
         return;
       }
 
+      if (tEl.id === 'prism-intro-video-input' && tEl instanceof HTMLInputElement) {
+        const file = tEl.files?.[0];
+        tEl.value = '';
+        if (file) await uploadIntroVideoFile(file);
+        return;
+      }
+
       if (tEl.id === 'prism-preset-import-input' && tEl instanceof HTMLInputElement) {
         const file = tEl.files?.[0];
         tEl.value = '';
@@ -20413,6 +20887,54 @@ function bootPrismStudioApp() {
         }
         case 'trigger-upload': {
           document.getElementById('prism-upload-input')?.click();
+          break;
+        }
+        case 'trigger-intro-upload': {
+          document.getElementById('prism-intro-video-input')?.click();
+          break;
+        }
+        case 'clear-intro-video': {
+          try {
+            const res = await apiJson('/api/intro/clear', { method: 'POST', body: {} });
+            if (res?.state) ingestServerState(res.state);
+            store.introItem = null;
+            showToast(tr('intro.cleared'), 'ok');
+          } catch (err) {
+            showToast(err.message || 'Clear failed', 'danger');
+          }
+          renderActiveSurface();
+          break;
+        }
+        case 'pick-intro-wallpaper': {
+          const wid = actEl.dataset.id || '';
+          if (!wid) break;
+          queueConfigPatch({ introSourceMode: 'wallpaper', introWallpaperId: wid }, true, false);
+          renderActiveSurface();
+          break;
+        }
+        case 'use-active-intro-wallpaper': {
+          const activeId = getActiveId();
+          if (!activeId) {
+            showToast(tr('intro.previewNeedMedia'), 'warn');
+            break;
+          }
+          queueConfigPatch({ introSourceMode: 'wallpaper', introWallpaperId: activeId }, true, false);
+          renderActiveSurface();
+          break;
+        }
+        case 'toggle-intro-all-kinds': {
+          store.introShowAllKinds = !store.introShowAllKinds;
+          renderActiveSurface();
+          break;
+        }
+        case 'preview-intro': {
+          try {
+            const res = await apiJson('/api/intro/preview', { method: 'POST', body: {} });
+            if (res?.state) ingestServerState(res.state);
+            showToast(tr('intro.previewSent'), 'ok');
+          } catch (err) {
+            showToast(err.message || tr('intro.previewNeedMedia'), 'warn');
+          }
           break;
         }
         case 'refresh-library': {

@@ -275,6 +275,9 @@ export const store = {
   config: sanitizeConfig(DEFAULT_CONFIG),
   skinEnabled: true,
   activeItem: null,
+  introItem: null,
+  introUploading: false,
+  introShowAllKinds: false,
   items: [],
   presets: [...FACTORY_PRESETS],
   hostStatus: { debuggable: false, attached: false, cdpPort: DEFAULT_DEBUG_PORT, targets: 0 },
@@ -1430,6 +1433,9 @@ export function ingestServerState(payload, { forceConfig = false } = {}) {
     }
   }
 
+  if ('introItem' in s) {
+    store.introItem = s.introItem || null;
+  }
   if ('activeItem' in s) {
     store.activeItem = s.activeItem || null;
   } else if (store.config.activeWallpaperId && store.items.length > 0) {

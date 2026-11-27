@@ -1946,6 +1946,8 @@ export function createPassiveCdpBridge({
       ? hostScripts.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
           skinEnabled,
           slides: st.activeItem?.slides,
+          introItem: st.introItem || null,
+          introPreviewNonce: st.introPreviewNonce || 0,
           pluginOrigin,
           stateRev,
           ...(resolvedEpoch ? { stateEpoch: resolvedEpoch } : {}),

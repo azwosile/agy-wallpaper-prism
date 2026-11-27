@@ -3,14 +3,14 @@
 
 export const PLUGIN_ID = 'agy-wallpaper-prism';
 export const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-export const PLUGIN_VERSION = '2.4.0';
+export const PLUGIN_VERSION = '2.5.0';
 export const SIDECAR_ID = 'prism_studio';
 export const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 export const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 export const DEFAULT_DEBUG_PORT = 9339;
 
 export const PRISM_DOM = Object.freeze({
-  skinVersion: '2.4.0',
+  skinVersion: '2.5.0',
   skinAttr: 'data-agy-prism-skin',
   glassAttr: 'data-agy-prism-glass',
   wallpaperAttr: 'data-agy-prism-wallpaper',
@@ -31,6 +31,7 @@ export const PRISM_DOM = Object.freeze({
   kindAttr: 'data-prism-kind',
   styleId: 'agy-prism-css',
   stageId: 'agy-prism-stage',
+  introOverlayId: 'agy-prism-intro-overlay',
   popoverId: 'agy-prism-popover',
   popoverStyleId: 'agy-prism-popover-css',
   pillId: 'agy-prism-pill',
@@ -67,6 +68,8 @@ export const BORDER_STYLES = Object.freeze(['full', 'bottom', 'none']);
 export const SIDEBAR_LIST_STYLES = Object.freeze(['capsule', 'underline', 'accordion', 'tree']);
 export const SIDEBAR_TYPOGRAPHY_MODES = Object.freeze(['balanced', 'native']);
 export const LIBRARY_ANIMATED_THUMB_MODES = Object.freeze(['off', 'hover', 'always']);
+export const INTRO_SOURCE_MODES = Object.freeze(['wallpaper', 'custom']);
+export const INTRO_FIT_MODES = Object.freeze(['cover', 'contain']);
 
 export const CJK_SAFE_FONT_PRESETS = Object.freeze([
   Object.freeze({ id: 'system', value: '', labelKey: 'region.font.followSystem' }),
@@ -1059,6 +1062,20 @@ export const DEFAULT_CONFIG = Object.freeze({
   pauseOnFullscreen: false,
   desktopSync: false,
 
+  // Opening Animation (Optional, OFF by default; supports Wallpaper Engine dynamic wallpapers or custom user video)
+  introEnabled: false,
+  introSourceMode: 'wallpaper',
+  introWallpaperId: '',
+  introCustomVideoPath: '',
+  introCustomVideoName: '',
+  introDurationSec: 5,
+  introFadeOutMs: 600,
+  introMuted: true,
+  introVolume: 0.7,
+  introSkippable: true,
+  introFit: 'cover',
+  introShowProgress: true,
+
   // Playlists, Library Curation & Per-Wallpaper Memory
   rotationEnabled: false,
   rotationSeeded: false,
@@ -1183,6 +1200,15 @@ export const RESET_SCOPES = Object.freeze({
     'rotationOrder',
     'rotationTrigger',
     'rotationInterval',
+    'introEnabled',
+    'introSourceMode',
+    'introDurationSec',
+    'introFadeOutMs',
+    'introMuted',
+    'introVolume',
+    'introSkippable',
+    'introFit',
+    'introShowProgress',
   ]),
 });
 
@@ -2355,6 +2381,19 @@ export function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     pauseOnBattery: bool(merged.pauseOnBattery, DEFAULT_CONFIG.pauseOnBattery),
     pauseOnFullscreen: bool(merged.pauseOnFullscreen, DEFAULT_CONFIG.pauseOnFullscreen),
     desktopSync: bool(merged.desktopSync, DEFAULT_CONFIG.desktopSync),
+
+    introEnabled: bool(merged.introEnabled, DEFAULT_CONFIG.introEnabled),
+    introSourceMode: oneOf(merged.introSourceMode, INTRO_SOURCE_MODES, DEFAULT_CONFIG.introSourceMode),
+    introWallpaperId: String(merged.introWallpaperId || '').trim().slice(0, 200),
+    introCustomVideoPath: String(merged.introCustomVideoPath || '').trim().slice(0, 1024),
+    introCustomVideoName: String(merged.introCustomVideoName || '').trim().slice(0, 200),
+    introDurationSec: num(merged.introDurationSec, DEFAULT_CONFIG.introDurationSec, 0, 30, 0),
+    introFadeOutMs: num(merged.introFadeOutMs, DEFAULT_CONFIG.introFadeOutMs, 200, 2000, 0),
+    introMuted: bool(merged.introMuted, DEFAULT_CONFIG.introMuted),
+    introVolume: num(merged.introVolume, DEFAULT_CONFIG.introVolume, 0, 1, 2),
+    introSkippable: bool(merged.introSkippable, DEFAULT_CONFIG.introSkippable),
+    introFit: oneOf(merged.introFit, INTRO_FIT_MODES, DEFAULT_CONFIG.introFit),
+    introShowProgress: bool(merged.introShowProgress, DEFAULT_CONFIG.introShowProgress),
 
     rotationEnabled: bool(merged.rotationEnabled, DEFAULT_CONFIG.rotationEnabled),
     rotationSeeded: bool(merged.rotationSeeded, DEFAULT_CONFIG.rotationSeeded),

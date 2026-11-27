@@ -1739,6 +1739,10 @@ export async function createMediaServer(opts = {}) {
     for (const [k, v] of nextRegistry.entries()) {
       registry.set(k, v);
     }
+    if (customIntroEntry && customIntroEntry.id) {
+      const introTok = tokenForWallpaperId(customIntroEntry.id);
+      registry.set(introTok, customIntroEntry);
+    }
     return publicItems;
   }
 
@@ -1752,6 +1756,86 @@ export async function createMediaServer(opts = {}) {
     existing.push(item);
     const pub = syncLibrary(existing);
     return pub.find((x) => x.id === item.id) || null;
+  }
+
+  let customIntroEntry = null;
+  let customIntroPublic = null;
+
+  /** Register a standalone Opening Animation video file that survives background syncLibrary() calls. */
+  function registerIntroFile(absPath, title = '') {
+    const rawPath = String(absPath || '').trim();
+    if (!rawPath || !existsSync(rawPath)) {
+      if (customIntroEntry) {
+        const oldTok = tokenForWallpaperId(customIntroEntry.id);
+        registry.delete(oldTok);
+      }
+      customIntroEntry = null;
+      customIntroPublic = null;
+      return null;
+    }
+    const cleanAbs = resolve(rawPath);
+    const introId = '__prism_intro_custom__';
+    const introToken = tokenForWallpaperId(introId);
+    const encToken = encodeURIComponent(introToken);
+    const st = statSync(cleanAbs);
+    const displayTitle = String(title || '').trim() || basename(cleanAbs);
+    const entry = {
+      id: introId,
+      title: displayTitle,
+      kind: 'video',
+      source: 'local',
+      workshopId: '',
+      contentRating: 'everyone',
+      tags: ['intro'],
+      schemeColor: '#669DF6',
+      sceneMode: null,
+      properties: [],
+      wireProps: {},
+      fileSize: st.size || 0,
+      resolution: '',
+      _fs: {
+        projectDir: dirname(cleanAbs),
+        primaryAbs: cleanAbs,
+        previewAbs: null,
+        slidesAbs: [],
+        sceneContainerAbs: null,
+        hasSceneVideo: false,
+        hasSceneAudio: false,
+        looseAudioAbs: null,
+        webEntryRel: '',
+      },
+      token: introToken,
+      mediaUrl: `${origin}/media/${encToken}`,
+      thumbUrl: `${origin}/thumb/${encToken}`,
+      videoStageUrl: `${origin}/video-stage/${encToken}`,
+      mseFmp4Url: `${origin}/mse-fmp4/${encToken}`,
+      audioUrl: '',
+      slidesUrl: '',
+      sceneVideoUrl: '',
+      sceneImageUrl: '',
+      sceneLiveUrl: '',
+      webUrl: '',
+    };
+    customIntroEntry = entry;
+    registry.set(introToken, entry);
+    customIntroPublic = {
+      id: introId,
+      title: displayTitle,
+      kind: 'video',
+      source: 'custom-intro',
+      fileSize: st.size || 0,
+      mediaUrl: entry.mediaUrl,
+      thumbUrl: entry.thumbUrl,
+      videoStageUrl: entry.videoStageUrl,
+      mseFmp4Url: entry.mseFmp4Url,
+      audioUrl: '',
+      slidesUrl: '',
+      sceneVideoUrl: '',
+      sceneImageUrl: '',
+      sceneLiveUrl: '',
+      webUrl: '',
+    };
+    return customIntroPublic;
   }
 
   function registerFile(id, absPath, kind = 'video') {
@@ -1900,6 +1984,7 @@ export async function createMediaServer(opts = {}) {
     syncLibrary,
     registerEntry,
     registerFile,
+    registerIntroFile,
     setRuntimeContextGetter,
     prunePinnedSessions,
     releaseOldVideoPins: prunePinnedSessions,

@@ -202,6 +202,19 @@ export async function createWallpaperPrismEngine(opts = {}) {
     };
   }
 
+  function getIntroItem() {
+    const cfg = store.getConfig();
+    if (cfg.introSourceMode === 'custom') {
+      const customPath = String(cfg.introCustomVideoPath || '').trim();
+      if (!customPath) return null;
+      return mediaServer.registerIntroFile(customPath, cfg.introCustomVideoName || '');
+    }
+    const introWid = String(cfg.introWallpaperId || '').trim();
+    if (!introWid) return null;
+    const found = publicLibraryItems.find((it) => it.id === introWid);
+    return found ? recomputeItemPropsWithOverrides(found, cfg) : null;
+  }
+
   function getActiveItem() {
     const cfg = store.getConfig();
     const activeId = cfg.activeWallpaperId || cfg.wallpaperId || '';
@@ -213,6 +226,7 @@ export async function createWallpaperPrismEngine(opts = {}) {
   function getActivePayload() {
     const cfg = store.getConfig();
     const activeItem = getActiveItem();
+    const introItem = getIntroItem();
     const effCfg = store.getEffectiveConfig(activeItem?.id || cfg.activeWallpaperId);
     const slideIntervalMs = effCfg.pictureSlideSeconds > 0
       ? effCfg.pictureSlideSeconds * 1000
@@ -226,6 +240,7 @@ export async function createWallpaperPrismEngine(opts = {}) {
       config: cfg,
       effectiveConfig: effCfg,
       activeItem,
+      introItem,
       mediaOrigin: mediaServer.getOrigin(),
       presets: store.listPresets(),
       stats: getStats(),
@@ -639,6 +654,45 @@ export async function createWallpaperPrismEngine(opts = {}) {
     return { ...payload, wallpaperId, props: savedProps };
   }
 
+  async function uploadIntroVideo({ filename, contentType, streamOrBuffer, title } = {}) {
+    if (!initialized) await init();
+    const prevPath = String(store.getConfig().introCustomVideoPath || '').trim();
+    const saved = await store.saveIntroVideo({ filename, contentType, streamOrBuffer, title });
+    if (prevPath && prevPath !== saved.absPath) {
+      store.removeIntroVideo(prevPath);
+    }
+    await store.updateConfig({
+      introSourceMode: 'custom',
+      introCustomVideoPath: saved.absPath,
+      introCustomVideoName: saved.displayName,
+    });
+    const introItem = getIntroItem();
+    const payload = emitStateChange(true);
+    return {
+      ...payload,
+      introItem,
+      saved,
+    };
+  }
+
+  async function clearIntroVideo() {
+    if (!initialized) await init();
+    const prevPath = String(store.getConfig().introCustomVideoPath || '').trim();
+    if (prevPath) {
+      store.removeIntroVideo(prevPath);
+    }
+    mediaServer.registerIntroFile('', '');
+    await store.updateConfig({
+      introCustomVideoPath: '',
+      introCustomVideoName: '',
+    });
+    const payload = emitStateChange(true);
+    return {
+      ...payload,
+      introItem: null,
+    };
+  }
+
   async function uploadMedia({ filename, contentType, streamOrBuffer, title } = {}) {
     if (!initialized) await init();
     const { duplicate, meta } = await store.uploadMedia({
@@ -728,6 +782,7 @@ export async function createWallpaperPrismEngine(opts = {}) {
     getEffectiveConfig: (id) => store.getEffectiveConfig(id),
     getStats,
     getActiveItem,
+    getIntroItem,
     getActivePayload,
     updateConfig,
     restoreSkin,
@@ -745,6 +800,8 @@ export async function createWallpaperPrismEngine(opts = {}) {
     importPreset,
     exportPreset,
     updateUserProps,
+    uploadIntroVideo,
+    clearIntroVideo,
     uploadMedia,
     removeUpload,
     browseDirs,

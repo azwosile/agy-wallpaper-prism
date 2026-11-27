@@ -1692,6 +1692,153 @@ export async function createPrismStore(opts = {}) {
     };
   }
 
+  function getIntroDir() {
+    return join(dataDir, 'intro');
+  }
+
+  /**
+   * Stream or write a custom Opening Animation video (up to 512 MiB) into `<dataDir>/intro/`
+   * with SHA-256 deduplication so it never clutters the wallpaper library.
+   */
+  async function saveIntroVideo({ filename = '', contentType = '', streamOrBuffer, title = '' } = {}) {
+    if (!streamOrBuffer) {
+      throw makeError('Missing intro video body', 400);
+    }
+
+    const cleanOriginal = basename(String(filename || 'intro.mp4')).replace(/[\0<>:"/\\|?*]+/g, '_');
+    let ext = extname(cleanOriginal).toLowerCase();
+    if (!ext && contentType) {
+      const baseCt = String(contentType).split(';')[0].trim().toLowerCase();
+      ext = EXT_FROM_CONTENT_TYPE[baseCt] || '';
+    }
+    if (!VIDEO_EXTS.has(ext)) {
+      throw makeError(`Unsupported intro video extension: ${ext || '(none)'} (supported: mp4, webm, mov, mkv, m4v, ogv)`, 415);
+    }
+
+    const dir = getIntroDir();
+    mkdirSync(dir, { recursive: true });
+    uploadSeq += 1;
+    const tmpPath = join(dir, `.intro-${process.pid}-${Date.now()}-${uploadSeq}.tmp`);
+    const hash = createHash('sha256');
+    let totalBytes = 0;
+
+    try {
+      if (
+        Buffer.isBuffer(streamOrBuffer)
+        || streamOrBuffer instanceof Uint8Array
+        || streamOrBuffer instanceof ArrayBuffer
+        || typeof streamOrBuffer === 'string'
+      ) {
+        const buf = Buffer.isBuffer(streamOrBuffer)
+          ? streamOrBuffer
+          : streamOrBuffer instanceof ArrayBuffer
+            ? Buffer.from(streamOrBuffer)
+            : typeof streamOrBuffer === 'string'
+              ? Buffer.from(streamOrBuffer, 'utf8')
+              : Buffer.from(streamOrBuffer.buffer, streamOrBuffer.byteOffset, streamOrBuffer.byteLength);
+
+        if (buf.length === 0) throw makeError('Uploaded intro video is empty', 400);
+        if (buf.length > MAX_UPLOAD_BYTES) {
+          throw makeError(`Intro video exceeds maximum size (${MAX_UPLOAD_BYTES} bytes)`, 413);
+        }
+        totalBytes = buf.length;
+        hash.update(buf);
+        const fd = openSync(tmpPath, 'w', 0o600);
+        try {
+          writeSync(fd, buf, 0, buf.length, 0);
+          try { fsyncSync(fd); } catch { /* ignore */ }
+        } finally {
+          closeSync(fd);
+        }
+      } else if (typeof streamOrBuffer.on === 'function') {
+        await new Promise((resolveStream, rejectStream) => {
+          const out = createWriteStream(tmpPath, { mode: 0o600 });
+          let aborted = false;
+
+          const fail = (err) => {
+            if (aborted) return;
+            aborted = true;
+            try { out.destroy(); } catch { /* ignore */ }
+            rejectStream(err);
+          };
+
+          streamOrBuffer.on('data', (chunk) => {
+            if (aborted) return;
+            const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            totalBytes += b.length;
+            if (totalBytes > MAX_UPLOAD_BYTES) {
+              fail(makeError(`Intro video exceeds maximum size (${MAX_UPLOAD_BYTES} bytes)`, 413));
+              return;
+            }
+            hash.update(b);
+            if (!out.write(b)) {
+              try { streamOrBuffer.pause?.(); } catch { /* ignore */ }
+              out.once('drain', () => {
+                try { streamOrBuffer.resume?.(); } catch { /* ignore */ }
+              });
+            }
+          });
+
+          streamOrBuffer.on('error', fail);
+          out.on('error', fail);
+          streamOrBuffer.on('end', () => {
+            if (aborted) return;
+            out.end();
+          });
+          out.on('finish', () => {
+            if (!aborted) resolveStream();
+          });
+        });
+
+        if (totalBytes === 0) {
+          throw makeError('Uploaded intro video is empty', 400);
+        }
+      } else {
+        throw makeError('Unsupported intro video stream type', 400);
+      }
+
+      const digest = hash.digest('hex');
+      const shortHash = digest.slice(0, 16);
+      const finalName = `intro-${shortHash}${ext}`;
+      const finalPath = join(dir, finalName);
+
+      if (existsSync(finalPath)) {
+        try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      } else {
+        renameSync(tmpPath, finalPath);
+      }
+
+      const displayName = String(title || '').trim() || cleanOriginal;
+      return {
+        absPath: finalPath,
+        filename: finalName,
+        originalName: cleanOriginal,
+        displayName,
+        size: totalBytes,
+        hash: digest,
+      };
+    } catch (err) {
+      try { if (existsSync(tmpPath)) unlinkSync(tmpPath); } catch { /* ignore */ }
+      throw err;
+    }
+  }
+
+  function removeIntroVideo(absPath = '') {
+    const raw = String(absPath || '').trim();
+    if (!raw) return false;
+    const dir = resolve(getIntroDir());
+    const target = resolve(raw);
+    const dirPrefix = dir.endsWith(sep) ? dir : `${dir}${sep}`;
+    if (!target.startsWith(dirPrefix)) return false;
+    try {
+      if (existsSync(target)) {
+        unlinkSync(target);
+        return true;
+      }
+    } catch { /* ignore */ }
+    return false;
+  }
+
   return {
     dataDir,
     configPath,
@@ -1716,6 +1863,9 @@ export async function createPrismStore(opts = {}) {
     importPreset,
     updateUserProps,
     savePerWallpaperOverride,
+    getIntroDir,
+    saveIntroVideo,
+    removeIntroVideo,
     uploadMedia,
     removeUpload,
     setStorageDir,

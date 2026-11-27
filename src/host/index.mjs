@@ -1,4 +1,4 @@
-// Host injection script loader & client skin payload builder for agy-wallpaper-prism v2.4.0.
+// Host injection script loader & client skin payload builder for agy-wallpaper-prism v2.5.0.
 // Consumed by `sidecars/prism_studio/main.mjs`, `cdp-bridge.mjs`, and `test/verify-all.mjs`.
 
 import { readFileSync } from 'node:fs';
@@ -100,44 +100,44 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
     (effective.extractedAccent && effective.extractedAccent.wallpaperId === wid ? effective.extractedAccent : null);
   effective.extractedAccent = cachedAccent || null;
 
-  let normalizedItem = null;
-  if (activeItem && typeof activeItem === 'object') {
-    const kind = String(activeItem.kind || effective.kind || 'image');
-    const sceneMode = String(activeItem.sceneMode || '');
-    const thumbUrl = resolveMediaUrl(activeItem.thumbUrl, mediaOrigin);
-    const sceneVideoUrl = resolveMediaUrl(activeItem.sceneVideoUrl, mediaOrigin);
-    const sceneLiveUrl = resolveMediaUrl(activeItem.sceneLiveUrl, mediaOrigin);
-    const videoStageUrl = resolveMediaUrl(activeItem.videoStageUrl, mediaOrigin);
-    const webUrl = resolveMediaUrl(activeItem.webUrl, mediaOrigin);
-    const audioUrl = resolveMediaUrl(activeItem.audioUrl, mediaOrigin);
-    const mseFmp4Url = resolveMediaUrl(activeItem.mseFmp4Url, mediaOrigin);
-    let mediaUrl = resolveMediaUrl(activeItem.mediaUrl, mediaOrigin);
+  const normalizePayloadItem = (rawItem, fallbackId = '') => {
+    if (!rawItem || typeof rawItem !== 'object') return null;
+    const kind = String(rawItem.kind || effective.kind || 'image');
+    const sceneMode = String(rawItem.sceneMode || '');
+    const thumbUrl = resolveMediaUrl(rawItem.thumbUrl, mediaOrigin);
+    const sceneVideoUrl = resolveMediaUrl(rawItem.sceneVideoUrl, mediaOrigin);
+    const sceneLiveUrl = resolveMediaUrl(rawItem.sceneLiveUrl, mediaOrigin);
+    const videoStageUrl = resolveMediaUrl(rawItem.videoStageUrl, mediaOrigin);
+    const webUrl = resolveMediaUrl(rawItem.webUrl, mediaOrigin);
+    const audioUrl = resolveMediaUrl(rawItem.audioUrl, mediaOrigin);
+    const mseFmp4Url = resolveMediaUrl(rawItem.mseFmp4Url, mediaOrigin);
+    let mediaUrl = resolveMediaUrl(rawItem.mediaUrl, mediaOrigin);
     if (kind === 'scene' && (sceneMode === 'video' || sceneMode === 'scene-video') && sceneVideoUrl) {
       mediaUrl = sceneVideoUrl;
     }
 
     const pluginMediaUrl =
-      toPluginProxyUrl(mediaUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginMediaUrl || '').trim();
+      toPluginProxyUrl(mediaUrl, mediaOrigin, pluginOrigin) || String(rawItem.pluginMediaUrl || '').trim();
     const pluginThumbUrl =
-      toPluginProxyUrl(thumbUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginThumbUrl || '').trim();
+      toPluginProxyUrl(thumbUrl, mediaOrigin, pluginOrigin) || String(rawItem.pluginThumbUrl || '').trim();
     const pluginAudioUrl =
-      toPluginProxyUrl(audioUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginAudioUrl || '').trim();
+      toPluginProxyUrl(audioUrl, mediaOrigin, pluginOrigin) || String(rawItem.pluginAudioUrl || '').trim();
     const pluginVideoStageUrl =
-      toPluginProxyUrl(videoStageUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginVideoStageUrl || '').trim();
+      toPluginProxyUrl(videoStageUrl, mediaOrigin, pluginOrigin) || String(rawItem.pluginVideoStageUrl || '').trim();
     const pluginWebUrl =
-      toPluginProxyUrl(webUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginWebUrl || '').trim();
+      toPluginProxyUrl(webUrl, mediaOrigin, pluginOrigin) || String(rawItem.pluginWebUrl || '').trim();
     const pluginSceneLiveUrl =
-      toPluginProxyUrl(sceneLiveUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginSceneLiveUrl || '').trim();
+      toPluginProxyUrl(sceneLiveUrl, mediaOrigin, pluginOrigin) || String(rawItem.pluginSceneLiveUrl || '').trim();
 
-    normalizedItem = {
-      id: String(activeItem.id || wid),
-      title: String(activeItem.title || activeItem.id || ''),
+    return {
+      id: String(rawItem.id || fallbackId),
+      title: String(rawItem.title || rawItem.id || ''),
       kind,
-      source: String(activeItem.source || 'local'),
+      source: String(rawItem.source || 'local'),
       sceneMode,
-      schemeColor: String(activeItem.schemeColor || ''),
-      fileSize: Number(activeItem.fileSize || 0),
-      durationSec: Number(activeItem.durationSec || 0),
+      schemeColor: String(rawItem.schemeColor || ''),
+      fileSize: Number(rawItem.fileSize || 0),
+      durationSec: Number(rawItem.durationSec || 0),
       thumbUrl,
       mediaUrl,
       videoStageUrl,
@@ -150,13 +150,16 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
       pluginSceneLiveUrl,
       sceneVideoUrl,
       sceneLiveUrl,
-      sceneImageUrl: resolveMediaUrl(activeItem.sceneImageUrl, mediaOrigin),
+      sceneImageUrl: resolveMediaUrl(rawItem.sceneImageUrl, mediaOrigin),
       webUrl,
       audioUrl,
-      slidesUrl: resolveMediaUrl(activeItem.slidesUrl, mediaOrigin),
-      properties: activeItem.properties || null,
+      slidesUrl: resolveMediaUrl(rawItem.slidesUrl, mediaOrigin),
+      properties: rawItem.properties || null,
     };
-  }
+  };
+
+  const normalizedItem = normalizePayloadItem(activeItem, wid);
+  const normalizedIntroItem = normalizePayloadItem(extra?.introItem || null, '');
 
   const slides = Array.isArray(extra?.slides)
     ? extra.slides.map((s) => resolveMediaUrl(s, mediaOrigin))
@@ -168,14 +171,18 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
   const rawStateRev = Number(extra?.stateRev);
   const stateRevProp = Number.isFinite(rawStateRev) && rawStateRev > 0 ? { stateRev: Math.floor(rawStateRev) } : {};
   const stateEpochProp = extra?.stateEpoch ? { stateEpoch: String(extra.stateEpoch) } : {};
+  const rawIntroNonce = Number(extra?.introPreviewNonce);
+  const introPreviewNonceProp = Number.isFinite(rawIntroNonce) && rawIntroNonce > 0 ? { introPreviewNonce: Math.floor(rawIntroNonce) } : {};
 
   return {
     version: PRISM_DOM.skinVersion,
     skinEnabled,
     ...stateRevProp,
     ...stateEpochProp,
+    ...introPreviewNonceProp,
     config: effective,
     activeItem: normalizedItem,
+    introItem: normalizedIntroItem,
     mediaOrigin: String(mediaOrigin || ''),
     ...(pluginOrigin ? { pluginOrigin } : {}),
     ...(slides ? { slides } : {}),
@@ -213,10 +220,10 @@ const CODE_FG_PROTECT_EX =
   ':not(pre code span[style], pre code [class*="token"], pre code [class*="hljs"], .monaco-editor, .monaco-editor *, .xterm, .xterm *, svg, svg *)';
 
 const SIBLING_EXCLUDE =
-  ':not(#gemini-neko-pet-root):not(#gemini-neko-observer-modal):not(#gemini-neko-stats-bar):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(#agy-prism-stage):not(#agy-prism-wco-pill):not(#agy-prism-topbar-pills):not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-hud):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
+  ':not(#gemini-neko-pet-root):not(#gemini-neko-observer-modal):not(#gemini-neko-stats-bar):not(#ag-context-meter):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-portal):not(#deck-metrics-strip):not(#agy-prism-popover):not(#agy-prism-stage):not(#agy-prism-intro-overlay):not(#agy-prism-wco-pill):not(#agy-prism-topbar-pills):not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-hud):not(.settings-modal-backdrop):not(.settings-modal-container):not([data-testid="modal-backdrop"]):not([data-testid="media-modal"]):not(.agy-dialog):not([role="dialog"]):not([role="alertdialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"])';
 
 const SIBLING_DESCENDANT_EXCLUDE =
-  ':not(#agy-prism-pill):not(#agy-prism-pill *):not(#gemini-neko-pet-root):not(#gemini-neko-pet-root *):not(#gemini-neko-observer-modal):not(#gemini-neko-observer-modal *):not(#gemini-neko-stats-bar):not(#gemini-neko-stats-bar *):not(#ag-context-meter):not(#ag-context-meter *):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-capsule *):not(#ag-usage-monitor-portal):not(#ag-usage-monitor-portal *):not(#deck-metrics-strip):not(#deck-metrics-strip *):not(#agy-prism-popover):not(#agy-prism-popover *):not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-overlay *):not(#agy-prism-inspector-hud):not(#agy-prism-inspector-hud *)';
+  ':not(#agy-prism-pill):not(#agy-prism-pill *):not(#gemini-neko-pet-root):not(#gemini-neko-pet-root *):not(#gemini-neko-observer-modal):not(#gemini-neko-observer-modal *):not(#gemini-neko-stats-bar):not(#gemini-neko-stats-bar *):not(#ag-context-meter):not(#ag-context-meter *):not(#ag-usage-monitor-capsule):not(#ag-usage-monitor-capsule *):not(#ag-usage-monitor-portal):not(#ag-usage-monitor-portal *):not(#deck-metrics-strip):not(#deck-metrics-strip *):not(#agy-prism-popover):not(#agy-prism-popover *):not(#agy-prism-intro-overlay):not(#agy-prism-intro-overlay *):not(#agy-prism-inspector-overlay):not(#agy-prism-inspector-overlay *):not(#agy-prism-inspector-hud):not(#agy-prism-inspector-hud *)';
 
 const COMPOSER_DESCENDANT_EXCLUDE =
   ':not(#antigravity\\.agentSidePanelInputBox):not(#antigravity\\.agentSidePanelInputBox *):not([data-testid="agent-input-box"]):not([data-testid="agent-input-box"] *):not(.surface-composer-card):not(.surface-composer-card *):not(.agy-composer):not(.agy-composer *)';
