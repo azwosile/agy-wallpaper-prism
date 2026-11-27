@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.4.0
+ * Comprehensive Automated Verification & Visual E2E Suite (`test/verify-all.mjs`) — v2.4.1
  *
- * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.2.0 + v2.3.0 + v2.4.0 specifications across:
- *   Suite 1 — Manifest (v2.4.0), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
+ * Verifies 100% of `agy-wallpaper-prism` v1.x + Gentle Fail-Open v2.2.0 + v2.3.0 + v2.4.1 specifications across:
+ *   Suite 1 — Manifest (v2.4.1), Bundle, Skills, Sidecar (`on-failure`), Zero-Enable CDP Static Audit,
  *             Zero-PII Audit & SHA-256 Workspace <-> Global Plugin Sync
  *   Suite 2 — Backend Engine, DSH Parity, Co-Keyed Storage, Two-Phase `fsync` Boot Canary Circuit-Breaker
  *             (`canary.json` arming -> tripped, `/api/canary/reset`, `/api/skin/wake`), PR #6 Hardened `fetch+blob`,
@@ -197,7 +197,7 @@ function decodePngRgba(pngBuf) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  console.log('=== agy-wallpaper-prism v2.4.0 Full Verification Harness ===');
+  console.log('=== agy-wallpaper-prism v2.4.1 Full Verification Harness ===');
   fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
   fs.mkdirSync(DEFAULT_ARTIFACT_DIR, { recursive: true });
   const fixturesDir = path.join(SCRATCH_ROOT, 'fixtures');
@@ -206,9 +206,9 @@ async function main() {
   // =========================================================================
   // SUITE 1: Manifest, Bundle, Zero-Enable CDP Audit, Zero-PII & Byte Sync
   // =========================================================================
-  console.log('\n--- Suite 1: Manifest (v2.4.0), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
+  console.log('\n--- Suite 1: Manifest (v2.4.1), Zero-Enable CDP Audit, Zero-PII & Sync Checks ---');
 
-  await check('plugin.json, package.json & 8-point v2.4.0 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
+  await check('plugin.json, package.json & 8-point v2.4.1 version anchors + GitHub repository metadata', '@gentle-skin-architect', () => {
     const pPath = path.join(REPO_ROOT, 'plugin.json');
     const pkgPath = path.join(REPO_ROOT, 'package.json');
     const readmePath = path.join(REPO_ROOT, 'README.md');
@@ -229,14 +229,14 @@ async function main() {
     const badKeys = Object.keys(raw).filter((k) => !ALLOWED_PLUGIN_JSON_KEYS.has(k));
     assert.deepEqual(badKeys, [], `Forbidden keys in plugin.json: ${badKeys.join(', ')}`);
     assert.equal(raw.name, 'agy-wallpaper-prism');
-    assert.equal(raw.version, '2.4.0', `Expected plugin.json version 2.4.0, got ${raw.version}`);
-    assert.equal(pkg.version, '2.4.0', `Expected package.json version 2.4.0, got ${pkg.version}`);
-    assert.match(readme, /\*\*Version\*\*:\s*`2\.4\.0`/, 'Expected README.md **Version**: `2.4.0`');
-    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.4\.0'/, 'Expected schema.mjs PLUGIN_VERSION = 2.4.0');
-    assert.match(schemaSrc, /skinVersion:\s*'2\.4\.0'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.4.0');
-    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.4\.0'/, 'Expected wallpaper-inject.js VERSION = 2.4.0');
-    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.4\.0'/, 'Expected panel-inject.js VERSION = 2.4.0');
-    assert.match(inspectorInjectSrc, /var VERSION\s*=\s*'2\.4\.0'/, 'Expected inspector-inject.js VERSION = 2.4.0');
+    assert.equal(raw.version, '2.4.1', `Expected plugin.json version 2.4.1, got ${raw.version}`);
+    assert.equal(pkg.version, '2.4.1', `Expected package.json version 2.4.1, got ${pkg.version}`);
+    assert.match(readme, /\*\*Version\*\*:\s*`2\.4\.0`/, 'Expected README.md **Version**: `2.4.1`');
+    assert.match(schemaSrc, /export const PLUGIN_VERSION\s*=\s*'2\.4\.0'/, 'Expected schema.mjs PLUGIN_VERSION = 2.4.1');
+    assert.match(schemaSrc, /skinVersion:\s*'2\.4\.0'/, 'Expected schema.mjs PRISM_DOM.skinVersion = 2.4.1');
+    assert.match(wallInjectSrc, /var VERSION\s*=\s*'2\.4\.0'/, 'Expected wallpaper-inject.js VERSION = 2.4.1');
+    assert.match(panelInjectSrc, /var VERSION\s*=\s*'2\.4\.0'/, 'Expected panel-inject.js VERSION = 2.4.1');
+    assert.match(inspectorInjectSrc, /var VERSION\s*=\s*'2\.4\.0'/, 'Expected inspector-inject.js VERSION = 2.4.1');
     assert.equal(raw.logo, 'assets/logo.svg');
     const repoUrl = typeof raw.repository === 'object' ? raw.repository?.url : raw.repository;
     assert.ok(
@@ -298,7 +298,7 @@ async function main() {
     assert.ok(md.includes('sidecar://agy-wallpaper-prism/prism_studio/'), 'Missing sidecar:// pill link');
     assert.ok(md.includes('customization://agy-wallpaper-prism'), 'Missing customization:// link');
     assert.ok(!md.includes('plugin://') && !md.includes('plugins://'), 'Dead plugin:// scheme found in SKILL.md');
-    assert.ok(md.includes('2.4.0'), 'Expected 2.4.0 version marker in SKILL.md');
+    assert.ok(md.includes('2.4.1'), 'Expected 2.4.1 version marker in SKILL.md');
     return `logo=${svg.length}B, SKILL.md valid`;
   });
 
@@ -332,12 +332,12 @@ async function main() {
     assert.ok(html.includes('prism-update-card'), 'Bundled index.html missing #prism-update-card');
     assert.ok(html.includes('mini-blur-veil'), 'Bundled index.html missing .mini-blur-veil');
     assert.ok(html.includes('class="agy-prism-root"'), 'Bundled index.html missing Req #6 #app.agy-prism-root guard');
-    assert.ok(html.includes('prism-region-group'), 'Bundled index.html missing v2.4.0 .prism-region-group 12-region accordions');
+    assert.ok(html.includes('prism-region-group'), 'Bundled index.html missing v2.4.1 .prism-region-group 12-region accordions');
     assert.ok(html.includes('toggle-preview-live'), 'Bundled index.html missing v2.2.0 toggle-preview-live static-first action');
     assert.ok(html.includes('agy-prism-visual-editor'), 'Bundled index.html missing v2.2.0 .agy-prism-visual-editor');
-    assert.ok(html.includes('2.4.0'), 'Bundled index.html missing inlined v2.4.0 version marker');
+    assert.ok(html.includes('2.4.1'), 'Bundled index.html missing inlined v2.4.1 version marker');
     assert.equal(html.includes('\r'), false, 'Bundled index.html must be pure LF (0 CR/CRLF)');
-    return `${Math.round(html.length / 1024)} KB inlined v2.4.0 pure-LF bundle`;
+    return `${Math.round(html.length / 1024)} KB inlined v2.4.1 pure-LF bundle`;
   });
 
   await check('Syntax check (`node --check`) across all JS/MJS entrypoints & test modules', '@resilience-designer', () => {
@@ -559,7 +559,7 @@ async function main() {
     return `Micro-bootstrap ${bytes} B <= 6144 B with W[K].apply & ds(W[K])`;
   });
 
-  await check('`src/shared/i18n.mjs` 100% zh/en key parity & v2.4.0 region/preset/degrade/sidebar/editor/picker/optical keys', '@exec-mock-tests', async () => {
+  await check('`src/shared/i18n.mjs` 100% zh/en key parity & v2.4.1 region/preset/degrade/sidebar/editor/picker/optical keys', '@exec-mock-tests', async () => {
     const { DICT, t } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'i18n.mjs')).href);
     const zhKeys = Object.keys(DICT.zh || {}).sort();
     const enKeys = Object.keys(DICT.en || {}).sort();
@@ -4451,7 +4451,7 @@ async function main() {
     return 'Multi-instance server_info fencing + preserved owner file + 600ms SSE loop breaker verified';
   });
 
-  await check('Issue #10 + Req #4 + v2.4.0: Pure-Optical `SCENE_PRESETS` (5 presets), 12-Component `surfaceTints` + `resolveComponentDefaultAlpha` & 128/128 WCAG AA (>= 4.5:1) Matrix', '@exec-shared / @exec-host-skin / @exec-tests', async () => {
+  await check('Issue #10 + Req #4 + v2.4.1: Pure-Optical `SCENE_PRESETS` (5 presets), 12-Component `surfaceTints` + `resolveComponentDefaultAlpha` & 128/128 WCAG AA (>= 4.5:1) Matrix', '@exec-shared / @exec-host-skin / @exec-tests', async () => {
     const {
       SCENE_PRESETS,
       COLOR_SCHEMES,
@@ -4461,7 +4461,7 @@ async function main() {
       resolveComponentDefaultAlpha,
     } = await import(pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href);
 
-    // 1) Issue #10 + v2.4.0: All 5 SCENE_PRESETS are strictly optical-only (0 layout keys) and restore fpsCap=60 (eco=30)
+    // 1) Issue #10 + v2.4.1: All 5 SCENE_PRESETS are strictly optical-only (0 layout keys) and restore fpsCap=60 (eco=30)
     const forbiddenLayoutKeys = [
       'layoutMode',
       'islandGap',
@@ -4735,13 +4735,13 @@ async function main() {
     );
 
     // 1) SemVer unit checks (`isNewerVersion(candidate, current)`)
-    assert.equal(compareSemver('2.4.0', '2.3.0'), 1);
-    assert.equal(compareSemver('v2.4.0', '2.4.0'), 0);
-    assert.equal(compareSemver('2.4.0-beta.1', '2.4.0'), -1);
-    assert.equal(compareSemver('2.4.0+build.42', '2.4.0'), 0);
-    assert.equal(isNewerVersion('2.4.0', '2.3.0'), true);
-    assert.equal(isNewerVersion('2.3.0', '2.4.0'), false);
-    assert.equal(isNewerVersion('2.4.0-rc.1', '2.4.0'), false);
+    assert.equal(compareSemver('2.4.1', '2.3.0'), 1);
+    assert.equal(compareSemver('v2.4.1', '2.4.1'), 0);
+    assert.equal(compareSemver('2.4.1-beta.1', '2.4.1'), -1);
+    assert.equal(compareSemver('2.4.1+build.42', '2.4.1'), 0);
+    assert.equal(isNewerVersion('2.4.1', '2.3.0'), true);
+    assert.equal(isNewerVersion('2.3.0', '2.4.1'), false);
+    assert.equal(isNewerVersion('2.4.1-rc.1', '2.4.1'), false);
     assert.equal(parseSemver('not-a-version'), null);
 
     // 2) `tar-safe.mjs` hostile archive rejection (Zip-Slip, absolute, symlink, hardlink, Windows reserved, case collision)
@@ -4809,7 +4809,7 @@ async function main() {
 
     const healthzRes = await invokeServerInMemory(studio.server, { method: 'GET', url: '/api/healthz', headers: { Host: '127.0.0.1:53040' } });
     assert.equal(healthzRes.status, 200);
-    assert.equal(healthzRes.json().version, '2.4.0');
+    assert.equal(healthzRes.json().version, '2.4.1');
     assert.notEqual(healthzRes.headers['access-control-allow-origin'], '*', '/api/healthz must NOT emit wildcard CORS');
 
     const badOriginApply = await invokeServerInMemory(studio.server, {
@@ -4845,11 +4845,11 @@ async function main() {
     assert.equal(gitCheckoutApply.status, 409, `POST /api/update/apply in .git checkout expected 409, got ${gitCheckoutApply.status}`);
     assert.equal(gitCheckoutApply.json().code, 'ERR_GIT_DEV_CHECKOUT');
 
-    // 4) Build deterministic v2.4.0 release tarball (all real runtime files) & test (a) Offline fail-safe, (b) Temp-plugin-dir swap, (c) Mid-sync rollback!
+    // 4) Build deterministic v2.4.1 release tarball (all real runtime files) & test (a) Offline fail-safe, (b) Temp-plugin-dir swap, (c) Mid-sync rollback!
     const pkg240Map = collectDirectoryFilesMap(REPO_ROOT);
     const mockTarGz = createDeterministicTarGz(pkg240Map);
     const mockSha256 = createHash('sha256').update(mockTarGz).digest('hex');
-    const mockShaText = `${mockSha256}  agy-wallpaper-prism-v2.4.0.tar.gz\n`;
+    const mockShaText = `${mockSha256}  agy-wallpaper-prism-v2.4.1.tar.gz\n`;
 
     const makeMockGhFetch = ({ offline = false } = {}) => async (url) => {
       const u = String(url || '');
@@ -4865,19 +4865,19 @@ async function main() {
           headers: new Map([['content-type', 'application/json']]),
           async json() {
             return {
-              tag_name: 'v2.4.0',
-              html_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/tag/v2.4.0',
-              body: 'Release v2.4.0 mock notes',
+              tag_name: 'v2.4.1',
+              html_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/tag/v2.4.1',
+              body: 'Release v2.4.1 mock notes',
               published_at: '2026-11-27T00:00:00Z',
               assets: [
                 {
-                  name: 'agy-wallpaper-prism-v2.4.0.tar.gz',
-                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.4.0/agy-wallpaper-prism-v2.4.0.tar.gz',
+                  name: 'agy-wallpaper-prism-v2.4.1.tar.gz',
+                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.4.1/agy-wallpaper-prism-v2.4.1.tar.gz',
                   size: mockTarGz.length,
                 },
                 {
-                  name: 'agy-wallpaper-prism-v2.4.0.tar.gz.sha256',
-                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.4.0/agy-wallpaper-prism-v2.4.0.tar.gz.sha256',
+                  name: 'agy-wallpaper-prism-v2.4.1.tar.gz.sha256',
+                  browser_download_url: 'https://github.com/azwosile/agy-wallpaper-prism/releases/download/v2.4.1/agy-wallpaper-prism-v2.4.1.tar.gz.sha256',
                   size: Buffer.byteLength(mockShaText, 'utf8'),
                 },
               ],
@@ -4959,23 +4959,23 @@ async function main() {
       assert.notEqual(stResp.headers['access-control-allow-origin'], '*', '/api/update/status must NOT emit wildcard CORS');
       const stJson = stResp.json();
       assert.equal(stJson.hasUpdate, true, `Expected mock GitHub release hasUpdate=true, got ${JSON.stringify(stJson)}`);
-      assert.equal(stJson.latestVersion, '2.4.0');
+      assert.equal(stJson.latestVersion, '2.4.1');
       assert.equal(stJson.canAutoUpdate, true);
 
       const applyResp = await invokeServerInMemory(updSrv.server, {
         method: 'POST',
         url: '/api/update/apply',
         headers: { Host: '127.0.0.1:53040', 'X-Sidecar-Token': UPD_TOKEN, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetVersion: '2.4.0' }),
+        body: JSON.stringify({ targetVersion: '2.4.1' }),
       });
       assert.equal(applyResp.status, 200, `Mock /api/update/apply expected 200, got ${applyResp.status}: ${applyResp.text()}`);
       const applyJson = applyResp.json();
       assert.equal(applyJson.ok, true);
-      assert.equal(applyJson.toVersion, '2.4.0');
-      assert.equal(JSON.parse(fs.readFileSync(path.join(swapPluginDir, 'plugin.json'), 'utf8')).version, '2.4.0');
+      assert.equal(applyJson.toVersion, '2.4.1');
+      assert.equal(JSON.parse(fs.readFileSync(path.join(swapPluginDir, 'plugin.json'), 'utf8')).version, '2.4.1');
       assert.equal(fs.readFileSync(path.join(swapPluginDir, '.prism-install-id'), 'utf8'), 'keep-this-install-id-12345\n', '.prism-install-id was NOT preserved across update swap!');
-      assert.ok(fs.existsSync(path.join(swapPluginDir, 'src', 'engine', 'updater.mjs')), 'New v2.4.0 file missing after swap');
-      assert.ok(fs.existsSync(path.join(swapPluginDir, 'src', 'host', 'inspector-inject.js')), 'New v2.4.0 inspector-inject.js missing after swap');
+      assert.ok(fs.existsSync(path.join(swapPluginDir, 'src', 'engine', 'updater.mjs')), 'New v2.4.1 file missing after swap');
+      assert.ok(fs.existsSync(path.join(swapPluginDir, 'src', 'host', 'inspector-inject.js')), 'New v2.4.1 inspector-inject.js missing after swap');
     } finally {
       await updSrv.close().catch(() => {});
     }
@@ -5005,7 +5005,7 @@ async function main() {
       },
     });
     await assert.rejects(
-      () => rbUpdater.applyUpdate({ targetVersion: '2.4.0' }),
+      () => rbUpdater.applyUpdate({ targetVersion: '2.4.1' }),
       (err) => err && (err.code === 'ENOSPC' || String(err.message || '').includes('Simulated disk full')),
       'Mid-sync ENOSPC failure must reject after synchronous rollback',
     );
@@ -5013,7 +5013,7 @@ async function main() {
     assert.equal(JSON.parse(fs.readFileSync(path.join(rbPluginDir, 'plugin.json'), 'utf8')).version, '2.1.0', 'Rollback did not restore original plugin.json 2.1.0!');
     assert.equal(fs.readFileSync(path.join(rbPluginDir, '.prism-install-id'), 'utf8'), 'keep-this-install-id-12345\n', 'Rollback did not preserve .prism-install-id!');
 
-    return `SemVer + ${hostileCases.length} hostile tar rejections + Host 403 + Origin 403/Token 401/CT 415/Git 409 + offline fail-safe + swap (2.1.0->2.4.0) & ENOSPC rollback verified`;
+    return `SemVer + ${hostileCases.length} hostile tar rejections + Host 403 + Origin 403/Token 401/CT 415/Git 409 + offline fail-safe + swap (2.1.0->2.4.1) & ENOSPC rollback verified`;
   });
 
   await check('Req #7: `scripts/pack-release.mjs` 3-Artifact Release Bundle (`.tar.gz` + `.sha256` + `.zip`) & `dist/` Gitignore', '@exec-build-release / @exec-tests', async () => {
@@ -5026,8 +5026,8 @@ async function main() {
 
     const scratchDist = path.join(SCRATCH_ROOT, 'dist-verify');
     const pack = await packReleaseBundle({ sourceRoot: REPO_ROOT, outDir: scratchDist, skipBuild: true });
-    assert.equal(pack.version, '2.4.0');
-    assert.equal(pack.tag, 'v2.4.0');
+    assert.equal(pack.version, '2.4.1');
+    assert.equal(pack.tag, 'v2.4.1');
     assert.ok(fs.existsSync(pack.tarPath), 'Missing .tar.gz release artifact');
     assert.ok(fs.existsSync(pack.shaPath), 'Missing .tar.gz.sha256 release artifact');
     assert.ok(fs.existsSync(pack.zipPath), 'Missing .zip release artifact');
@@ -5042,11 +5042,11 @@ async function main() {
     assert.equal(zipBuf.readUInt32LE(0), 0x04034b50, 'ZIP missing PK\\x03\\x04 Local File Header magic');
     assert.ok(zipBuf.includes(Buffer.from([0x50, 0x4b, 0x05, 0x06])), 'ZIP missing PK\\x05\\x06 EOCD signature');
 
-    validateTarGzArchive(tarBuf, { expectedVersion: '2.4.0' });
+    validateTarGzArchive(tarBuf, { expectedVersion: '2.4.1' });
     const extractDir = path.join(SCRATCH_ROOT, 'dist-extract');
     extractSafeTarGz({ tarGzBuffer: tarBuf, destDir: extractDir });
     const staged = validateStagedPlugin({ stageDir: extractDir, currentVersion: '2.3.0', requireNewerVersion: true });
-    assert.equal(staged.version, '2.4.0');
+    assert.equal(staged.version, '2.4.1');
     assert.ok(staged.requiredFiles.includes('src/host/inspector-inject.js'), 'tar-safe REQUIRED_RUNTIME_FILES missing src/host/inspector-inject.js');
     assert.ok(fs.existsSync(path.join(extractDir, 'src', 'host', 'inspector-inject.js')), 'Extracted bundle missing src/host/inspector-inject.js');
 
@@ -5090,7 +5090,7 @@ async function main() {
     assert.equal(REGION_FONT_SIZE_BOUNDS.sidebar.max, 15);
     assert.ok(Array.isArray(CJK_SAFE_FONT_PRESETS) && CJK_SAFE_FONT_PRESETS.length >= 2, 'Expected >= 2 CJK-safe font presets');
 
-    // v2.4.0 optical sanitization, style `'auto' -> null`, saturation [50..220], elevation [0..2], retired chipBlurPx & v2.3.0 migration
+    // v2.4.1 optical sanitization, style `'auto' -> null`, saturation [50..220], elevation [0..2], retired chipBlurPx & v2.3.0 migration
     const optCfg = sanitizeConfig({
       chipBlurPx: 14,
       regions: {
@@ -6415,7 +6415,7 @@ async function main() {
     return `micro=${maxMicroBytes}B heartbeatLoads=0 yieldFlips=${hubState.flips} shutdown=403/401/200 sse>=4 cleaned=${cleanupOut.cleaned.map((c) => `${c.pid}:${c.method}`).join(',')}`;
   });
 
-  await check('S2-10: `v2.4.0` CDP Live Host Region Picker E2E (`/host/<cap>/inspector.js`, `/api/inspector/{pick,cancel}` auth, live/static-css/manual + V1/V4, RPC 400/200, dual-SSE `aux`+`popout`, bootstrap <=6144B)', '@exec-v23-manifests', async () => {
+  await check('S2-10: `v2.4.1` CDP Live Host Region Picker E2E (`/host/<cap>/inspector.js`, `/api/inspector/{pick,cancel}` auth, live/static-css/manual + V1/V4, RPC 400/200, dual-SSE `aux`+`popout`, bootstrap <=6144B)', '@exec-v23-manifests', async () => {
     const { REGION_IDS, SKIN_REGION_KEYS, PRISM_DOM } = await import(
       pathToFileURL(path.join(REPO_ROOT, 'src', 'shared', 'schema.mjs')).href
     );
@@ -7321,7 +7321,7 @@ async function main() {
         });
         assert.ok(sHostV2.bytes > 20000, 'Studio Host & System v2.0 screenshot suspiciously small');
 
-        // PR #3 + v2.4.0 Studio 12-Region Accordion Default Collapsed & <summary> Reset Delegation E2E (`global` owns `reset-module`; regions 1-11 use `reset-region`)
+        // PR #3 + v2.4.1 Studio 12-Region Accordion Default Collapsed & <summary> Reset Delegation E2E (`global` owns `reset-module`; regions 1-11 use `reset-region`)
         await engine.updateConfig({ islandGap: 14 });
         await studioPage.evaluate(`document.querySelector('[data-action="switch-tab"][data-tab="skin"]').click()`);
         await sleep(220);
@@ -10771,7 +10771,7 @@ async function main() {
       }
     });
 
-    await check('S3-07: `v2.4.0` Inspector Script VM (V2 `boot.rpcUrl`, detach guard, 0 `<body>` mutations, `pointer-events:none`, 12-region `hitTestAt`, F-07 `.msg-user -> userBubble`, Esc/right-click) + Studio UI Picker & V3 `Escape` Priority E2E', '@exec-v23-manifests', async () => {
+    await check('S3-07: `v2.4.1` Inspector Script VM (V2 `boot.rpcUrl`, detach guard, 0 `<body>` mutations, `pointer-events:none`, 12-region `hitTestAt`, F-07 `.msg-user -> userBubble`, Esc/right-click) + Studio UI Picker & V3 `Escape` Priority E2E', '@exec-v23-manifests', async () => {
       // ---- Part A: Pure `vm.Script` + Mock DOM test of `src/host/inspector-inject.js` ----
       const inspectorSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'inspector-inject.js'), 'utf8');
       const compiledInspector = new vm.Script(inspectorSrc, { filename: 'src/host/inspector-inject.js' });
@@ -11194,7 +11194,7 @@ async function main() {
       };
 
       compiledInspector.runInContext(vmCtx);
-      assert.equal(vmWin.__agyPrismInspector.version, '2.4.0');
+      assert.equal(vmWin.__agyPrismInspector.version, '2.4.1');
       assert.equal(vmWin.__agyPrismInspector.active(), true);
       assert.equal(vmHtml.getAttribute('data-agy-prism-inspector'), 'picking');
       assert.equal(vmBodyMutations, 0, `#15 CN l10n violated: inspector mutated <body> ${vmBodyMutations} times!`);
@@ -11562,7 +11562,7 @@ async function main() {
         assert.equal(staticAudit.topbar, 'topbar');
         assert.equal(staticAudit.popover, 'popover');
         assert.equal(staticAudit.composer, 'composer');
-        assert.equal(staticAudit.msgUser, 'userBubble', 'F-07: .msg-user must resolve to userBubble in v2.4.0');
+        assert.equal(staticAudit.msgUser, 'userBubble', 'F-07: .msg-user must resolve to userBubble in v2.4.1');
         assert.equal(staticAudit.telemetryCard, 'card');
         assert.equal(staticAudit.sidebar, 'sidebar');
         assert.equal(staticAudit.rightPane, 'rightPane');
@@ -12422,7 +12422,7 @@ async function main() {
       return 'TEX(PNG/JPG/RGBA/DXT5/DXT1) + /scene-image/ + web proxy base + /media-proxy/ cancel + large-video MSE + narrow layout & virtual scroll verified';
     });
 
-    await check('S3-09: `v2.4.0` Chat Bubbles & Controls Default-No-Blur (OQ-1A), 5 `GLASS_STYLES`, F-02..F-06 Guardrails, Live/Static Parity & 12-Region CDP Picker E2E', '@exec-v24-tests', async () => {
+    await check('S3-09: `v2.4.1` Chat Bubbles & Controls Default-No-Blur (OQ-1A), 5 `GLASS_STYLES`, F-02..F-06 Guardrails, Live/Static Parity & 12-Region CDP Picker E2E', '@exec-v24-tests', async () => {
       const { computeShadowFactor } = await import(
         pathToFileURL(path.join(REPO_ROOT, 'src', 'host', 'index.mjs')).href
       );
@@ -12798,7 +12798,7 @@ async function main() {
       }
     });
 
-    await check('S3-10: `v2.4.0` Dual-Form Visual Editor (12 Regions & Mini Preview), Narrow `<840px` Scroll, Studio Crisp/F-05 & Quick Prism 9-Key Reset Parity E2E', '@exec-v24-tests', async () => {
+    await check('S3-10: `v2.4.1` Dual-Form Visual Editor (12 Regions & Mini Preview), Narrow `<840px` Scroll, Studio Crisp/F-05 & Quick Prism 9-Key Reset Parity E2E', '@exec-v24-tests', async () => {
       await engine.applyWallpaper(auroraItem.id, {
         skinEnabled: true,
         startupMode: 'gentle-auto',

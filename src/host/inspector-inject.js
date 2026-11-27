@@ -1,4 +1,4 @@
-// Ephemeral CDP Live Host Region Picker for Antigravity (agy-wallpaper-prism v2.5.0).
+// Ephemeral CDP Live Host Region Picker for Antigravity (agy-wallpaper-prism v2.4.1).
 //
 // Self-contained ES2020 browser IIFE loaded on demand via `/host/<capToken>/inspector.js`.
 // Strictly read-only geometric hit-testing across all 12 Prism regions in BOTH `live`
@@ -9,7 +9,7 @@
 (function agyPrismInspectorMain() {
   'use strict';
 
-  var VERSION = '2.5.0';
+  var VERSION = '2.4.1';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   try {

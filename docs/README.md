@@ -1,4 +1,4 @@
-# Wallpaper Prism Documentation Index · 文档导航 (`v2.5.0`)
+# Wallpaper Prism Documentation Index · 文档导航 (`v2.4.1`)
 
 **语言 / Language**: [简体中文](#简体中文索引) · [English](#english-index) · [返回主 README](../README.md)
 
@@ -6,14 +6,14 @@
 
 ## 简体中文索引
 
-### 1. 当前 `v2.5.0` 活跃文档
+### 1. 当前 `v2.4.1` 活跃文档
 
 | 文档 | 作用与内容定位 | 维护状态 |
 |---|---|---|
-| [../README.md](../README.md) | 项目中英双语主页：`v2.5.0` 核心亮点（可选自定义开场动画支持 Wallpaper 动态壁纸与自定义视频、12 区域对话气泡与控件玻璃化 + 默认无毛玻璃、4K60 MSE 零闪烁流控、Scene 高清 `.tex` 解码与 12 区域拾取器）、安装方法、快速开始、架构、脚本、排障与致谢 | **Active (`v2.5.0`)** |
-| [CHANGELOG.md](./CHANGELOG.md) | 完整双语版本更新日志（覆盖 `v1.1.0` 至 `v2.5.0` 全部 Release、PR 与贡献者致谢） | **Active (`v2.5.0`)** |
-| [dsh-parity-spec.md](./dsh-parity-spec.md) | 上游 `dsh-plugin-wallpaper-engine v1.4.2` 逆向分析（`§1`–`§3`）与 `agy-wallpaper-prism v2.5.0` 功能对齐清单（`§4`–`§5`） | **Active (`v2.5.0`)** |
-| [../skills/wallpaper-prism/SKILL.md](../skills/wallpaper-prism/SKILL.md) | Agent 按需调度指南：Sidecar / Customizations 链接、`v2.5.0` 开场动画配置、12 区域拾取器流程与 `host/cli.mjs` 安全命令集 | **Active (`v2.5.0`)** |
+| [../README.md](../README.md) | 项目中英双语主页：`v2.4.1` 核心亮点（可选自定义开场动画支持 Wallpaper 动态壁纸与自定义视频、12 区域对话气泡与控件玻璃化 + 默认无毛玻璃、4K60 MSE 零闪烁流控、Scene 高清 `.tex` 解码与 12 区域拾取器）、安装方法、快速开始、架构、脚本、排障与致谢 | **Active (`v2.4.1`)** |
+| [CHANGELOG.md](./CHANGELOG.md) | 完整双语版本更新日志（覆盖 `v1.1.0` 至 `v2.4.1` 全部 Release、PR 与贡献者致谢） | **Active (`v2.4.1`)** |
+| [dsh-parity-spec.md](./dsh-parity-spec.md) | 上游 `dsh-plugin-wallpaper-engine v1.4.2` 逆向分析（`§1`–`§3`）与 `agy-wallpaper-prism v2.4.1` 功能对齐清单（`§4`–`§5`） | **Active (`v2.4.1`)** |
+| [../skills/wallpaper-prism/SKILL.md](../skills/wallpaper-prism/SKILL.md) | Agent 按需调度指南：Sidecar / Customizations 链接、`v2.4.1` 开场动画配置、12 区域拾取器流程与 `host/cli.mjs` 安全命令集 | **Active (`v2.4.1`)** |
 
 ### 2. 历史快照与硬冻结基线（只读存档）
 
@@ -34,14 +34,14 @@
 
 ## English Index
 
-### 1. Active `v2.5.0` Documentation
+### 1. Active `v2.4.1` Documentation
 
 | Document | Scope & Purpose | Status |
 |---|---|---|
-| [../README.md](../README.md) | Bilingual project homepage covering `v2.5.0` highlights (optional customizable Opening Animation with Wallpaper Engine dynamic wallpapers or custom videos, 12-region chat bubbles & controls glassmorphism with default no blur, 4K60 MSE zero-blanking flow, Scene HD `.tex` decoding & 12-region Live Host Region Picker), install methods, quick start, architecture, scripts, troubleshooting & acknowledgments | **Active (`v2.5.0`)** |
-| [CHANGELOG.md](./CHANGELOG.md) | Complete bilingual release history from `v1.1.0` through `v2.5.0` with PR/Issue provenance | **Active (`v2.5.0`)** |
-| [dsh-parity-spec.md](./dsh-parity-spec.md) | Upstream `dsh-plugin-wallpaper-engine v1.4.2` reverse-engineering reference (`§1`–`§3`) and `agy-wallpaper-prism v2.5.0` parity checklist (`§4`–`§5`) | **Active (`v2.5.0`)** |
-| [../skills/wallpaper-prism/SKILL.md](../skills/wallpaper-prism/SKILL.md) | Agent navigation, Opening Animation & safe `host/cli.mjs` reference (`v2.5.0`) | **Active (`v2.5.0`)** |
+| [../README.md](../README.md) | Bilingual project homepage covering `v2.4.1` highlights (optional customizable Opening Animation with Wallpaper Engine dynamic wallpapers or custom videos, 12-region chat bubbles & controls glassmorphism with default no blur, 4K60 MSE zero-blanking flow, Scene HD `.tex` decoding & 12-region Live Host Region Picker), install methods, quick start, architecture, scripts, troubleshooting & acknowledgments | **Active (`v2.4.1`)** |
+| [CHANGELOG.md](./CHANGELOG.md) | Complete bilingual release history from `v1.1.0` through `v2.4.1` with PR/Issue provenance | **Active (`v2.4.1`)** |
+| [dsh-parity-spec.md](./dsh-parity-spec.md) | Upstream `dsh-plugin-wallpaper-engine v1.4.2` reverse-engineering reference (`§1`–`§3`) and `agy-wallpaper-prism v2.4.1` parity checklist (`§4`–`§5`) | **Active (`v2.4.1`)** |
+| [../skills/wallpaper-prism/SKILL.md](../skills/wallpaper-prism/SKILL.md) | Agent navigation, Opening Animation & safe `host/cli.mjs` reference (`v2.4.1`) | **Active (`v2.4.1`)** |
 
 ### 2. Historical Snapshots & Frozen Baselines (Read-Only)
 

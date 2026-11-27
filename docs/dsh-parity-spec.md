@@ -5,7 +5,7 @@
 > **Target Plugin**: `agy-wallpaper-prism` (Google Antigravity 2.x Hub + Sidecar Studio + Zero-Enable Ephemeral CDP Prism Skin, redesigned with `obsidian-prism` UI principles)
 
 > [!NOTE]
-> **Parity Specification Status (`v2.5.0` Sync)** — Sections `§1`–`§3` remain the unaltered upstream `dsh-plugin-wallpaper-engine v1.4.2` reverse-engineering reference. Sections `§4` and `§5` below are synced to the shipped `agy-wallpaper-prism v2.5.0` runtime (including the new optional Opening Animation feature supporting Wallpaper Engine dynamic wallpapers and custom videos, while marking partially implemented `[~]` and unimplemented `[ ]` items honestly). For `v2.5.0` release history and documentation index, see [`docs/CHANGELOG.md`](./CHANGELOG.md) and [`docs/README.md`](./README.md); [`docs/V2.2_NEXT_AI_HANDOFF.md`](./V2.2_NEXT_AI_HANDOFF.md) and [`docs/AI_HANDOFF.md`](./AI_HANDOFF.md) (`D1`-frozen) preserve historical `v2.1.0`/`v2.2.0` baselines.
+> **Parity Specification Status (`v2.4.1` Sync)** — Sections `§1`–`§3` remain the unaltered upstream `dsh-plugin-wallpaper-engine v1.4.2` reverse-engineering reference. Sections `§4` and `§5` below are synced to the shipped `agy-wallpaper-prism v2.4.1` runtime (including the new optional Opening Animation feature supporting Wallpaper Engine dynamic wallpapers and custom videos, while marking partially implemented `[~]` and unimplemented `[ ]` items honestly). For `v2.4.1` release history and documentation index, see [`docs/CHANGELOG.md`](./CHANGELOG.md) and [`docs/README.md`](./README.md); [`docs/V2.2_NEXT_AI_HANDOFF.md`](./V2.2_NEXT_AI_HANDOFF.md) and [`docs/AI_HANDOFF.md`](./AI_HANDOFF.md) (`D1`-frozen) preserve historical `v2.1.0`/`v2.2.0` baselines.
 
 ---
 

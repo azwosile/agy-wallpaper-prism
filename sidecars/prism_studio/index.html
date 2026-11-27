@@ -5258,7 +5258,7 @@ html[data-prism-dormant="1"] .prism-picker-pulse-dot {
   animation: none;
 }
 
-/* v2.5.0 Opening Animation configuration card & dynamic wallpaper picker */
+/* v2.4.1 Opening Animation configuration card & dynamic wallpaper picker */
 .prism-intro-badge {
   display: inline-flex;
   align-items: center;
@@ -5359,13 +5359,13 @@ const __prism_mod_2 = (function() {
 // Shared across src/engine, src/host, src/studio-ui, sidecars/prism_studio, and test/verify-all.
 const PLUGIN_ID = 'agy-wallpaper-prism';
 const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-const PLUGIN_VERSION = '2.5.0';
+const PLUGIN_VERSION = '2.4.1';
 const SIDECAR_ID = 'prism_studio';
 const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 const DEFAULT_DEBUG_PORT = 9339;
 const PRISM_DOM = Object.freeze({
-  skinVersion: '2.5.0',
+  skinVersion: '2.4.1',
   skinAttr: 'data-agy-prism-skin',
   glassAttr: 'data-agy-prism-glass',
   wallpaperAttr: 'data-agy-prism-wallpaper',
@@ -8004,7 +8004,7 @@ const DICT = Object.freeze({
     'play.sceneFps': '场景渲染帧率上限',
     'play.sceneAutoQuality': '帧率不足时自动降级画质',
 
-    // Opening Animation (v2.5.0)
+    // Opening Animation (v2.4.1)
     'intro.sectionTitle': '开场动画',
     'intro.badgeOff': '默认关闭',
     'intro.badgeOn': '已开启',
@@ -8550,7 +8550,7 @@ const DICT = Object.freeze({
     'play.sceneFps': 'Scene Render FPS Cap',
     'play.sceneAutoQuality': 'Auto-scale quality when FPS drops',
 
-    // Opening Animation (v2.5.0)
+    // Opening Animation (v2.4.1)
     'intro.sectionTitle': 'Opening Animation',
     'intro.badgeOff': 'Off by default',
     'intro.badgeOn': 'Enabled',
@@ -15450,7 +15450,7 @@ function renderOpeningAnimationSection(eff, isZh) {
     : '';
 
   return `
-      <!-- Opening Animation (v2.5.0: Optional, OFF by default) -->
+      <!-- Opening Animation (v2.4.1: Optional, OFF by default) -->
       <details id="prism-intro-section" class="prism-section" open>
         <summary>
           <div class="prism-section-title-wrap">

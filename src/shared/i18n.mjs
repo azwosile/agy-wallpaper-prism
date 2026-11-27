@@ -214,7 +214,7 @@ export const DICT = Object.freeze({
     'play.sceneFps': '场景渲染帧率上限',
     'play.sceneAutoQuality': '帧率不足时自动降级画质',
 
-    // Opening Animation (v2.5.0)
+    // Opening Animation (v2.4.1)
     'intro.sectionTitle': '开场动画',
     'intro.badgeOff': '默认关闭',
     'intro.badgeOn': '已开启',
@@ -760,7 +760,7 @@ export const DICT = Object.freeze({
     'play.sceneFps': 'Scene Render FPS Cap',
     'play.sceneAutoQuality': 'Auto-scale quality when FPS drops',
 
-    // Opening Animation (v2.5.0)
+    // Opening Animation (v2.4.1)
     'intro.sectionTitle': 'Opening Animation',
     'intro.badgeOff': 'Off by default',
     'intro.badgeOn': 'Enabled',

@@ -1,7 +1,7 @@
 # Wallpaper Prism (`agy-wallpaper-prism`)
 
 > **Repository**: [https://github.com/azwosile/agy-wallpaper-prism](https://github.com/azwosile/agy-wallpaper-prism)  
-> **Version**: `2.5.0` · **Zero Agent Tokens** · **Zero `app.asar` Modification** · **License**: MIT
+> **Version**: `2.4.1` · **Zero Agent Tokens** · **Zero `app.asar` Modification** · **License**: MIT
 
 **适用于 Google Antigravity 的棱镜液态玻璃皮肤与动态壁纸工作台**  
 **Obsidian Prism Liquid Glass Skin & Wallpaper Engine Studio for Google Antigravity**
@@ -12,14 +12,14 @@
 
 ## 简体中文文档
 
-### 1. 简介与 `v2.5.0` 核心亮点
+### 1. 简介与 `v2.4.1` 核心亮点
 
 `agy-wallpaper-prism` 为 Google Antigravity 2.x 带来基于 **Obsidian Prism** 光学层次体系的整窗液态玻璃皮肤，以及兼容 **Steam Wallpaper Engine (`431960`)** 与本地多媒体的动态壁纸工作台：
 
 - **零 Agent 上下文 / Token 消耗**：插件默认不向模型注入任何 MCP 工具或系统提示词，渲染、流媒体与皮肤控制完全在带外 Sidecar 进程中运行。
 - **零 `app.asar` 侵入修改**：通过 **Zero-Enable Ephemeral CDP**（零持久域：严格禁用 `Page.enable`、`Runtime.enable`、`Page.addScriptToEvaluateOnNewDocument` 与 `Runtime.addBinding`）进行安全挂载，并具备 **Fail-Open** 首帧就绪门控与双阶段 `fsync` 启动金丝雀熔断保护。
 
-#### `v2.5.0` 新特性亮点
+#### `v2.4.1` 新特性亮点
 
 1. **可选自定义开场动画（Opening Animation，默认关闭）**
    - **默认关闭、零冷启动干扰**：`introEnabled` 默认为 `false`；开启后仅在每次启动 Antigravity 宿主窗口时自动播放一次全屏开场动画（通过 `window.__agyPrismIntroPlayed` 防重复播放），绝不在配置微调、热重载或 SSE 重连时误触发。
@@ -48,7 +48,7 @@
 
 #### 方式 A：通过 GitHub Releases 压缩包安装（推荐普通用户）
 
-1. 前往 [GitHub Releases](https://github.com/azwosile/agy-wallpaper-prism/releases) 下载对应版本的 `agy-wallpaper-prism-v2.5.0.tar.gz`（或 `.zip`）以及 `agy-wallpaper-prism-v2.5.0.tar.gz.sha256` 校验文件。
+1. 前往 [GitHub Releases](https://github.com/azwosile/agy-wallpaper-prism/releases) 下载对应版本的 `agy-wallpaper-prism-v2.4.1.tar.gz`（或 `.zip`）以及 `agy-wallpaper-prism-v2.4.1.tar.gz.sha256` 校验文件。
 2. 校验压缩包 SHA-256 完整性后，将其**完整解压为真实文件夹**（Windows 下**切勿**使用 NTFS 目录联接 Junction 或符号链接 Symlink，Antigravity 会跳过非真实目录）至：
    - `<USER_HOME>/.gemini/config/plugins/agy-wallpaper-prism`
 3. 在 Antigravity 内打开 [Wallpaper Prism 扩展管理页](customization://agy-wallpaper-prism) 确认已启用，之后即可在工作台顶部或 **宿主与系统** 标签页使用 **GitHub Release 一键自更新**（自动校验 `.sha256` 与 `tar-safe.mjs` 安全解包并在失败时原子回滚）。
@@ -105,11 +105,11 @@ node scripts/install-local.mjs
 
 ```text
 agy-wallpaper-prism/
-├── plugin.json                     # 官方 10 键插件清单 (version: 2.5.0)
+├── plugin.json                     # 官方 10 键插件清单 (version: 2.4.1)
 ├── package.json                    # Node >=22 ESM 包配置与构建/打包/CLI 脚本
 ├── assets/logo.svg                 # 256×256 棱镜矢量图标
 ├── docs/                           # 双语文档导航、CHANGELOG、DSH 对齐规范与历史档案
-├── skills/wallpaper-prism/SKILL.md # Agent 按需调度与安全 CLI 指南 (v2.5.0)
+├── skills/wallpaper-prism/SKILL.md # Agent 按需调度与安全 CLI 指南 (v2.4.1)
 ├── .github/workflows/release.yml   # GitHub Actions 自动化验证与三产物发布流
 ├── src/
 │   ├── shared/                     # 12 区域统一 Schema、5 种玻璃风格、5 套光学预设与 498 键中英字典
@@ -139,7 +139,7 @@ agy-wallpaper-prism/
 | `npm run build` | `node scripts/build.mjs` | 将 `src/studio-ui/` 确定性内联构建为纯 LF `sidecars/prism_studio/index.html` |
 | `npm run install:local` | `node scripts/install-local.mjs` | 真实文件安装至 `<USER_HOME>/.gemini/config/plugins/agy-wallpaper-prism` 并热同步 |
 | `npm test` | `node test/verify-all.mjs` | 运行全部自动化测试套件（提交前如有未提交修改，先设置 `$env:PRISM_ALLOW_DIRTY_GIT='1'`） |
-| `npm run pack:release` | `node scripts/pack-release.mjs` | 生成 `dist/agy-wallpaper-prism-v2.5.0.{tar.gz,tar.gz.sha256,zip}` 三产物 |
+| `npm run pack:release` | `node scripts/pack-release.mjs` | 生成 `dist/agy-wallpaper-prism-v2.4.1.{tar.gz,tar.gz.sha256,zip}` 三产物 |
 | `npm run status` | `node host/cli.mjs status` | 只读检查 Sidecar、CDP、快捷方式、金丝雀与当前壁纸状态 |
 | `npm run wake` | `node host/cli.mjs wake` | 温和唤醒并重新挂载宿主皮肤 |
 | `npm run reset-canary` | `node host/cli.mjs reset-canary` | 清除启动金丝雀 `tripped` 熔断状态并恢复启用 |
@@ -185,14 +185,14 @@ agy-wallpaper-prism/
 
 ## English Documentation
 
-### 1. Overview & `v2.5.0` Release Highlights
+### 1. Overview & `v2.4.1` Release Highlights
 
 `agy-wallpaper-prism` delivers an **Obsidian Prism** layered acrylic workbench skin and a full **Steam Wallpaper Engine (`431960`)** + local media studio for Google Antigravity 2.x:
 
 - **Zero Agent Context/Token Overhead**: Registers no model-visible tools or prompt injections; all rendering, media streaming, and configuration run out-of-band in a gentle Sidecar process.
 - **Zero `app.asar` Modification**: Attaches passively via **Zero-Enable Ephemeral CDP** (zero `Page.enable`, `Runtime.enable`, `Page.addScriptToEvaluateOnNewDocument`, or `Runtime.addBinding`), gated by a Fail-Open first-frame media stage and two-phase `fsync` Boot Canary circuit breaker.
 
-#### What's New in `v2.5.0`
+#### What's New in `v2.4.1`
 
 1. **Optional Customizable Opening Animation (Disabled by Default)**
    - **Zero Overhead When Off**: `introEnabled` defaults to `false`. When enabled, it plays a fullscreen opening animation once per Antigravity window launch (`window.__agyPrismIntroPlayed` session guard) and never retriggers on config edits, hot-reloads, or SSE reconnects.
@@ -221,7 +221,7 @@ agy-wallpaper-prism/
 
 #### Method A — GitHub Releases Archive (Recommended for Users)
 
-1. Download `agy-wallpaper-prism-v2.5.0.tar.gz` (or `.zip`) and `agy-wallpaper-prism-v2.5.0.tar.gz.sha256` from [GitHub Releases](https://github.com/azwosile/agy-wallpaper-prism/releases).
+1. Download `agy-wallpaper-prism-v2.4.1.tar.gz` (or `.zip`) and `agy-wallpaper-prism-v2.4.1.tar.gz.sha256` from [GitHub Releases](https://github.com/azwosile/agy-wallpaper-prism/releases).
 2. Verify the SHA-256 checksum and extract as a **real directory** (never an NTFS junction or symlink on Windows, which Antigravity ignores) into:
    - `<USER_HOME>/.gemini/config/plugins/agy-wallpaper-prism`
 3. Manage or enable the plugin via [Wallpaper Prism Customizations](customization://agy-wallpaper-prism). Installed release builds support **1-Click GitHub Release Self-Update** inside Studio (**Host & System**) with `.sha256` verification, `tar-safe.mjs` validation, and atomic rollback.
@@ -276,11 +276,11 @@ node scripts/install-local.mjs
 
 ```text
 agy-wallpaper-prism/
-├── plugin.json                     # Official 10-key plugin manifest (version: 2.5.0)
+├── plugin.json                     # Official 10-key plugin manifest (version: 2.4.1)
 ├── package.json                    # Node >=22 ESM package & build/pack/CLI scripts
 ├── assets/logo.svg                 # 256×256 faceted Prism vector icon
 ├── docs/                           # Bilingual docs index, CHANGELOG, DSH parity spec & archives
-├── skills/wallpaper-prism/SKILL.md # Agent navigation & safe CLI skill (v2.5.0)
+├── skills/wallpaper-prism/SKILL.md # Agent navigation & safe CLI skill (v2.4.1)
 ├── .github/workflows/release.yml   # Automated CI verification & 3-artifact GitHub Release workflow
 ├── src/
 │   ├── shared/                     # 12-region schema, 5 glass styles, 5 scene presets & 498-key zh/en i18n
@@ -310,7 +310,7 @@ All commands align verbatim with `package.json` (requires Node.js `>= 22.0.0`):
 | `npm run build` | `node scripts/build.mjs` | Build deterministic pure-LF single-file `sidecars/prism_studio/index.html` |
 | `npm run install:local` | `node scripts/install-local.mjs` | Real-file install into `<USER_HOME>/.gemini/config/plugins/agy-wallpaper-prism` + live reload |
 | `npm test` | `node test/verify-all.mjs` | Run all verification suites (set `$env:PRISM_ALLOW_DIRTY_GIT='1'` when testing uncommitted edits) |
-| `npm run pack:release` | `node scripts/pack-release.mjs` | Produce deterministic `dist/agy-wallpaper-prism-v2.5.0.{tar.gz,tar.gz.sha256,zip}` |
+| `npm run pack:release` | `node scripts/pack-release.mjs` | Produce deterministic `dist/agy-wallpaper-prism-v2.4.1.{tar.gz,tar.gz.sha256,zip}` |
 | `npm run status` | `node host/cli.mjs status` | Read-only diagnostic report (Sidecar, CDP, shortcuts, canary, active item) |
 | `npm run wake` | `node host/cli.mjs wake` | Gently wake and mount the Prism skin |
 | `npm run reset-canary` | `node host/cli.mjs reset-canary` | Clear tripped Boot Canary Safe Mode and re-enable skin |

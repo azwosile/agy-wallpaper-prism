@@ -6,14 +6,14 @@
 
 ## 简体中文更新日志
 
-### `v2.5.0` — 可选自定义开场动画（支持 Wallpaper 动态壁纸与自定义视频）及文档全面翻新
+### `v2.4.1` — 可选自定义开场动画（支持 Wallpaper 动态壁纸与自定义视频）及文档全面翻新
 
 - **新特性：可选自定义开场动画（Opening Animation，默认关闭）**
   - **配置 Schema 与双语 i18n（`src/shared/schema.mjs`, `src/shared/i18n.mjs`）**：新增 12 项 `intro*` 配置键（`introEnabled: false` 默认关闭、`introSourceMode: 'wallpaper' | 'custom'`、`introWallpaperId`、`introCustomVideoPath`、`introCustomVideoName`、`introDurationSec` `0..30s`、`introFadeOutMs` `200..2000ms`、`introMuted`、`introVolume`、`introSkippable`、`introFit`、`introShowProgress`），并新增 32 组中英 100% 对等 `intro.*` 词条。
   - **独立存储与完整流媒体管线（`src/engine/{store,media-server,index}.mjs`, `sidecars/prism_studio/{main,cdp-bridge}.mjs`, `src/host/index.mjs`）**：新增 `<dataDir>/intro/` 独立视频存储（`saveIntroVideo` / `removeIntroVideo`，支持 `MP4/WebM/MOV/MKV/M4V/OGV` 最大 `512 MiB`，SHA-256 去重且绝不污染壁纸库）；在 `media-server.mjs` 新增抗 `syncLibrary()` 重置的 `registerIntroFile()`，并通过 `buildClientSkinPayload` 复用完整回环 `HTTP 206`、`fetch+blob` 与 `/mse-fmp4/` 流媒体通道；新增受鉴权接口 `POST /api/intro/upload`、`POST /api/intro/clear`、`POST /api/intro/preview` 及宿主 RPC `intro.preview`。
   - **宿主微内核全屏开场叠加层（`src/host/wallpaper-inject.js`）**：对 `buildHostMicroBootstrap`（`<= 6,144 B`）保持 **`0 B` 增量**；新增 `#agy-prism-intro-overlay`（`data-browser-occluder="true"` 与防汉化隔离，支持视频、`Scene`、`Web` 与图片开场），通过 `window.__agyPrismIntroPlayed` 保证每会话仅自动播放一次，内建 `4.5s` 首帧解码 Fail-Open 看门狗、自动静音防浏览器拦截降级、底部进度条与可跳过胶囊（点击 / `Esc` / `Space` / `Enter`），并支持工作台一键实时预览（`introPreviewNonce`）与软停用 / `Ctrl+Alt+Shift+R` 即时清理。
   - **Studio 工作台播放页开场动画配置面板（`src/studio-ui/{tabs/playback,app,state}.mjs`, `styles.css`）**：在「播放」标签页顶部新增 **「🎬 开场动画」** 专属面板，支持一键开关、在「Wallpaper 动态壁纸」（含动态壁纸网格筛选与「选用当前壁纸」快捷按钮）与「自定义视频」（一键上传与移除）间自由切换、快捷时长与全部播放参数调节，以及 **「▶ 立即在宿主窗口预览」**。
-- **文档全面翻新**：同步升级 [`README.md`](../README.md)、[`docs/README.md`](./README.md)、[`docs/CHANGELOG.md`](./CHANGELOG.md)、[`docs/dsh-parity-spec.md`](./dsh-parity-spec.md) 与 [`skills/wallpaper-prism/SKILL.md`](../skills/wallpaper-prism/SKILL.md) 至 `v2.5.0`（严格保留 `D1` 冻结基线 `docs/AI_HANDOFF.md` 零改动）。
+- **文档全面翻新**：同步升级 [`README.md`](../README.md)、[`docs/README.md`](./README.md)、[`docs/CHANGELOG.md`](./CHANGELOG.md)、[`docs/dsh-parity-spec.md`](./dsh-parity-spec.md) 与 [`skills/wallpaper-prism/SKILL.md`](../skills/wallpaper-prism/SKILL.md) 至 `v2.4.1`（严格保留 `D1` 冻结基线 `docs/AI_HANDOFF.md` 零改动）。
 
 ### `v2.4.0` — 12 区域对话气泡与控件玻璃化、默认无毛玻璃、4K60 MSE 零闪烁流控与 Scene 高清 `.tex` 解码
 
@@ -77,14 +77,14 @@
 
 ## English Changelog
 
-### `v2.5.0` — Optional Customizable Opening Animation (Wallpaper Engine & Custom Video) & Documentation Refresh
+### `v2.4.1` — Optional Customizable Opening Animation (Wallpaper Engine & Custom Video) & Documentation Refresh
 
 - **New Feature: Optional Customizable Opening Animation (Disabled by Default)**
   - **Schema & Bilingual i18n (`src/shared/schema.mjs`, `src/shared/i18n.mjs`)**: Added 12 `intro*` configuration keys (`introEnabled: false` by default, `introSourceMode: 'wallpaper' | 'custom'`, `introWallpaperId`, `introCustomVideoPath`, `introCustomVideoName`, `introDurationSec` `0..30s`, `introFadeOutMs` `200..2000ms`, `introMuted`, `introVolume`, `introSkippable`, `introFit`, `introShowProgress`) and 32 paired `zh`/`en` `intro.*` i18n keys.
   - **Dedicated Storage & Full Streaming Pipeline (`src/engine/{store,media-server,index}.mjs`, `sidecars/prism_studio/{main,cdp-bridge}.mjs`, `src/host/index.mjs`)**: Added `<dataDir>/intro/` video storage (`saveIntroVideo` / `removeIntroVideo` for `MP4/WebM/MOV/MKV/M4V/OGV` up to `512 MiB`, SHA-256 deduplicated without cluttering the wallpaper library); added `mediaServer.registerIntroFile()` resilient across `syncLibrary()` scans; enriched `introItem` in `buildClientSkinPayload` with full loopback `HTTP 206` / `fetch+blob` / `/mse-fmp4/` URLs; added authenticated `POST /api/intro/upload`, `POST /api/intro/clear`, `POST /api/intro/preview`, and RPC `intro.preview`.
   - **Host Fullscreen Intro Overlay (`src/host/wallpaper-inject.js`)**: Zero bytes (`0 B`) added to `buildHostMicroBootstrap <= 6,144 B`. Renders `#agy-prism-intro-overlay` (`data-browser-occluder="true"` + CN-L10n isolation, supporting video, `scene`, `web`, and image items) once per window session (`window.__agyPrismIntroPlayed`), with a `4.5s` Fail-Open decode watchdog, automatic muted autoplay fallback, bottom progress bar & skippable pill (click / `Esc` / `Space` / `Enter`), live on-demand preview (`introPreviewNonce`), and instant teardown on soft-disable or `Ctrl+Alt+Shift+R`.
   - **Studio Playback Tab Opening Animation Panel (`src/studio-ui/{tabs/playback,app,state}.mjs`, `styles.css`)**: Added the **Opening Animation** section at the top of the Playback tab with default-OFF toggle, Wallpaper Engine / Library dynamic wallpaper picker (+ **Use Active Wallpaper** shortcut), Custom Video upload/clear controls, quick duration presets, fade/fit/audio/skip options, and **Preview Intro in Host Window**.
-- **Documentation Refresh**: Updated [`README.md`](../README.md), [`docs/README.md`](./README.md), [`docs/CHANGELOG.md`](./CHANGELOG.md), [`docs/dsh-parity-spec.md`](./dsh-parity-spec.md), and [`skills/wallpaper-prism/SKILL.md`](../skills/wallpaper-prism/SKILL.md) to `v2.5.0` while keeping the `D1`-frozen [`docs/AI_HANDOFF.md`](./AI_HANDOFF.md) strictly untouched.
+- **Documentation Refresh**: Updated [`README.md`](../README.md), [`docs/README.md`](./README.md), [`docs/CHANGELOG.md`](./CHANGELOG.md), [`docs/dsh-parity-spec.md`](./dsh-parity-spec.md), and [`skills/wallpaper-prism/SKILL.md`](../skills/wallpaper-prism/SKILL.md) to `v2.4.1` while keeping the `D1`-frozen [`docs/AI_HANDOFF.md`](./AI_HANDOFF.md) strictly untouched.
 
 ### `v2.4.0` — 12-Region Chat Bubbles & Controls Glassmorphism, Zero-Blur Default, 4K60 MSE Non-Blanking Streaming & Scene HD `.tex`
 

@@ -2681,7 +2681,7 @@ button, input, select, textarea {
 @import './styles/preview.css';
 @import './styles/regions.css';
 @import './styles/editor.css';
-/* v2.5.0 Opening Animation configuration card & dynamic wallpaper picker */
+/* v2.4.1 Opening Animation configuration card & dynamic wallpaper picker */
 .prism-intro-badge {
   display: inline-flex;
   align-items: center;

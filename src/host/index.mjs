@@ -1,4 +1,4 @@
-// Host injection script loader & client skin payload builder for agy-wallpaper-prism v2.5.0.
+// Host injection script loader & client skin payload builder for agy-wallpaper-prism v2.4.1.
 // Consumed by `sidecars/prism_studio/main.mjs`, `cdp-bridge.mjs`, and `test/verify-all.mjs`.
 
 import { readFileSync } from 'node:fs';

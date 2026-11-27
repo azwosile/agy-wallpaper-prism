@@ -111,7 +111,7 @@ function renderOpeningAnimationSection(eff, isZh) {
     : '';
 
   return `
-      <!-- Opening Animation (v2.5.0: Optional, OFF by default) -->
+      <!-- Opening Animation (v2.4.1: Optional, OFF by default) -->
       <details id="prism-intro-section" class="prism-section" open>
         <summary>
           <div class="prism-section-title-wrap">
