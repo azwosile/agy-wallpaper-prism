@@ -117,6 +117,10 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
       toPluginProxyUrl(audioUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginAudioUrl || '').trim();
     const pluginVideoStageUrl =
       toPluginProxyUrl(videoStageUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginVideoStageUrl || '').trim();
+    const pluginWebUrl =
+      toPluginProxyUrl(webUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginWebUrl || '').trim();
+    const pluginSceneLiveUrl =
+      toPluginProxyUrl(sceneLiveUrl, mediaOrigin, pluginOrigin) || String(activeItem.pluginSceneLiveUrl || '').trim();
 
     normalizedItem = {
       id: String(activeItem.id || wid),
@@ -125,6 +129,8 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
       source: String(activeItem.source || 'local'),
       sceneMode,
       schemeColor: String(activeItem.schemeColor || ''),
+      fileSize: Number(activeItem.fileSize || 0),
+      durationSec: Number(activeItem.durationSec || 0),
       thumbUrl,
       mediaUrl,
       videoStageUrl,
@@ -133,8 +139,11 @@ export function buildClientSkinPayload(config = DEFAULT_CONFIG, activeItem = nul
       pluginThumbUrl,
       pluginAudioUrl,
       pluginVideoStageUrl,
+      pluginWebUrl,
+      pluginSceneLiveUrl,
       sceneVideoUrl,
       sceneLiveUrl,
+      sceneImageUrl: resolveMediaUrl(activeItem.sceneImageUrl, mediaOrigin),
       webUrl,
       audioUrl,
       slidesUrl: resolveMediaUrl(activeItem.slidesUrl, mediaOrigin),

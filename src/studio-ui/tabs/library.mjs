@@ -247,15 +247,37 @@ export function computeVirtualSlice(totalCount) {
   if (totalCount <= threshold) {
     return { start: 0, end: totalCount, padTop: 0, padBottom: 0, cols: 3 };
   }
-  const scroller = document.getElementById('prism-tab-scroll');
-  const viewW = scroller ? Math.max(240, scroller.clientWidth - 28) : Math.max(240, window.innerWidth - 32);
   const isWide = window.innerWidth >= 840;
+  const scroller = document.getElementById('prism-tab-scroll');
+  const ws = document.querySelector('.prism-workspace');
+  const scrollHost = isWide ? scroller : (ws || scroller);
+  const viewW = scroller && scroller.clientWidth > 0
+    ? Math.max(240, scroller.clientWidth - 28)
+    : scrollHost && scrollHost.clientWidth > 0
+      ? Math.max(240, scrollHost.clientWidth - 28)
+      : Math.max(240, window.innerWidth - 32);
   const cols = isWide ? Math.max(2, Math.floor((viewW + 11) / 206)) : window.innerWidth >= 480 ? 3 : 2;
   const isCompact = store.config.pickerLayout === 'fixed';
   const rowH = isCompact ? 136 : Math.round((viewW / cols) * 0.625) + 46;
   const totalRows = Math.ceil(totalCount / cols);
-  const scrollTop = scroller ? Math.max(0, scroller.scrollTop - 160) : 0;
-  const viewH = scroller && scroller.clientHeight > 0 ? scroller.clientHeight : 720;
+  let scrollTop = 0;
+  let viewH = 720;
+  if (isWide) {
+    scrollTop = scroller ? Math.max(0, scroller.scrollTop - 160) : 0;
+    viewH = scroller && scroller.clientHeight > 0 ? scroller.clientHeight : 720;
+  } else {
+    const gridHost = document.getElementById('prism-lib-grid-host');
+    let gridOffset = 420;
+    if (gridHost && scrollHost && typeof gridHost.getBoundingClientRect === 'function' && typeof scrollHost.getBoundingClientRect === 'function') {
+      const gRect = gridHost.getBoundingClientRect();
+      const sRect = scrollHost.getBoundingClientRect();
+      if (sRect.height > 0) {
+        gridOffset = Math.max(0, gRect.top - sRect.top + scrollHost.scrollTop);
+      }
+    }
+    scrollTop = scrollHost ? Math.max(0, scrollHost.scrollTop - gridOffset) : 0;
+    viewH = scrollHost && scrollHost.clientHeight > 0 ? scrollHost.clientHeight : (window.innerHeight || 720);
+  }
 
   const firstRow = Math.max(0, Math.floor(scrollTop / rowH) - 3);
   const visibleRows = Math.ceil(viewH / rowH) + 6;

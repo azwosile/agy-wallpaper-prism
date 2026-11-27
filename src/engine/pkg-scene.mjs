@@ -14,6 +14,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 import {
   closeSync,
   existsSync,
@@ -29,7 +30,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { extname, join, resolve, sep } from 'node:path';
+import { extname, join, relative, resolve, sep } from 'node:path';
 
 export const MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024;
 export const MAX_PKG_ENTRY_BYTES = 512 * 1024 * 1024;
@@ -457,34 +458,411 @@ export function extractMp4FromTexBytes(texInput) {
 }
 
 const AUDIO_EXT_RE = /\.(mp3|ogg|oga|wav|m4a|flac|aac)$/i;
+const MAX_TEX_IMAGE_PIXELS = 64_000_000;
+const TEX_FREEIMAGE_EXTS = new Set([2, 13, 35]); // 2=JPEG, 13=PNG, 35=WEBP
+const TEX_PIXEL_FORMATS = new Set([0, 4, 6, 7]); // 0=RGBA8888, 4=DXT5, 6=DXT3, 7=DXT1
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let c = i;
+    for (let k = 0; k < 8; k += 1) {
+      c = (c & 1) !== 0 ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i += 1) {
+    c = CRC32_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function makePngChunk(type, data) {
+  const typeBytes = Buffer.from(type, 'ascii');
+  const lenBuf = Buffer.allocUnsafe(4);
+  lenBuf.writeUInt32BE(data.length >>> 0, 0);
+  const crcInput = Buffer.concat([typeBytes, data]);
+  const crcBuf = Buffer.allocUnsafe(4);
+  crcBuf.writeUInt32BE(crc32(crcInput) >>> 0, 0);
+  return Buffer.concat([lenBuf, typeBytes, data, crcBuf]);
+}
+
+function encodeRgbaToPng(rgba, width, height) {
+  const rowBytes = width * 4;
+  const raw = Buffer.allocUnsafe((rowBytes + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    const dstOff = y * (rowBytes + 1);
+    raw[dstOff] = 0; // filter type 0 (None)
+    const srcOff = y * rowBytes;
+    raw.set(rgba.subarray(srcOff, srcOff + rowBytes), dstOff + 1);
+  }
+  const ihdr = Buffer.allocUnsafe(13);
+  ihdr.writeUInt32BE(width >>> 0, 0);
+  ihdr.writeUInt32BE(height >>> 0, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 6; // RGBA
+  ihdr[10] = 0; // compression
+  ihdr[11] = 0; // filter
+  ihdr[12] = 0; // interlace
+  const idat = deflateSync(raw, { level: 1 });
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return Buffer.concat([
+    sig,
+    makePngChunk('IHDR', ihdr),
+    makePngChunk('IDAT', idat),
+    makePngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+function unpackRgb565(c) {
+  const r = ((c >> 11) & 0x1f);
+  const g = ((c >> 5) & 0x3f);
+  const b = (c & 0x1f);
+  return [
+    (r << 3) | (r >> 2),
+    (g << 2) | (g >> 4),
+    (b << 3) | (b >> 2),
+  ];
+}
+
+function decodeDxtColorBlock(src, off, opaqueOnly) {
+  const c0 = src[off] | (src[off + 1] << 8);
+  const c1 = src[off + 2] | (src[off + 3] << 8);
+  const [r0, g0, b0] = unpackRgb565(c0);
+  const [r1, g1, b1] = unpackRgb565(c1);
+  const pal = [
+    r0, g0, b0, 255,
+    r1, g1, b1, 255,
+    0, 0, 0, 255,
+    0, 0, 0, 255,
+  ];
+  if (opaqueOnly || c0 > c1) {
+    pal[8] = Math.trunc((2 * r0 + r1 + 1) / 3);
+    pal[9] = Math.trunc((2 * g0 + g1 + 1) / 3);
+    pal[10] = Math.trunc((2 * b0 + b1 + 1) / 3);
+    pal[12] = Math.trunc((r0 + 2 * r1 + 1) / 3);
+    pal[13] = Math.trunc((g0 + 2 * g1 + 1) / 3);
+    pal[14] = Math.trunc((b0 + 2 * b1 + 1) / 3);
+  } else {
+    pal[8] = (r0 + r1) >> 1;
+    pal[9] = (g0 + g1) >> 1;
+    pal[10] = (b0 + b1) >> 1;
+    pal[12] = 0;
+    pal[13] = 0;
+    pal[14] = 0;
+    pal[15] = 0;
+  }
+  return pal;
+}
+
+function decodeDxt1(src, width, height) {
+  const out = Buffer.allocUnsafe(width * height * 4);
+  const bw = Math.ceil(width / 4);
+  const bh = Math.ceil(height / 4);
+  let srcOff = 0;
+  for (let by = 0; by < bh; by += 1) {
+    for (let bx = 0; bx < bw; bx += 1) {
+      const pal = decodeDxtColorBlock(src, srcOff, false);
+      const bits = (
+        src[srcOff + 4] |
+        (src[srcOff + 5] << 8) |
+        (src[srcOff + 6] << 16) |
+        (src[srcOff + 7] << 24)
+      ) >>> 0;
+      srcOff += 8;
+      for (let py = 0; py < 4; py += 1) {
+        const y = by * 4 + py;
+        if (y >= height) continue;
+        for (let px = 0; px < 4; px += 1) {
+          const x = bx * 4 + px;
+          if (x >= width) continue;
+          const idx = ((bits >>> ((py * 4 + px) * 2)) & 3) * 4;
+          const dst = (y * width + x) * 4;
+          out[dst] = pal[idx];
+          out[dst + 1] = pal[idx + 1];
+          out[dst + 2] = pal[idx + 2];
+          out[dst + 3] = pal[idx + 3];
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function decodeDxt3(src, width, height) {
+  const out = Buffer.allocUnsafe(width * height * 4);
+  const bw = Math.ceil(width / 4);
+  const bh = Math.ceil(height / 4);
+  let srcOff = 0;
+  for (let by = 0; by < bh; by += 1) {
+    for (let bx = 0; bx < bw; bx += 1) {
+      const aOff = srcOff;
+      const cOff = srcOff + 8;
+      srcOff += 16;
+      const pal = decodeDxtColorBlock(src, cOff, true);
+      const bits = (
+        src[cOff + 4] |
+        (src[cOff + 5] << 8) |
+        (src[cOff + 6] << 16) |
+        (src[cOff + 7] << 24)
+      ) >>> 0;
+      for (let py = 0; py < 4; py += 1) {
+        const y = by * 4 + py;
+        if (y >= height) continue;
+        const rowAlpha = src[aOff + py * 2] | (src[aOff + py * 2 + 1] << 8);
+        for (let px = 0; px < 4; px += 1) {
+          const x = bx * 4 + px;
+          if (x >= width) continue;
+          const idx = ((bits >>> ((py * 4 + px) * 2)) & 3) * 4;
+          const a4 = (rowAlpha >>> (px * 4)) & 0x0f;
+          const dst = (y * width + x) * 4;
+          out[dst] = pal[idx];
+          out[dst + 1] = pal[idx + 1];
+          out[dst + 2] = pal[idx + 2];
+          out[dst + 3] = (a4 << 4) | a4;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function decodeDxt5(src, width, height) {
+  const out = Buffer.allocUnsafe(width * height * 4);
+  const bw = Math.ceil(width / 4);
+  const bh = Math.ceil(height / 4);
+  const alphas = new Uint8Array(8);
+  let srcOff = 0;
+  for (let by = 0; by < bh; by += 1) {
+    for (let bx = 0; bx < bw; bx += 1) {
+      const a0 = src[srcOff];
+      const a1 = src[srcOff + 1];
+      alphas[0] = a0;
+      alphas[1] = a1;
+      if (a0 > a1) {
+        for (let i = 1; i <= 6; i += 1) {
+          alphas[i + 1] = Math.trunc(((7 - i) * a0 + i * a1 + 3) / 7);
+        }
+      } else {
+        for (let i = 1; i <= 4; i += 1) {
+          alphas[i + 1] = Math.trunc(((5 - i) * a0 + i * a1 + 2) / 5);
+        }
+        alphas[6] = 0;
+        alphas[7] = 255;
+      }
+      const aLow = (src[srcOff + 2] | (src[srcOff + 3] << 8) | (src[srcOff + 4] << 16)) >>> 0;
+      const aHigh = (src[srcOff + 5] | (src[srcOff + 6] << 8) | (src[srcOff + 7] << 16)) >>> 0;
+      const cOff = srcOff + 8;
+      srcOff += 16;
+      const pal = decodeDxtColorBlock(src, cOff, true);
+      const bits = (
+        src[cOff + 4] |
+        (src[cOff + 5] << 8) |
+        (src[cOff + 6] << 16) |
+        (src[cOff + 7] << 24)
+      ) >>> 0;
+      for (let py = 0; py < 4; py += 1) {
+        const y = by * 4 + py;
+        if (y >= height) continue;
+        for (let px = 0; px < 4; px += 1) {
+          const x = bx * 4 + px;
+          if (x >= width) continue;
+          const pIdx = py * 4 + px;
+          const aCode = pIdx < 8
+            ? (aLow >>> (pIdx * 3)) & 7
+            : (aHigh >>> ((pIdx - 8) * 3)) & 7;
+          const idx = ((bits >>> (pIdx * 2)) & 3) * 4;
+          const dst = (y * width + x) * 4;
+          out[dst] = pal[idx];
+          out[dst + 1] = pal[idx + 1];
+          out[dst + 2] = pal[idx + 2];
+          out[dst + 3] = alphas[aCode];
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function cropRgba(rgba, srcW, srcH, dstW, dstH) {
+  if (dstW === srcW && dstH === srcH) return rgba;
+  const out = Buffer.allocUnsafe(dstW * dstH * 4);
+  const dstRow = dstW * 4;
+  const srcRow = srcW * 4;
+  for (let y = 0; y < dstH; y += 1) {
+    const sOff = y * srcRow;
+    out.set(rgba.subarray(sOff, sOff + dstRow), y * dstRow);
+  }
+  return out;
+}
+
+function sniffEncodedImageMagic(bytes) {
+  if (!bytes || bytes.length < 12) return null;
+  if (
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  ) {
+    return { mime: 'image/png', ext: '.png' };
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return { mime: 'image/jpeg', ext: '.jpg' };
+  }
+  if (
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    return { mime: 'image/webp', ext: '.webp' };
+  }
+  return null;
+}
 
 /**
- * Fast header-only probe of `.tex` prefix bytes (`<= 256` bytes) so directory scanning skips
- * multi-megabyte `TEXB0001..0003` static RGBA/DXT textures in `0.02ms` without LZ4 decompression.
+ * Parse a Wallpaper Engine `.tex` binary and extract its primary static image
+ * (supports embedded PNG/JPEG/WebP plus raw/LZ4 RGBA8888, DXT1, DXT3, and DXT5).
  */
-function probeTexHeaderFast(headInput) {
+export function extractImageFromTexBytes(texInput) {
+  const bytes = texInput instanceof Uint8Array ? texInput : new Uint8Array(texInput);
+  if (bytes.byteLength < 48) return null;
+
+  try {
+    const r = new BinaryReader(bytes, 'tex-img');
+    const texv = r.nstring(16);
+    if (!texv.startsWith('TEXV')) return null;
+    const texi = r.nstring(16);
+    if (!texi.startsWith('TEXI')) return null;
+
+    const format = r.i32();
+    const flags = r.i32();
+    const texWidth = r.i32();
+    const texHeight = r.i32();
+    const imgWidth = r.i32();
+    const imgHeight = r.i32();
+    r.u32(); // unk
+
+    const texb = r.nstring(16);
+    if (!texb.startsWith('TEXB')) return null;
+    const containerVer = Number(texb.slice(4)) || 1;
+
+    r.i32(); // imageCount
+    let freeImageFormat = -1;
+    let isVideoMp4 = false;
+    if (containerVer >= 3) freeImageFormat = r.i32();
+    if (containerVer >= 4) isVideoMp4 = r.i32() === 1;
+    if (isVideoMp4 || (flags & 0x20) !== 0) return null;
+
+    const mipCount = r.i32();
+    if (mipCount <= 0 || mipCount > 64) return null;
+
+    const mipW = r.i32();
+    const mipH = r.i32();
+    let lz4Flag = 0;
+    let decompressedSize = 0;
+    if (containerVer >= 2) {
+      lz4Flag = r.i32();
+      decompressedSize = r.i32();
+    }
+    const byteCount = r.i32();
+    if (byteCount <= 0 || byteCount > r.remaining || byteCount > MAX_PKG_ENTRY_BYTES) {
+      return null;
+    }
+
+    let payload = r.bytes(byteCount);
+    if (lz4Flag === 1 && decompressedSize > 0) {
+      payload = lz4DecompressBlock(payload, decompressedSize);
+    }
+
+    const outW = imgWidth > 0 && (mipW <= 0 || imgWidth <= mipW) ? imgWidth : (mipW || texWidth || 0);
+    const outH = imgHeight > 0 && (mipH <= 0 || imgHeight <= mipH) ? imgHeight : (mipH || texHeight || 0);
+
+    const magic = sniffEncodedImageMagic(payload);
+    if (magic) {
+      return {
+        bytes: Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength),
+        mime: magic.mime,
+        ext: magic.ext,
+        width: outW,
+        height: outH,
+      };
+    }
+
+    if (
+      mipW <= 0 || mipH <= 0 ||
+      mipW > 16384 || mipH > 16384 ||
+      (mipW * mipH) > MAX_TEX_IMAGE_PIXELS
+    ) {
+      return null;
+    }
+    if (freeImageFormat >= 0 && !TEX_FREEIMAGE_EXTS.has(freeImageFormat) && !TEX_PIXEL_FORMATS.has(format)) {
+      return null;
+    }
+
+    let rgba = null;
+    if (format === 0) {
+      const expected = mipW * mipH * 4;
+      if (payload.byteLength < expected) return null;
+      rgba = Buffer.from(payload.buffer, payload.byteOffset, expected);
+    } else if (format === 4) {
+      const expected = Math.ceil(mipW / 4) * Math.ceil(mipH / 4) * 16;
+      if (payload.byteLength < expected) return null;
+      rgba = decodeDxt5(payload, mipW, mipH);
+    } else if (format === 6) {
+      const expected = Math.ceil(mipW / 4) * Math.ceil(mipH / 4) * 16;
+      if (payload.byteLength < expected) return null;
+      rgba = decodeDxt3(payload, mipW, mipH);
+    } else if (format === 7) {
+      const expected = Math.ceil(mipW / 4) * Math.ceil(mipH / 4) * 8;
+      if (payload.byteLength < expected) return null;
+      rgba = decodeDxt1(payload, mipW, mipH);
+    } else {
+      return null;
+    }
+
+    const finalW = outW > 0 && outW <= mipW ? outW : mipW;
+    const finalH = outH > 0 && outH <= mipH ? outH : mipH;
+    const cropped = cropRgba(rgba, mipW, mipH, finalW, finalH);
+    const pngBytes = encodeRgbaToPng(cropped, finalW, finalH);
+    return {
+      bytes: pngBytes,
+      mime: 'image/png',
+      ext: '.png',
+      width: finalW,
+      height: finalH,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fast header-only probe of `.tex` prefix bytes (`<= 256` bytes) for both video and static image detection.
+ */
+function probeTexHeader(headInput) {
   const bytes = headInput instanceof Uint8Array ? headInput : new Uint8Array(headInput);
-  if (bytes.byteLength < 48) return { status: 'not-video' };
+  if (bytes.byteLength < 48) return { status: 'unsupported' };
   try {
     const r = new BinaryReader(bytes, 'tex-head');
     const texv = r.nstring(16);
-    if (!texv.startsWith('TEXV')) return { status: 'not-video' };
+    if (!texv.startsWith('TEXV')) return { status: 'unsupported' };
     const texi = r.nstring(16);
-    if (!texi.startsWith('TEXI')) return { status: 'not-video' };
-    r.i32(); // format
-    r.i32(); // flags
+    if (!texi.startsWith('TEXI')) return { status: 'unsupported' };
+    const format = r.i32();
+    const flags = r.i32();
     const texWidth = r.i32();
     const texHeight = r.i32();
-    r.i32(); // imgWidth
-    r.i32(); // imgHeight
+    const imgWidth = r.i32();
+    const imgHeight = r.i32();
     r.u32(); // unk
     const texb = r.nstring(16);
-    if (!texb.startsWith('TEXB')) return { status: 'not-video' };
+    if (!texb.startsWith('TEXB')) return { status: 'unsupported' };
     const containerVer = Number(texb.slice(4)) || 1;
-    if (containerVer < 4) return { status: 'not-video' };
     r.i32(); // imageCount
-    r.i32(); // freeImageFormat
-    const isVideoMp4 = r.i32() === 1;
+    const freeImageFormat = containerVer >= 3 ? r.i32() : -1;
+    const isVideoMp4 = containerVer >= 4 ? (r.i32() === 1) : false;
     const mipCount = r.i32();
     let mipW = 0;
     let mipH = 0;
@@ -492,13 +870,43 @@ function probeTexHeaderFast(headInput) {
       mipW = r.i32();
       mipH = r.i32();
     }
-    if (isVideoMp4) {
-      return { status: 'video', width: mipW || texWidth || 0, height: mipH || texHeight || 0 };
+    const outW = imgWidth > 0 ? imgWidth : (mipW || texWidth || 0);
+    const outH = imgHeight > 0 ? imgHeight : (mipH || texHeight || 0);
+    if (isVideoMp4 || (flags & 0x20) !== 0) {
+      return { status: 'video', width: outW, height: outH, containerVer };
     }
-    return { status: 'maybe-video' };
+    const isSupportedStatic =
+      outW >= 64 && outH >= 64 && outW <= 16384 && outH <= 16384 &&
+      (TEX_FREEIMAGE_EXTS.has(freeImageFormat) || TEX_PIXEL_FORMATS.has(format));
+    if (isSupportedStatic) {
+      return {
+        status: 'image',
+        format,
+        width: outW,
+        height: outH,
+        texWidth,
+        texHeight,
+        mipW,
+        mipH,
+        freeImageFormat,
+        containerVer,
+      };
+    }
+    return { status: containerVer >= 4 ? 'maybe-video' : 'unsupported', containerVer };
   } catch {
     return { status: 'maybe-video' };
   }
+}
+
+/**
+ * Fast header-only probe of `.tex` prefix bytes (`<= 256` bytes) so directory scanning skips
+ * multi-megabyte `TEXB0001..0003` static RGBA/DXT textures in `0.02ms` without LZ4 decompression.
+ */
+function probeTexHeaderFast(headInput) {
+  const res = probeTexHeader(headInput);
+  if (res.status === 'video') return { status: 'video', width: res.width, height: res.height };
+  if (res.status === 'maybe-video') return { status: 'maybe-video' };
+  return { status: 'not-video' };
 }
 
 function readPkgEntryHeaderPrefix(absPkgPath, entry, maxBytes = 256) {
@@ -564,18 +972,28 @@ function persistBufferAtomically(targetPath, bytes) {
   }
 }
 
+function scoreTexImageCandidate(width, height) {
+  if (!(width > 0 && height > 0)) return 0;
+  const area = width * height;
+  const bonus = (width >= 512 || height >= 512) ? 2 : 1;
+  const aspect = Math.max(width, height) / Math.max(1, Math.min(width, height));
+  const aspectPenalty = aspect > 4 ? 0.25 : 1;
+  return area * bonus * aspectPenalty;
+}
+
 /**
  * Inspect a packed `scene.pkg` file OR a loose scene project directory:
  * - Locates the highest-scoring embedded MP4 animation (`TEXB0004` or packaged `.mp4`)
+ * - Locates the highest-scoring static background `.tex` texture (`TEXB0001..0004`)
  * - Locates packaged BGM audio (`.mp3/.ogg/.wav/...`)
  */
 export function inspectSceneContainer(fileOrDirAbs) {
   let st;
   try {
     st = lstatSync(fileOrDirAbs);
-    if (st.isSymbolicLink()) return { hasVideo: false, hasAudio: false, entriesCount: 0 };
+    if (st.isSymbolicLink()) return { hasVideo: false, hasImage: false, hasAudio: false, entriesCount: 0 };
   } catch {
-    return { hasVideo: false, hasAudio: false, entriesCount: 0 };
+    return { hasVideo: false, hasImage: false, hasAudio: false, entriesCount: 0 };
   }
 
   if (st.isFile() && fileOrDirAbs.toLowerCase().endsWith('.pkg')) {
@@ -592,26 +1010,37 @@ export function inspectSceneContainer(fileOrDirAbs) {
         .sort((a, b) => b.length - a.length)[0] || null;
 
       let videoSource = directMp4 ? { kind: 'pkg-mp4', entry: directMp4 } : null;
-      if (!videoSource) {
-        for (const cand of texCandidates.slice(0, 12)) {
-          try {
-            const headPrefix = readPkgEntryHeaderPrefix(fileOrDirAbs, cand, 256);
-            if (headPrefix) {
-              const fast = probeTexHeaderFast(headPrefix);
-              if (fast.status === 'not-video') continue;
-              if (fast.status === 'video') {
-                videoSource = { kind: 'pkg-tex-mp4', entry: cand, width: fast.width, height: fast.height };
-                break;
-              }
+      let imageSource = null;
+      let bestImageScore = 0;
+
+      for (const cand of texCandidates.slice(0, 16)) {
+        try {
+          const headPrefix = readPkgEntryHeaderPrefix(fileOrDirAbs, cand, 256);
+          if (headPrefix) {
+            const probed = probeTexHeader(headPrefix);
+            if (!videoSource && probed.status === 'video') {
+              videoSource = { kind: 'pkg-tex-mp4', entry: cand, width: probed.width, height: probed.height };
+              break;
             }
+            if (probed.status === 'image') {
+              const score = scoreTexImageCandidate(probed.width, probed.height);
+              if (score > bestImageScore) {
+                bestImageScore = score;
+                imageSource = { kind: 'pkg-tex-img', entry: cand, width: probed.width, height: probed.height };
+              }
+              continue;
+            }
+            if (probed.status === 'unsupported') continue;
+          }
+          if (!videoSource) {
             const raw = readPkgFileEntry(fileOrDirAbs, cand);
             const hit = extractMp4FromTexBytes(raw);
             if (hit && hit.bytes.length >= 64) {
               videoSource = { kind: 'pkg-tex-mp4', entry: cand, width: hit.width, height: hit.height };
               break;
             }
-          } catch { /* skip unreadable tex */ }
-        }
+          }
+        } catch { /* skip unreadable tex */ }
       }
 
       return {
@@ -619,11 +1048,13 @@ export function inspectSceneContainer(fileOrDirAbs) {
         entriesCount: entries.length,
         hasVideo: Boolean(videoSource),
         videoSource,
+        hasImage: Boolean(imageSource),
+        imageSource,
         hasAudio: Boolean(audioEntry),
         audioEntry,
       };
     } catch {
-      return { containerKind: 'pkg', entriesCount: 0, hasVideo: false, hasAudio: false };
+      return { containerKind: 'pkg', entriesCount: 0, hasVideo: false, hasImage: false, hasAudio: false };
     }
   }
 
@@ -655,9 +1086,10 @@ export function inspectSceneContainer(fileOrDirAbs) {
         walkLoose(full, depth + 1);
       } else if (lst.isFile()) {
         const lower = name.toLowerCase();
-        if (lower.endsWith('.tex') && !isLikelyMaskOrHelper(full) && lst.size >= 256) {
+        const relPosix = relative(rootDir, full).split(sep).join('/');
+        if (lower.endsWith('.tex') && !isLikelyMaskOrHelper(relPosix) && lst.size >= 256) {
           texFiles.push({ full, size: lst.size });
-        } else if (lower.endsWith('.mp4') && !isLikelyMaskOrHelper(full)) {
+        } else if (lower.endsWith('.mp4') && !isLikelyMaskOrHelper(relPosix)) {
           mp4Files.push({ full, size: lst.size });
         } else if (AUDIO_EXT_RE.test(lower)) {
           audioFiles.push({ full, size: lst.size });
@@ -672,31 +1104,42 @@ export function inspectSceneContainer(fileOrDirAbs) {
   audioFiles.sort((a, b) => b.size - a.size);
 
   let videoSource = mp4Files[0] ? { kind: 'loose-mp4', absPath: mp4Files[0].full } : null;
-  if (!videoSource) {
-    for (const cand of texFiles.slice(0, 12)) {
+  let imageSource = null;
+  let bestImageScore = 0;
+
+  for (const cand of texFiles.slice(0, 16)) {
+    try {
+      const fd = openSync(cand.full, 'r');
+      let headBuf;
       try {
-        const fd = openSync(cand.full, 'r');
-        let headBuf;
-        try {
-          const cap = Math.min(cand.size, 256);
-          headBuf = Buffer.allocUnsafe(cap);
-          readSync(fd, headBuf, 0, cap, 0);
-        } finally {
-          closeSync(fd);
+        const cap = Math.min(cand.size, 256);
+        headBuf = Buffer.allocUnsafe(cap);
+        readSync(fd, headBuf, 0, cap, 0);
+      } finally {
+        closeSync(fd);
+      }
+      const probed = probeTexHeader(headBuf);
+      if (!videoSource && probed.status === 'video') {
+        videoSource = { kind: 'loose-tex-mp4', absPath: cand.full, width: probed.width, height: probed.height };
+        break;
+      }
+      if (probed.status === 'image') {
+        const score = scoreTexImageCandidate(probed.width, probed.height);
+        if (score > bestImageScore) {
+          bestImageScore = score;
+          imageSource = { kind: 'loose-tex-img', absPath: cand.full, width: probed.width, height: probed.height };
         }
-        const fast = probeTexHeaderFast(headBuf);
-        if (fast.status === 'not-video') continue;
-        if (fast.status === 'video') {
-          videoSource = { kind: 'loose-tex-mp4', absPath: cand.full, width: fast.width, height: fast.height };
-          break;
-        }
+        continue;
+      }
+      if (probed.status === 'unsupported') continue;
+      if (!videoSource) {
         const hit = extractMp4FromTexBytes(readFileSync(cand.full));
         if (hit && hit.bytes.length >= 64) {
           videoSource = { kind: 'loose-tex-mp4', absPath: cand.full, width: hit.width, height: hit.height };
           break;
         }
-      } catch { /* ignore */ }
-    }
+      }
+    } catch { /* ignore */ }
   }
 
   return {
@@ -704,6 +1147,8 @@ export function inspectSceneContainer(fileOrDirAbs) {
     entriesCount: texFiles.length + mp4Files.length + audioFiles.length,
     hasVideo: Boolean(videoSource),
     videoSource,
+    hasImage: Boolean(imageSource),
+    imageSource,
     hasAudio: Boolean(audioFiles[0]),
     audioAbsPath: audioFiles[0] ? audioFiles[0].full : null,
   };
@@ -756,6 +1201,69 @@ export function extractSceneVideoPayload(fileOrDirAbs, opts = {}) {
     return { kind: 'file', absPath: cachedMp4Path, mime: 'video/mp4', cached: false };
   }
   return { kind: 'buffer', bytes: extractedBytes, mime: 'video/mp4' };
+}
+
+/**
+ * Extract the highest-resolution static background `.tex` image from a Scene container.
+ * When `opts.cacheDir` is provided, persists to `<cacheDir>/scene-media/<hash>.img.<ext>`
+ * so subsequent plays stream directly from disk.
+ */
+export function extractSceneImagePayload(fileOrDirAbs, opts = {}) {
+  const cacheDir = typeof opts?.cacheDir === 'string' ? opts.cacheDir.trim() : '';
+  const containerHash = cacheDir ? computeSceneContainerHash(fileOrDirAbs) : '';
+  const cachedExts = [
+    { ext: '.png', mime: 'image/png' },
+    { ext: '.jpg', mime: 'image/jpeg' },
+    { ext: '.webp', mime: 'image/webp' },
+  ];
+
+  if (cacheDir && containerHash) {
+    for (const item of cachedExts) {
+      const p = join(cacheDir, 'scene-media', `${containerHash}.img${item.ext}`);
+      if (existsSync(p)) {
+        try {
+          const st = statSync(p);
+          if (st.isFile() && st.size >= 64) {
+            return { kind: 'file', absPath: p, mime: item.mime, cached: true };
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  }
+
+  const info = inspectSceneContainer(fileOrDirAbs);
+  if (!info.hasImage || !info.imageSource) return null;
+  const is = info.imageSource;
+
+  let extracted = null;
+  if (is.kind === 'loose-tex-img') {
+    extracted = extractImageFromTexBytes(readFileSync(is.absPath));
+  } else if (is.kind === 'pkg-tex-img') {
+    const raw = readPkgFileEntry(fileOrDirAbs, is.entry);
+    extracted = extractImageFromTexBytes(raw);
+  }
+  if (!extracted || !extracted.bytes || extracted.bytes.byteLength < 64) return null;
+
+  if (cacheDir && containerHash) {
+    const outPath = join(cacheDir, 'scene-media', `${containerHash}.img${extracted.ext}`);
+    if (persistBufferAtomically(outPath, extracted.bytes)) {
+      return {
+        kind: 'file',
+        absPath: outPath,
+        mime: extracted.mime,
+        width: extracted.width,
+        height: extracted.height,
+        cached: false,
+      };
+    }
+  }
+  return {
+    kind: 'buffer',
+    bytes: extracted.bytes,
+    mime: extracted.mime,
+    width: extracted.width,
+    height: extracted.height,
+  };
 }
 
 /** Extract packaged audio bytes (persisted to `<cacheDir>/scene-media/<hash>-audio<ext>` when `cacheDir` is set). */

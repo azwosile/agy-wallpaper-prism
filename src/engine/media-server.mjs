@@ -28,6 +28,7 @@ import { Writable } from 'node:stream';
 import { createMp4VfsKit, createVirtualSegmentStream, probeMp4Metadata } from './mp4-vfs.mjs';
 import {
   extractSceneAudioPayload,
+  extractSceneImagePayload,
   extractSceneVideoPayload,
 } from './pkg-scene.mjs';
 import {
@@ -979,7 +980,7 @@ export async function createMediaServer(opts = {}) {
     stream.pipe(res);
   }
 
-  function serveBufferWithRange(req, res, bytes, mime, etag = '') {
+  function serveBufferWithRange(req, res, bytes, mime, etag = '', { cacheControl = 'public, max-age=300' } = {}) {
     const buf = Buffer.isBuffer(bytes)
       ? bytes
       : Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -987,7 +988,7 @@ export async function createMediaServer(opts = {}) {
     const headers = {
       'Content-Type': mime,
       'Accept-Ranges': 'bytes',
-      'Cache-Control': 'public, max-age=300',
+      'Cache-Control': cacheControl,
     };
     if (etag) {
       headers.ETag = etag;
@@ -1215,6 +1216,7 @@ export async function createMediaServer(opts = {}) {
       serveFileWithRange(req, res, fsMeta.primaryAbs, {
         useMp4Vfs: true,
         sessionKey: `${token}:${parsedUrl.searchParams.get('s') || 'main'}`,
+        cacheControl: 'no-store',
       });
       return;
     }
@@ -1412,7 +1414,7 @@ export async function createMediaServer(opts = {}) {
         sendJson(req, res, 404, { error: 'No loose audio file' });
         return;
       }
-      serveFileWithRange(req, res, fsMeta.looseAudioAbs);
+      serveFileWithRange(req, res, fsMeta.looseAudioAbs, { cacheControl: 'no-store' });
       return;
     }
 
@@ -1433,11 +1435,43 @@ export async function createMediaServer(opts = {}) {
         return;
       }
       if (payload.kind === 'file' && payload.absPath) {
-        serveFileWithRange(req, res, payload.absPath, { useMp4Vfs: true, sessionKey: `scene-vid:${token}` });
+        serveFileWithRange(req, res, payload.absPath, {
+          useMp4Vfs: true,
+          sessionKey: `scene-vid:${token}`,
+          cacheControl: 'no-store',
+        });
       } else if (payload.kind === 'buffer' && payload.bytes) {
-        serveBufferWithRange(req, res, payload.bytes, payload.mime || 'video/mp4', `"sv-${token}-${mtimeTag}"`);
+        serveBufferWithRange(req, res, payload.bytes, payload.mime || 'video/mp4', `"sv-${token}-${mtimeTag}"`, {
+          cacheControl: 'no-store',
+        });
       } else {
         sendJson(req, res, 404, { error: 'Empty scene video payload' });
+      }
+      return;
+    }
+
+    if (route === 'scene-image') {
+      if (!fsMeta.sceneContainerAbs) {
+        sendJson(req, res, 404, { error: 'No scene container' });
+        return;
+      }
+      let mtimeTag = '0';
+      try { mtimeTag = String(Math.trunc(statSync(fsMeta.sceneContainerAbs).mtimeMs)); } catch { /* ignore */ }
+      const cacheDir = cacheDirGetter();
+      const payload = getCachedSceneBuffer(
+        `img:${token}:${mtimeTag}:${cacheDir ? 'disk' : 'mem'}`,
+        () => extractSceneImagePayload(fsMeta.sceneContainerAbs, { cacheDir }),
+      );
+      if (!payload) {
+        sendJson(req, res, 404, { error: 'No static image texture inside scene container' });
+        return;
+      }
+      if (payload.kind === 'file' && payload.absPath) {
+        serveFileWithRange(req, res, payload.absPath, { cacheControl: 'public, max-age=86400' });
+      } else if (payload.kind === 'buffer' && payload.bytes) {
+        serveBufferWithRange(req, res, payload.bytes, payload.mime || 'image/png', `"si-${token}-${mtimeTag}"`);
+      } else {
+        sendJson(req, res, 404, { error: 'Empty scene image payload' });
       }
       return;
     }
@@ -1459,9 +1493,11 @@ export async function createMediaServer(opts = {}) {
         return;
       }
       if (payload.kind === 'file' && payload.absPath) {
-        serveFileWithRange(req, res, payload.absPath);
+        serveFileWithRange(req, res, payload.absPath, { cacheControl: 'no-store' });
       } else if (payload.kind === 'buffer' && payload.bytes) {
-        serveBufferWithRange(req, res, payload.bytes, payload.mime || 'audio/mpeg', `"sa-${token}-${mtimeTag}"`);
+        serveBufferWithRange(req, res, payload.bytes, payload.mime || 'audio/mpeg', `"sa-${token}-${mtimeTag}"`, {
+          cacheControl: 'no-store',
+        });
       } else {
         sendJson(req, res, 404, { error: 'Empty scene audio payload' });
       }
@@ -1502,10 +1538,12 @@ export async function createMediaServer(opts = {}) {
     if (route === 'scene-live') {
       const ctx = runtimeContextGetter(entry) || {};
       const cfg = ctx.config || {};
+      const encToken = encodeURIComponent(token);
       const html = buildLiveSceneHtml(entry, cfg, {
-        sceneVideoUrl: entry.sceneVideoUrl || '',
-        thumbUrl: entry.thumbUrl || '',
-        audioUrl: entry.audioUrl || '',
+        sceneVideoUrl: entry.sceneVideoUrl ? `../scene-video/${encToken}` : '',
+        sceneImageUrl: entry.sceneImageUrl ? `../scene-image/${encToken}` : '',
+        thumbUrl: entry.thumbUrl ? `../preview/${encToken}` : '',
+        audioUrl: entry.audioUrl ? (fsMeta.hasSceneAudio ? `../scene-audio/${encToken}` : `../audio/${encToken}`) : '',
       });
       const body = Buffer.from(html, 'utf8');
       res.writeHead(200, {
@@ -1553,7 +1591,8 @@ export async function createMediaServer(opts = {}) {
         const fps = Number(cfg.fpsCap) > 0 ? Number(cfg.fpsCap) : 30;
         const dirRel = posix.dirname(resolved.relPosix);
         const baseSuffix = dirRel && dirRel !== '.' ? `${encodeUrlSubpath(dirRel)}/` : '';
-        const baseHref = `${origin}/web/${encodeURIComponent(token)}/${baseSuffix}`;
+        const proxyBase = String(req.headers['x-prism-proxy-base'] || '').trim().replace(/\/+$/, '');
+        const baseHref = `${proxyBase || origin}/web/${encodeURIComponent(token)}/${baseSuffix}`;
         const injected = injectWebWallpaperHtml(rawHtml, {
           baseHref,
           seedProps,
@@ -1635,6 +1674,7 @@ export async function createMediaServer(opts = {}) {
         ? `${origin}/preview/${encToken}`
         : '';
       const sceneVideoUrl = fsMeta.hasSceneVideo ? `${origin}/scene-video/${encToken}` : '';
+      const sceneImageUrl = fsMeta.hasSceneImage ? `${origin}/scene-image/${encToken}` : '';
       const sceneLiveUrl = raw.kind === 'scene' ? `${origin}/scene-live/${encToken}` : '';
       const videoStageUrl = (raw.kind === 'video' && fsMeta.primaryAbs)
         ? `${origin}/video-stage/${encToken}`
@@ -1683,6 +1723,7 @@ export async function createMediaServer(opts = {}) {
         slidesUrl,
         ...(slides ? { slides } : {}),
         sceneVideoUrl,
+        sceneImageUrl,
         sceneLiveUrl,
         videoStageUrl,
         mseFmp4Url,

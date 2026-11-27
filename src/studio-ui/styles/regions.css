@@ -189,7 +189,6 @@
    Minimal Wide-Screen Left Rail Profile Card (zero duplicate sliders)
    ========================================================================== */
 .prism-rail-profile-card {
-  display: flex;
   flex-direction: column;
   gap: 7px;
   padding: 10px 12px;
