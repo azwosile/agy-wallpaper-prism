@@ -67,6 +67,7 @@ export const REQUIRED_RUNTIME_FILES = Object.freeze([
   'src/host/index.mjs',
   'src/host/wallpaper-inject.js',
   'src/host/panel-inject.js',
+  'src/host/inspector-inject.js',
   'host/cli.mjs',
 ]);
 

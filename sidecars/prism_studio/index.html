@@ -4709,6 +4709,121 @@ html[data-prism-dormant="1"] .prism-spinner {
   border-bottom: 1px solid var(--prism-border-hairline);
 }
 
+/* ==========================================================================
+   Phase 2: CDP Live Host Region Picker Button, Banner & Focus Pulse
+   ========================================================================== */
+.prism-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-color: rgba(var(--prism-accent-rgb), 0.34);
+  background: rgba(var(--prism-accent-rgb), 0.09);
+  color: var(--prism-fg);
+  transition: background var(--prism-dur-fast) ease, border-color var(--prism-dur-fast) ease, box-shadow var(--prism-dur-fast) ease;
+}
+
+.prism-picker-btn:hover:not(:disabled) {
+  background: rgba(var(--prism-accent-rgb), 0.17);
+  border-color: rgba(var(--prism-accent-rgb), 0.62);
+}
+
+.prism-picker-btn.is-busy {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.prism-picker-btn.is-picking {
+  background: rgba(var(--prism-accent-rgb), 0.22);
+  border-color: var(--prism-accent);
+  color: var(--prism-fg);
+  font-weight: 600;
+  animation: prism-picker-pulse 1.5s ease-in-out infinite;
+}
+
+.prism-picker-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid rgba(var(--prism-accent-rgb), 0.42);
+  background: rgba(var(--prism-accent-rgb), 0.11);
+  color: var(--prism-fg);
+}
+
+.prism-ve-picker-banner {
+  flex: 0 0 auto;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  padding: 6px 12px;
+}
+
+.prism-picker-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.prism-picker-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--prism-accent);
+  animation: prism-picker-dot-pulse 1.3s ease-in-out infinite;
+}
+
+.prism-picker-banner-text {
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--prism-fg);
+}
+
+.prism-ve-pick-highlight {
+  animation: prism-ve-pick-flash 1.35s var(--prism-ease-out) 1;
+}
+
+@keyframes prism-picker-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(var(--prism-accent-rgb), 0.34);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(var(--prism-accent-rgb), 0.12);
+  }
+}
+
+@keyframes prism-picker-dot-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--prism-accent-rgb), 0.55);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 5px rgba(var(--prism-accent-rgb), 0);
+  }
+}
+
+@keyframes prism-ve-pick-flash {
+  0% {
+    box-shadow: 0 0 0 3px rgba(var(--prism-accent-rgb), 0.72), 0 0 16px rgba(var(--prism-accent-rgb), 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--prism-accent-rgb), 0);
+  }
+}
+
+html[data-prism-dormant="1"] .prism-picker-btn.is-picking,
+html[data-prism-dormant="1"] .prism-picker-pulse-dot {
+  animation: none;
+}
+
 
 </style>
 </head>
@@ -4729,13 +4844,13 @@ const __prism_mod_2 = (function() {
 // Shared across src/engine, src/host, src/studio-ui, sidecars/prism_studio, and test/verify-all.
 const PLUGIN_ID = 'agy-wallpaper-prism';
 const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-const PLUGIN_VERSION = '2.2.0';
+const PLUGIN_VERSION = '2.3.0';
 const SIDECAR_ID = 'prism_studio';
 const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 const DEFAULT_DEBUG_PORT = 9339;
 const PRISM_DOM = Object.freeze({
-  skinVersion: '2.2.0',
+  skinVersion: '2.3.0',
   skinAttr: 'data-agy-prism-skin',
   glassAttr: 'data-agy-prism-glass',
   wallpaperAttr: 'data-agy-prism-wallpaper',
@@ -4763,6 +4878,7 @@ const PRISM_DOM = Object.freeze({
   bindingName: '__agyPrismCall',
   skinGlobal: '__agyPrism',
   panelGlobal: '__agyPrismPanel',
+  inspectorGlobal: '__agyPrismInspector',
 });
 const STARTUP_MODES = Object.freeze(['gentle-auto', 'manual', 'static-css']);
 const CANARY_STATES = Object.freeze(['idle', 'arming', 'healthy', 'tripped']);
@@ -5142,6 +5258,10 @@ const REGION_IDS = Object.freeze([
 ]);
 const SURFACE_TINT_COMPONENTS = REGION_IDS;
 const GLASS_COMPONENT_IDS = REGION_IDS;
+const SKIN_REGION_KEYS = REGION_IDS;
+function getValidRegionIdSet() {
+  return new Set(REGION_IDS);
+}
 const SURFACE_TINT_BOUNDS = Object.freeze({
   topbar: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
   wco: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
@@ -6927,7 +7047,7 @@ function resolveEffectiveConfig(config = DEFAULT_CONFIG, wallpaperId = config.ac
   return sanitizeConfig(filtered, clean);
 }
 
-return { createDefaultRegionEntry: createDefaultRegionEntry, createDefaultRegions: createDefaultRegions, createDefaultSurfaceTints: createDefaultSurfaceTints, nullableNum: nullableNum, sanitizeFontFamily: sanitizeFontFamily, sanitizeSidebarRadius: sanitizeSidebarRadius, hexToRgbTriplet: hexToRgbTriplet, contrastFgForHex: contrastFgForHex, hexToRgbArray: hexToRgbArray, rgbArrayToHex: rgbArrayToHex, relLumRgb: relLumRgb, contrastRatioRgb: contrastRatioRgb, enforceFgContrastRgb: enforceFgContrastRgb, resolveRegionFgColor: resolveRegionFgColor, resolveSchemeTokens: resolveSchemeTokens, mergeRegionsPatch: mergeRegionsPatch, sanitizeRegions: sanitizeRegions, projectSurfaceTintsFromRegions: projectSurfaceTintsFromRegions, sanitizeSurfaceTints: sanitizeSurfaceTints, resolveComponentDefaultAlpha: resolveComponentDefaultAlpha, sanitizeConfig: sanitizeConfig, applyResetScope: applyResetScope, resolveEffectiveConfig: resolveEffectiveConfig, PLUGIN_ID: PLUGIN_ID, PLUGIN_DISPLAY_NAME: PLUGIN_DISPLAY_NAME, PLUGIN_VERSION: PLUGIN_VERSION, SIDECAR_ID: SIDECAR_ID, SIDECAR_URI: SIDECAR_URI, CUSTOMIZATION_URI: CUSTOMIZATION_URI, DEFAULT_DEBUG_PORT: DEFAULT_DEBUG_PORT, PRISM_DOM: PRISM_DOM, STARTUP_MODES: STARTUP_MODES, CANARY_STATES: CANARY_STATES, WALLPAPER_KINDS: WALLPAPER_KINDS, LIBRARY_KINDS: LIBRARY_KINDS, CONTENT_RATINGS: CONTENT_RATINGS, LAYOUT_MODES: LAYOUT_MODES, TOPBAR_STYLES: TOPBAR_STYLES, CORNER_STYLES: CORNER_STYLES, BORDER_MODES: BORDER_MODES, THEME_MODES: THEME_MODES, CODE_READABILITY_MODES: CODE_READABILITY_MODES, FIT_MODES: FIT_MODES, FILTER_PRESETS: FILTER_PRESETS, SWITCH_TRANSITIONS: SWITCH_TRANSITIONS, SWITCH_DIRECTIONS: SWITCH_DIRECTIONS, SWITCH_SPEEDS: SWITCH_SPEEDS, ROTATION_ORDERS: ROTATION_ORDERS, ROTATION_TRIGGERS: ROTATION_TRIGGERS, TRIGGER_MODES: TRIGGER_MODES, LANGUAGES: LANGUAGES, SIDEBAR_RADII: SIDEBAR_RADII, SIDEBAR_RADIUS_RANGE: SIDEBAR_RADIUS_RANGE, BORDER_STYLES: BORDER_STYLES, SIDEBAR_LIST_STYLES: SIDEBAR_LIST_STYLES, SIDEBAR_TYPOGRAPHY_MODES: SIDEBAR_TYPOGRAPHY_MODES, LIBRARY_ANIMATED_THUMB_MODES: LIBRARY_ANIMATED_THUMB_MODES, CJK_SAFE_FONT_PRESETS: CJK_SAFE_FONT_PRESETS, COLOR_SCHEMES: COLOR_SCHEMES, COLOR_SCHEME_IDS: COLOR_SCHEME_IDS, ACCENT_MODES: ACCENT_MODES, ACCENT_PRESETS: ACCENT_PRESETS, REGION_IDS: REGION_IDS, SURFACE_TINT_COMPONENTS: SURFACE_TINT_COMPONENTS, GLASS_COMPONENT_IDS: GLASS_COMPONENT_IDS, SURFACE_TINT_BOUNDS: SURFACE_TINT_BOUNDS, REGION_FONT_SIZE_BOUNDS: REGION_FONT_SIZE_BOUNDS, REGION_OPTICAL_KEYS: REGION_OPTICAL_KEYS, REGION_STRUCTURAL_KEYS: REGION_STRUCTURAL_KEYS, SIDEBAR_REGION_EXTRA_KEYS: SIDEBAR_REGION_EXTRA_KEYS, DEFAULT_REGION_ENTRY: DEFAULT_REGION_ENTRY, DEFAULT_SIDEBAR_REGION_ENTRY: DEFAULT_SIDEBAR_REGION_ENTRY, DEFAULT_REGIONS: DEFAULT_REGIONS, DEFAULT_SURFACE_TINT_ENTRY: DEFAULT_SURFACE_TINT_ENTRY, DEFAULT_SURFACE_TINTS: DEFAULT_SURFACE_TINTS, SCENE_PRESETS: SCENE_PRESETS, SCENE_PRESET_IDS: SCENE_PRESET_IDS, FACTORY_PRESETS: FACTORY_PRESETS, DEFAULT_CONFIG: DEFAULT_CONFIG, RESET_SCOPES: RESET_SCOPES, PER_WALLPAPER_OVERRIDE_KEYS: PER_WALLPAPER_OVERRIDE_KEYS, FAST_OPTICAL_KEYS: FAST_OPTICAL_KEYS, FAST_OPTICAL_KEYS_MAP: FAST_OPTICAL_KEYS_MAP, FONT_FAMILY_FORBIDDEN_CHARS_RE: FONT_FAMILY_FORBIDDEN_CHARS_RE, FONT_FAMILY_FORBIDDEN_KW_RE: FONT_FAMILY_FORBIDDEN_KW_RE, FONT_FAMILY_TOKEN_RE: FONT_FAMILY_TOKEN_RE };
+return { getValidRegionIdSet: getValidRegionIdSet, createDefaultRegionEntry: createDefaultRegionEntry, createDefaultRegions: createDefaultRegions, createDefaultSurfaceTints: createDefaultSurfaceTints, nullableNum: nullableNum, sanitizeFontFamily: sanitizeFontFamily, sanitizeSidebarRadius: sanitizeSidebarRadius, hexToRgbTriplet: hexToRgbTriplet, contrastFgForHex: contrastFgForHex, hexToRgbArray: hexToRgbArray, rgbArrayToHex: rgbArrayToHex, relLumRgb: relLumRgb, contrastRatioRgb: contrastRatioRgb, enforceFgContrastRgb: enforceFgContrastRgb, resolveRegionFgColor: resolveRegionFgColor, resolveSchemeTokens: resolveSchemeTokens, mergeRegionsPatch: mergeRegionsPatch, sanitizeRegions: sanitizeRegions, projectSurfaceTintsFromRegions: projectSurfaceTintsFromRegions, sanitizeSurfaceTints: sanitizeSurfaceTints, resolveComponentDefaultAlpha: resolveComponentDefaultAlpha, sanitizeConfig: sanitizeConfig, applyResetScope: applyResetScope, resolveEffectiveConfig: resolveEffectiveConfig, PLUGIN_ID: PLUGIN_ID, PLUGIN_DISPLAY_NAME: PLUGIN_DISPLAY_NAME, PLUGIN_VERSION: PLUGIN_VERSION, SIDECAR_ID: SIDECAR_ID, SIDECAR_URI: SIDECAR_URI, CUSTOMIZATION_URI: CUSTOMIZATION_URI, DEFAULT_DEBUG_PORT: DEFAULT_DEBUG_PORT, PRISM_DOM: PRISM_DOM, STARTUP_MODES: STARTUP_MODES, CANARY_STATES: CANARY_STATES, WALLPAPER_KINDS: WALLPAPER_KINDS, LIBRARY_KINDS: LIBRARY_KINDS, CONTENT_RATINGS: CONTENT_RATINGS, LAYOUT_MODES: LAYOUT_MODES, TOPBAR_STYLES: TOPBAR_STYLES, CORNER_STYLES: CORNER_STYLES, BORDER_MODES: BORDER_MODES, THEME_MODES: THEME_MODES, CODE_READABILITY_MODES: CODE_READABILITY_MODES, FIT_MODES: FIT_MODES, FILTER_PRESETS: FILTER_PRESETS, SWITCH_TRANSITIONS: SWITCH_TRANSITIONS, SWITCH_DIRECTIONS: SWITCH_DIRECTIONS, SWITCH_SPEEDS: SWITCH_SPEEDS, ROTATION_ORDERS: ROTATION_ORDERS, ROTATION_TRIGGERS: ROTATION_TRIGGERS, TRIGGER_MODES: TRIGGER_MODES, LANGUAGES: LANGUAGES, SIDEBAR_RADII: SIDEBAR_RADII, SIDEBAR_RADIUS_RANGE: SIDEBAR_RADIUS_RANGE, BORDER_STYLES: BORDER_STYLES, SIDEBAR_LIST_STYLES: SIDEBAR_LIST_STYLES, SIDEBAR_TYPOGRAPHY_MODES: SIDEBAR_TYPOGRAPHY_MODES, LIBRARY_ANIMATED_THUMB_MODES: LIBRARY_ANIMATED_THUMB_MODES, CJK_SAFE_FONT_PRESETS: CJK_SAFE_FONT_PRESETS, COLOR_SCHEMES: COLOR_SCHEMES, COLOR_SCHEME_IDS: COLOR_SCHEME_IDS, ACCENT_MODES: ACCENT_MODES, ACCENT_PRESETS: ACCENT_PRESETS, REGION_IDS: REGION_IDS, SURFACE_TINT_COMPONENTS: SURFACE_TINT_COMPONENTS, GLASS_COMPONENT_IDS: GLASS_COMPONENT_IDS, SKIN_REGION_KEYS: SKIN_REGION_KEYS, SURFACE_TINT_BOUNDS: SURFACE_TINT_BOUNDS, REGION_FONT_SIZE_BOUNDS: REGION_FONT_SIZE_BOUNDS, REGION_OPTICAL_KEYS: REGION_OPTICAL_KEYS, REGION_STRUCTURAL_KEYS: REGION_STRUCTURAL_KEYS, SIDEBAR_REGION_EXTRA_KEYS: SIDEBAR_REGION_EXTRA_KEYS, DEFAULT_REGION_ENTRY: DEFAULT_REGION_ENTRY, DEFAULT_SIDEBAR_REGION_ENTRY: DEFAULT_SIDEBAR_REGION_ENTRY, DEFAULT_REGIONS: DEFAULT_REGIONS, DEFAULT_SURFACE_TINT_ENTRY: DEFAULT_SURFACE_TINT_ENTRY, DEFAULT_SURFACE_TINTS: DEFAULT_SURFACE_TINTS, SCENE_PRESETS: SCENE_PRESETS, SCENE_PRESET_IDS: SCENE_PRESET_IDS, FACTORY_PRESETS: FACTORY_PRESETS, DEFAULT_CONFIG: DEFAULT_CONFIG, RESET_SCOPES: RESET_SCOPES, PER_WALLPAPER_OVERRIDE_KEYS: PER_WALLPAPER_OVERRIDE_KEYS, FAST_OPTICAL_KEYS: FAST_OPTICAL_KEYS, FAST_OPTICAL_KEYS_MAP: FAST_OPTICAL_KEYS_MAP, FONT_FAMILY_FORBIDDEN_CHARS_RE: FONT_FAMILY_FORBIDDEN_CHARS_RE, FONT_FAMILY_FORBIDDEN_KW_RE: FONT_FAMILY_FORBIDDEN_KW_RE, FONT_FAMILY_TOKEN_RE: FONT_FAMILY_TOKEN_RE };
 })();
 
 const __prism_mod_4 = (function() {
@@ -7402,6 +7522,12 @@ const DICT = Object.freeze({
     'editor.selectRegionPrompt': '点击左侧结构树或画布中任意区域即可精调',
     'editor.pickHostBtn': '🎯 拾取真实界面区域',
     'editor.pickHostHint': '点击 Antigravity 窗口任意区域即可定位，按 Esc 取消',
+    // v2.3.0: CDP Live Host Region Picker (5 keys)
+    'editor.pickHostCancel': '✕ 取消拾取',
+    'editor.pickHostActiveBanner': '正在 Antigravity 窗口中拾取区域 — 点击任意界面元素即可定位，按 Esc 或右键取消',
+    'editor.pickHostPickedToast': '已定位至区域：{region}',
+    'editor.pickHostCancelledToast': '已退出宿主区域拾取',
+    'editor.pickHostUnavailable': '未检测到可用的 Antigravity 宿主窗口（请开启普通快捷方式自启或检查 CDP 连接）',
   }),
 
   en: Object.freeze({
@@ -7872,6 +7998,12 @@ const DICT = Object.freeze({
     'editor.selectRegionPrompt': 'Click any region in the tree or canvas to customize',
     'editor.pickHostBtn': '🎯 Pick Live Host Region',
     'editor.pickHostHint': 'Click any region in Antigravity to inspect, or press Esc to cancel',
+    // v2.3.0: CDP Live Host Region Picker (5 keys)
+    'editor.pickHostCancel': '✕ Cancel Pick',
+    'editor.pickHostActiveBanner': 'Host region picker active — click any element in Antigravity to inspect, or press Esc / right-click to cancel',
+    'editor.pickHostPickedToast': 'Focused region: {region}',
+    'editor.pickHostCancelledToast': 'Exited host region picker',
+    'editor.pickHostUnavailable': 'No live Antigravity host window reachable — enable shortcut auto-load or check CDP connection',
   }),
 });
 function resolveLocale(langPref = 'auto', hostNavigatorLang = '') {
@@ -8245,6 +8377,15 @@ const store = {
   canvasShowPopover: false,
   canvasShowEmptyLogo: false,
   canvasPreviewTheme: null, // null (follow config) | 'dark' | 'light'
+
+  // Phase 2 CDP Live Host Region Picker state
+  inspectorPicking: false,
+  inspectorBusy: false,
+  inspectorSessionId: '',
+  inspectorTargetCount: 0,
+  inspectorLastPicked: '',
+  inspectorLastPickedAt: 0,
+  inspectorError: '',
 
   // 2-step inline confirmation (never window.confirm / alert)
   armedConfirm: null, // { key, timer }
@@ -9307,6 +9448,20 @@ function ingestServerState(payload, { forceConfig = false } = {}) {
     store.sessionAwake = s.hostStatus.sessionAwake;
   }
 
+  // Guardrail V3: ONLY sync inspectorPicking when payload provides an object `inspectorStatus`
+  if (s.inspectorStatus && typeof s.inspectorStatus === 'object') {
+    const nextActive = Boolean(s.inspectorStatus.active);
+    store.inspectorPicking = nextActive;
+    store.inspectorSessionId = String(s.inspectorStatus.sessionId || '');
+    store.inspectorTargetCount = Number(s.inspectorStatus.targetCount) || 0;
+    if (typeof s.inspectorStatus.lastPickedRegion === 'string' && s.inspectorStatus.lastPickedRegion) {
+      store.inspectorLastPicked = s.inspectorStatus.lastPickedRegion;
+    }
+    if (!nextActive) {
+      store.inspectorBusy = false;
+    }
+  }
+
   const autoSrc = (s.autostart && typeof s.autostart === 'object' ? s.autostart : null) || {};
   const hsSrc = (s.hostStatus && typeof s.hostStatus === 'object' ? s.hostStatus : null) || {};
   if ('normalShortcutEnabled' in s || 'normalShortcutEnabled' in autoSrc || 'normalShortcutEnabled' in hsSrc) {
@@ -9394,6 +9549,73 @@ function setArmedConfirm(key) {
   }, 6000);
   store.armedConfirm = { key, timer };
   hooks.renderActiveSurface();
+}
+
+// ============================================================================
+// Phase 2: CDP Live Host Region Picker Actions
+// ============================================================================
+async function startInspectorPick() {
+  if (store.inspectorBusy) {
+    return { ok: false, busy: true };
+  }
+  if (store.inspectorPicking) {
+    return cancelInspectorPick('studio-cancel');
+  }
+  store.inspectorBusy = true;
+  store.inspectorError = '';
+  hooks.renderActiveSurface();
+  try {
+    const res = await apiJson('/api/inspector/pick', {
+      method: 'POST',
+      body: { lang: curLocale() },
+      timeoutMs: 8000,
+    });
+    store.inspectorBusy = false;
+    store.inspectorPicking = Boolean(res?.active ?? true);
+    store.inspectorSessionId = String(res?.sessionId || res?.inspectorStatus?.sessionId || '');
+    store.inspectorTargetCount = Number(res?.targetCount ?? res?.inspectorStatus?.targetCount) || 1;
+    store.inspectorError = '';
+    hooks.renderActiveSurface();
+    return res;
+  } catch (err) {
+    const code = String(err?.code || err?.data?.code || '');
+    const isUnavailableCode =
+      code === 'ERR_CDP_UNAVAILABLE' ||
+      code === 'ERR_NO_HUB_TARGETS' ||
+      code === 'ERR_PLUGIN_DISABLED' ||
+      code === 'ERR_INSPECTOR_INJECT_FAILED';
+    const msg = isUnavailableCode
+      ? tr('editor.pickHostUnavailable')
+      : err?.message || tr('editor.pickHostUnavailable');
+    store.inspectorBusy = false;
+    store.inspectorPicking = false;
+    store.inspectorSessionId = '';
+    store.inspectorTargetCount = 0;
+    store.inspectorError = msg;
+    showToast(msg, 'warn', 4800);
+    hooks.renderActiveSurface();
+    return { ok: false, code, error: msg };
+  }
+}
+async function cancelInspectorPick(reason = 'studio-cancel') {
+  const cleanReason = typeof reason === 'string' && reason.trim() ? reason.trim().slice(0, 64) : 'studio-cancel';
+  const wasPicking = Boolean(store.inspectorPicking || store.inspectorBusy);
+  store.inspectorPicking = false;
+  store.inspectorBusy = false;
+  store.inspectorSessionId = '';
+  store.inspectorTargetCount = 0;
+  if (wasPicking) {
+    hooks.renderActiveSurface();
+  }
+  try {
+    return await apiJson('/api/inspector/cancel', {
+      method: 'POST',
+      body: { reason: cleanReason },
+      timeoutMs: 5000,
+    });
+  } catch {
+    return { ok: false, cancelled: false, reason: cleanReason };
+  }
 }
 
 // ============================================================================
@@ -9726,7 +9948,7 @@ function updateStatusSignature() {
   ]);
 }
 
-return { detectInitialHostPolarity: detectInitialHostPolarity, loadOpenRegions: loadOpenRegions, saveOpenRegions: saveOpenRegions, registerHooks: registerHooks, curLocale: curLocale, tr: tr, trWithFallback: trWithFallback, tx: tx, esc: esc, formatBytes: formatBytes, sanitizeExternalReleaseUrl: sanitizeExternalReleaseUrl, formatUpdateTimestamp: formatUpdateTimestamp, stripHtml: stripHtml, withStaticPreviewParam: withStaticPreviewParam, isStudioViewportActive: isStudioViewportActive, getSidecarAuthToken: getSidecarAuthToken, apiFetch: apiFetch, apiJson: apiJson, getActiveId: getActiveId, getEffectiveConfig: getEffectiveConfig, getResolvedPolarity: getResolvedPolarity, hasPerWallpaperPin: hasPerWallpaperPin, isHostAttached: isHostAttached, resolvePreviewVideoUrl: resolvePreviewVideoUrl, getMasterToggleLabel: getMasterToggleLabel, getMasterToggleHint: getMasterToggleHint, isRegionOpen: isRegionOpen, setRegionOpen: setRegionOpen, setAllRegionsOpen: setAllRegionsOpen, hasAnyRegionOpen: hasAnyRegionOpen, mergeSurfaceTintsPatch: mergeSurfaceTintsPatch, mergeConfigPatches: mergeConfigPatches, buildConfigPatchForKey: buildConfigPatchForKey, setSaveStatus: setSaveStatus, applyLocalPatch: applyLocalPatch, queueConfigPatch: queueConfigPatch, flushConfigPatch: flushConfigPatch, flushConfigPatchKeepalive: flushConfigPatchKeepalive, ingestUpdateStatus: ingestUpdateStatus, ingestServerState: ingestServerState, showToast: showToast, setArmedConfirm: setArmedConfirm, normalizeWeProperties: normalizeWeProperties, evaluateWeCondition: evaluateWeCondition, computeLibraryModel: computeLibraryModel, computeQuickQueueItems: computeQuickQueueItems, externalStateSignature: externalStateSignature, updateStatusSignature: updateStatusSignature, MAX_UPLOAD_BYTES: MAX_UPLOAD_BYTES, CONFIG_THROTTLE_MS: CONFIG_THROTTLE_MS, API_TIMEOUT_MS: API_TIMEOUT_MS, VIRTUAL_SCROLL_THRESHOLD: VIRTUAL_SCROLL_THRESHOLD, OPEN_REGIONS_STORAGE_KEY: OPEN_REGIONS_STORAGE_KEY, REGION_UI_ORDER: REGION_UI_ORDER, REGION_RESET_EXTRA_KEYS: REGION_RESET_EXTRA_KEYS, EXTRA_COPY: EXTRA_COPY, store: store, hooks: hooks };
+return { detectInitialHostPolarity: detectInitialHostPolarity, loadOpenRegions: loadOpenRegions, saveOpenRegions: saveOpenRegions, registerHooks: registerHooks, curLocale: curLocale, tr: tr, trWithFallback: trWithFallback, tx: tx, esc: esc, formatBytes: formatBytes, sanitizeExternalReleaseUrl: sanitizeExternalReleaseUrl, formatUpdateTimestamp: formatUpdateTimestamp, stripHtml: stripHtml, withStaticPreviewParam: withStaticPreviewParam, isStudioViewportActive: isStudioViewportActive, getSidecarAuthToken: getSidecarAuthToken, apiFetch: apiFetch, apiJson: apiJson, getActiveId: getActiveId, getEffectiveConfig: getEffectiveConfig, getResolvedPolarity: getResolvedPolarity, hasPerWallpaperPin: hasPerWallpaperPin, isHostAttached: isHostAttached, resolvePreviewVideoUrl: resolvePreviewVideoUrl, getMasterToggleLabel: getMasterToggleLabel, getMasterToggleHint: getMasterToggleHint, isRegionOpen: isRegionOpen, setRegionOpen: setRegionOpen, setAllRegionsOpen: setAllRegionsOpen, hasAnyRegionOpen: hasAnyRegionOpen, mergeSurfaceTintsPatch: mergeSurfaceTintsPatch, mergeConfigPatches: mergeConfigPatches, buildConfigPatchForKey: buildConfigPatchForKey, setSaveStatus: setSaveStatus, applyLocalPatch: applyLocalPatch, queueConfigPatch: queueConfigPatch, flushConfigPatch: flushConfigPatch, flushConfigPatchKeepalive: flushConfigPatchKeepalive, ingestUpdateStatus: ingestUpdateStatus, ingestServerState: ingestServerState, showToast: showToast, setArmedConfirm: setArmedConfirm, startInspectorPick: startInspectorPick, cancelInspectorPick: cancelInspectorPick, normalizeWeProperties: normalizeWeProperties, evaluateWeCondition: evaluateWeCondition, computeLibraryModel: computeLibraryModel, computeQuickQueueItems: computeQuickQueueItems, externalStateSignature: externalStateSignature, updateStatusSignature: updateStatusSignature, MAX_UPLOAD_BYTES: MAX_UPLOAD_BYTES, CONFIG_THROTTLE_MS: CONFIG_THROTTLE_MS, API_TIMEOUT_MS: API_TIMEOUT_MS, VIRTUAL_SCROLL_THRESHOLD: VIRTUAL_SCROLL_THRESHOLD, OPEN_REGIONS_STORAGE_KEY: OPEN_REGIONS_STORAGE_KEY, REGION_UI_ORDER: REGION_UI_ORDER, REGION_RESET_EXTRA_KEYS: REGION_RESET_EXTRA_KEYS, EXTRA_COPY: EXTRA_COPY, store: store, hooks: hooks };
 })();
 
 const __prism_mod_5 = (function() {
@@ -12526,6 +12748,8 @@ function renderSkinTopActionBarHtml(eff = getEffectiveConfig()) {
   const anyOpen = hasAnyRegionOpen();
   const totalCustom = countTotalCustomizedRegions(eff, REGION_UI_ORDER);
   const busy = Boolean(store.profileOpBusy);
+  const pickerPicking = Boolean(store.inspectorPicking);
+  const pickerBusy = Boolean(store.inspectorBusy);
   const overwriteConfirmKey = activePreset && !activePreset.builtin ? `overwrite-preset:${activePreset.id}` : '';
   const overwriteArmed = Boolean(overwriteConfirmKey && store.armedConfirm?.key === overwriteConfirmKey);
 
@@ -12551,7 +12775,7 @@ function renderSkinTopActionBarHtml(eff = getEffectiveConfig()) {
               : `<span class="prism-chip" style="cursor:default">${esc(tr('region.scopeGlobal'))}</span>`
           }
         </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap">
           ${
             activeId
               ? `<button type="button" class="prism-btn prism-btn-sm" data-action="open-inspector" data-id="${esc(activeId)}">
@@ -12559,6 +12783,14 @@ function renderSkinTopActionBarHtml(eff = getEffectiveConfig()) {
                  </button>`
               : ''
           }
+          <button type="button"
+                  class="prism-btn prism-btn-sm prism-picker-btn${pickerPicking ? ' is-picking' : ''}${pickerBusy ? ' is-busy' : ''}"
+                  data-action="${pickerPicking ? 'cancel-host-pick' : 'pick-host-region'}"
+                  aria-pressed="${pickerPicking ? 'true' : 'false'}"
+                  title="${esc(tr('editor.pickHostHint'))}"
+                  ${pickerBusy ? 'disabled' : ''}>
+            ${esc(pickerPicking ? tr('editor.pickHostCancel') : tr('editor.pickHostBtn'))}
+          </button>
           <button type="button" class="prism-btn prism-btn-sm prism-btn-primary" data-action="open-visual-editor">
             ${esc(tr('editor.openBtn'))}
           </button>
@@ -12622,6 +12854,21 @@ function renderSkinTopActionBarHtml(eff = getEffectiveConfig()) {
           </span>
         </div>
       </div>
+      ${
+        pickerPicking
+          ? `
+        <div id="prism-skin-picker-banner" class="prism-picker-banner" role="status" aria-live="polite">
+          <div class="prism-picker-banner-info">
+            <span class="prism-picker-pulse-dot" aria-hidden="true"></span>
+            <span class="prism-picker-banner-text">${esc(tr('editor.pickHostActiveBanner'))}</span>
+          </div>
+          <button type="button" class="prism-btn prism-btn-sm prism-btn-danger" data-action="cancel-host-pick">
+            ${esc(tr('editor.pickHostCancel'))}
+          </button>
+        </div>
+      `
+          : ''
+      }
     </div>
   `;
 }
@@ -13684,6 +13931,38 @@ function renderGlobalRegionBody(eff, polarity) {
     </div>
   `;
 }
+function mapPickerRegionToAccordionId(regionId) {
+  return regionId === 'card' ? 'workspace' : regionId;
+}
+function focusSkinRegionAccordionInDom(regionId) {
+  if (typeof document === 'undefined' || !regionId) return false;
+  const accRid = mapPickerRegionToAccordionId(regionId);
+  const det = document.querySelector(`details.prism-region-group[data-region="${accRid}"]`);
+  if (!(det instanceof HTMLElement)) return false;
+  if ('open' in det && !det.open) {
+    det.open = true;
+  }
+  const targetEl =
+    regionId === 'card'
+      ? det.querySelector('.prism-region-subgroup[data-region-subgroup="card"]') || det
+      : det;
+  try {
+    targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch {
+    targetEl.scrollIntoView();
+  }
+  const flashTarget =
+    regionId === 'card'
+      ? det.querySelector('.prism-region-subgroup[data-region-subgroup="card"]') || det
+      : det.querySelector('summary') || det;
+  if (flashTarget instanceof HTMLElement) {
+    flashTarget.classList.remove('prism-ve-pick-highlight');
+    void flashTarget.offsetWidth;
+    flashTarget.classList.add('prism-ve-pick-highlight');
+    setTimeout(() => flashTarget.classList.remove('prism-ve-pick-highlight'), 1400);
+  }
+  return true;
+}
 function renderRegionGroupHtml(regionId, eff = getEffectiveConfig(), polarity = getResolvedPolarity(eff)) {
   const isLight = polarity === 'light';
   const tokens = resolveSchemeTokens(eff, polarity);
@@ -13725,7 +14004,7 @@ function renderPrismSkinTab() {
   `;
 }
 
-return { isCurrentStateDirtyFromPreset: isCurrentStateDirtyFromPreset, renderSkinTopActionBarHtml: renderSkinTopActionBarHtml, renderPresetsGridHtml: renderPresetsGridHtml, renderPresetsManagerDrawerHtml: renderPresetsManagerDrawerHtml, renderRegionGroupHtml: renderRegionGroupHtml, renderPrismSkinTab: renderPrismSkinTab };
+return { isCurrentStateDirtyFromPreset: isCurrentStateDirtyFromPreset, renderSkinTopActionBarHtml: renderSkinTopActionBarHtml, renderPresetsGridHtml: renderPresetsGridHtml, renderPresetsManagerDrawerHtml: renderPresetsManagerDrawerHtml, mapPickerRegionToAccordionId: mapPickerRegionToAccordionId, focusSkinRegionAccordionInDom: focusSkinRegionAccordionInDom, renderRegionGroupHtml: renderRegionGroupHtml, renderPrismSkinTab: renderPrismSkinTab };
 })();
 
 const __prism_mod_9 = (function() {
@@ -15721,6 +16000,66 @@ function renderZoomAndPreviewTogglesHtml(eff) {
     </div>
   `;
 }
+
+function renderPickerTriggerButtonHtml() {
+  const picking = Boolean(store.inspectorPicking);
+  const busy = Boolean(store.inspectorBusy);
+  return `
+    <button type="button"
+            class="prism-btn prism-btn-sm prism-picker-btn${picking ? ' is-picking' : ''}${busy ? ' is-busy' : ''}"
+            data-action="${picking ? 'cancel-host-pick' : 'pick-host-region'}"
+            aria-pressed="${picking ? 'true' : 'false'}"
+            title="${esc(tr('editor.pickHostHint'))}"
+            ${busy ? 'disabled' : ''}>
+      ${esc(picking ? tr('editor.pickHostCancel') : tr('editor.pickHostBtn'))}
+    </button>
+  `;
+}
+
+function renderPickerActiveBannerHtml() {
+  if (!store.inspectorPicking) return '';
+  return `
+    <div id="prism-ve-picker-banner" class="prism-picker-banner prism-ve-picker-banner" role="status" aria-live="polite">
+      <div class="prism-picker-banner-info">
+        <span class="prism-picker-pulse-dot" aria-hidden="true"></span>
+        <span class="prism-picker-banner-text">${esc(tr('editor.pickHostActiveBanner'))}</span>
+      </div>
+      <button type="button" class="prism-btn prism-btn-sm prism-btn-danger" data-action="cancel-host-pick">
+        ${esc(tr('editor.pickHostCancel'))}
+      </button>
+    </div>
+  `;
+}
+function focusVisualEditorRegionInDom(regionId) {
+  if (typeof document === 'undefined' || !regionId) return false;
+  let focused = false;
+  document
+    .querySelectorAll(`[data-action="select-editor-region"][data-region="${regionId}"].is-selected`)
+    .forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      focused = true;
+      try {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      } catch {
+        el.scrollIntoView();
+      }
+      if (
+        el.classList.contains('prism-ve-tree-item') ||
+        el.classList.contains('prism-ve-region-chip') ||
+        el.hasAttribute('data-editor-region')
+      ) {
+        el.classList.remove('prism-ve-pick-highlight');
+        void el.offsetWidth;
+        el.classList.add('prism-ve-pick-highlight');
+        setTimeout(() => el.classList.remove('prism-ve-pick-highlight'), 1400);
+      }
+    });
+  const insp = document.getElementById('prism-ve-inspector-pane');
+  if (insp instanceof HTMLElement) {
+    insp.scrollTop = 0;
+  }
+  return focused;
+}
 function renderVisualEditorModalHtml() {
   if (!store.editorModalOpen) return '';
   const eff = getEffectiveConfig();
@@ -15738,6 +16077,7 @@ function renderVisualEditorModalHtml() {
         </div>
         <div class="prism-ve-toolbar-right">
           ${renderZoomAndPreviewTogglesHtml(eff)}
+          ${renderPickerTriggerButtonHtml()}
           <button type="button" class="prism-btn prism-btn-sm" data-action="popout-visual-editor">
             ${esc(tr('editor.popoutBtn'))}
           </button>
@@ -15746,6 +16086,7 @@ function renderVisualEditorModalHtml() {
           </button>
         </div>
       </header>
+      ${renderPickerActiveBannerHtml()}
 
       <div class="prism-ve-modal-body">
         <div class="prism-ve-region-strip" role="tablist" aria-label="${esc(tr('editor.treeTitle'))}">
@@ -15788,6 +16129,7 @@ function renderVisualEditorPopoutShellHtml() {
         </div>
         <div class="prism-ve-toolbar-right">
           ${renderZoomAndPreviewTogglesHtml(eff)}
+          ${renderPickerTriggerButtonHtml()}
           <span id="prism-top-status-pill" class="prism-status-pill" data-status="${!store.skinEnabled ? 'off' : attached ? 'attached' : 'standby'}">
             <span class="prism-status-dot"></span>
             <span id="prism-top-status-text">${esc(attached ? tr('editor.liveLinkedBadge') : tr('status.standby'))}</span>
@@ -15805,6 +16147,7 @@ function renderVisualEditorPopoutShellHtml() {
           </button>
         </div>
       </header>
+      ${renderPickerActiveBannerHtml()}
 
       <div class="prism-ve-ide-grid">
         <aside class="prism-ve-tree-pane">
@@ -15972,7 +16315,7 @@ function attachCanvasPanZoom(viewportEl = null, canvasEl = null) {
   return cleanup;
 }
 
-return { renderVisualCanvasStageHtml: renderVisualCanvasStageHtml, renderVisualEditorModalHtml: renderVisualEditorModalHtml, renderVisualEditorPopoutShellHtml: renderVisualEditorPopoutShellHtml, syncVisualCanvasZoomTransform: syncVisualCanvasZoomTransform, attachCanvasPanZoom: attachCanvasPanZoom };
+return { renderVisualCanvasStageHtml: renderVisualCanvasStageHtml, focusVisualEditorRegionInDom: focusVisualEditorRegionInDom, renderVisualEditorModalHtml: renderVisualEditorModalHtml, renderVisualEditorPopoutShellHtml: renderVisualEditorPopoutShellHtml, syncVisualCanvasZoomTransform: syncVisualCanvasZoomTransform, attachCanvasPanZoom: attachCanvasPanZoom };
 })();
 
 const __prism_mod_1 = (function() {
@@ -16022,6 +16365,8 @@ const ingestServerState = __prism_mod_3.ingestServerState;
 const ingestUpdateStatus = __prism_mod_3.ingestUpdateStatus;
 const showToast = __prism_mod_3.showToast;
 const setArmedConfirm = __prism_mod_3.setArmedConfirm;
+const startInspectorPick = __prism_mod_3.startInspectorPick;
+const cancelInspectorPick = __prism_mod_3.cancelInspectorPick;
 const normalizeWeProperties = __prism_mod_3.normalizeWeProperties;
 const evaluateWeCondition = __prism_mod_3.evaluateWeCondition;
 const computeLibraryModel = __prism_mod_3.computeLibraryModel;
@@ -16057,6 +16402,8 @@ const renderPresetsGridHtml = __prism_mod_8.renderPresetsGridHtml;
 const renderPresetsManagerDrawerHtml = __prism_mod_8.renderPresetsManagerDrawerHtml;
 const renderPrismSkinTab = __prism_mod_8.renderPrismSkinTab;
 const isCurrentStateDirtyFromPreset = __prism_mod_8.isCurrentStateDirtyFromPreset;
+const mapPickerRegionToAccordionId = __prism_mod_8.mapPickerRegionToAccordionId;
+const focusSkinRegionAccordionInDom = __prism_mod_8.focusSkinRegionAccordionInDom;
 const renderPlaylistPickerGridHtml = __prism_mod_9.renderPlaylistPickerGridHtml;
 const renderPlaybackTab = __prism_mod_9.renderPlaybackTab;
 const renderUpdateReconnectOverlay = __prism_mod_10.renderUpdateReconnectOverlay;
@@ -16066,6 +16413,7 @@ const renderVisualEditorModalHtml = __prism_mod_11.renderVisualEditorModalHtml;
 const renderVisualEditorPopoutShellHtml = __prism_mod_11.renderVisualEditorPopoutShellHtml;
 const attachCanvasPanZoom = __prism_mod_11.attachCanvasPanZoom;
 const syncVisualCanvasZoomTransform = __prism_mod_11.syncVisualCanvasZoomTransform;
+const focusVisualEditorRegionInDom = __prism_mod_11.focusVisualEditorRegionInDom;
 // Wallpaper Prism Studio UI — Layer 6 Thin-Shell Entrypoint, Event Delegation & Dormancy Engine
 // Imports L0-L5 strictly acyclic DAG modules. No exports (bundled via scripts/build.mjs).
 // Preserves exact symbol names `installStudioVisibilityGuards` & `disconnectStudioEvents` (verify-all.mjs:L1594-L1598).
@@ -17627,6 +17975,72 @@ function bootPrismStudioApp() {
     }
   }
 
+  function handleInspectorPicked(data) {
+    const regionId = typeof data?.regionId === 'string' ? data.regionId.trim() : '';
+    if (!regionId || !REGION_IDS.includes(regionId)) return;
+
+    store.inspectorPicking = false;
+    store.inspectorBusy = false;
+    store.inspectorSessionId = '';
+    store.inspectorTargetCount = 0;
+    store.inspectorError = '';
+    store.inspectorLastPicked = regionId;
+    store.inspectorLastPickedAt = Date.now();
+    store.selectedRegion = regionId;
+
+    const accRid = mapPickerRegionToAccordionId(regionId);
+    if (!store.isPopoutMode) {
+      setRegionOpen(accRid, true);
+      if (!store.editorModalOpen) {
+        store.activeTab = 'skin';
+      }
+    }
+
+    renderActiveSurface();
+
+    if (store.isPopoutMode || store.editorModalOpen) {
+      focusVisualEditorRegionInDom(regionId);
+    } else if (store.activeTab === 'skin') {
+      focusSkinRegionAccordionInDom(regionId);
+    }
+
+    showToast(tr('editor.pickHostPickedToast', { region: tr(`region.${regionId}`) }), 'ok', 2800);
+  }
+
+  function handleInspectorCancelled(data) {
+    const reason = typeof data?.reason === 'string' ? data.reason.trim() : 'unknown';
+    const wasPickingOrBusy = Boolean(store.inspectorPicking || store.inspectorBusy);
+    store.inspectorPicking = false;
+    store.inspectorBusy = false;
+    store.inspectorSessionId = '';
+    store.inspectorTargetCount = 0;
+    if (wasPickingOrBusy) {
+      renderActiveSurface();
+    }
+    if (reason !== 'restarted' && reason !== 'picked') {
+      showToast(tr('editor.pickHostCancelledToast'), 'info', 2400);
+    }
+  }
+
+  function handleInspectorStatus(data) {
+    if (!data || typeof data !== 'object') return;
+    const nextActive = Boolean(data.active);
+    const nextTargetCount = Number(data.targetCount) || 0;
+    const nextSessionId = String(data.sessionId || '');
+    const changed =
+      store.inspectorPicking !== nextActive ||
+      store.inspectorTargetCount !== nextTargetCount ||
+      store.inspectorSessionId !== nextSessionId ||
+      store.inspectorBusy;
+    store.inspectorPicking = nextActive;
+    store.inspectorBusy = false;
+    store.inspectorSessionId = nextSessionId;
+    store.inspectorTargetCount = nextTargetCount;
+    if (changed) {
+      renderActiveSurface();
+    }
+  }
+
   // FS Browser, WE Properties & Auto-Update Actions
   async function openFsBrowser(kind) {
     const startPath =
@@ -18313,14 +18727,19 @@ function bootPrismStudioApp() {
         case 'jump-to-region': {
           e.stopPropagation();
           const rawRid = actEl.dataset.region || 'sidebar';
-          const accRid = rawRid === 'card' ? 'workspace' : rawRid;
+          const accRid = mapPickerRegionToAccordionId(rawRid);
           store.activeTab = 'skin';
           setRegionOpen(accRid, true);
           renderActiveSurface();
-          const det = document.querySelector(`details[data-region="${accRid}"]`);
-          if (det instanceof HTMLElement) {
-            det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
+          focusSkinRegionAccordionInDom(rawRid);
+          break;
+        }
+        case 'pick-host-region': {
+          await startInspectorPick();
+          break;
+        }
+        case 'cancel-host-pick': {
+          await cancelInspectorPick('studio-cancel');
           break;
         }
         case 'open-visual-editor': {
@@ -19455,6 +19874,11 @@ function bootPrismStudioApp() {
       }
 
       if (e.key === 'Escape') {
+        if (store.inspectorPicking) {
+          e.preventDefault();
+          void cancelInspectorPick('escape');
+          return;
+        }
         if (store.armedConfirm) {
           e.preventDefault();
           setArmedConfirm(null);
@@ -19633,6 +20057,7 @@ function bootPrismStudioApp() {
     }
 
     const wasAttached = isHostAttached();
+    const prevInspectorPicking = store.inspectorPicking;
     const prevCanaryState = store.canary?.state || 'idle';
     const prevSkinEnabled = store.skinEnabled;
     const prevActiveId = getActiveId();
@@ -19645,11 +20070,19 @@ function bootPrismStudioApp() {
     const nextActiveId = getActiveId();
     const nextSig = externalStateSignature();
     const nextUpdSig = updateStatusSignature();
+    const inspectorPickingChanged = store.inspectorPicking !== prevInspectorPicking;
     const canaryChanged = (store.canary?.state || 'idle') !== prevCanaryState;
     const skinChanged = store.skinEnabled !== prevSkinEnabled;
     const activeChanged = nextActiveId !== prevActiveId;
     const stateChanged = nextSig !== prevSig;
     const updateChanged = nextUpdSig !== prevUpdSig;
+
+    const activeEl = document.activeElement;
+    const isDraggingRange = activeEl instanceof HTMLInputElement && activeEl.type === 'range';
+    const isEditingField =
+      activeEl instanceof HTMLTextAreaElement ||
+      activeEl instanceof HTMLSelectElement ||
+      (activeEl instanceof HTMLInputElement && activeEl.type !== 'button' && activeEl.type !== 'checkbox');
 
     updateTopStatusIndicators();
 
@@ -19659,13 +20092,6 @@ function bootPrismStudioApp() {
       syncOpticalCssVars();
       syncRegionBadgesInDom();
       syncWcagBlocksInDom();
-
-      const activeEl = document.activeElement;
-      const isDraggingRange = activeEl instanceof HTMLInputElement && activeEl.type === 'range';
-      const isEditingField =
-        activeEl instanceof HTMLTextAreaElement ||
-        activeEl instanceof HTMLSelectElement ||
-        (activeEl instanceof HTMLInputElement && activeEl.type !== 'button' && activeEl.type !== 'checkbox');
 
       if (!isDraggingRange) {
         if (store.isPopoutMode) {
@@ -19691,9 +20117,11 @@ function bootPrismStudioApp() {
       }
     }
 
-    if ((!wasAttached && isHostAttached()) || canaryChanged || skinChanged || updateChanged) {
-      if (store.isPopoutMode || store.activeTab === 'system' || store.canary?.state === 'tripped') {
-        renderActiveSurface();
+    if ((!wasAttached && isHostAttached()) || canaryChanged || skinChanged || updateChanged || inspectorPickingChanged) {
+      if (store.isPopoutMode || store.activeTab === 'system' || store.canary?.state === 'tripped' || inspectorPickingChanged) {
+        if (!isDraggingRange && !isEditingField) {
+          renderActiveSurface();
+        }
       }
     }
   }
@@ -19737,16 +20165,31 @@ function bootPrismStudioApp() {
       const url = store.isPopoutMode ? '/api/events?channel=popout' : '/api/events';
       const es = new window.EventSource(url);
       rt.studioEventSource = es;
-      const handleEvent = (ev) => {
+      const parseSseJson = (ev) => {
         rt.studioLastSseAt = Date.now();
         try {
-          const parsed = JSON.parse(ev.data);
-          applyExternalStateSnapshot(parsed);
+          return JSON.parse(ev.data);
         } catch {
-          // ignore malformed SSE frame
+          return null;
         }
       };
+      const handleEvent = (ev) => {
+        const parsed = parseSseJson(ev);
+        if (parsed) applyExternalStateSnapshot(parsed);
+      };
       es.addEventListener('state', handleEvent);
+      es.addEventListener('inspector-picked', (ev) => {
+        const parsed = parseSseJson(ev);
+        if (parsed) handleInspectorPicked(parsed);
+      });
+      es.addEventListener('inspector-cancelled', (ev) => {
+        const parsed = parseSseJson(ev);
+        if (parsed) handleInspectorCancelled(parsed);
+      });
+      es.addEventListener('inspector-status', (ev) => {
+        const parsed = parseSseJson(ev);
+        if (parsed) handleInspectorStatus(parsed);
+      });
       es.onmessage = handleEvent;
       es.onerror = () => {
         if (!isStudioViewportActive() || rt.isDormant) {

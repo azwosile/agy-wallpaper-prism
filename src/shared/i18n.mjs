@@ -470,6 +470,12 @@ export const DICT = Object.freeze({
     'editor.selectRegionPrompt': '点击左侧结构树或画布中任意区域即可精调',
     'editor.pickHostBtn': '🎯 拾取真实界面区域',
     'editor.pickHostHint': '点击 Antigravity 窗口任意区域即可定位，按 Esc 取消',
+    // v2.3.0: CDP Live Host Region Picker (5 keys)
+    'editor.pickHostCancel': '✕ 取消拾取',
+    'editor.pickHostActiveBanner': '正在 Antigravity 窗口中拾取区域 — 点击任意界面元素即可定位，按 Esc 或右键取消',
+    'editor.pickHostPickedToast': '已定位至区域：{region}',
+    'editor.pickHostCancelledToast': '已退出宿主区域拾取',
+    'editor.pickHostUnavailable': '未检测到可用的 Antigravity 宿主窗口（请开启普通快捷方式自启或检查 CDP 连接）',
   }),
 
   en: Object.freeze({
@@ -940,6 +946,12 @@ export const DICT = Object.freeze({
     'editor.selectRegionPrompt': 'Click any region in the tree or canvas to customize',
     'editor.pickHostBtn': '🎯 Pick Live Host Region',
     'editor.pickHostHint': 'Click any region in Antigravity to inspect, or press Esc to cancel',
+    // v2.3.0: CDP Live Host Region Picker (5 keys)
+    'editor.pickHostCancel': '✕ Cancel Pick',
+    'editor.pickHostActiveBanner': 'Host region picker active — click any element in Antigravity to inspect, or press Esc / right-click to cancel',
+    'editor.pickHostPickedToast': 'Focused region: {region}',
+    'editor.pickHostCancelledToast': 'Exited host region picker',
+    'editor.pickHostUnavailable': 'No live Antigravity host window reachable — enable shortcut auto-load or check CDP connection',
   }),
 });
 

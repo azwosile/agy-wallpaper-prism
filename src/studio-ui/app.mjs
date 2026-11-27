@@ -52,6 +52,8 @@ import {
   ingestUpdateStatus,
   showToast,
   setArmedConfirm,
+  startInspectorPick,
+  cancelInspectorPick,
   normalizeWeProperties,
   evaluateWeCondition,
   computeLibraryModel,
@@ -99,6 +101,8 @@ import {
   renderPresetsManagerDrawerHtml,
   renderPrismSkinTab,
   isCurrentStateDirtyFromPreset,
+  mapPickerRegionToAccordionId,
+  focusSkinRegionAccordionInDom,
 } from './tabs/skin-regions.mjs';
 
 import {
@@ -117,6 +121,7 @@ import {
   renderVisualEditorPopoutShellHtml,
   attachCanvasPanZoom,
   syncVisualCanvasZoomTransform,
+  focusVisualEditorRegionInDom,
 } from './editor/visual-canvas.mjs';
 
 function bootPrismStudioApp() {
@@ -1658,6 +1663,72 @@ function bootPrismStudioApp() {
     }
   }
 
+  function handleInspectorPicked(data) {
+    const regionId = typeof data?.regionId === 'string' ? data.regionId.trim() : '';
+    if (!regionId || !REGION_IDS.includes(regionId)) return;
+
+    store.inspectorPicking = false;
+    store.inspectorBusy = false;
+    store.inspectorSessionId = '';
+    store.inspectorTargetCount = 0;
+    store.inspectorError = '';
+    store.inspectorLastPicked = regionId;
+    store.inspectorLastPickedAt = Date.now();
+    store.selectedRegion = regionId;
+
+    const accRid = mapPickerRegionToAccordionId(regionId);
+    if (!store.isPopoutMode) {
+      setRegionOpen(accRid, true);
+      if (!store.editorModalOpen) {
+        store.activeTab = 'skin';
+      }
+    }
+
+    renderActiveSurface();
+
+    if (store.isPopoutMode || store.editorModalOpen) {
+      focusVisualEditorRegionInDom(regionId);
+    } else if (store.activeTab === 'skin') {
+      focusSkinRegionAccordionInDom(regionId);
+    }
+
+    showToast(tr('editor.pickHostPickedToast', { region: tr(`region.${regionId}`) }), 'ok', 2800);
+  }
+
+  function handleInspectorCancelled(data) {
+    const reason = typeof data?.reason === 'string' ? data.reason.trim() : 'unknown';
+    const wasPickingOrBusy = Boolean(store.inspectorPicking || store.inspectorBusy);
+    store.inspectorPicking = false;
+    store.inspectorBusy = false;
+    store.inspectorSessionId = '';
+    store.inspectorTargetCount = 0;
+    if (wasPickingOrBusy) {
+      renderActiveSurface();
+    }
+    if (reason !== 'restarted' && reason !== 'picked') {
+      showToast(tr('editor.pickHostCancelledToast'), 'info', 2400);
+    }
+  }
+
+  function handleInspectorStatus(data) {
+    if (!data || typeof data !== 'object') return;
+    const nextActive = Boolean(data.active);
+    const nextTargetCount = Number(data.targetCount) || 0;
+    const nextSessionId = String(data.sessionId || '');
+    const changed =
+      store.inspectorPicking !== nextActive ||
+      store.inspectorTargetCount !== nextTargetCount ||
+      store.inspectorSessionId !== nextSessionId ||
+      store.inspectorBusy;
+    store.inspectorPicking = nextActive;
+    store.inspectorBusy = false;
+    store.inspectorSessionId = nextSessionId;
+    store.inspectorTargetCount = nextTargetCount;
+    if (changed) {
+      renderActiveSurface();
+    }
+  }
+
   // FS Browser, WE Properties & Auto-Update Actions
   async function openFsBrowser(kind) {
     const startPath =
@@ -2344,14 +2415,19 @@ function bootPrismStudioApp() {
         case 'jump-to-region': {
           e.stopPropagation();
           const rawRid = actEl.dataset.region || 'sidebar';
-          const accRid = rawRid === 'card' ? 'workspace' : rawRid;
+          const accRid = mapPickerRegionToAccordionId(rawRid);
           store.activeTab = 'skin';
           setRegionOpen(accRid, true);
           renderActiveSurface();
-          const det = document.querySelector(`details[data-region="${accRid}"]`);
-          if (det instanceof HTMLElement) {
-            det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
+          focusSkinRegionAccordionInDom(rawRid);
+          break;
+        }
+        case 'pick-host-region': {
+          await startInspectorPick();
+          break;
+        }
+        case 'cancel-host-pick': {
+          await cancelInspectorPick('studio-cancel');
           break;
         }
         case 'open-visual-editor': {
@@ -3486,6 +3562,11 @@ function bootPrismStudioApp() {
       }
 
       if (e.key === 'Escape') {
+        if (store.inspectorPicking) {
+          e.preventDefault();
+          void cancelInspectorPick('escape');
+          return;
+        }
         if (store.armedConfirm) {
           e.preventDefault();
           setArmedConfirm(null);
@@ -3664,6 +3745,7 @@ function bootPrismStudioApp() {
     }
 
     const wasAttached = isHostAttached();
+    const prevInspectorPicking = store.inspectorPicking;
     const prevCanaryState = store.canary?.state || 'idle';
     const prevSkinEnabled = store.skinEnabled;
     const prevActiveId = getActiveId();
@@ -3676,11 +3758,19 @@ function bootPrismStudioApp() {
     const nextActiveId = getActiveId();
     const nextSig = externalStateSignature();
     const nextUpdSig = updateStatusSignature();
+    const inspectorPickingChanged = store.inspectorPicking !== prevInspectorPicking;
     const canaryChanged = (store.canary?.state || 'idle') !== prevCanaryState;
     const skinChanged = store.skinEnabled !== prevSkinEnabled;
     const activeChanged = nextActiveId !== prevActiveId;
     const stateChanged = nextSig !== prevSig;
     const updateChanged = nextUpdSig !== prevUpdSig;
+
+    const activeEl = document.activeElement;
+    const isDraggingRange = activeEl instanceof HTMLInputElement && activeEl.type === 'range';
+    const isEditingField =
+      activeEl instanceof HTMLTextAreaElement ||
+      activeEl instanceof HTMLSelectElement ||
+      (activeEl instanceof HTMLInputElement && activeEl.type !== 'button' && activeEl.type !== 'checkbox');
 
     updateTopStatusIndicators();
 
@@ -3690,13 +3780,6 @@ function bootPrismStudioApp() {
       syncOpticalCssVars();
       syncRegionBadgesInDom();
       syncWcagBlocksInDom();
-
-      const activeEl = document.activeElement;
-      const isDraggingRange = activeEl instanceof HTMLInputElement && activeEl.type === 'range';
-      const isEditingField =
-        activeEl instanceof HTMLTextAreaElement ||
-        activeEl instanceof HTMLSelectElement ||
-        (activeEl instanceof HTMLInputElement && activeEl.type !== 'button' && activeEl.type !== 'checkbox');
 
       if (!isDraggingRange) {
         if (store.isPopoutMode) {
@@ -3722,9 +3805,11 @@ function bootPrismStudioApp() {
       }
     }
 
-    if ((!wasAttached && isHostAttached()) || canaryChanged || skinChanged || updateChanged) {
-      if (store.isPopoutMode || store.activeTab === 'system' || store.canary?.state === 'tripped') {
-        renderActiveSurface();
+    if ((!wasAttached && isHostAttached()) || canaryChanged || skinChanged || updateChanged || inspectorPickingChanged) {
+      if (store.isPopoutMode || store.activeTab === 'system' || store.canary?.state === 'tripped' || inspectorPickingChanged) {
+        if (!isDraggingRange && !isEditingField) {
+          renderActiveSurface();
+        }
       }
     }
   }
@@ -3768,16 +3853,31 @@ function bootPrismStudioApp() {
       const url = store.isPopoutMode ? '/api/events?channel=popout' : '/api/events';
       const es = new window.EventSource(url);
       rt.studioEventSource = es;
-      const handleEvent = (ev) => {
+      const parseSseJson = (ev) => {
         rt.studioLastSseAt = Date.now();
         try {
-          const parsed = JSON.parse(ev.data);
-          applyExternalStateSnapshot(parsed);
+          return JSON.parse(ev.data);
         } catch {
-          // ignore malformed SSE frame
+          return null;
         }
       };
+      const handleEvent = (ev) => {
+        const parsed = parseSseJson(ev);
+        if (parsed) applyExternalStateSnapshot(parsed);
+      };
       es.addEventListener('state', handleEvent);
+      es.addEventListener('inspector-picked', (ev) => {
+        const parsed = parseSseJson(ev);
+        if (parsed) handleInspectorPicked(parsed);
+      });
+      es.addEventListener('inspector-cancelled', (ev) => {
+        const parsed = parseSseJson(ev);
+        if (parsed) handleInspectorCancelled(parsed);
+      });
+      es.addEventListener('inspector-status', (ev) => {
+        const parsed = parseSseJson(ev);
+        if (parsed) handleInspectorStatus(parsed);
+      });
       es.onmessage = handleEvent;
       es.onerror = () => {
         if (!isStudioViewportActive() || rt.isDormant) {

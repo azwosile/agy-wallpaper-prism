@@ -10,7 +10,7 @@
  * - Windows reserved device-name (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`) & case-collision rejection
  * - 9-root runtime allowlist matching `scripts/install-local.mjs`
  * - Pre-swap validation of `plugin.json` (10-key whitelist, `name`, SemVer `isNewerVersion`),
- *   `package.json`, `sidecar.json`, 14 required runtime files, and prebuilt `sidecars/prism_studio/index.html`
+ *   `package.json`, `sidecar.json`, 15 required runtime files, and prebuilt `sidecars/prism_studio/index.html`
  */
 
 import {
@@ -74,6 +74,7 @@ export const REQUIRED_RUNTIME_FILES = Object.freeze([
   'src/host/index.mjs',
   'src/host/wallpaper-inject.js',
   'src/host/panel-inject.js',
+  'src/host/inspector-inject.js',
   'host/cli.mjs',
 ]);
 
@@ -680,7 +681,7 @@ export function validateStagedPlugin({
     );
   }
 
-  // 4. Verify all 14 required runtime files exist as non-empty regular files
+  // 4. Verify all 15 required runtime files exist as non-empty regular files
   for (const relPath of REQUIRED_RUNTIME_FILES) {
     const full = resolve(absStage, relPath);
     const relCheck = relative(absStage, full);

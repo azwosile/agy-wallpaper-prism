@@ -194,6 +194,8 @@ export function renderSkinTopActionBarHtml(eff = getEffectiveConfig()) {
   const anyOpen = hasAnyRegionOpen();
   const totalCustom = countTotalCustomizedRegions(eff, REGION_UI_ORDER);
   const busy = Boolean(store.profileOpBusy);
+  const pickerPicking = Boolean(store.inspectorPicking);
+  const pickerBusy = Boolean(store.inspectorBusy);
   const overwriteConfirmKey = activePreset && !activePreset.builtin ? `overwrite-preset:${activePreset.id}` : '';
   const overwriteArmed = Boolean(overwriteConfirmKey && store.armedConfirm?.key === overwriteConfirmKey);
 
@@ -219,7 +221,7 @@ export function renderSkinTopActionBarHtml(eff = getEffectiveConfig()) {
               : `<span class="prism-chip" style="cursor:default">${esc(tr('region.scopeGlobal'))}</span>`
           }
         </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap">
           ${
             activeId
               ? `<button type="button" class="prism-btn prism-btn-sm" data-action="open-inspector" data-id="${esc(activeId)}">
@@ -227,6 +229,14 @@ export function renderSkinTopActionBarHtml(eff = getEffectiveConfig()) {
                  </button>`
               : ''
           }
+          <button type="button"
+                  class="prism-btn prism-btn-sm prism-picker-btn${pickerPicking ? ' is-picking' : ''}${pickerBusy ? ' is-busy' : ''}"
+                  data-action="${pickerPicking ? 'cancel-host-pick' : 'pick-host-region'}"
+                  aria-pressed="${pickerPicking ? 'true' : 'false'}"
+                  title="${esc(tr('editor.pickHostHint'))}"
+                  ${pickerBusy ? 'disabled' : ''}>
+            ${esc(pickerPicking ? tr('editor.pickHostCancel') : tr('editor.pickHostBtn'))}
+          </button>
           <button type="button" class="prism-btn prism-btn-sm prism-btn-primary" data-action="open-visual-editor">
             ${esc(tr('editor.openBtn'))}
           </button>
@@ -290,6 +300,21 @@ export function renderSkinTopActionBarHtml(eff = getEffectiveConfig()) {
           </span>
         </div>
       </div>
+      ${
+        pickerPicking
+          ? `
+        <div id="prism-skin-picker-banner" class="prism-picker-banner" role="status" aria-live="polite">
+          <div class="prism-picker-banner-info">
+            <span class="prism-picker-pulse-dot" aria-hidden="true"></span>
+            <span class="prism-picker-banner-text">${esc(tr('editor.pickHostActiveBanner'))}</span>
+          </div>
+          <button type="button" class="prism-btn prism-btn-sm prism-btn-danger" data-action="cancel-host-pick">
+            ${esc(tr('editor.pickHostCancel'))}
+          </button>
+        </div>
+      `
+          : ''
+      }
     </div>
   `;
 }
@@ -1353,6 +1378,40 @@ function renderGlobalRegionBody(eff, polarity) {
       }
     </div>
   `;
+}
+
+export function mapPickerRegionToAccordionId(regionId) {
+  return regionId === 'card' ? 'workspace' : regionId;
+}
+
+export function focusSkinRegionAccordionInDom(regionId) {
+  if (typeof document === 'undefined' || !regionId) return false;
+  const accRid = mapPickerRegionToAccordionId(regionId);
+  const det = document.querySelector(`details.prism-region-group[data-region="${accRid}"]`);
+  if (!(det instanceof HTMLElement)) return false;
+  if ('open' in det && !det.open) {
+    det.open = true;
+  }
+  const targetEl =
+    regionId === 'card'
+      ? det.querySelector('.prism-region-subgroup[data-region-subgroup="card"]') || det
+      : det;
+  try {
+    targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch {
+    targetEl.scrollIntoView();
+  }
+  const flashTarget =
+    regionId === 'card'
+      ? det.querySelector('.prism-region-subgroup[data-region-subgroup="card"]') || det
+      : det.querySelector('summary') || det;
+  if (flashTarget instanceof HTMLElement) {
+    flashTarget.classList.remove('prism-ve-pick-highlight');
+    void flashTarget.offsetWidth;
+    flashTarget.classList.add('prism-ve-pick-highlight');
+    setTimeout(() => flashTarget.classList.remove('prism-ve-pick-highlight'), 1400);
+  }
+  return true;
 }
 
 export function renderRegionGroupHtml(regionId, eff = getEffectiveConfig(), polarity = getResolvedPolarity(eff)) {

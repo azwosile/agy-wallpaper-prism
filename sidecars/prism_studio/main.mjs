@@ -4,7 +4,7 @@
 
 import { execFile } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdirSync, openSync, readFileSync, readSync, closeSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, closeSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
@@ -17,6 +17,7 @@ import {
   PLUGIN_ID,
   PLUGIN_VERSION,
   PRISM_DOM,
+  REGION_IDS,
   SCENE_PRESETS,
   SCENE_PRESET_IDS,
   SIDECAR_URI,
@@ -61,11 +62,20 @@ const FALLBACK_REGION_IDS = Object.freeze([
 ]);
 
 function getValidRegionIdSet() {
+  if (typeof schemaModule.getValidRegionIdSet === 'function') {
+    return schemaModule.getValidRegionIdSet();
+  }
   const list =
-    Array.isArray(schemaModule.REGION_IDS) && schemaModule.REGION_IDS.length > 0
-      ? schemaModule.REGION_IDS
-      : FALLBACK_REGION_IDS;
+    Array.isArray(REGION_IDS) && REGION_IDS.length > 0
+      ? REGION_IDS
+      : Array.isArray(schemaModule.SKIN_REGION_KEYS) && schemaModule.SKIN_REGION_KEYS.length > 0
+        ? schemaModule.SKIN_REGION_KEYS
+        : FALLBACK_REGION_IDS;
   return new Set(list);
+}
+
+function safeJsonLiteral(value) {
+  return JSON.stringify(value).replace(/[\u2028\u2029<]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 
 function launchSystemBrowserNoShell(targetUrl, { platform = process.platform, openExternalUrl = null } = {}) {
@@ -431,11 +441,13 @@ function upsertSidecarRegistry(dataDir, entry) {
   writeSidecarRegistryEntries(registryPath, kept.slice(-16));
 }
 
-function removeSidecarRegistryPid(dataDir, pid) {
+function removeSidecarRegistryPid(dataDir, pid, port = 0) {
   const registryPath = join(dataDir, 'sidecar-registry.json');
   if (!existsSync(registryPath)) return;
   const existing = readSidecarRegistryEntries(registryPath);
-  const kept = existing.filter((e) => e.pid !== pid && isPidAlive(e.pid));
+  const kept = existing.filter(
+    (e) => isPidAlive(e.pid) && !(e.pid === pid && (!port || !e.port || e.port === port)),
+  );
   writeSidecarRegistryEntries(registryPath, kept);
 }
 
@@ -803,12 +815,17 @@ export async function createPrismStudioServer(options = {}) {
   const stateEpoch = options.stateEpoch
     ? String(options.stateEpoch)
     : `${process.pid}-${randomBytes(6).toString('hex')}`;
+  const updaterEnv = options.env || process.env;
   const exitOnShutdown = options.exitOnShutdown !== undefined ? Boolean(options.exitOnShutdown) : isMainEntry();
   const orphanMonitorEnabled =
-    options.monitorParentOrphan !== undefined ? Boolean(options.monitorParentOrphan) : isMainEntry();
+    options.monitorParentOrphan !== undefined
+      ? Boolean(options.monitorParentOrphan)
+      : (isMainEntry() && isManagedSidecar(updaterEnv, options.managedSidecar));
   let checkOwnershipAndYield = async () => false;
   const resolvedPluginRoot = options.pluginRoot ? resolve(options.pluginRoot) : PLUGIN_ROOT;
-  const updaterEnv = options.env || process.env;
+  const instanceId = String(options.instanceId || randomBytes(12).toString('hex'));
+  const serverInfoPath = join(dataDir, 'server_info.json');
+  let actualPort = listenPort;
   let closed = false;
   let stateRev = 1;
   let deferredPushDepth = 0;
@@ -862,6 +879,48 @@ export async function createPrismStudioServer(options = {}) {
       return cachedIndexHtml;
     } catch {
       return cachedIndexHtml || FALLBACK_INDEX_HTML;
+    }
+  };
+
+  const writeServerInfoAtomic = (payload) => {
+    const body = `${JSON.stringify(payload, null, 2)}\n`;
+    const tmpPath = `${serverInfoPath}.tmp.${process.pid}.${instanceId}`;
+    try {
+      writeFileSync(tmpPath, body, { encoding: 'utf8', mode: 0o600 });
+      renameSync(tmpPath, serverInfoPath);
+    } catch {
+      try {
+        rmSync(tmpPath, { force: true });
+      } catch {
+        /* ignore */
+      }
+      try {
+        writeFileSync(serverInfoPath, body, { encoding: 'utf8', mode: 0o600 });
+      } catch {
+        /* non-fatal */
+      }
+    }
+  };
+
+  const isServerInfoOwnedBySelf = (info) => {
+    if (!info || typeof info !== 'object') return true;
+    if (info.plugin && info.plugin !== PLUGIN_ID) return true;
+    if (typeof info.instanceId === 'string' && info.instanceId) {
+      return info.instanceId === instanceId;
+    }
+    return info.pid === process.pid && (!Number.isInteger(info.port) || info.port === actualPort);
+  };
+
+  const isAuthoritativeOwner = () => {
+    if (closed) return false;
+    try {
+      if (!existsSync(serverInfoPath)) return true;
+      const raw = readFileSync(serverInfoPath, 'utf8');
+      if (!raw || !raw.trim()) return true;
+      const info = JSON.parse(raw);
+      return isServerInfoOwnedBySelf(info);
+    } catch {
+      return true;
     }
   };
 
@@ -996,6 +1055,45 @@ export async function createPrismStudioServer(options = {}) {
     return lib.items.find((i) => i.id === activeId) || null;
   };
 
+  let inspectorState = {
+    active: false,
+    sessionId: '',
+    startedAt: 0,
+    timeoutMs: 45000,
+    targetCount: 0,
+    lastPickedRegion: '',
+    lastCancelledReason: '',
+    timer: null,
+  };
+
+  const getInspectorStatus = () => ({
+    active: Boolean(inspectorState.active),
+    sessionId: inspectorState.sessionId,
+    startedAt: inspectorState.startedAt,
+    targetCount: inspectorState.targetCount,
+    lastPickedRegion: inspectorState.lastPickedRegion,
+    lastCancelledReason: inspectorState.lastCancelledReason,
+  });
+
+  const clearInspectorTimer = () => {
+    if (inspectorState.timer) {
+      clearTimeout(inspectorState.timer);
+      inspectorState.timer = null;
+    }
+  };
+
+  const clearInspectorSession = ({ lastPickedRegion, lastCancelledReason } = {}) => {
+    clearInspectorTimer();
+    const prevSessionId = inspectorState.sessionId;
+    inspectorState.active = false;
+    inspectorState.sessionId = '';
+    inspectorState.startedAt = 0;
+    inspectorState.targetCount = 0;
+    if (lastPickedRegion !== undefined) inspectorState.lastPickedRegion = lastPickedRegion;
+    if (lastCancelledReason !== undefined) inspectorState.lastCancelledReason = lastCancelledReason;
+    return prevSessionId;
+  };
+
   const buildCanonicalState = async ({ includeAutostart = true } = {}) => {
     let config;
     let activeItem = null;
@@ -1096,6 +1194,7 @@ export async function createPrismStudioServer(options = {}) {
       version: PLUGIN_VERSION,
       studioUri: SIDECAR_URI,
       stateEpoch,
+      inspectorStatus: getInspectorStatus(),
       updateStatus: cachedUpdateStatus,
       updateSummary: buildUpdateSummary(cachedUpdateStatus),
     };
@@ -1106,6 +1205,47 @@ export async function createPrismStudioServer(options = {}) {
   let studioBroadcastScheduled = false;
   let studioBroadcastPending = false;
   let studioBroadcastForce = false;
+
+  const broadcastStudioEvent = (eventName, payload = {}) => {
+    if (studioSseClients.size === 0) return 0;
+    const serialized = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
+    let sent = 0;
+    for (const clientRes of [...studioSseClients.keys()]) {
+      if (clientRes.writableEnded || clientRes.destroyed) {
+        studioSseClients.delete(clientRes);
+        continue;
+      }
+      try {
+        clientRes.write(serialized);
+        sent += 1;
+      } catch {
+        studioSseClients.delete(clientRes);
+      }
+    }
+    return sent;
+  };
+
+  const startInspectorSession = ({ sessionId, targetCount, timeoutMs = 45000 }) => {
+    clearInspectorTimer();
+    inspectorState.active = true;
+    inspectorState.sessionId = sessionId;
+    inspectorState.startedAt = Date.now();
+    inspectorState.timeoutMs = timeoutMs;
+    inspectorState.targetCount = targetCount;
+    inspectorState.lastCancelledReason = '';
+    const t = setTimeout(() => {
+      if (!inspectorState.active || inspectorState.sessionId !== sessionId) return;
+      clearInspectorSession({ lastCancelledReason: 'timeout' });
+      const activeBridge = options.inspectorController || cdpBridge;
+      if (activeBridge?.cancelInspectorPick) {
+        void activeBridge.cancelInspectorPick({ reason: 'timeout' }).catch(() => {});
+      }
+      broadcastStudioEvent('inspector-cancelled', { reason: 'timeout', sessionId, ts: Date.now() });
+      broadcastStudioEvent('inspector-status', getInspectorStatus());
+    }, timeoutMs + 2000);
+    t.unref?.();
+    inspectorState.timer = t;
+  };
 
   const broadcastStudioState = async ({ force = false } = {}) => {
     if (studioSseClients.size === 0) return;
@@ -1617,6 +1757,56 @@ export async function createPrismStudioServer(options = {}) {
       const state = await buildCanonicalState();
       return { ok: res.ok, autostart: res, stateRev: state.stateRev, state };
     },
+    'inspector.picked': async (params = {}) => {
+      const regionId = typeof params?.regionId === 'string' ? params.regionId.trim() : '';
+      if (!regionId || !getValidRegionIdSet().has(regionId)) {
+        throw Object.assign(new Error(`Invalid regionId: ${regionId || '(empty)'}`), {
+          statusCode: 400,
+          code: 'ERR_INVALID_REGION',
+        });
+      }
+      const prevSessionId = clearInspectorSession({ lastPickedRegion: regionId, lastCancelledReason: '' });
+      const activeBridge = options.inspectorController || cdpBridge;
+      if (activeBridge?.cancelInspectorPick) {
+        void activeBridge.cancelInspectorPick({ reason: 'picked' }).catch(() => {});
+      }
+      const eventPayload = {
+        regionId,
+        source: 'host-picker',
+        sessionId: prevSessionId || (typeof params?.sessionId === 'string' ? params.sessionId.slice(0, 64) : ''),
+        selector: typeof params?.selector === 'string' ? params.selector.slice(0, 160) : '',
+        matchedBy: typeof params?.matchedBy === 'string' ? params.matchedBy.slice(0, 160) : '',
+        ts: Date.now(),
+      };
+      broadcastStudioEvent('inspector-picked', eventPayload);
+      broadcastStudioEvent('inspector-status', getInspectorStatus());
+      return { ok: true, regionId, inspectorStatus: getInspectorStatus() };
+    },
+    'inspector.cancelled': async (params = {}) => {
+      const allowedReasons = new Set([
+        'escape',
+        'contextmenu',
+        'timeout',
+        'studio-cancel',
+        'teardown',
+        'restarted',
+        'no_match',
+        'removed',
+        'error',
+        'unknown',
+      ]);
+      const rawReason = typeof params?.reason === 'string' ? params.reason.trim() : 'unknown';
+      const reason = allowedReasons.has(rawReason) ? rawReason : 'unknown';
+      const prevSessionId = clearInspectorSession({ lastCancelledReason: reason });
+      const payload = {
+        reason,
+        sessionId: prevSessionId || (typeof params?.sessionId === 'string' ? params.sessionId.slice(0, 64) : ''),
+        ts: Date.now(),
+      };
+      broadcastStudioEvent('inspector-cancelled', payload);
+      broadcastStudioEvent('inspector-status', getInspectorStatus());
+      return { ok: true, cancelled: true, reason, inspectorStatus: getInspectorStatus() };
+    },
     'studio.open': async () => ({ ok: true, uri: SIDECAR_URI }),
   };
 
@@ -1632,11 +1822,32 @@ export async function createPrismStudioServer(options = {}) {
       pluginRoot: resolvedPluginRoot,
       canaryController,
       stateEpoch,
-      onOwnershipLost: () => checkOwnershipAndYield(),
       cdpPort: options.cdpPort || 0,
       pollMs: options.cdpPollMs ?? 3000,
       configPath: options.hostConfigPath || '',
       profileDir: options.profileDir || '',
+      isAuthoritativeOwner,
+      onOwnershipLost: (reasonOrInfo) => {
+        if (typeof reasonOrInfo === 'string') {
+          if (closed || shutdownInFlight) return false;
+          shutdownInFlight = true;
+          const safetyExit = exitOnShutdown ? setTimeout(() => process.exit(0), 1500) : null;
+          safetyExit?.unref?.();
+          void close({ preserveHostDom: true })
+            .catch(() => {})
+            .finally(() => {
+              if (safetyExit) clearTimeout(safetyExit);
+              try {
+                options.onSuperseded?.(reasonOrInfo);
+              } catch {
+                /* ignore */
+              }
+              if (exitOnShutdown) process.exit(0);
+            });
+          return true;
+        }
+        return checkOwnershipAndYield();
+      },
       log: options.log || (() => {}),
     });
   }
@@ -1715,12 +1926,14 @@ export async function createPrismStudioServer(options = {}) {
     const pathname = urlObj.pathname;
     const reqOrigin = typeof req.headers.origin === 'string' && req.headers.origin ? req.headers.origin : '*';
 
-    // Strict preflight interception for /api/update/*, /api/healthz, /api/studio/popout & /api/shutdown BEFORE global wildcard/PNA OPTIONS
+    // Strict preflight interception for /api/update/*, /api/healthz, /api/studio/popout, /api/inspector/* & /api/shutdown BEFORE global wildcard/PNA OPTIONS
     const isStrictRoute =
       pathname === '/api/healthz' ||
       pathname === '/api/update' ||
       pathname.startsWith('/api/update/') ||
       pathname === '/api/studio/popout' ||
+      pathname === '/api/inspector/pick' ||
+      pathname === '/api/inspector/cancel' ||
       pathname === '/api/shutdown';
     if (req.method === 'OPTIONS' && isStrictRoute) {
       const rawOrigin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
@@ -1730,7 +1943,11 @@ export async function createPrismStudioServer(options = {}) {
       }
       const preflightHeaders = {
         'Access-Control-Allow-Methods':
-          pathname === '/api/update/apply' || pathname === '/api/studio/popout' || pathname === '/api/shutdown'
+          pathname === '/api/update/apply' ||
+          pathname === '/api/studio/popout' ||
+          pathname === '/api/inspector/pick' ||
+          pathname === '/api/inspector/cancel' ||
+          pathname === '/api/shutdown'
             ? 'POST, OPTIONS'
             : 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, X-Sidecar-Token',
@@ -1761,7 +1978,7 @@ export async function createPrismStudioServer(options = {}) {
     }
 
     // ---- Capability-Fenced Direct Host Bridge Routes (`/host/<256bitCapToken>/*`) ----
-    const hostMatch = /^\/host\/([a-zA-Z0-9_-]{16,128})\/(stage\.js|panel\.js|static\.css|rpc|events)$/.exec(pathname);
+    const hostMatch = /^\/host\/([a-zA-Z0-9_-]{16,128})\/(stage\.js|panel\.js|inspector\.js|static\.css|rpc|events)$/.exec(pathname);
     if (hostMatch) {
       const [, reqCap, asset] = hostMatch;
       const hostHeaders = {
@@ -1809,6 +2026,37 @@ export async function createPrismStudioServer(options = {}) {
         return;
       }
 
+      if (req.method === 'GET' && asset === 'inspector.js') {
+        const getInspectorScript = hostModule.getHostInspectorScript;
+        if (typeof getInspectorScript !== 'function') {
+          sendJson(
+            res,
+            503,
+            { ok: false, code: 'ERR_INSPECTOR_UNAVAILABLE', error: 'Host inspector script is unavailable' },
+            hostHeaders,
+          );
+          return;
+        }
+        const st = await buildCanonicalState({ includeAutostart: false });
+        const rawLang = (urlObj.searchParams.get('lang') || st.config?.language || 'auto').trim().slice(0, 32) || 'auto';
+        const rawSessionId = (urlObj.searchParams.get('sessionId') || inspectorState.sessionId || '').trim().slice(0, 64);
+        const boot = {
+          hostOrigin: boundOrigin || '',
+          capToken: hostCapToken,
+          rpcUrl: `${boundOrigin || ''}/host/${hostCapToken}/rpc`,
+          lang: rawLang,
+          locale: rawLang,
+          sessionId: rawSessionId,
+          startupMode: st.config?.startupMode || 'gentle-auto',
+          skinEnabled: st.skinEnabled !== false,
+          timeoutMs: inspectorState.timeoutMs || 45000,
+        };
+        const body = `window.__AGY_PRISM_INSPECTOR_BOOT__ = ${safeJsonLiteral(boot)};\n${getInspectorScript()}\n`;
+        res.writeHead(200, { ...hostHeaders, 'Content-Type': 'application/javascript; charset=utf-8' });
+        res.end(body);
+        return;
+      }
+
       if (req.method === 'GET' && asset === 'static.css') {
         const st = await buildCanonicalState();
         const skinPayload = hostModule.buildClientSkinPayload(st.config, st.activeItem, st.mediaOrigin, {
@@ -1841,7 +2089,13 @@ export async function createPrismStudioServer(options = {}) {
           const result = await handler(params);
           sendJson(res, 200, { id, ok: true, result: result === undefined ? null : result }, hostHeaders);
         } catch (err) {
-          sendJson(res, 200, { id, ok: false, error: err?.message || String(err) }, hostHeaders);
+          const errStatus = err?.statusCode === 400 ? 400 : 200;
+          sendJson(
+            res,
+            errStatus,
+            { id, ok: false, ...(err?.code ? { code: err.code } : {}), error: err?.message || String(err) },
+            hostHeaders,
+          );
         }
         return;
       }
@@ -2234,6 +2488,7 @@ export async function createPrismStudioServer(options = {}) {
           cachedIndexHtml = null;
           hostModule.getHostSkinScript?.({ reload: true });
           hostModule.getHostPanelScript?.({ reload: true });
+          hostModule.getHostInspectorScript?.({ reload: true });
         }
         cachedUpdateStatus = decorateUpdateStatus(updater.getCachedStatus?.() || cachedUpdateStatus);
         const onFlushed = result.willRestart ? () => triggerManagedSelfRestart(result) : null;
@@ -2374,6 +2629,137 @@ export async function createPrismStudioServer(options = {}) {
           extra,
         );
       }
+      return;
+    }
+
+    // ---- Strict Live Host Region Picker Routes (`/api/inspector/pick` & `/api/inspector/cancel`) ----
+    if (req.method === 'POST' && (pathname === '/api/inspector/pick' || pathname === '/api/inspector/cancel')) {
+      const rawOrigin = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
+      if (!isAllowedStrictOrigin(rawOrigin)) {
+        sendStrictJson(res, 403, { ok: false, code: 'ERR_CSRF_ORIGIN', error: 'Forbidden: disallowed Origin' });
+        return;
+      }
+      if (!validateToken(req, urlObj, { headerOnly: true })) {
+        sendStrictJson(res, 401, {
+          ok: false,
+          code: 'ERR_AUTH_TOKEN_REQUIRED',
+          error: 'Unauthorized: missing or invalid X-Sidecar-Token header',
+        });
+        return;
+      }
+      const rawCt = String(req.headers['content-type'] || '').trim();
+      if (!rawCt.toLowerCase().includes('application/json')) {
+        sendStrictJson(res, 415, {
+          ok: false,
+          code: 'ERR_INVALID_CONTENT_TYPE',
+          error: 'Unsupported Media Type: Content-Type must be application/json',
+        });
+        return;
+      }
+      let rawBodyBuf;
+      try {
+        rawBodyBuf = await readRawBuffer(req, 16 * 1024);
+      } catch (err) {
+        sendStrictJson(res, 413, {
+          ok: false,
+          code: 'ERR_BODY_TOO_LARGE',
+          error: err?.message || 'Request body too large',
+        });
+        return;
+      }
+      let body = {};
+      if (rawBodyBuf.length > 0) {
+        try {
+          const parsed = JSON.parse(rawBodyBuf.toString('utf8'));
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            sendStrictJson(res, 400, { ok: false, code: 'ERR_INVALID_JSON', error: 'Request body must be a JSON object' });
+            return;
+          }
+          body = parsed;
+        } catch (err) {
+          sendStrictJson(res, 400, { ok: false, code: 'ERR_INVALID_JSON', error: `Invalid JSON body: ${err?.message || String(err)}` });
+          return;
+        }
+      }
+
+      const extra = rawOrigin ? { 'Access-Control-Allow-Origin': rawOrigin, Vary: 'Origin' } : {};
+      const activeBridge = options.inspectorController || cdpBridge;
+
+      if (pathname === '/api/inspector/cancel') {
+        const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim().slice(0, 64) : 'studio-cancel';
+        const prevSessionId = clearInspectorSession({ lastCancelledReason: reason });
+        if (activeBridge && typeof activeBridge.cancelInspectorPick === 'function') {
+          await activeBridge.cancelInspectorPick({ reason }).catch(() => ({ cancelled: false }));
+        }
+        broadcastStudioEvent('inspector-cancelled', { reason, sessionId: prevSessionId, ts: Date.now() });
+        broadcastStudioEvent('inspector-status', getInspectorStatus());
+        sendStrictJson(
+          res,
+          200,
+          { ok: true, active: false, cancelled: true, reason, inspectorStatus: getInspectorStatus() },
+          extra,
+        );
+        return;
+      }
+
+      if (!activeBridge || typeof activeBridge.startInspectorPick !== 'function') {
+        sendStrictJson(
+          res,
+          503,
+          {
+            ok: false,
+            code: 'ERR_CDP_UNAVAILABLE',
+            error: 'Antigravity CDP bridge is unavailable — enable Normal Shortcut Auto-Load or launch with --remote-debugging-port=9339',
+          },
+          extra,
+        );
+        return;
+      }
+
+      const timeoutMs = Math.max(5000, Math.min(120000, Number(body.timeoutMs) || 45000));
+      const sessionId = `ins_${Date.now()}_${randomBytes(4).toString('hex')}`;
+      const lang =
+        typeof body.lang === 'string' && body.lang.trim()
+          ? body.lang.trim().slice(0, 32)
+          : (await Promise.resolve().then(() => engine.getConfig()).catch(() => null))?.language || 'auto';
+
+      const pickRes = await activeBridge.startInspectorPick({
+        hostOrigin: boundOrigin,
+        capToken: hostCapToken,
+        sessionId,
+        lang,
+        timeoutMs,
+      });
+      if (!pickRes || !pickRes.ok) {
+        const statusCode = Number.isInteger(pickRes?.statusCode) ? pickRes.statusCode : 503;
+        sendStrictJson(
+          res,
+          statusCode,
+          {
+            ok: false,
+            code: pickRes?.code || 'ERR_CDP_UNAVAILABLE',
+            error: pickRes?.error || 'Antigravity CDP bridge is unavailable',
+          },
+          extra,
+        );
+        return;
+      }
+
+      const targetCount = Number(pickRes.targetCount) || 1;
+      startInspectorSession({ sessionId, targetCount, timeoutMs });
+      broadcastStudioEvent('inspector-status', getInspectorStatus());
+      sendStrictJson(
+        res,
+        200,
+        {
+          ok: true,
+          active: true,
+          sessionId,
+          targetCount,
+          inspectorStatus: getInspectorStatus(),
+        },
+        extra,
+      );
       return;
     }
 
@@ -2539,6 +2925,7 @@ export async function createPrismStudioServer(options = {}) {
         plugin: PLUGIN_ID,
         studioUri: SIDECAR_URI,
         stateEpoch,
+        instanceId,
         stateRev: st.stateRev,
         config: st.config,
         hostStatus: st.hostStatus,
@@ -2553,6 +2940,7 @@ export async function createPrismStudioServer(options = {}) {
         mediaOrigin: st.mediaOrigin,
         pluginOrigin: st.pluginOrigin,
         studioHttpOrigin: st.studioHttpOrigin,
+        inspectorStatus: st.inspectorStatus,
         pid: process.pid,
         version: PLUGIN_VERSION,
         updateStatus: st.updateStatus,
@@ -2890,6 +3278,7 @@ export async function createPrismStudioServer(options = {}) {
         cachedIndexHtml = null;
         hostModule.getHostSkinScript?.({ reload: true });
         hostModule.getHostPanelScript?.({ reload: true });
+        hostModule.getHostInspectorScript?.({ reload: true });
         if (cdpBridge?.reloadHostScripts) {
           await cdpBridge.reloadHostScripts().catch(() => {});
         } else {
@@ -2958,7 +3347,6 @@ export async function createPrismStudioServer(options = {}) {
   });
 
   let shutdownInFlight = false;
-  const serverInfoPath = join(dataDir, 'server_info.json');
   let wroteServerInfo = false;
   let ownershipTimer = null;
   let ownershipCheckInFlight = null;
@@ -2982,9 +3370,31 @@ export async function createPrismStudioServer(options = {}) {
   });
 
   const addr = server.address();
-  const actualPort = addr && typeof addr === 'object' ? addr.port : listenPort;
+  actualPort = addr && typeof addr === 'object' ? addr.port : listenPort;
   const origin = `http://127.0.0.1:${actualPort}`;
   boundOrigin = origin;
+
+  writeServerInfoAtomic({
+    plugin: PLUGIN_ID,
+    pid: process.pid,
+    port: actualPort,
+    token: effectiveAuthToken,
+    instanceId,
+    startedAt,
+  });
+  wroteServerInfo = true;
+  try {
+    upsertSidecarRegistry(dataDir, {
+      plugin: PLUGIN_ID,
+      studioUri: SIDECAR_URI,
+      pid: process.pid,
+      port: actualPort,
+      token: effectiveAuthToken,
+      startedAt,
+    });
+  } catch {
+    /* non-fatal */
+  }
 
   if (cdpBridge) {
     await cdpBridge.start().catch(() => {});
@@ -3048,25 +3458,6 @@ export async function createPrismStudioServer(options = {}) {
     bootUpdateTimer.unref?.();
   }
 
-  try {
-    writeFileSync(
-      serverInfoPath,
-      `${JSON.stringify({ plugin: PLUGIN_ID, pid: process.pid, port: actualPort, token: effectiveAuthToken, startedAt }, null, 2)}\n`,
-      { encoding: 'utf8', mode: 0o600 },
-    );
-    wroteServerInfo = true;
-    upsertSidecarRegistry(dataDir, {
-      plugin: PLUGIN_ID,
-      studioUri: SIDECAR_URI,
-      pid: process.pid,
-      port: actualPort,
-      token: effectiveAuthToken,
-      startedAt,
-    });
-  } catch {
-    /* non-fatal */
-  }
-
   checkOwnershipAndYield = async () => {
     if (closed || shutdownInFlight || !wroteServerInfo) return false;
     if (ownershipCheckInFlight) return ownershipCheckInFlight;
@@ -3074,14 +3465,22 @@ export async function createPrismStudioServer(options = {}) {
       try {
         if (closed || shutdownInFlight) return false;
         const info = readJsonFileSafe(serverInfoPath);
-        const ownerPid = Number(info?.pid);
-        if (!Number.isInteger(ownerPid) || ownerPid <= 0 || ownerPid === process.pid) {
+        if (!info || typeof info !== 'object' || isServerInfoOwnedBySelf(info)) {
           return false;
         }
-        if (!isPidAlive(ownerPid)) return false;
+        const ownerPid = Number(info.pid);
+        const ownerPort = Number(info.port);
+        if (!Number.isInteger(ownerPid) || ownerPid <= 0) return false;
+        if (ownerPid === process.pid) {
+          if (!Number.isInteger(ownerPort) || ownerPort <= 0 || ownerPort === actualPort) {
+            return false;
+          }
+        } else if (!isPidAlive(ownerPid)) {
+          return false;
+        }
         const verified = await verifyPrismCandidate({
           pid: ownerPid,
-          port: Number(info?.port),
+          port: ownerPort,
           token: typeof info?.token === 'string' ? info.token : '',
           timeoutMs: 1000,
         });
@@ -3091,6 +3490,11 @@ export async function createPrismStudioServer(options = {}) {
         safetyExit?.unref?.();
         await close({ preserveHostDom: true }).catch(() => {});
         if (safetyExit) clearTimeout(safetyExit);
+        try {
+          options.onSuperseded?.('owner_changed_on_poll');
+        } catch {
+          /* ignore */
+        }
         if (exitOnShutdown) process.exit(0);
         return true;
       } finally {
@@ -3124,54 +3528,73 @@ export async function createPrismStudioServer(options = {}) {
     ownershipTimer.unref?.();
   }
 
+  let closePromise = null;
   close = async ({ preserveHostDom = false } = {}) => {
-    closed = true;
-    if (ownershipTimer) {
-      clearInterval(ownershipTimer);
-      ownershipTimer = null;
-    }
-    if (bootUpdateTimer) {
-      clearTimeout(bootUpdateTimer);
-      bootUpdateTimer = null;
-    }
-    if (retiredSweepTimer) {
-      clearTimeout(retiredSweepTimer);
-      retiredSweepTimer = null;
-    }
-    for (const ka of studioSseKeepalives) clearInterval(ka);
-    studioSseKeepalives.clear();
-    for (const clientRes of studioSseClients.keys()) {
-      try { clientRes.end(); } catch { /* ignore */ }
-    }
-    studioSseClients.clear();
-    if (cdpBridge) {
-      await cdpBridge
-        .stop({
-          removeSkin: !preserveHostDom,
-          removePanel: !preserveHostDom,
-          preserveHostDom: Boolean(preserveHostDom),
-        })
-        .catch(() => {});
-      cdpBridge = null;
-    }
-    if (typeof engine.close === 'function') {
-      await engine.close().catch(() => {});
-    }
-    try {
-      removeSidecarRegistryPid(dataDir, process.pid);
-    } catch {
-      /* ignore */
-    }
-    try {
-      if (existsSync(serverInfoPath)) {
-        const info = JSON.parse(readFileSync(serverInfoPath, 'utf8'));
-        if (info?.pid === process.pid) rmSync(serverInfoPath, { force: true });
+    if (closePromise) return closePromise;
+    closePromise = (async () => {
+      closed = true;
+      clearInspectorSession();
+      if (ownershipTimer) {
+        clearInterval(ownershipTimer);
+        ownershipTimer = null;
       }
-    } catch {
-      /* ignore */
-    }
-    server.closeAllConnections?.();
-    await new Promise((r) => server.close(() => r()));
+      if (bootUpdateTimer) {
+        clearTimeout(bootUpdateTimer);
+        bootUpdateTimer = null;
+      }
+      if (retiredSweepTimer) {
+        clearTimeout(retiredSweepTimer);
+        retiredSweepTimer = null;
+      }
+      for (const ka of studioSseKeepalives) clearInterval(ka);
+      studioSseKeepalives.clear();
+      for (const clientRes of studioSseClients.keys()) {
+        try { clientRes.end(); } catch { /* ignore */ }
+      }
+      studioSseClients.clear();
+      if (cdpBridge) {
+        await cdpBridge
+          .stop({
+            removeSkin: !preserveHostDom,
+            removePanel: !preserveHostDom,
+            preserveHostDom: Boolean(preserveHostDom),
+          })
+          .catch(() => {});
+        cdpBridge = null;
+      }
+      if (typeof engine.close === 'function') {
+        await engine.close().catch(() => {});
+      }
+      let currentInfo = null;
+      try {
+        if (existsSync(serverInfoPath)) {
+          currentInfo = JSON.parse(readFileSync(serverInfoPath, 'utf8'));
+        }
+      } catch {
+        currentInfo = null;
+      }
+      const ownsServerInfo =
+        Boolean(currentInfo) &&
+        (!currentInfo.plugin || currentInfo.plugin === PLUGIN_ID) &&
+        isServerInfoOwnedBySelf(currentInfo);
+      try {
+        if (!preserveHostDom || !currentInfo || ownsServerInfo) {
+          removeSidecarRegistryPid(dataDir, process.pid, actualPort);
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        if (ownsServerInfo) {
+          rmSync(serverInfoPath, { force: true });
+        }
+      } catch {
+        /* ignore */
+      }
+      server.closeAllConnections?.();
+      await new Promise((r) => server.close(() => r()));
+    })();
+    return closePromise;
   };
 
   /** In-process HTTP request injector for sandboxed tests where outbound TCP loopback is blocked. */
@@ -3263,6 +3686,7 @@ export async function createPrismStudioServer(options = {}) {
     token: effectiveAuthToken,
     hostCapToken,
     hostBaseUrl: `${origin}/host/${hostCapToken}`,
+    instanceId,
     startedAt,
     canary: canaryController,
     engine,
@@ -3291,6 +3715,7 @@ if (isMainEntry()) {
   const watchedFiles = [
     join(PLUGIN_ROOT, 'src', 'host', 'wallpaper-inject.js'),
     join(PLUGIN_ROOT, 'src', 'host', 'panel-inject.js'),
+    join(PLUGIN_ROOT, 'src', 'host', 'inspector-inject.js'),
   ];
   const mtimes = new Map();
   const refreshWatchedMtimes = () => {
@@ -3305,13 +3730,32 @@ if (isMainEntry()) {
   if (DEV_WATCH_ENABLED) refreshWatchedMtimes();
 
   let watchTimer = null;
+  let parentWatchTimer = null;
   let instance = null;
+  let shuttingDown = false;
 
   const pauseWatchTimer = () => {
     if (watchTimer) {
       clearInterval(watchTimer);
       watchTimer = null;
     }
+  };
+
+  const stopParentWatchTimer = () => {
+    if (parentWatchTimer) {
+      clearInterval(parentWatchTimer);
+      parentWatchTimer = null;
+    }
+  };
+
+  const shutdown = ({ preserveHostDom = false } = {}) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    pauseWatchTimer();
+    stopParentWatchTimer();
+    Promise.resolve(instance?.close?.({ preserveHostDom }))
+      .catch(() => {})
+      .finally(() => process.exit(0));
   };
 
   const startWatchTimer = () => {
@@ -3333,6 +3777,7 @@ if (isMainEntry()) {
       if (changed) {
         hostModule.getHostSkinScript?.({ reload: true });
         hostModule.getHostPanelScript?.({ reload: true });
+        hostModule.getHostInspectorScript?.({ reload: true });
         void instance?.cdpBridge?.broadcastState?.({ force: true }).catch(() => {});
       }
     }, 4000);
@@ -3342,6 +3787,14 @@ if (isMainEntry()) {
   instance = await createPrismStudioServer({
     onBeforeSync: pauseWatchTimer,
     onRollback: startWatchTimer,
+    onSuperseded: (reason) => {
+      console.log(`[prism_studio] superseded (${reason || 'owner_changed'}); exiting cleanly`);
+      if (shuttingDown) return;
+      shuttingDown = true;
+      pauseWatchTimer();
+      stopParentWatchTimer();
+      process.exit(0);
+    },
   });
   console.log(
     `[prism_studio] listening on ${instance.origin} (media=${instance.engine.getMediaOrigin?.() || 'n/a'}, pid=${process.pid})`,
@@ -3349,13 +3802,18 @@ if (isMainEntry()) {
 
   if (DEV_WATCH_ENABLED) startWatchTimer();
 
-  let shuttingDown = false;
-  const shutdown = () => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    pauseWatchTimer();
-    instance.close().finally(() => process.exit(0));
-  };
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
+  const initialPpid = Number(process.ppid);
+  if (instance.isManagedSidecar?.() && Number.isInteger(initialPpid) && initialPpid > 1 && isPidAlive(initialPpid)) {
+    parentWatchTimer = setInterval(() => {
+      if (shuttingDown) return;
+      if (process.ppid !== initialPpid || !isPidAlive(initialPpid)) {
+        console.log(`[prism_studio] parent pid ${initialPpid} exited; shutting down orphaned sidecar`);
+        shutdown({ preserveHostDom: true });
+      }
+    }, 5000);
+    parentWatchTimer.unref?.();
+  }
+
+  process.once('SIGINT', () => shutdown());
+  process.once('SIGTERM', () => shutdown());
 }

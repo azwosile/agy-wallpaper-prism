@@ -68,15 +68,17 @@ jobs:
             const schemaSrc = fs.readFileSync("src/shared/schema.mjs", "utf8");
             const wallSrc = fs.readFileSync("src/host/wallpaper-inject.js", "utf8");
             const panelSrc = fs.readFileSync("src/host/panel-inject.js", "utf8");
+            const inspectorSrc = fs.readFileSync("src/host/inspector-inject.js", "utf8");
             const verRe = plugin.version.replace(/\./g, "\\.");
             assert.match(readme, new RegExp(`\\*\\*Version\\*\\*:\\s*\`${verRe}\``), "README.md version mismatch");
             assert.match(schemaSrc, new RegExp(`export const PLUGIN_VERSION\\s*=\\s*[\x27"]${verRe}[\x27"]`), "schema.mjs PLUGIN_VERSION mismatch");
             assert.match(schemaSrc, new RegExp(`skinVersion:\\s*[\x27"]${verRe}[\x27"]`), "schema.mjs skinVersion mismatch");
             assert.match(wallSrc, new RegExp(`var VERSION\\s*=\\s*[\x27"]${verRe}[\x27"]`), "wallpaper-inject.js VERSION mismatch");
             assert.match(panelSrc, new RegExp(`var VERSION\\s*=\\s*[\x27"]${verRe}[\x27"]`), "panel-inject.js VERSION mismatch");
+            assert.match(inspectorSrc, new RegExp(`var VERSION\\s*=\\s*[\x27"]${verRe}[\x27"]`), "inspector-inject.js VERSION mismatch");
 
             fs.appendFileSync(process.env.GITHUB_ENV, `RELEASE_TAG=${resolvedTag}\nPLUGIN_VERSION=${plugin.version}\n`);
-            console.log(`Verified release tag ${resolvedTag} across all 7 version anchors.`);
+            console.log(`Verified release tag ${resolvedTag} across all 8 version anchors.`);
           '
 
       - name: Build Studio bundle & verify committed index.html is deterministic
@@ -143,9 +145,9 @@ jobs:
 
             // 3. Unit checks on shared SemVer, schema, and zh/en i18n parity
             const semver = await import("./src/shared/semver.mjs");
-            assert.equal(semver.isNewerVersion("2.2.0", "2.1.0"), true);
-            assert.equal(semver.isNewerVersion("2.2.0", "2.2.0"), false);
-            assert.equal(semver.compareSemver("2.2.0", "2.2.0-rc.1") > 0, true);
+            assert.equal(semver.isNewerVersion("2.3.0", "2.2.0"), true);
+            assert.equal(semver.isNewerVersion("2.3.0", "2.3.0"), false);
+            assert.equal(semver.compareSemver("2.3.0", "2.3.0-rc.1") > 0, true);
 
             const { PLUGIN_VERSION, sanitizeConfig } = await import("./src/shared/schema.mjs");
             assert.equal(PLUGIN_VERSION, process.env.PLUGIN_VERSION);
@@ -196,6 +198,7 @@ jobs:
               });
               assert.ok(fs.existsSync(path.join(tmpDir, "plugin.json")), "Extracted archive missing plugin.json");
               assert.ok(fs.existsSync(path.join(tmpDir, "sidecars/prism_studio/index.html")), "Extracted archive missing index.html");
+              assert.ok(fs.existsSync(path.join(tmpDir, "src/host/inspector-inject.js")), "Extracted archive missing src/host/inspector-inject.js");
               assert.equal(fs.existsSync(path.join(tmpDir, "test")), false, "Extracted archive must not contain test/");
               assert.equal(fs.existsSync(path.join(tmpDir, ".git")), false, "Extracted archive must not contain .git/");
               console.log(`tar-safe extraction check PASSED (${JSON.stringify(res)}).`);

@@ -3,14 +3,14 @@
 
 export const PLUGIN_ID = 'agy-wallpaper-prism';
 export const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-export const PLUGIN_VERSION = '2.2.0';
+export const PLUGIN_VERSION = '2.3.0';
 export const SIDECAR_ID = 'prism_studio';
 export const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 export const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 export const DEFAULT_DEBUG_PORT = 9339;
 
 export const PRISM_DOM = Object.freeze({
-  skinVersion: '2.2.0',
+  skinVersion: '2.3.0',
   skinAttr: 'data-agy-prism-skin',
   glassAttr: 'data-agy-prism-glass',
   wallpaperAttr: 'data-agy-prism-wallpaper',
@@ -38,6 +38,7 @@ export const PRISM_DOM = Object.freeze({
   bindingName: '__agyPrismCall',
   skinGlobal: '__agyPrism',
   panelGlobal: '__agyPrismPanel',
+  inspectorGlobal: '__agyPrismInspector',
 });
 
 export const STARTUP_MODES = Object.freeze(['gentle-auto', 'manual', 'static-css']);
@@ -423,6 +424,11 @@ export const REGION_IDS = Object.freeze([
 
 export const SURFACE_TINT_COMPONENTS = REGION_IDS;
 export const GLASS_COMPONENT_IDS = REGION_IDS;
+export const SKIN_REGION_KEYS = REGION_IDS;
+
+export function getValidRegionIdSet() {
+  return new Set(REGION_IDS);
+}
 
 export const SURFACE_TINT_BOUNDS = Object.freeze({
   topbar: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),

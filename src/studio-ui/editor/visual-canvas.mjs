@@ -253,6 +253,67 @@ function renderZoomAndPreviewTogglesHtml(eff) {
   `;
 }
 
+function renderPickerTriggerButtonHtml() {
+  const picking = Boolean(store.inspectorPicking);
+  const busy = Boolean(store.inspectorBusy);
+  return `
+    <button type="button"
+            class="prism-btn prism-btn-sm prism-picker-btn${picking ? ' is-picking' : ''}${busy ? ' is-busy' : ''}"
+            data-action="${picking ? 'cancel-host-pick' : 'pick-host-region'}"
+            aria-pressed="${picking ? 'true' : 'false'}"
+            title="${esc(tr('editor.pickHostHint'))}"
+            ${busy ? 'disabled' : ''}>
+      ${esc(picking ? tr('editor.pickHostCancel') : tr('editor.pickHostBtn'))}
+    </button>
+  `;
+}
+
+function renderPickerActiveBannerHtml() {
+  if (!store.inspectorPicking) return '';
+  return `
+    <div id="prism-ve-picker-banner" class="prism-picker-banner prism-ve-picker-banner" role="status" aria-live="polite">
+      <div class="prism-picker-banner-info">
+        <span class="prism-picker-pulse-dot" aria-hidden="true"></span>
+        <span class="prism-picker-banner-text">${esc(tr('editor.pickHostActiveBanner'))}</span>
+      </div>
+      <button type="button" class="prism-btn prism-btn-sm prism-btn-danger" data-action="cancel-host-pick">
+        ${esc(tr('editor.pickHostCancel'))}
+      </button>
+    </div>
+  `;
+}
+
+export function focusVisualEditorRegionInDom(regionId) {
+  if (typeof document === 'undefined' || !regionId) return false;
+  let focused = false;
+  document
+    .querySelectorAll(`[data-action="select-editor-region"][data-region="${regionId}"].is-selected`)
+    .forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      focused = true;
+      try {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      } catch {
+        el.scrollIntoView();
+      }
+      if (
+        el.classList.contains('prism-ve-tree-item') ||
+        el.classList.contains('prism-ve-region-chip') ||
+        el.hasAttribute('data-editor-region')
+      ) {
+        el.classList.remove('prism-ve-pick-highlight');
+        void el.offsetWidth;
+        el.classList.add('prism-ve-pick-highlight');
+        setTimeout(() => el.classList.remove('prism-ve-pick-highlight'), 1400);
+      }
+    });
+  const insp = document.getElementById('prism-ve-inspector-pane');
+  if (insp instanceof HTMLElement) {
+    insp.scrollTop = 0;
+  }
+  return focused;
+}
+
 export function renderVisualEditorModalHtml() {
   if (!store.editorModalOpen) return '';
   const eff = getEffectiveConfig();
@@ -270,6 +331,7 @@ export function renderVisualEditorModalHtml() {
         </div>
         <div class="prism-ve-toolbar-right">
           ${renderZoomAndPreviewTogglesHtml(eff)}
+          ${renderPickerTriggerButtonHtml()}
           <button type="button" class="prism-btn prism-btn-sm" data-action="popout-visual-editor">
             ${esc(tr('editor.popoutBtn'))}
           </button>
@@ -278,6 +340,7 @@ export function renderVisualEditorModalHtml() {
           </button>
         </div>
       </header>
+      ${renderPickerActiveBannerHtml()}
 
       <div class="prism-ve-modal-body">
         <div class="prism-ve-region-strip" role="tablist" aria-label="${esc(tr('editor.treeTitle'))}">
@@ -321,6 +384,7 @@ export function renderVisualEditorPopoutShellHtml() {
         </div>
         <div class="prism-ve-toolbar-right">
           ${renderZoomAndPreviewTogglesHtml(eff)}
+          ${renderPickerTriggerButtonHtml()}
           <span id="prism-top-status-pill" class="prism-status-pill" data-status="${!store.skinEnabled ? 'off' : attached ? 'attached' : 'standby'}">
             <span class="prism-status-dot"></span>
             <span id="prism-top-status-text">${esc(attached ? tr('editor.liveLinkedBadge') : tr('status.standby'))}</span>
@@ -338,6 +402,7 @@ export function renderVisualEditorPopoutShellHtml() {
           </button>
         </div>
       </header>
+      ${renderPickerActiveBannerHtml()}
 
       <div class="prism-ve-ide-grid">
         <aside class="prism-ve-tree-pane">
