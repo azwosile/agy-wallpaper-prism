@@ -774,7 +774,7 @@ export async function createPrismStudioServer(options = {}) {
     return p > 0 ? `plugin://agy-wallpaper-prism--prism_studio-${p}` : '';
   };
   const STREAMING_PROXY_ROUTES = new Set(['media', 'scene-video', 'mse-fmp4', 'audio', 'scene-audio']);
-  const MAX_CONCURRENT_STREAM_PROXIES = Math.max(1, Number(options.maxConcurrentStreamProxies || 2));
+  const MAX_CONCURRENT_STREAM_PROXIES = Math.max(1, Number(options.maxConcurrentStreamProxies || 4));
   const STREAM_BACKPRESSURE_STALL_MS = Math.max(50, Number(options.streamBackpressureStallMs || 10000));
   const activeMediaProxies = new Set(); // { token, subRoute, abort }
   const abortStaleMediaProxies = (keepTokenOrId = '') => {

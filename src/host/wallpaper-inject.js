@@ -4616,25 +4616,20 @@
     }
   }
 
-  function hasStreamingProxyOrMseVideo(wrap) {
+  function hasPluginProxyVideo(wrap) {
     if (!wrap || !wrap.querySelectorAll) return false;
     var vids = wrap.querySelectorAll('video');
     for (var i = 0; i < vids.length; i += 1) {
       var v = vids[i];
       if (!v) continue;
-      if (
-        v.__prismMseActive ||
-        v.__prismMseLoading ||
-        v.__prismFetchingBlob ||
-        /^plugin:\/\//i.test(String(v.currentSrc || v.src || ''))
-      ) {
+      if (/^plugin:\/\//i.test(String(v.currentSrc || v.src || ''))) {
         return true;
       }
     }
     return false;
   }
 
-  function releaseWrapNetworkStreams(wrap) {
+  function abortWrapNetworkControllers(wrap) {
     if (!wrap) return;
     if (wrap.__prismAbortControllers) {
       for (var k = 0; k < wrap.__prismAbortControllers.length; k += 1) {
@@ -4656,6 +4651,18 @@
         el.__prismFetchTimer = 0;
         el.__prismFetchingBlob = false;
         el.__prismMseLoading = false;
+      } catch (_) {}
+    }
+  }
+
+  function releaseWrapNetworkStreams(wrap) {
+    if (!wrap) return;
+    abortWrapNetworkControllers(wrap);
+    var mediaEls = wrap.querySelectorAll ? wrap.querySelectorAll('video, audio') : [];
+    for (var i = 0; i < mediaEls.length; i += 1) {
+      var el = mediaEls[i];
+      if (!el) continue;
+      try {
         el.__prismMseActive = false;
         if (typeof el.pause === 'function') el.pause();
         if (typeof el.removeAttribute === 'function') el.removeAttribute('src');
@@ -4916,8 +4923,18 @@
   }
 
   // Streaming MediaSource (MSE) fMP4 fallback player under `https:` hosts when loopback Blob fetch fails or times out.
-  // Pumps chunks from `/mse-fmp4/<token>` into SourceBuffer with rolling frame eviction so RAM stays <32 MiB.
-  function mountMseStreamVideo(video, mseUrl, wrap, isStaleFn, onVideoDecoded, fallbackToPoster) {
+  // Pumps chunks from `/mse-fmp4/<token>` into SourceBuffer with byte-aware backpressure & rolling frame eviction.
+  function mountMseStreamVideo(video, mseUrl, wrap, isStaleFn, onVideoDecoded, fallbackToPoster, mediaMeta) {
+    var MSE_TARGET_LEAD_BYTES = 48 * 1024 * 1024;
+    var MSE_EVICT_TRIGGER_BYTES = 64 * 1024 * 1024;
+    var MSE_HARD_BUFFER_BYTES = 80 * 1024 * 1024;
+    var itemMeta = mediaMeta || state.item || null;
+    var metaSize = Number((itemMeta && itemMeta.fileSize) || 0);
+    var metaDur = Number((itemMeta && itemMeta.durationSec) || 0);
+    var metaBytesPerSec = metaSize > 0 && metaDur > 0 ? metaSize / metaDur : 0;
+    var bytesInBufferEst = 0;
+    var totalAppendedBytes = 0;
+    var firstBufStart = -1;
     var isStale = typeof isStaleFn === 'function' ? isStaleFn : function () { return destroyed; };
     var failedOnce = false;
     var mseDone = false;
@@ -5070,17 +5087,56 @@
             });
           };
 
-          var evictOldFramesIfNeeded = function () {
+          var chunksAppended = 0;
+
+          var estimateBytesPerSec = function () {
+            var runtimeBps = 0;
             try {
-              var curT = Number(video.currentTime || 0);
-              if (curT > 12 && sb.buffered && sb.buffered.length > 0) {
+              if (totalAppendedBytes > 0 && sb.buffered && sb.buffered.length > 0) {
                 var bStart = Number(sb.buffered.start(0));
                 var bEnd = Number(sb.buffered.end(sb.buffered.length - 1));
-                if (bEnd - bStart > 10 && curT - 6 > bStart) {
-                  video.__prismMseEvicted = true;
-                  sb.remove(0, curT - 6);
-                  return waitForUpdateEnd();
+                if (firstBufStart < 0 && Number.isFinite(bStart)) firstBufStart = bStart;
+                var originStart = firstBufStart >= 0 ? firstBufStart : bStart;
+                var span = bEnd - originStart;
+                if (Number.isFinite(span) && span > 0.25) {
+                  runtimeBps = totalAppendedBytes / span;
                 }
+              }
+            } catch (_) {}
+            return Math.max(metaBytesPerSec, runtimeBps);
+          };
+
+          var computeMaxLeadSec = function () {
+            var bps = estimateBytesPerSec();
+            if (bps > 0) {
+              return Math.max(3, Math.min(15, MSE_TARGET_LEAD_BYTES / bps));
+            }
+            return 15;
+          };
+
+          var evictOldFramesIfNeeded = function (forceMinBehindSec) {
+            try {
+              if (!sb || !sb.buffered || sb.buffered.length === 0) return Promise.resolve();
+              var curT = Number(video.currentTime || 0);
+              var bStart = Number(sb.buffered.start(0));
+              var bEnd = Number(sb.buffered.end(sb.buffered.length - 1));
+              if (firstBufStart < 0 && Number.isFinite(bStart)) firstBufStart = bStart;
+              var bps = estimateBytesPerSec();
+              var keepBehind = typeof forceMinBehindSec === 'number'
+                ? forceMinBehindSec
+                : (bps > 4 * 1024 * 1024 ? 2.5 : 6);
+              var rmEnd = curT - keepBehind;
+              var shouldEvict =
+                (typeof forceMinBehindSec === 'number' && rmEnd > bStart + 0.25) ||
+                (curT > 12 && bEnd - bStart > 10 && rmEnd > bStart) ||
+                (bytesInBufferEst >= MSE_EVICT_TRIGGER_BYTES && rmEnd > bStart + 0.5);
+              if (shouldEvict && rmEnd > bStart) {
+                var prevSpan = Math.max(0.01, bEnd - bStart);
+                var removedFrac = Math.max(0, Math.min(1, (rmEnd - bStart) / prevSpan));
+                video.__prismMseEvicted = true;
+                sb.remove(0, rmEnd);
+                bytesInBufferEst = Math.max(0, Math.round(bytesInBufferEst * (1 - removedFrac)));
+                return waitForUpdateEnd();
               }
             } catch (_) {}
             return Promise.resolve();
@@ -5100,42 +5156,70 @@
 
           var waitForBackpressure = function () {
             if (mseDone || destroyed || isStale()) return Promise.resolve();
-            try {
-              if (chunksAppended > 0 && sb.buffered && sb.buffered.length > 0) {
-                var bStart = Number(sb.buffered.start(0));
-                var bEnd = Number(sb.buffered.end(sb.buffered.length - 1));
-                var curT = Number(video.currentTime || 0);
-                var refT = Math.max(curT, bStart);
-                if (bEnd - refT > 15) {
+            return waitForUpdateEnd()
+              .then(function () {
+                return evictOldFramesIfNeeded();
+              })
+              .then(function () {
+                if (mseDone || destroyed || isStale()) return;
+                var shouldThrottle = false;
+                try {
+                  if (chunksAppended > 0 && sb.buffered && sb.buffered.length > 0) {
+                    var bStart = Number(sb.buffered.start(0));
+                    var bEnd = Number(sb.buffered.end(sb.buffered.length - 1));
+                    var curT = Number(video.currentTime || 0);
+                    var refT = Math.max(curT, bStart);
+                    var maxLeadSec = computeMaxLeadSec();
+                    if (
+                      bEnd - refT > maxLeadSec ||
+                      (bytesInBufferEst >= MSE_HARD_BUFFER_BYTES && bEnd - refT > 2.0)
+                    ) {
+                      shouldThrottle = true;
+                    }
+                  }
+                } catch (_) {}
+                if (shouldThrottle) {
                   return new Promise(function (resolveDelay) {
-                    setTimeout(resolveDelay, 250);
+                    setTimeout(resolveDelay, 200);
                   }).then(waitForBackpressure);
                 }
-              }
-            } catch (_) {}
-            return Promise.resolve();
+              });
           };
 
-          var appendChunkWithRetry = function (u8) {
+          var appendChunkWithRetry = function (u8, quotaRetries, pauseWaits) {
+            var retries = quotaRetries || 0;
+            var pWaits = pauseWaits || 0;
             return waitForUpdateEnd()
-              .then(evictOldFramesIfNeeded)
+              .then(function () {
+                return evictOldFramesIfNeeded();
+              })
               .then(function () {
                 if (mseDone || destroyed || isStale()) return;
                 try {
                   sb.appendBuffer(u8);
+                  bytesInBufferEst += u8.byteLength;
+                  totalAppendedBytes += u8.byteLength;
                   return waitForUpdateEnd();
                 } catch (appendErr) {
                   if (appendErr && appendErr.name === 'QuotaExceededError') {
                     var curT = Number(video.currentTime || 0);
-                    if (curT > 2 && sb.buffered && sb.buffered.length > 0) {
-                      try {
-                        video.__prismMseEvicted = true;
-                        sb.remove(0, Math.max(0, curT - 2));
-                      } catch (_) {}
-                      return waitForUpdateEnd().then(function () {
+                    var hasBuf = sb.buffered && sb.buffered.length > 0;
+                    var bStart = hasBuf ? Number(sb.buffered.start(0)) : 0;
+                    if (hasBuf && curT - 1.0 > bStart + 0.2 && retries < 24) {
+                      return evictOldFramesIfNeeded(1.0).then(function () {
+                        return appendChunkWithRetry(u8, retries + 1, pWaits);
+                      });
+                    }
+                    var isPaused = Boolean(video.paused && pWaits < 240);
+                    if (hasBuf && (retries < 24 || isPaused)) {
+                      if (video.readyState >= 2 && video.videoWidth > 0 && typeof onVideoDecoded === 'function') {
+                        onVideoDecoded();
+                      }
+                      return new Promise(function (resolveDelay) {
+                        setTimeout(resolveDelay, 250);
+                      }).then(function () {
                         if (mseDone || destroyed || isStale()) return;
-                        sb.appendBuffer(u8);
-                        return waitForUpdateEnd();
+                        return appendChunkWithRetry(u8, isPaused ? retries : retries + 1, isPaused ? pWaits + 1 : pWaits);
                       });
                     }
                   }
@@ -5143,8 +5227,6 @@
                 }
               });
           };
-
-          var chunksAppended = 0;
 
           var finishStream = function () {
             return waitForUpdateEnd().then(function () {
@@ -5637,6 +5719,16 @@
     var pluginWebUrl = effKind === 'web' ? String((item && (item.pluginWebUrl || item.pluginSceneLiveUrl)) || '').trim() : '';
     var mseFmp4Url = effKind === 'video' ? String((item && item.mseFmp4Url) || '').trim() : '';
     var audioUrl = String((item && item.audioUrl) || '').trim();
+    var LARGE_VIDEO_MSE_BYTES = 100 * 1024 * 1024;
+    var LARGE_VIDEO_MSE_SEC = 90;
+    var itemFileSize = Number((item && item.fileSize) || 0);
+    var itemDurationSec = Number((item && item.durationSec) || 0);
+    var videoIsLargeOrLong =
+      (Number.isFinite(itemFileSize) && itemFileSize >= LARGE_VIDEO_MSE_BYTES) ||
+      (Number.isFinite(itemDurationSec) && itemDurationSec >= LARGE_VIDEO_MSE_SEC);
+    var wantAudioStream = Boolean(!cfg.muted && cfg.volume > 0.005 && !audioUrl);
+    var mseAudioMode =
+      effKind === 'video' && mseFmp4Url && videoIsLargeOrLong ? (wantAudioStream ? 'a1' : 'a0') : '';
     var mediaKey =
       effKind +
       '|' +
@@ -5651,6 +5743,8 @@
       pluginWebUrl +
       '|' +
       mseFmp4Url +
+      '|' +
+      mseAudioMode +
       '|' +
       (state.slides ? state.slides.length : 0);
 
@@ -5668,6 +5762,8 @@
       state.failedMediaKey = mediaKey;
       state.failedMediaRetries = 0;
     }
+    var prevMediaKey = state.activeMediaKey;
+    var isSameMediaRemount = Boolean(forceReplace && prevMediaKey && prevMediaKey === mediaKey);
     state.activeMediaKey = mediaKey;
     state.degradedToPoster = false;
     state.degradeReason = '';
@@ -5686,8 +5782,11 @@
     if (!validPrevWrap) {
       setWallpaperReady(false);
     }
-    if (prevWrap && hasStreamingProxyOrMseVideo(prevWrap)) {
-      releaseWrapNetworkStreams(prevWrap);
+    if (prevWrap) {
+      abortWrapNetworkControllers(prevWrap);
+      if (!isSameMediaRemount && hasPluginProxyVideo(prevWrap)) {
+        releaseWrapNetworkStreams(prevWrap);
+      }
     }
     state.activeVideo = null;
     state.activeAudio = null;
@@ -5716,7 +5815,7 @@
       applyTransitionAnimation(
         nextWrap,
         validPrev,
-        validPrev ? cfg.switchTransition : 'cut',
+        validPrev ? (isSameMediaRemount ? 'cut' : cfg.switchTransition) : 'cut',
         cfg.switchTransitionDir,
         transitionDurationMs(cfg.switchTransitionSpeed)
       );
@@ -6071,7 +6170,7 @@
         // Freeze outgoing 4K60 decoder immediately so incoming video decodes frame 1 without GPU contention.
         if (prevWrap) pauseWrapMedia(prevWrap);
 
-        var needsCrossfade = Boolean(validPrevWrap && cfg.switchTransition !== 'cut' && !doc.hidden);
+        var needsCrossfade = Boolean(validPrevWrap && !isSameMediaRemount && cfg.switchTransition !== 'cut' && !doc.hidden);
         nextWrap.style.opacity = needsCrossfade ? '0' : '0.001';
         state.pendingWrap = nextWrap;
         if (nextWrap.parentNode !== stage) {
@@ -6305,7 +6404,7 @@
               if (video.__prismMseActive) {
                 fallbackToPoster('mse-load-timeout');
               } else if (mseFmp4Url && typeof W.MediaSource === 'function') {
-                mountMseStreamVideo(video, mseFmp4Url, nextWrap, isStaleVid, onVideoDecoded, fallbackToPoster);
+                mountMseStreamVideo(video, mseFmp4Url, nextWrap, isStaleVid, onVideoDecoded, fallbackToPoster, item);
               } else if (item && item.thumbUrl) {
                 fallbackToPoster('blob-fetch-timeout');
               } else {
@@ -6348,7 +6447,7 @@
             } else {
               fallbackToPoster(reason);
             }
-          });
+          }, item);
           syncMediaPlaybackState();
           if (video.readyState >= 2 && video.videoWidth > 0) {
             onVideoDecoded();
@@ -6365,7 +6464,7 @@
             var isMissingAsset = httpStatus === 404 || httpStatus === 403 || httpStatus === 410;
             if (!isMissingAsset) {
               if (mseFmp4Url && typeof W.MediaSource === 'function') {
-                mountMseStreamVideo(video, mseFmp4Url, nextWrap, isStaleVid, onVideoDecoded, fallbackToPoster);
+                mountMseStreamVideo(video, mseFmp4Url, nextWrap, isStaleVid, onVideoDecoded, fallbackToPoster, item);
                 return;
               }
               if (item && item.thumbUrl) {
@@ -6628,14 +6727,7 @@
 
       // Priority 0 for large/long muted videos (>= 100 MiB or >= 90s): stream chunked fMP4 directly via
       // loopback HTTP `MediaSource /mse-fmp4/` so `plugin://` pool stays 100% free for Studio UI!
-      var LARGE_VIDEO_MSE_BYTES = 100 * 1024 * 1024;
-      var LARGE_VIDEO_MSE_SEC = 90;
-      var itemFileSize = Number((item && item.fileSize) || 0);
-      var itemDurationSec = Number((item && item.durationSec) || 0);
-      var videoIsLargeOrLong =
-        (Number.isFinite(itemFileSize) && itemFileSize >= LARGE_VIDEO_MSE_BYTES) ||
-        (Number.isFinite(itemDurationSec) && itemDurationSec >= LARGE_VIDEO_MSE_SEC);
-      var videoMutedOrSeparateAudio = Boolean(cfg.muted || cfg.volume <= 0.005 || audioUrl);
+      var videoMutedOrSeparateAudio = Boolean(!wantAudioStream);
       var preferDirectMseForLarge = Boolean(
         isCrossSchemeLoopbackUrl(mediaUrl) &&
         mseFmp4Url &&

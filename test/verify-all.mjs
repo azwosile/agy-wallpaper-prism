@@ -3412,6 +3412,498 @@ async function main() {
     }
   });
 
+  await check('High-bitrate 4K60 MSE byte-aware backpressure, early rolling eviction (<12s), transient QuotaExceededError (<2s) recovery & non-blanking loop remount', '@exec-mock-tests', async () => {
+    const wallInjectSrc = fs.readFileSync(path.join(REPO_ROOT, 'src', 'host', 'wallpaper-inject.js'), 'utf8');
+    const createdVids = [];
+    const mediaSourceByUrl = new Map();
+    const vmFetchUrls = [];
+    let blobSeq = 0;
+
+    let hbAppendedChunks = 0;
+    let hbBufferedBytes = 0;
+    let hbQuotaInjected = false;
+    const hbEvictions = [];
+    const mseHook = {
+      bufLen: 0,
+      bufStart: 0,
+      bufEnd: 0,
+      openDelayMs: 0,
+      onAppend(u8, vid) {
+        if (!hbQuotaInjected && hbBufferedBytes >= 32 * 1024 * 1024 && (vid?.currentTime || 0) < 2) {
+          hbQuotaInjected = true;
+          throw Object.assign(new Error('QuotaExceededError'), { name: 'QuotaExceededError' });
+        }
+        if (hbBufferedBytes + u8.byteLength > 100 * 1024 * 1024) {
+          throw Object.assign(new Error('QuotaExceededError'), { name: 'QuotaExceededError' });
+        }
+        hbAppendedChunks += 1;
+        hbBufferedBytes += u8.byteLength;
+        mseHook.bufLen = 1;
+        mseHook.bufEnd += 2;
+      },
+      onRemove(_start, end) {
+        hbEvictions.push({ start: _start, end });
+        const span = Math.max(0.01, mseHook.bufEnd - mseHook.bufStart);
+        const frac = Math.max(0, Math.min(1, (end - mseHook.bufStart) / span));
+        mseHook.bufStart = Math.max(mseHook.bufStart, end);
+        hbBufferedBytes = Math.max(0, Math.round(hbBufferedBytes * (1 - frac)));
+      },
+    };
+
+    class HbMockStyle {
+      constructor() {
+        this._props = new Map();
+        this.display = '';
+        this.opacity = '';
+        this.transition = '';
+        this.clipPath = '';
+        this.transform = '';
+        this.background = '';
+        this.cssText = '';
+      }
+      setProperty(k, v) { this._props.set(String(k), String(v)); }
+      removeProperty(k) { this._props.delete(String(k)); }
+      getPropertyValue(k) { return this._props.get(String(k)) || ''; }
+    }
+
+    class HbMockMediaSource {
+      static isTypeSupported(mime) {
+        return String(mime || '').includes('video/mp4');
+      }
+      constructor() {
+        this.readyState = 'closed';
+        this._listeners = new Map();
+        this._video = null;
+      }
+      addEventListener(type, fn) {
+        const list = this._listeners.get(type) || [];
+        list.push(fn);
+        this._listeners.set(type, list);
+      }
+      removeEventListener(type, fn) {
+        const list = this._listeners.get(type);
+        if (!list) return;
+        const idx = list.indexOf(fn);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+      _openFor(video) {
+        this._video = video;
+        const openNow = () => {
+          this.readyState = 'open';
+          for (const fn of (this._listeners.get('sourceopen') || []).slice()) fn({ type: 'sourceopen' });
+        };
+        if (mseHook.openDelayMs > 0) setTimeout(openNow, mseHook.openDelayMs);
+        else queueMicrotask(openNow);
+      }
+      addSourceBuffer(mime) {
+        assert.ok(String(mime || '').includes('video/mp4'), `Unexpected SourceBuffer MIME: ${mime}`);
+        const ms = this;
+        const sbListeners = new Map();
+        const sb = {
+          updating: false,
+          buffered: {
+            get length() { return mseHook.bufLen; },
+            start: () => mseHook.bufStart,
+            end: () => mseHook.bufEnd,
+          },
+          addEventListener(type, fn) {
+            const list = sbListeners.get(type) || [];
+            list.push(fn);
+            sbListeners.set(type, list);
+          },
+          removeEventListener(type, fn) {
+            const list = sbListeners.get(type);
+            if (!list) return;
+            const idx = list.indexOf(fn);
+            if (idx >= 0) list.splice(idx, 1);
+          },
+          appendBuffer(chunk) {
+            const u8 = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+            mseHook.onAppend(u8, ms._video);
+            sb.updating = true;
+            queueMicrotask(() => {
+              sb.updating = false;
+              if (ms._video && ms._video.readyState < 4) {
+                ms._video.readyState = 4;
+                ms._video.videoWidth = 3840;
+                ms._video.videoHeight = 2160;
+                ms._video.dispatchEvent({ type: 'loadeddata' });
+                ms._video.dispatchEvent({ type: 'canplay' });
+              }
+              for (const fn of (sbListeners.get('updateend') || []).slice()) fn({ type: 'updateend' });
+            });
+          },
+          remove(start, end) {
+            mseHook.onRemove(start, end);
+            sb.updating = true;
+            queueMicrotask(() => {
+              sb.updating = false;
+              for (const fn of (sbListeners.get('updateend') || []).slice()) fn({ type: 'updateend' });
+            });
+          },
+        };
+        return sb;
+      }
+      endOfStream() {
+        this.readyState = 'ended';
+      }
+    }
+
+    class HbMockNode {
+      constructor(tagName) {
+        this.tagName = String(tagName || 'DIV').toUpperCase();
+        this.id = '';
+        this.className = '';
+        this.style = new HbMockStyle();
+        this._attrs = new Map();
+        this.dataset = {};
+        this.children = [];
+        this.parentNode = null;
+        this._listeners = new Map();
+        this.textContent = '';
+        this._src = '';
+        const self = this;
+        this.classList = {
+          add() {},
+          remove() {},
+          contains(cls) { return String(self.className || '').split(/\s+/).filter(Boolean).includes(cls); },
+        };
+        if (this.tagName === 'VIDEO') {
+          createdVids.push(this);
+          this.readyState = 0;
+          this.videoWidth = 0;
+          this.videoHeight = 0;
+          this.currentTime = 0;
+          this.duration = 20;
+          this.paused = true;
+          this.muted = true;
+          this.defaultMuted = true;
+          this.volume = 1;
+          this.playbackRate = 1;
+          this.loop = true;
+          this.ended = false;
+          this.error = null;
+          this.networkState = 0;
+          this.poster = '';
+          this.loadCalled = 0;
+          this.play = () => { this.paused = false; return Promise.resolve(); };
+          this.pause = () => { this.paused = true; };
+          this.load = () => { this.loadCalled += 1; };
+          Object.defineProperty(this, 'currentSrc', { get() { return self._src; } });
+          Object.defineProperty(this, 'src', {
+            get() { return self._src; },
+            set(val) {
+              const s = String(val || '');
+              self._src = s;
+              if (mediaSourceByUrl.has(s)) {
+                mediaSourceByUrl.get(s)._openFor(self);
+              }
+            },
+          });
+        } else if (this.tagName === 'IMG') {
+          this.complete = false;
+          this.naturalWidth = 0;
+          this.naturalHeight = 0;
+          this.decode = () => Promise.resolve();
+          Object.defineProperty(this, 'src', {
+            get() { return self._src; },
+            set(val) {
+              const s = String(val || '');
+              self._src = s;
+              if (s.startsWith('blob:') || s.startsWith('data:')) {
+                self.complete = true;
+                self.naturalWidth = 1920;
+                self.naturalHeight = 1080;
+                queueMicrotask(() => {
+                  if (typeof self.onload === 'function') self.onload();
+                  self.dispatchEvent({ type: 'load' });
+                });
+              }
+            },
+          });
+        }
+      }
+      get isConnected() {
+        let cur = this;
+        while (cur) {
+          if (cur === docRoot) return true;
+          cur = cur.parentNode;
+        }
+        return false;
+      }
+      get firstChild() { return this.children[0] || null; }
+      setAttribute(k, v) {
+        const key = String(k);
+        const val = String(v);
+        this._attrs.set(key, val);
+        if (key === 'id') this.id = val;
+        if (key === 'class') this.className = val;
+      }
+      getAttribute(k) {
+        const key = String(k);
+        if (key === 'id') return this.id || null;
+        if (key === 'class') return this.className || null;
+        return this._attrs.has(key) ? this._attrs.get(key) : null;
+      }
+      removeAttribute(k) {
+        const key = String(k);
+        this._attrs.delete(key);
+        if (key === 'src') {
+          this._src = '';
+          if (this.tagName === 'VIDEO') this.readyState = 0;
+        }
+      }
+      hasAttribute(k) { return this._attrs.has(String(k)); }
+      appendChild(child) {
+        if (!child) return child;
+        if (child.parentNode) child.parentNode.removeChild(child);
+        child.parentNode = this;
+        this.children.push(child);
+        return child;
+      }
+      insertBefore(child, ref) {
+        if (!child) return child;
+        if (child.parentNode) child.parentNode.removeChild(child);
+        child.parentNode = this;
+        const idx = ref ? this.children.indexOf(ref) : -1;
+        if (idx >= 0) this.children.splice(idx, 0, child);
+        else this.children.push(child);
+        return child;
+      }
+      removeChild(child) {
+        const idx = this.children.indexOf(child);
+        if (idx >= 0) {
+          this.children.splice(idx, 1);
+          child.parentNode = null;
+        }
+        return child;
+      }
+      contains(other) {
+        let cur = other;
+        while (cur) {
+          if (cur === this) return true;
+          cur = cur.parentNode;
+        }
+        return false;
+      }
+      getBoundingClientRect() { return { left: 0, top: 0, right: 1920, bottom: 1080, width: 1920, height: 1080 }; }
+      addEventListener(type, fn) {
+        if (typeof fn !== 'function') return;
+        const list = this._listeners.get(type) || [];
+        list.push(fn);
+        this._listeners.set(type, list);
+      }
+      removeEventListener(type, fn) {
+        const list = this._listeners.get(type);
+        if (!list) return;
+        const idx = list.indexOf(fn);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+      dispatchEvent(evt) {
+        for (const fn of (this._listeners.get(evt.type) || []).slice()) fn.call(this, evt);
+        return true;
+      }
+      querySelectorAll(selector) {
+        const parts = String(selector || '').split(',').map((s) => s.trim()).filter(Boolean);
+        const matchesPart = (node, p) => {
+          if (p.startsWith('#')) return node.id === p.slice(1);
+          if (p.startsWith('.')) return node.classList.contains(p.slice(1));
+          if (/^[a-z0-9]+$/i.test(p)) return node.tagName === p.toUpperCase();
+          return false;
+        };
+        const out = [];
+        const walk = (n) => {
+          for (const ch of n.children) {
+            if (parts.some((p) => matchesPart(ch, p))) out.push(ch);
+            walk(ch);
+          }
+        };
+        walk(this);
+        return out;
+      }
+      querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+    }
+
+    const docRoot = new HbMockNode('HTML');
+    const docHead = new HbMockNode('HEAD');
+    const docBody = new HbMockNode('BODY');
+    docRoot.appendChild(docHead);
+    docRoot.appendChild(docBody);
+
+    const mockDoc = {
+      documentElement: docRoot,
+      head: docHead,
+      body: docBody,
+      hidden: false,
+      fullscreenElement: null,
+      activeElement: docBody,
+      hasFocus: () => true,
+      createElement: (tag) => new HbMockNode(tag),
+      createDocumentFragment: () => new HbMockNode('FRAGMENT'),
+      getElementById: (id) => docRoot.querySelector(`#${id}`),
+      querySelector: (sel) => docRoot.querySelector(sel),
+      querySelectorAll: (sel) => docRoot.querySelectorAll(sel),
+      addEventListener: (t, fn) => docRoot.addEventListener(t, fn),
+      removeEventListener: (t, fn) => docRoot.removeEventListener(t, fn),
+      dispatchEvent: (e) => docRoot.dispatchEvent(e),
+    };
+
+    const chunk16M = new Uint8Array(16 * 1024 * 1024);
+    const mockFetch = async (url) => {
+      const u = String(url || '');
+      vmFetchUrls.push(u);
+      if (u.startsWith('plugin://')) {
+        return { ok: false, status: 404, headers: { get: () => null }, blob: async () => new Blob([]) };
+      }
+      if (u.includes('/media/vid-4k60-hb/')) {
+        return { ok: false, status: 503, headers: { get: () => null }, blob: async () => new Blob([]) };
+      }
+      if (u.includes('/mse-fmp4/vid-4k60-hb')) {
+        let idx = 0;
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (k) => (String(k).toLowerCase() === 'x-prism-mse-mime' ? 'video/mp4; codecs="avc1.640028"' : null) },
+          body: {
+            getReader() {
+              return {
+                async read() {
+                  if (idx < 7) {
+                    idx += 1;
+                    return { done: false, value: chunk16M };
+                  }
+                  return { done: true, value: undefined };
+                },
+                async cancel() {},
+              };
+            },
+          },
+        };
+      }
+      const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      return { ok: true, status: 200, headers: { get: () => 'image/png' }, blob: async () => new Blob([pngBytes], { type: 'image/png' }) };
+    };
+
+    const mockURL = {
+      createObjectURL(obj) {
+        const u = `blob:https://127.0.0.1:62133/prism-hb-${++blobSeq}`;
+        if (obj instanceof HbMockMediaSource) mediaSourceByUrl.set(u, obj);
+        return u;
+      },
+      revokeObjectURL(u) { mediaSourceByUrl.delete(String(u)); },
+    };
+
+    const mockWin = {
+      document: mockDoc,
+      location: { protocol: 'https:', origin: 'https://127.0.0.1:62133', href: 'https://127.0.0.1:62133/' },
+      innerWidth: 1920,
+      innerHeight: 1080,
+      devicePixelRatio: 1,
+      fetch: mockFetch,
+      URL: mockURL,
+      Image: function MockImage() { return new HbMockNode('IMG'); },
+      MediaSource: HbMockMediaSource,
+      AbortController,
+      Blob,
+      Date,
+      Event: class MockEvent { constructor(type) { this.type = type; } },
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: (cb) => setTimeout(() => cb(Date.now()), 16),
+      cancelAnimationFrame: (id) => clearTimeout(id),
+      getComputedStyle: () => ({ backgroundColor: 'rgb(7, 7, 8)', getPropertyValue: () => '' }),
+      matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
+      navigator: {},
+      __agyPrismCall: () => Promise.resolve({ ok: true, skinEnabled: true, config: {} }),
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent() {},
+    };
+    mockWin.window = mockWin;
+    mockWin.top = mockWin;
+
+    const vmCtx = vm.createContext({
+      window: mockWin,
+      document: mockDoc,
+      location: mockWin.location,
+      URL: mockURL,
+      Image: mockWin.Image,
+      MediaSource: HbMockMediaSource,
+      Blob,
+      AbortController,
+      Date,
+      Uint8Array,
+      Event: mockWin.Event,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      requestAnimationFrame: mockWin.requestAnimationFrame,
+      cancelAnimationFrame: mockWin.cancelAnimationFrame,
+      getComputedStyle: mockWin.getComputedStyle,
+    });
+
+    vm.runInContext(wallInjectSrc, vmCtx, { filename: 'wallpaper-inject.js' });
+    const prismHb = mockWin.__agyPrism;
+    assert.ok(prismHb && typeof prismHb.applyPayload === 'function', 'wallpaper-inject.js failed to mount in high-bitrate MSE VM');
+
+    try {
+      prismHb.applyPayload({
+        skinEnabled: true,
+        config: { switchTransition: 'fade', layerScale: 100, parallaxEnabled: false, muted: true },
+        activeItem: {
+          id: 'vid-4k60-hb',
+          kind: 'video',
+          fileSize: 206986766,
+          durationSec: 20,
+          mediaUrl: 'http://127.0.0.1:49152/media/vid-4k60-hb/fail.mp4',
+          pluginMediaUrl: 'plugin://test-hb/media-proxy/media/tok-404',
+          mseFmp4Url: 'http://127.0.0.1:49152/mse-fmp4/vid-4k60-hb',
+          thumbUrl: 'http://127.0.0.1:49152/preview/vid-4k60-hb/poster.png',
+        },
+      });
+      await sleep(320);
+      const hbVid = createdVids[createdVids.length - 1];
+      assert.ok(hbVid, 'Expected <video> mounted for 4K60 MSE stream');
+      assert.equal(hbQuotaInjected, true, 'Expected transient QuotaExceededError injection at curT < 2s');
+      assert.equal(prismHb.status().videoTransport, 'mse', 'Transient QuotaExceededError at curT < 2s must NOT degrade to poster');
+      assert.equal(prismHb.status().wallpaperReady, true, 'High-bitrate MSE video should remain wallpaperReady');
+      assert.equal(mockDoc.getElementById('agy-prism-stage').querySelectorAll('img').length, 0, 'Recovered MSE video must NOT render poster <img>');
+
+      for (const tPos of [3.5, 6.5, 9.5]) {
+        hbVid.currentTime = tPos;
+        await sleep(280);
+      }
+      assert.ok(hbEvictions.length >= 1, 'High-bitrate MSE must proactively evict played frames well before curT = 12s');
+      assert.ok(hbAppendedChunks >= 5, `Expected MSE stream to recover and append >=5 chunks, got ${hbAppendedChunks}`);
+      assert.ok(hbBufferedBytes <= 90 * 1024 * 1024, `Buffered bytes exceeded ceiling: ${hbBufferedBytes}`);
+
+      // Ended loop remount with evicted MSE buffer must keep outgoing frame intact (no blank/src clear) until replacement decodes
+      mseHook.openDelayMs = 80;
+      mseHook.bufLen = 0;
+      mseHook.bufStart = 0;
+      mseHook.bufEnd = 0;
+      hbBufferedBytes = 0;
+      assert.equal(hbVid.__prismMseEvicted, true, 'Expected __prismMseEvicted = true after rolling eviction');
+      hbVid.dispatchEvent({ type: 'ended' });
+      await sleep(20);
+      assert.ok(hbVid._src.startsWith('blob:'), `Outgoing evicted MSE video must keep its src during remount, got ${hbVid._src}`);
+      assert.equal(hbVid.loadCalled, 0, 'Outgoing evicted MSE video must NOT call load() during non-blanking remount');
+      assert.equal(hbVid.isConnected, true, 'Outgoing evicted MSE video must remain connected until replacement decodes');
+
+      await sleep(160);
+      const remountedVid = createdVids[createdVids.length - 1];
+      assert.notEqual(remountedVid, hbVid, 'Expected fresh <video> mounted for evicted MSE loop remount');
+      assert.equal(prismHb.status().wallpaperReady, true, 'Remounted MSE loop video did not reach wallpaperReady');
+      assert.equal(prismHb.status().videoTransport, 'mse', `Expected videoTransport="mse" after loop remount, got ${prismHb.status().videoTransport}`);
+      return `QuotaExceededError(<2s) recovered + ${hbEvictions.length} early evictions (<12s) + ${hbAppendedChunks} chunks + non-blanking loop remount verified`;
+    } finally {
+      prismHb.destroy();
+    }
+  });
+
   await check('PR #9 + Req #6: `selectHubTargets` bilingual scoring, `cdpBridge.wake()` live-SSE fast-path vs `forceProbe` vs dead SSE & `/preload.js`+iframe translator guards', '@exec-sidecar / @exec-tests', async () => {
     const { selectHubTargets, createPassiveCdpBridge, probeCdpPort } = await import(
       pathToFileURL(path.join(REPO_ROOT, 'sidecars', 'prism_studio', 'cdp-bridge.mjs')).href
@@ -11289,26 +11781,32 @@ async function main() {
         assert.equal(statusAfterAbort.status, 200);
         assert.ok(statusAfterAbort.ms < 1000, `Expected /api/status <1000ms after abort, got ${statusAfterAbort.ms}ms`);
 
-        // Concurrency cap (MAX_CONCURRENT_STREAM_PROXIES = 2): 3rd slow stream evicts the oldest so API saves never starve
+        // Concurrency cap (MAX_CONCURRENT_STREAM_PROXIES = 4): 4 concurrent streams stay open; 5th evicts oldest so API saves never starve
         const slowStreams = [];
         let firstSlowClosed = false;
-        for (let si = 0; si < 3; si += 1) {
+        let fourthSlowClosed = false;
+        for (let si = 0; si < 5; si += 1) {
           let closed = false;
           const req = http.get({
             host: srvUrl.hostname,
             port: srvUrl.port,
             path: `/media-proxy/media/concurrent-slow-${si}`,
           }, (proxyRes) => {
-            proxyRes.on('close', () => { closed = true; if (si === 0) firstSlowClosed = true; });
-            proxyRes.on('end', () => { closed = true; if (si === 0) firstSlowClosed = true; });
-            proxyRes.on('error', () => { closed = true; if (si === 0) firstSlowClosed = true; });
+            proxyRes.on('close', () => { closed = true; if (si === 0) firstSlowClosed = true; if (si === 3) fourthSlowClosed = true; });
+            proxyRes.on('end', () => { closed = true; if (si === 0) firstSlowClosed = true; if (si === 3) fourthSlowClosed = true; });
+            proxyRes.on('error', () => { closed = true; if (si === 0) firstSlowClosed = true; if (si === 3) fourthSlowClosed = true; });
           });
-          req.on('error', () => { closed = true; if (si === 0) firstSlowClosed = true; });
+          req.on('error', () => { closed = true; if (si === 0) firstSlowClosed = true; if (si === 3) fourthSlowClosed = true; });
           slowStreams.push({ req, isClosed: () => closed });
           await sleep(40);
+          if (si === 3) {
+            await sleep(40);
+            assert.equal(firstSlowClosed, false, '4 concurrent /media-proxy/media/ streams must stay open when cap=4');
+          }
         }
         await sleep(60);
-        assert.equal(firstSlowClosed, true, '3rd concurrent /media-proxy/media/ stream should evict oldest stream when cap=2');
+        assert.equal(firstSlowClosed, true, '5th concurrent /media-proxy/media/ stream should evict oldest stream when cap=4');
+        assert.equal(fourthSlowClosed, false, '4th concurrent /media-proxy/media/ stream should remain active when cap=4');
         const cfgSaveRes = await new Promise((resolve, reject) => {
           const payload = JSON.stringify({ patch: { topbarStyle: 'bar' } });
           const req = http.request({
@@ -11637,6 +12135,31 @@ async function main() {
         );
         const hugeMseVid = vNodes[vNodes.length - 1];
         assert.equal(hugeMseVid.loop, false, 'MSE video must disable native loop so ended handler controls loopStart/remount');
+
+        // F-01: unmuting a Priority 0 -an MSE large video changes mediaKey and cleanly remounts onto audio-capable stream
+        vmFetchUrls.length = 0;
+        const beforeUnmuteVids = vNodes.length;
+        p308.applyPayload({
+          skinEnabled: true,
+          config: { switchTransition: 'cut', layerScale: 100, parallaxEnabled: false, muted: false },
+          activeItem: {
+            id: 'vid-huge-adler',
+            kind: 'video',
+            fileSize: 517634490,
+            durationSec: 537,
+            mediaUrl: 'http://127.0.0.1:49152/media/vid-huge-adler',
+            pluginMediaUrl: 'plugin://test-p308/media-proxy/media/vid-huge-adler',
+            mseFmp4Url: 'http://127.0.0.1:49152/mse-fmp4/vid-huge-adler',
+          },
+        });
+        await sleep(60);
+        assert.ok(vNodes.length > beforeUnmuteVids, 'F-01: unmuting Priority 0 -an MSE video must change mediaKey and remount');
+        assert.equal(p308.status().videoTransport, 'plugin', 'F-01: unmuted large video must remount onto audio-capable plugin:// stream');
+        assert.equal(
+          vmFetchUrls.some((u) => u.includes('/media/vid-huge-adler')),
+          true,
+          'F-01: unmuted large video should fetch audio-capable media stream',
+        );
 
         // HEVC non-zero first PTS (buffered.start(0) > 0): pump aligns currentTime, and ended seeks to buffered.start(0) + 0.001
         mseBufStart = 0.033333;
