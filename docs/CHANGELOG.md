@@ -6,6 +6,22 @@
 
 ## 简体中文更新日志
 
+### `v2.4.0` — 12 区域对话气泡与控件玻璃化、默认无毛玻璃、4K60 MSE 零闪烁流控与 Scene 高清 `.tex` 解码
+
+- **新特性：12 区域对话气泡与宿主控件玻璃化体系（默认无毛玻璃）**
+  - 将 `REGION_IDS` 从 8 个扩展至 **12 个区域**（`src/shared/schema.mjs`）：新增 `userBubble`（用户消息气泡）、`assistantBubble`（AI 回复与任务卡）、`codeBlock`（代码块与表格）及 `controls`（按钮、输入框、分段切换、标签页、滚动条滑块与浮动胶囊），与原有 8 个区域统一归档。
+  - **默认无毛玻璃与 `Crisp Glass`（`crisp`）预设**：`ZERO_BLUR_BY_DEFAULT_REGIONS`（`card`、`userBubble`、`assistantBubble`、`codeBlock`、`controls`）默认 `style: 'none'` / `blur: 0`，移除隐藏 `chipBlurPx` 自动模糊并收紧 `.surface-glass` 浮窗白名单；原有 7 个外框/浮窗区域保持 `glassBlur: 16`，新增 5 号预设 **`清透无雾 / Crisp Glass`（`crisp`）** 实现全区域 `0px` 零模糊。
+  - **5 种玻璃材质风格与 9 项光学属性**：全面支持 `GLASS_STYLES`（`none` / `frosted` / `crystal` / `tinted` / `solid` + `auto`）、`saturation`（`50..220%`）与 `elevation`（`0..2×`，`F-02` 零透明度归零防护阻止透明正文产生幽灵阴影）；`REGION_OPTICAL_KEYS` 扩充至 9 项，`i18n.mjs` 扩充至 463 组中英双语词条。
+  - **宿主 live & `static-css` 双引擎 `1:1` 对齐与防叠框守卫**：实现 `F-03` `body[data-agy-theme]` `(0,4,1)+` 控件高优先级规则、`F-04` 外层 `<pre>` 镂空单框渲染与语法保留 + `planner-response-text` 模糊时自动抑制内部代码块嵌套 `backdrop-filter` + `SOLID_POPOVERS` `.surface-glass` 精细排除、`F-06` 驼峰排版/连字符表面变量命名规范，以及 `.agy-takeover-frame` / `[data-testid="artifact-card"]` 卡片归属精确隔离。
+  - **Studio UI、双形态可视化编辑器、拾取器与 Quick Prism 全端联动**：新增共享 `renderRegionStyleRow` / `renderRegionOpticalControlsHtml`（`controls.mjs`）、`F-05` 将 `codeReadabilityMode` 移入 `codeBlock` 并保留 `elevation` 浮点精度、Quick Prism 5 列预设 + 行内风格循环胶囊 + 9 键重置，以及 `inspector-inject.js` 12 区域实时拾取器（`0 B` 微引导增量，守卫 `#hub-interactive-btn -> composer`）。
+- **流媒体、Scene 高清提取与窄屏修复（合入 PR `#12` `235df43`、PR `#13` `4e918fb` 与 `F-01` 加固）**
+  - 感谢 **`@zmzwynzj`** 贡献 **PR `#12`**（`c88183c`）与 **PR `#13`**（`64229de`）：
+    - **Priority 0 MSE 与 4K60 保护**：静音大/长视频（`>= 100 MiB` 或 `>= 90s`）直连 `/mse-fmp4/` 释放宿主流通道；支持 `alignMseInitialPts` HEVC 初始 PTS 对齐、`48/64/80 MiB` 字节感知前瞻驱逐、`<2s` 与暂停态 `QuotaExceededError` 无封面闪烁恢复、零黑屏同源循环重挂载（`abortWrapNetworkControllers` + `isSameMediaRemount` `cut`），以及 `vidSeekStallCount` `seeking` 死锁自愈。
+    - **`F-01` 解静音无缝重挂载与流控扩容**：`mediaKey` 编码大视频音频状态以实现解除静音自动重挂载，并将 `sidecars/prism_studio/main.mjs` `MAX_CONCURRENT_STREAM_PROXIES` 提至 `4`（含 TCP RST 驱逐与 `10s` 背压清理）。
+    - **零依赖 Scene 高清 `.tex` 与 `web` 适配**：`src/engine/pkg-scene.mjs` 纯 Node 标准库解码 `TEXB0001..0004`（LZ4 + `PNG/JPEG/WebP` + `RGBA8888/DXT1/3/5` -> `/scene-image/`），`web` 壁纸注入 `<base href>` / `viewport` / 随机文件与媒体监听 Shim 并支持 AC 下 `2×` DPR 与 `1:1` 清晰渲染。
+    - **`<840px` 窄屏工作台统一滚动**：修复窄侧栏下 `.prism-workspace` 统一滚动、粘性 `.prism-tabs-bar`（`scroll-margin-top: 56px`）、第 27 项后虚拟滚动与 `0×0` `#app` Soft Sleep 检测。
+- **文档与测试升级**：同步 [`README.md`](../README.md)、[`SKILL.md`](../skills/wallpaper-prism/SKILL.md)、[`CHANGELOG.md`](./CHANGELOG.md) 与 [`dsh-parity-spec.md`](./dsh-parity-spec.md) 至 `v2.4.0`，并在 `test/verify-all.mjs` 新增 `S3-08`（PR `#12` + `F-01`）、PR `#13` 4K60 MSE 检查与 `S3-09` / `S3-10` E2E 套件。
+
 ### `v2.3.0` — 实时宿主区域拾取器、单实例围栏、无上限视频播放与双语文档
 
 - **新特性：`#14 阶段二` CDP 真实宿主窗口点击拾取区域检查器**
@@ -51,6 +67,22 @@
 ---
 
 ## English Changelog
+
+### `v2.4.0` — 12-Region Chat Bubbles & Controls Glassmorphism, Zero-Blur Default, 4K60 MSE Non-Blanking Streaming & Scene HD `.tex`
+
+- **New Feature: 12-Region Chat Bubbles & Host Controls Glassmorphism (Default NO Frosted Glass)**
+  - Expanded `REGION_IDS` from 8 to **12 regions** (`src/shared/schema.mjs`): added `userBubble` (user chat bubbles), `assistantBubble` (assistant prose, step rows, and turn cards), `codeBlock` (code block cards and Markdown tables), and `controls` (buttons, inputs, segmented toggles, tabs, overlay scrollbars, and floating pills) alongside the 8 existing regions.
+  - **Zero-Blur Default & `Crisp Glass` (`crisp`) Preset**: `ZERO_BLUR_BY_DEFAULT_REGIONS` (`card`, `userBubble`, `assistantBubble`, `codeBlock`, `controls`) default to `style: 'none'` / `blur: 0`, retiring hidden `chipBlurPx` auto-blur and tightening non-popover `.surface-glass` exclusions. The 7 shell/overlay regions preserve `DEFAULT_CONFIG.glassBlur = 16`, while a new 5th scene preset **`Crisp Glass` (`crisp`)** sets `0px` blur everywhere.
+  - **5 `GLASS_STYLES` & 9 Optical Properties**: Added `style` (`none` / `frosted` / `crystal` / `tinted` / `solid` + `auto`), `saturation` (`50..220%`), and `elevation` (`0..2×`, guarded by `F-02` zero-alpha shadow return so transparent prose emits zero phantom drop shadows); expanded `REGION_OPTICAL_KEYS` to 9 keys and `src/shared/i18n.mjs` to `463` paired `zh`/`en` entries.
+  - **1:1 Live & `static-css` Host Parity (`F-03`, `F-04`, `F-06`)**: Added `body[data-agy-theme]` `(0,4,1)+` `!important` control rules (`F-03`), outer `<pre>` hollowing for single-box code cards with syntax `<span>` color preservation and nested `--prism-code-backdrop: none` suppression inside blurred `[data-testid="planner-response-text"]` (`F-04`), extended `SOLID_POPOVERS` `.surface-glass` exclusions, `F-06` camelCase typography vs kebab-case surface variables, and separated `.agy-takeover-card` (`card`) vs `[data-testid="artifact-card"]` (`assistantBubble`).
+  - **Studio UI, Dual-Form Visual Editor, Picker & Quick Prism Alignment (`F-05`)**: Shared L3 `renderRegionStyleRow` / `renderRegionOpticalControlsHtml` in `src/studio-ui/controls.mjs`, `codeReadabilityMode` moved to `codeBlock`, float `elevation` slider precision in `app.mjs`, responsive `<720px` Modal + clickable 12-region mockups across Modal/Popout/21:9 Preview, Quick Prism 5-column presets + inline Glass Style cycler + 9-key resets, and `inspector-inject.js` 12-region Live Picker (`0 B` micro-bootstrap delta, `#hub-interactive-btn -> composer` preserved).
+- **Media Streaming, Scene HD `.tex` & Narrow Studio Scroll (PR `#12` `235df43`, PR `#13` `4e918fb` & `F-01` Hardening)**
+  - Credits **`@zmzwynzj`** for **PR `#12`** (`c88183c`) and **PR `#13`** (`64229de`):
+    - **Priority 0 MSE & Byte-Aware 4K60 Protection**: Routes large/long muted videos (`>= 100 MiB` or `>= 90s`) via `/mse-fmp4/` to keep `plugin://` free for Studio UI; adds `alignMseInitialPts()` HEVC non-zero PTS alignment, byte-aware `48/64/80 MiB` lead capping & early rolling eviction (`<12s`), bounded `<2s` / paused `QuotaExceededError` recovery without poster flashes, non-blanking same-media loop remount (`abortWrapNetworkControllers` + `isSameMediaRemount` `cut`), and `vidSeekStallCount` deadlock self-healing.
+    - **`F-01` Unmute Auto-Remount & Concurrency Cap (`4`)**: Encodes `mseAudioMode` (`a1`/`a0`) in `mediaKey` for seamless unmute remounts onto audio-capable streams, and raises `MAX_CONCURRENT_STREAM_PROXIES` to `4` in `sidecars/prism_studio/main.mjs` (with TCP RST eviction & `10s` stall cleanup).
+    - **Zero-Dep Scene HD `.tex` & Web Adaptation**: Pure-Node `TEXB0001..0004` decoder (`PNG/JPEG/WebP/RGBA8888/DXT1/3/5` -> `/scene-image/<token>`) in `src/engine/pkg-scene.mjs`, `<base href>` / viewport / WE API shims for `/media-proxy/web/`, `2×` DPR on AC power, and crisp `1:1` `--prism-media-transform: none`.
+    - **Narrow `<840px` Unified Studio Scroll**: Unified `.prism-workspace` scrolling with sticky `.prism-tabs-bar` (`scroll-margin-top: 56px` accordion clearance), fixed virtual library scrolling past item 27, and `0×0` `#app` Soft Sleep detection.
+- **Docs & Verification**: Updated [`README.md`](../README.md), [`SKILL.md`](../skills/wallpaper-prism/SKILL.md), [`CHANGELOG.md`](./CHANGELOG.md), and [`dsh-parity-spec.md`](./dsh-parity-spec.md) to `v2.4.0`, and expanded `test/verify-all.mjs` with `S3-08` (PR `#12` + `F-01`), PR `#13` 4K60 MSE verification, and `S3-09` / `S3-10` E2E suites.
 
 ### `v2.3.0` — Live Host Region Picker, Single-Instance Fencing, Uncapped Blob Playback & Bilingual Docs
 

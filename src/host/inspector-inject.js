@@ -1,7 +1,7 @@
-// Ephemeral CDP Live Host Region Picker for Antigravity (agy-wallpaper-prism v2.3.0).
+// Ephemeral CDP Live Host Region Picker for Antigravity (agy-wallpaper-prism v2.4.0).
 //
 // Self-contained ES2020 browser IIFE loaded on demand via `/host/<capToken>/inspector.js`.
-// Strictly read-only geometric hit-testing across all 8 Prism regions in BOTH `live`
+// Strictly read-only geometric hit-testing across all 12 Prism regions in BOTH `live`
 // and `static-css` / `manual` / `skinEnabled: false` modes (zero text selectors,
 // `<html>`-only state attribute, zero `<body>` mutations, Guardrail V2 DOM-connected check).
 //
@@ -9,7 +9,7 @@
 (function agyPrismInspectorMain() {
   'use strict';
 
-  var VERSION = '2.3.0';
+  var VERSION = '2.4.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   try {
@@ -30,7 +30,11 @@
     wco: 1,
     sidebar: 1,
     workspace: 1,
+    userBubble: 1,
+    assistantBubble: 1,
+    codeBlock: 1,
     card: 1,
+    controls: 1,
     composer: 1,
     rightPane: 1,
     popover: 1,
@@ -41,10 +45,14 @@
     wco: { zh: '窗口控制胶囊', en: 'Window Controls' },
     sidebar: { zh: '左侧边栏', en: 'Left Sidebar' },
     workspace: { zh: '主工作区', en: 'Workspace' },
-    card: { zh: '消息气泡 / 卡片', en: 'Card / Bubble' },
+    userBubble: { zh: '用户消息气泡', en: 'User Bubble' },
+    assistantBubble: { zh: 'AI 回复与任务卡', en: 'Assistant Reply & Cards' },
+    codeBlock: { zh: '代码块 / 表格', en: 'Code Block & Table' },
+    card: { zh: '扩展 / 接管卡片', en: 'Extension / Card' },
+    controls: { zh: '按钮 / 控件 / 滚动条', en: 'Host Controls' },
     composer: { zh: '对话输入框', en: 'Composer' },
     rightPane: { zh: '右侧辅助面板', en: 'Right Pane' },
-    popover: { zh: '浮窗 / 菜单', en: 'Popover / Menu' },
+    popover: { zh: '浮窗 / 菜单 / 提示', en: 'Popover / Menu' },
   };
 
   var POPOVER_SELECTORS = [
@@ -57,6 +65,14 @@
     '.agy-popover',
     '.agy-menu',
     '.agy-toast',
+    '.agy-fastpick',
+    '.compact-tooltip',
+    '[class*="react-tooltip"]',
+    '.toast-root',
+    '.agy-tip-card',
+    '.agy-selection-pill',
+    '[data-base-ui-portal] :is([role="listbox"], [role="menu"], [role="dialog"], .agy-popover, .agy-overlay)',
+    '.surface-glass:not(.surface-composer):not(.surface-composer-card):not(.agy-user-bubble):not(.agy-user-bubble-frame):not(.agy-takeover-card):not(.agy-scroll-bottom)',
     '[role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]):not(.prism-sheet)',
     '[role="alertdialog"]',
     '[role="menu"]',
@@ -79,6 +95,39 @@
   ];
   var POPOVER_SELECTOR_STR = POPOVER_SELECTORS.join(', ');
 
+  // Keep CONTROL_SELECTORS free of bare `button` so #hub-interactive-btn inside composer stays `composer`.
+  var CONTROL_SELECTORS = [
+    '.agy-scroll-bottom',
+    '[data-testid="voice-live-pill"]',
+    '[data-testid="voice-start-button"]',
+    '[data-testid="overlay-scrollbar"]',
+    '[data-testid="overlay-scrollbar-thumb"]',
+    '[data-side-panel-strip="true"] .agy-aux-tab',
+    '[data-testid="subagent-node"]',
+    '[data-testid="code-block-preview-toggle"]',
+    '[data-slot="toggle-group"]',
+    '[data-slot="toggle-group"] > button',
+    ':is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"])[data-selected="true"]',
+    '.agy-row-actions > button',
+    '[data-testid="send-button"]',
+    '[data-testid="model-selector-trigger"]',
+    '[data-testid="permissions-selector-trigger"]',
+    '[data-testid="sidebar-toggle"]',
+    'button[data-testid="changed-files-card-review"]',
+    '.artifact-card .proceed-button',
+    '[role="switch"]',
+    '[role="checkbox"]',
+    '.agy-select-trigger',
+    'input.agy-field',
+    'textarea.agy-textarea',
+    '[data-testid="customizations-search"]',
+    '.agy-field:has([data-testid="customizations-search"])',
+    '[data-testid="plugins-tabs"]',
+    '[data-testid="new-tab-search-input"]',
+    ':is(.agy-button, .agy-button-xs, .agy-button-sm, .agy-button-md, .agy-button-lg, .agy-button-custom, .agy-button-icon-sm, .agy-button-icon, .agy-button-icon-lg):not([data-testid="title-menu-bar-item"]):not([data-project-card="true"]):not([data-testid="worked-for-collapsible"]):not([data-testid="step-plan-chip"])',
+  ];
+  var CONTROL_SELECTOR_STR = CONTROL_SELECTORS.join(', ');
+
   var COMPOSER_SELECTORS = [
     '#antigravity\\.agentSidePanelInputBox',
     'div[data-testid="agent-input-box"]',
@@ -87,32 +136,63 @@
     '.agy-composer',
     '.composer-dock',
   ];
+  var COMPOSER_SELECTOR_STR = COMPOSER_SELECTORS.join(', ');
   var COMPOSER_ANCESTOR_STR =
     '#antigravity\\.agentSidePanelInputBox, [data-testid="agent-input-box"], .surface-composer-card, .agy-composer';
 
-  var CARD_SELECTORS = [
-    '.msg-user',
-    '.msg-agent',
-    '[data-message-id]',
-    '[data-turn-id]',
-    '[data-role="user"]',
-    '[data-role="assistant"]',
+  var CODE_BLOCK_SELECTORS = [
+    'pre > div:has([data-testid="code-block-preview-toggle"], [data-testid="markdown-code-block-preview"])',
+    'pre > div.rounded-xl.border',
+    'pre.md-code-block',
+    'pre',
+    '.code-block',
+    '.md-code-block',
+    '.agy-md-table',
+    '.md-table-frame',
+  ];
+  var CODE_BLOCK_SELECTOR_STR = CODE_BLOCK_SELECTORS.join(', ');
+
+  var USER_BUBBLE_SELECTORS = [
+    '[data-testid="user-message-bubble"]',
+    '.agy-user-bubble',
+    '.agy-user-bubble-frame',
     '[data-testid="user-message"]',
+    '.msg-user',
+    '[data-role="user"]',
+  ];
+  var USER_BUBBLE_SELECTOR_STR = USER_BUBBLE_SELECTORS.join(', ');
+
+  var ASSISTANT_BUBBLE_SELECTORS = [
+    '[data-testid="artifact-card"]',
+    '.artifact-card',
+    '[data-testid="changed-files-card-header"]',
+    '.files-changed-header',
+    '[data-testid="changed-files-card"]',
+    'button[data-testid="worked-for-collapsible"]',
+    'button[data-testid="step-plan-chip"]',
+    '[data-step-rows="true"] [role="button"][aria-expanded]',
+    '[data-testid="planner-response-text"]',
+    '[data-testid="agent-response"]',
+    '[data-testid="background-task-command"]',
+    '.msg-agent',
     '[data-testid="assistant-message"]',
-    '[data-testid*="message-row"]',
-    '[data-testid*="chat-turn"]',
+    '[data-role="assistant"]',
+  ];
+  var ASSISTANT_BUBBLE_SELECTOR_STR = ASSISTANT_BUBBLE_SELECTORS.join(', ');
+
+  var CARD_SELECTORS = [
     '[data-testid="customization-card"]',
     '.agy-spotlight-card',
     '[data-testid="marketplace-bundles-banner"]',
     '[data-testid="plugin-detail"]',
+    '.agy-takeover-card',
+    '.agy-callout',
     '.mock-starter-card',
     '.aux-card',
-    'pre.md-code-block',
-    '.code-block',
-    '[data-testid="background-task-command"]',
     '.surface-opaque.bg-background',
-    '.bg-card',
+    '.bg-card:not(.agy-user-bubble):not([data-testid="user-message-bubble"])',
   ];
+  var CARD_SELECTOR_STR = CARD_SELECTORS.join(', ');
 
   var SIDEBAR_SELECTORS = [
     '[data-testid="sidebar-split"] > div:first-child',
@@ -123,6 +203,7 @@
     '.monaco-workbench .part.sidebar',
     '[data-testid="conversation-list-sidebar"]',
   ];
+  var SIDEBAR_SELECTOR_STR = SIDEBAR_SELECTORS.join(', ');
 
   var RIGHT_PANE_SELECTORS = [
     '[data-testid="aux-pane-split"] > :is(div, aside, section):last-child:not(:first-child):not([hidden]):not([aria-hidden="true"]):not(.split-gutter):not([data-split-sash])',
@@ -131,6 +212,7 @@
     '.monaco-workbench .part.auxiliarybar',
     '[data-testid="sidecar-iframe-slot"]',
   ];
+  var RIGHT_PANE_SELECTOR_STR = RIGHT_PANE_SELECTORS.join(', ');
 
   var WORKSPACE_SELECTORS = [
     '[data-testid="aux-pane-split"] > :is(div, main, section):first-child',
@@ -488,8 +570,22 @@
     return null;
   }
 
-  // Pure read-only geometric hit-testing across all 8 regions:
-  // popover > wco > topbar > composer > card > sidebar > rightPane > workspace
+  function isControlMatchAllowed(el) {
+    if (safeMatches(el, '.agy-shell, #root, body, html')) return false;
+    if (safeClosest(el, POPOVER_SELECTOR_STR)) return false;
+    if (safeClosest(el, '[data-testid="title-menu-bar"], .monaco-workbench .part.titlebar')) return false;
+    return true;
+  }
+
+  function isContentMatchAllowed(el) {
+    if (safeMatches(el, '.agy-shell, #root, body, html')) return false;
+    if (safeClosest(el, COMPOSER_ANCESTOR_STR)) return false;
+    if (safeClosest(el, POPOVER_SELECTOR_STR)) return false;
+    return true;
+  }
+
+  // Pure read-only geometric hit-testing across all 12 regions:
+  // popover > wco > topbar > controls > composer > codeBlock > userBubble > assistantBubble > card > sidebar > rightPane > workspace
   function hitTestAt(x, y) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
     var vp = getViewport();
@@ -560,7 +656,18 @@
       }
     }
 
-    // 4. composer
+    // 4. controls (outside popover & topbar)
+    var ctrlMatch = findSmallestVisibleMatchAt(CONTROL_SELECTORS, x, y, vp, isControlMatchAllowed);
+    if (ctrlMatch) {
+      return {
+        regionId: 'controls',
+        rect: ctrlMatch.rect,
+        matchedBy: 'controls:dom',
+        selector: describeEl(ctrlMatch.el),
+      };
+    }
+
+    // 5. composer
     var compMatch = findFirstVisibleMatchAt(COMPOSER_SELECTORS, x, y, vp);
     if (compMatch) {
       var compEl = compMatch.el;
@@ -584,12 +691,42 @@
       };
     }
 
-    // 5. card (outside composer and popover)
+    // 6. codeBlock (outside composer & popover)
+    var codeMatch = findSmallestVisibleMatchAt(CODE_BLOCK_SELECTORS, x, y, vp, isContentMatchAllowed);
+    if (codeMatch) {
+      return {
+        regionId: 'codeBlock',
+        rect: codeMatch.rect,
+        matchedBy: 'codeBlock:dom',
+        selector: describeEl(codeMatch.el),
+      };
+    }
+
+    // 7. userBubble (outside composer & popover)
+    var userMatch = findSmallestVisibleMatchAt(USER_BUBBLE_SELECTORS, x, y, vp, isContentMatchAllowed);
+    if (userMatch) {
+      return {
+        regionId: 'userBubble',
+        rect: userMatch.rect,
+        matchedBy: 'userBubble:dom',
+        selector: describeEl(userMatch.el),
+      };
+    }
+
+    // 8. assistantBubble (outside composer & popover)
+    var asstMatch = findSmallestVisibleMatchAt(ASSISTANT_BUBBLE_SELECTORS, x, y, vp, isContentMatchAllowed);
+    if (asstMatch) {
+      return {
+        regionId: 'assistantBubble',
+        rect: asstMatch.rect,
+        matchedBy: 'assistantBubble:dom',
+        selector: describeEl(asstMatch.el),
+      };
+    }
+
+    // 9. card (outside composer, popover, and userBubble)
     var cardMatch = findSmallestVisibleMatchAt(CARD_SELECTORS, x, y, vp, function (el) {
-      if (safeMatches(el, '.agy-shell, #root, body, html')) return false;
-      if (safeClosest(el, COMPOSER_ANCESTOR_STR)) return false;
-      if (safeClosest(el, POPOVER_SELECTOR_STR)) return false;
-      return true;
+      return isContentMatchAllowed(el) && !safeClosest(el, USER_BUBBLE_SELECTOR_STR);
     });
     if (cardMatch) {
       return {
@@ -600,7 +737,7 @@
       };
     }
 
-    // 6. sidebar
+    // 10. sidebar
     var sbMatch = findFirstVisibleMatchAt(SIDEBAR_SELECTORS, x, y, vp);
     if (sbMatch) {
       var sbEl = sbMatch.el;
@@ -621,7 +758,7 @@
       };
     }
 
-    // 7. rightPane
+    // 11. rightPane
     var rpMatch = findFirstVisibleMatchAt(RIGHT_PANE_SELECTORS, x, y, vp);
     if (rpMatch) {
       return {
@@ -632,7 +769,7 @@
       };
     }
 
-    // 8. workspace
+    // 12. workspace
     var wsMatch = findFirstVisibleMatchAt(WORKSPACE_SELECTORS, x, y, vp);
     if (wsMatch) {
       return {
@@ -687,16 +824,28 @@
     if ((m = safeClosest(el, '.agy-prism-topbar-pill, [data-testid="title-menu-bar"], .monaco-workbench .part.titlebar'))) {
       return { regionId: 'topbar', rect: getVisibleRect(m, vp), matchedBy: 'topbar:el', selector: describeEl(m) };
     }
-    if ((m = safeClosest(el, COMPOSER_SELECTORS.join(', ')))) {
+    if ((m = safeClosest(el, CONTROL_SELECTOR_STR)) && isControlMatchAllowed(m)) {
+      return { regionId: 'controls', rect: getVisibleRect(m, vp), matchedBy: 'controls:el', selector: describeEl(m) };
+    }
+    if ((m = safeClosest(el, COMPOSER_SELECTOR_STR))) {
       return { regionId: 'composer', rect: getVisibleRect(m, vp), matchedBy: 'composer:el', selector: describeEl(m) };
     }
-    if ((m = safeClosest(el, CARD_SELECTORS.join(', '))) && !safeClosest(m, COMPOSER_ANCESTOR_STR) && !safeClosest(m, POPOVER_SELECTOR_STR)) {
+    if ((m = safeClosest(el, CODE_BLOCK_SELECTOR_STR)) && isContentMatchAllowed(m)) {
+      return { regionId: 'codeBlock', rect: getVisibleRect(m, vp), matchedBy: 'codeBlock:el', selector: describeEl(m) };
+    }
+    if ((m = safeClosest(el, USER_BUBBLE_SELECTOR_STR)) && isContentMatchAllowed(m)) {
+      return { regionId: 'userBubble', rect: getVisibleRect(m, vp), matchedBy: 'userBubble:el', selector: describeEl(m) };
+    }
+    if ((m = safeClosest(el, ASSISTANT_BUBBLE_SELECTOR_STR)) && isContentMatchAllowed(m)) {
+      return { regionId: 'assistantBubble', rect: getVisibleRect(m, vp), matchedBy: 'assistantBubble:el', selector: describeEl(m) };
+    }
+    if ((m = safeClosest(el, CARD_SELECTOR_STR)) && isContentMatchAllowed(m) && !safeClosest(m, USER_BUBBLE_SELECTOR_STR)) {
       return { regionId: 'card', rect: getVisibleRect(m, vp), matchedBy: 'card:el', selector: describeEl(m) };
     }
-    if ((m = safeClosest(el, SIDEBAR_SELECTORS.join(', ')))) {
+    if ((m = safeClosest(el, SIDEBAR_SELECTOR_STR))) {
       return { regionId: 'sidebar', rect: getVisibleRect(m, vp), matchedBy: 'sidebar:el', selector: describeEl(m) };
     }
-    if ((m = safeClosest(el, RIGHT_PANE_SELECTORS.join(', ')))) {
+    if ((m = safeClosest(el, RIGHT_PANE_SELECTOR_STR))) {
       return { regionId: 'rightPane', rect: getVisibleRect(m, vp), matchedBy: 'rightPane:el', selector: describeEl(m) };
     }
     if ((m = safeClosest(el, WORKSPACE_SELECTORS.slice(0, 5).join(', ')))) {

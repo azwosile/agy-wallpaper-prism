@@ -209,6 +209,19 @@
   }
 }
 
+@media (max-width: 720px) {
+  .prism-ve-modal-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(180px, 38%) minmax(0, 1fr);
+  }
+  .prism-ve-modal-body .prism-ve-canvas-pane {
+    flex: none;
+    max-height: none;
+    min-height: 180px;
+  }
+}
+
 /* ==========================================================================
    Form 2: Standalone Browser /?mode=visual-editor 3-Column IDE
    grid-template-columns: 220px minmax(0, 1fr) 340px
@@ -243,6 +256,9 @@
     flex-wrap: nowrap;
     overflow-x: auto;
   }
+  .prism-ve-ide-grid .prism-ve-tree-cat {
+    display: none;
+  }
   .prism-ve-ide-grid .prism-ve-canvas-pane {
     flex: 0 0 42%;
     min-height: 180px;
@@ -255,7 +271,7 @@
   }
 }
 
-/* Column 1: 8-Region Structure Tree */
+/* Column 1: 12-Region Structure Tree */
 .prism-ve-tree-pane {
   height: 100%;
   min-height: 0;
@@ -281,6 +297,32 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+.prism-ve-tree-cat {
+  padding: 6px 6px 2px;
+  font-size: 9.5px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--prism-fg-muted);
+}
+
+.prism-ve-tree-style {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid var(--prism-border-hairline);
+  background: rgba(var(--prism-pt-rgb), 0.04);
+  color: var(--prism-fg-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.prism-ve-tree-style[data-style-kind="frosted"],
+.prism-ve-tree-style[data-style-kind="crystal"] {
+  border-color: rgba(var(--prism-accent-rgb), 0.34);
+  color: var(--prism-accent);
 }
 
 .prism-ve-tree-item {
@@ -414,6 +456,9 @@
   width: 6px;
   height: 2.5px;
 }
+.prism-ve-stage .mini-island {
+  overflow: visible;
+}
 .prism-ve-stage .mini-sidebar,
 .prism-ve-stage .mini-center,
 .prism-ve-stage .mini-aux {
@@ -433,9 +478,60 @@
   font-size: 10px;
   line-height: 1.3;
 }
+.prism-ve-stage .mini-chat-flow {
+  gap: 5px;
+}
+.prism-ve-stage .mini-user-bubble {
+  padding: 4px 8px;
+  font-size: 9.5px;
+  line-height: 1.3;
+  max-width: 78%;
+}
+.prism-ve-stage .mini-assistant-bubble {
+  padding: 4px 7px;
+  font-size: 9.5px;
+  line-height: 1.3;
+}
+.prism-ve-stage .mini-turn-card {
+  padding: 3px 6px;
+}
 .prism-ve-stage .mini-code-card {
-  padding: 7px 9px;
-  font-size: 10px;
+  padding: 6px 8px;
+  font-size: 9.5px;
+  white-space: normal;
+}
+.prism-ve-stage .mini-code-head {
+  margin-bottom: 3px;
+}
+.prism-ve-stage .mini-code-lang {
+  font-size: 8.5px;
+}
+.prism-ve-stage .mini-ctl-seg {
+  font-size: 8.5px;
+  padding: 1px 2px;
+}
+.prism-ve-stage .mini-controls-strip {
+  padding: 3px 5px;
+  gap: 5px;
+  font-size: 8.5px;
+}
+.prism-ve-stage .mini-ctl-btn,
+.prism-ve-stage .mini-ctl-select,
+.prism-ve-stage .mini-scroll-pill {
+  padding: 2px 6px;
+  font-size: 8.5px;
+}
+.prism-ve-stage .mini-aux-tabs {
+  gap: 3px;
+  padding: 2px;
+}
+.prism-ve-stage .mini-aux-tab {
+  font-size: 9px;
+  padding: 2px 6px;
+}
+.prism-ve-stage .mini-standalone-card {
+  padding: 5px 7px;
+  font-size: 9.5px;
 }
 .prism-ve-stage .mini-composer {
   padding: 7px 9px;
@@ -444,7 +540,7 @@
   font-size: 10px;
 }
 
-/* Interactive 8-Region Selection Ring & Hover Label */
+/* Interactive 12-Region Selection Ring & Non-Clipped Hover Label (F-06) */
 .prism-ve-stage [data-editor-region] {
   position: relative;
   cursor: pointer;
@@ -472,7 +568,7 @@
   z-index: 12;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(10, 12, 18, 0.86);
+  background: rgba(10, 12, 18, 0.88);
   border: 1px solid var(--prism-accent-border);
   color: #F8FAFC;
   font-family: var(--prism-font-sans);
@@ -482,6 +578,48 @@
   letter-spacing: 0.01em;
   white-space: nowrap;
   pointer-events: none;
+}
+.prism-ve-stage [data-editor-region="topbar"]:hover::after,
+.prism-ve-stage [data-editor-region="topbar"].is-selected::after,
+.prism-ve-stage [data-editor-region="topbar"][data-selected="true"]::after,
+.prism-ve-stage .mini-aux-tabs:hover::after,
+.prism-ve-stage .mini-aux-tabs.is-selected::after,
+.prism-ve-stage .mini-aux-tabs[data-selected="true"]::after,
+.prism-ve-stage .mini-ctl-seg:hover::after,
+.prism-ve-stage .mini-ctl-seg.is-selected::after,
+.prism-ve-stage .mini-ctl-seg[data-selected="true"]::after {
+  top: calc(100% + 2px);
+  bottom: auto;
+  left: 0;
+}
+.prism-ve-stage [data-editor-region="wco"]:hover::after,
+.prism-ve-stage [data-editor-region="wco"].is-selected::after,
+.prism-ve-stage [data-editor-region="wco"][data-selected="true"]::after {
+  top: calc(100% + 2px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+}
+.prism-ve-stage .mini-user-bubble:hover::after,
+.prism-ve-stage .mini-user-bubble.is-selected::after,
+.prism-ve-stage .mini-user-bubble[data-selected="true"]::after,
+.prism-ve-stage .mini-controls-strip:hover::after,
+.prism-ve-stage .mini-controls-strip.is-selected::after,
+.prism-ve-stage .mini-controls-strip[data-selected="true"]::after,
+.prism-ve-stage .mini-standalone-card:hover::after,
+.prism-ve-stage .mini-standalone-card.is-selected::after,
+.prism-ve-stage .mini-standalone-card[data-selected="true"]::after {
+  top: auto;
+  bottom: calc(100% + 2px);
+  left: 0;
+}
+.prism-ve-stage .mini-code-card:hover::after,
+.prism-ve-stage .mini-code-card.is-selected::after,
+.prism-ve-stage .mini-code-card[data-selected="true"]::after {
+  top: auto;
+  bottom: 2px;
+  left: auto;
+  right: 4px;
 }
 
 /* Simulated Popover Preview inside Visual Canvas */

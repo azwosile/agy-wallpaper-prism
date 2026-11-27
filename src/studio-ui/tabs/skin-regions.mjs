@@ -17,12 +17,10 @@ import {
   COLOR_SCHEME_IDS,
   ACCENT_MODES,
   ACCENT_PRESETS,
-  SURFACE_TINT_BOUNDS,
   DEFAULT_REGION_ENTRY,
   DEFAULT_SIDEBAR_REGION_ENTRY,
   FACTORY_PRESETS,
   DEFAULT_CONFIG,
-  resolveComponentDefaultAlpha,
   resolveSchemeTokens,
 } from '../../shared/schema.mjs';
 
@@ -47,12 +45,14 @@ import {
 } from '../optics.mjs';
 
 import {
-  CURATED_TINT_SWATCHES,
   renderSliderRow,
   renderSwitchRow,
   renderSegRow,
   renderColorPickerWithWcag,
   renderFontFamilyControl,
+  renderRegionOpticalControlsHtml,
+  renderRegionBorderStyleRow,
+  formatRegionStyleBadge,
   renderRegionAccordionShell,
   countRegionCustomProps,
   countTotalCustomizedRegions,
@@ -130,12 +130,15 @@ function isRegionOpticalCustomized(eff, rid) {
   const op = rid === 'sidebar' ? (eff.sidebarOpacity ?? ent.opacity ?? null) : (ent.opacity ?? null);
   const bl = rid === 'sidebar' ? (eff.sidebarBlur ?? ent.blur ?? null) : (ent.blur ?? null);
   return (
+    ent.style !== null ||
     ent.glassEnabled !== null ||
     bl !== null ||
+    ent.saturation !== null ||
     op !== null ||
     Number(ent.tone || 0) !== 0 ||
     Boolean(ent.tint && String(ent.tint).trim()) ||
-    ent.borderOpacity !== null
+    ent.borderOpacity !== null ||
+    ent.elevation !== null
   );
 }
 
@@ -476,104 +479,6 @@ export function renderPresetsManagerDrawerHtml() {
   `;
 }
 
-function renderRegionGlassEnabledRow(rid, glassEnabled) {
-  const curVal = glassEnabled === true ? 'true' : glassEnabled === false ? 'false' : 'auto';
-  const opts = [
-    { val: 'auto', label: tr('region.followGlobal') },
-    { val: 'true', label: tr('layout.borders.on') },
-    { val: 'false', label: tr('layout.borders.off') },
-  ];
-  return `
-    <div class="prism-ctl-row">
-      <div class="prism-ctl-label">
-        <span class="prism-ctl-name">${esc(tr('region.prop.glassEnabled'))}</span>
-      </div>
-      <div class="prism-seg">
-        ${opts
-          .map(
-            (o) => `
-          <button type="button" class="prism-seg-btn ${curVal === o.val ? 'is-active' : ''}"
-                  data-action="set-region-prop" data-region="${esc(rid)}" data-prop="glassEnabled" data-val="${esc(o.val)}">
-            ${esc(o.label)}
-          </button>
-        `,
-          )
-          .join('')}
-      </div>
-    </div>
-  `;
-}
-
-function renderRegionBorderStyleRow(rid, borderStyle) {
-  const curVal = borderStyle || 'auto';
-  const opts = [
-    { val: 'auto', label: tr('region.prop.borderStyle.auto') },
-    { val: 'full', label: tr('region.prop.borderStyle.full') },
-    { val: 'bottom', label: tr('region.prop.borderStyle.bottom') },
-    { val: 'none', label: tr('region.prop.borderStyle.none') },
-  ];
-  return `
-    <div class="prism-ctl-row">
-      <div class="prism-ctl-label">
-        <span class="prism-ctl-name">${esc(tr('region.prop.borderStyle'))}</span>
-      </div>
-      <div class="prism-seg">
-        ${opts
-          .map(
-            (o) => `
-          <button type="button" class="prism-seg-btn ${curVal === o.val ? 'is-active' : ''}"
-                  data-action="set-region-prop" data-region="${esc(rid)}" data-prop="borderStyle" data-val="${esc(o.val)}">
-            ${esc(o.label)}
-          </button>
-        `,
-          )
-          .join('')}
-      </div>
-    </div>
-  `;
-}
-
-function renderRegionTintRow(rid, entry, surfaceFill) {
-  const curTint = typeof entry.tint === 'string' ? entry.tint.trim() : '';
-  const pickerHex = /^#[0-9a-f]{6}$/i.test(curTint) ? curTint : '#141417';
-
-  return `
-    <div class="prism-fg-color-ctl">
-      <div class="prism-fg-color-top">
-        <div class="prism-ctl-label">
-          <span class="prism-ctl-name">${esc(tr('region.prop.tint'))}</span>
-          <span class="prism-ctl-hint">${esc(tr('glass.comp.tintGuardHint'))}</span>
-        </div>
-        <div class="prism-color-picker-wrap">
-          <span class="prism-region-swatch" aria-hidden="true">
-            <span class="prism-region-swatch-fill" style="background:${esc(surfaceFill)}"></span>
-          </span>
-          <input type="color" class="prism-color-input" value="${esc(pickerHex)}"
-                 data-action="set-region-color" data-region="${esc(rid)}" data-prop="tint" />
-          <button type="button" class="prism-btn prism-btn-sm ${!curTint ? 'prism-btn-primary' : ''}"
-                  data-action="clear-region-prop" data-region="${esc(rid)}" data-prop="tint">
-            ${esc(tr('glass.comp.tintAuto'))}
-          </button>
-        </div>
-      </div>
-      <div class="prism-filter-group">
-        ${CURATED_TINT_SWATCHES.map((sw) => {
-          const swHex = String(sw.hex || '#141417').toUpperCase();
-          const isSel = curTint.toUpperCase() === swHex;
-          const swLabel = tr(sw.key || sw.labelKey || swHex);
-          return `
-            <button type="button" class="prism-chip ${isSel ? 'is-active' : ''}"
-                    data-action="pick-region-tint" data-region="${esc(rid)}" data-hex="${esc(swHex)}" title="${esc(swHex)}">
-              <span class="prism-accent-dot" style="background:${esc(swHex)}"></span>
-              <span>${esc(swLabel)}</span>
-            </button>
-          `;
-        }).join('')}
-      </div>
-    </div>
-  `;
-}
-
 function renderSidebarRadiusChips(legacyKey, currentVal) {
   const cur = String(currentVal || 'auto');
   const chips = [
@@ -600,129 +505,96 @@ function renderSidebarRadiusChips(legacyKey, currentVal) {
 function renderCardSubgroupHtml(eff, tokens, isLight) {
   const rid = 'card';
   const entry = getRegionEntry(eff, rid);
-  const bounds = SURFACE_TINT_BOUNDS.card || { minOpacity: 0, maxOpacity: 0.98 };
+  const fsBounds = REGION_FONT_SIZE_BOUNDS.card || { min: 10, max: 24 };
   const surf = resolveSimRegionSurface(rid, eff, tokens, isLight);
   const surfaceFill = surf?.rgba || 'rgba(20, 20, 24, 0.78)';
-  const defAlpha = resolveComponentDefaultAlpha(rid, eff, isLight);
   const radiusFallback = eff.layoutMode === 'flush' ? 0 : eff.cornerStyle === 'sharp' ? 6 : eff.cornerStyle === 'soft' ? 16 : 12;
+  const fsFallback = eff.globalFontSize ?? 14;
   const customN = countRegionCustomProps(rid, eff);
+  const styleInfo = formatRegionStyleBadge(rid, eff);
 
   return `
     <div class="prism-region-subgroup" data-region-subgroup="card">
       <div class="prism-region-subgroup-head">
-        <div style="display:flex;align-items:center;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap">
           <span class="prism-region-swatch" aria-hidden="true">
             <span class="prism-region-swatch-fill" style="background:${esc(surfaceFill)}"></span>
           </span>
           <span class="prism-region-subgroup-title">${esc(tr('region.card'))}</span>
+          <span class="prism-region-style-chip" data-region-style-chip="card" data-style-kind="${esc(styleInfo.kind)}">${esc(styleInfo.text)}</span>
           ${customN > 0 ? `<span class="prism-region-badge is-custom" data-region-badge="card">${esc(tr('region.customCount', { n: customN }))}</span>` : ''}
         </div>
         <button type="button" class="prism-btn prism-btn-sm" data-action="reset-region" data-region="card" title="${esc(tr('region.resetRegion'))}">↺</button>
       </div>
-      ${renderSliderRow({
-        key: 'regions.card.opacity',
-        label: tr('region.prop.opacity'),
-        value: entry.opacity ?? null,
-        defaultValue: defAlpha,
-        min: bounds.minOpacity,
-        max: bounds.maxOpacity,
-        step: 0.01,
-        scale: 100,
-        decimals: 0,
-        suffix: ' %',
-        nullable: true,
-        nullableFallbackKey: 'glassOpacity',
-        fallbackValue: defAlpha,
-        comp: 'card',
-        region: 'card',
-        prop: 'opacity',
-        resetAction: 'reset-region-prop',
-      })}
-      ${renderSliderRow({
-        key: 'regions.card.blur',
-        label: tr('region.prop.blur'),
-        value: entry.blur ?? null,
-        defaultValue: 0,
-        min: 0,
-        max: 64,
-        step: 1,
-        suffix: ' px',
-        nullable: true,
-        fallbackValue: 0,
-        comp: 'card',
-        region: 'card',
-        prop: 'blur',
-        resetAction: 'reset-region-prop',
-      })}
-      ${renderSliderRow({
-        key: 'regions.card.tone',
-        label: tr('region.prop.tone'),
-        value: Number(entry.tone || 0),
-        defaultValue: 0,
-        min: -100,
-        max: 100,
-        step: 1,
-        suffix: '',
-        comp: 'card',
-        region: 'card',
-        prop: 'tone',
-        resetAction: 'reset-region-prop',
-      })}
-      ${renderRegionTintRow('card', entry, surfaceFill)}
-      ${renderSliderRow({
-        key: 'regions.card.borderOpacity',
-        label: tr('region.prop.borderOpacity'),
-        value: entry.borderOpacity ?? null,
-        defaultValue: 1,
-        min: 0,
-        max: 1,
-        step: 0.01,
-        scale: 100,
-        decimals: 0,
-        suffix: ' %',
-        nullable: true,
-        fallbackValue: surf?.borderFactor ?? 0.5,
-        comp: 'card',
-        region: 'card',
-        prop: 'borderOpacity',
-        resetAction: 'reset-region-prop',
-      })}
-      ${renderRegionBorderStyleRow('card', entry.borderStyle)}
-      ${renderSliderRow({
-        key: 'regions.card.radius',
-        label: tr('region.prop.radius'),
-        value: entry.radius ?? null,
-        defaultValue: radiusFallback,
-        min: 0,
-        max: 28,
-        step: 1,
-        suffix: ' px',
-        nullable: true,
-        fallbackValue: radiusFallback,
-        comp: 'card',
-        region: 'card',
-        prop: 'radius',
-        resetAction: 'reset-region-prop',
-      })}
+      ${renderRegionOpticalControlsHtml(rid, entry, eff, tokens, isLight, { surf })}
+      <div class="prism-region-subblock">
+        <div class="prism-region-subblock-title">${esc(tr('region.geometrySection'))}</div>
+        ${renderRegionBorderStyleRow(rid, entry.borderStyle)}
+        ${renderSliderRow({
+          key: 'regions.card.radius',
+          label: tr('region.prop.radius'),
+          value: entry.radius ?? null,
+          defaultValue: radiusFallback,
+          min: 0,
+          max: 28,
+          step: 1,
+          suffix: ' px',
+          nullable: true,
+          fallbackValue: radiusFallback,
+          comp: rid,
+          region: rid,
+          prop: 'radius',
+          resetAction: 'reset-region-prop',
+        })}
+        ${renderSliderRow({
+          key: 'regions.card.fontSize',
+          label: tr('region.prop.fontSize'),
+          value: entry.fontSize ?? null,
+          defaultValue: fsFallback,
+          min: fsBounds.min,
+          max: fsBounds.max,
+          step: 1,
+          suffix: ' px',
+          nullable: true,
+          fallbackValue: fsFallback,
+          comp: rid,
+          region: rid,
+          prop: 'fontSize',
+          resetAction: 'reset-region-prop',
+        })}
+        ${renderFontFamilyControl({
+          key: 'regions.card.fontFamily',
+          region: rid,
+          label: tr('region.prop.fontFamily'),
+          value: entry.fontFamily || '',
+        })}
+        ${renderColorPickerWithWcag({
+          key: 'regions.card.fontColor',
+          region: rid,
+          label: tr('region.prop.fontColor'),
+          value: entry.fontColor || '',
+          allowRaw: Boolean(entry.allowRawFontColor),
+          eff,
+          tokens,
+          isLight,
+          showWcag: true,
+          showAllowRaw: true,
+          showCodeHint: false,
+          autoLabel: tr('region.prop.radiusAuto'),
+        })}
+      </div>
     </div>
   `;
 }
 
 function renderStandardRegionBody(rid, eff, tokens, isLight) {
   const entry = getRegionEntry(eff, rid);
-  const bounds = SURFACE_TINT_BOUNDS[rid] || { minOpacity: 0, maxOpacity: 0.98 };
   const fsBounds = REGION_FONT_SIZE_BOUNDS[rid] || { min: 10, max: 24 };
   const surf = resolveSimRegionSurface(rid, eff, tokens, isLight);
-  const surfaceFill = surf?.rgba || 'rgba(20, 20, 24, 0.76)';
-  const defAlpha = resolveComponentDefaultAlpha(rid, eff, isLight);
   const isSidebar = rid === 'sidebar';
   const isRightPane = rid === 'rightPane';
   const radiusFallback = eff.layoutMode === 'flush' ? 0 : eff.cornerStyle === 'sharp' ? 6 : eff.cornerStyle === 'soft' ? 16 : 12;
 
-  const opKey = isSidebar ? 'sidebarOpacity' : `regions.${rid}.opacity`;
-  const opVal = isSidebar ? (eff.sidebarOpacity ?? entry.opacity ?? null) : (entry.opacity ?? null);
-  const blurKey = isSidebar ? 'sidebarBlur' : `regions.${rid}.blur`;
-  const blurVal = isSidebar ? (eff.sidebarBlur ?? entry.blur ?? null) : (entry.blur ?? null);
   const fsKey = isSidebar ? 'sidebarFontSize' : `regions.${rid}.fontSize`;
   const fsVal = isSidebar ? (eff.sidebarFontSize ?? entry.fontSize ?? null) : (entry.fontSize ?? null);
   const fsFallback = eff.globalFontSize ?? (isSidebar ? 13 : 14);
@@ -754,89 +626,24 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
     }
   }
 
-  // Optical 6 keys (keeping sidebarOpacity & sidebarBlur inside details[data-region="sidebar"]!)
-  parts.push(renderRegionGlassEnabledRow(rid, entry.glassEnabled));
-  parts.push(
-    renderSliderRow({
-      key: opKey,
-      label: isSidebar ? tr('glass.sidebarOpacity') : tr('region.prop.opacity'),
-      value: opVal,
-      defaultValue: defAlpha,
-      min: bounds.minOpacity,
-      max: bounds.maxOpacity,
-      step: 0.01,
-      scale: 100,
-      decimals: 0,
-      suffix: ' %',
-      nullable: true,
-      nullableFallbackKey: rid === 'popover' ? '' : 'glassOpacity',
-      fallbackValue: defAlpha,
-      comp: rid,
-      region: rid,
-      prop: 'opacity',
-      resetAction: isSidebar ? 'reset-key' : 'reset-region-prop',
-    }),
-  );
-  parts.push(
-    renderSliderRow({
-      key: blurKey,
-      label: isSidebar ? tr('glass.sidebarBlur') : tr('region.prop.blur'),
-      value: blurVal,
-      defaultValue: eff.glassBlur,
-      min: 0,
-      max: 64,
-      step: 1,
-      suffix: ' px',
-      nullable: true,
-      nullableFallbackKey: 'glassBlur',
-      fallbackValue: eff.glassBlur,
-      comp: rid,
-      region: rid,
-      prop: 'blur',
-      resetAction: isSidebar ? 'reset-key' : 'reset-region-prop',
-    }),
-  );
-  parts.push(
-    renderSliderRow({
-      key: `regions.${rid}.tone`,
-      label: tr('region.prop.tone'),
-      value: Number(entry.tone || 0),
-      defaultValue: 0,
-      min: -100,
-      max: 100,
-      step: 1,
-      suffix: '',
-      comp: rid,
-      region: rid,
-      prop: 'tone',
-      resetAction: 'reset-region-prop',
-    }),
-  );
-  parts.push(renderRegionTintRow(rid, entry, surfaceFill));
-  parts.push(
-    renderSliderRow({
-      key: `regions.${rid}.borderOpacity`,
-      label: tr('region.prop.borderOpacity'),
-      value: entry.borderOpacity ?? null,
-      defaultValue: 1,
-      min: 0,
-      max: 1,
-      step: 0.01,
-      scale: 100,
-      decimals: 0,
-      suffix: ' %',
-      nullable: true,
-      fallbackValue: surf?.borderFactor ?? 0.5,
-      comp: rid,
-      region: rid,
-      prop: 'borderOpacity',
-      resetAction: 'reset-region-prop',
-    }),
-  );
+  if (rid === 'codeBlock') {
+    parts.push(
+      renderSegRow({
+        key: 'codeReadabilityMode',
+        label: tr('glass.codeMode'),
+        value: eff.codeReadabilityMode,
+        options: CODE_READABILITY_MODES.map((m) => ({ value: m, label: tr(`glass.code.${m}`) })),
+      }),
+    );
+  }
 
-  // Border style & radius
-  parts.push(renderRegionBorderStyleRow(rid, entry.borderStyle));
-  parts.push(
+  // Unified L3 Optical 9-Key Block (style, glassEnabled, opacity, blur, saturation, tone, tint, borderOpacity, elevation)
+  parts.push(renderRegionOpticalControlsHtml(rid, entry, eff, tokens, isLight, { surf }));
+
+  // Geometry, Borders & Typography
+  const geomParts = [];
+  geomParts.push(renderRegionBorderStyleRow(rid, entry.borderStyle));
+  geomParts.push(
     renderSliderRow({
       key: `regions.${rid}.radius`,
       label: isSidebar
@@ -859,8 +666,8 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
     }),
   );
   if (isSidebar) {
-    parts.push(renderSidebarRadiusChips('leftSidebarRadius', eff.leftSidebarRadius));
-    parts.push(
+    geomParts.push(renderSidebarRadiusChips('leftSidebarRadius', eff.leftSidebarRadius));
+    geomParts.push(
       renderSegRow({
         key: 'sidebarListStyle',
         label: tr('sidebar.listStyle'),
@@ -869,7 +676,7 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
         options: SIDEBAR_LIST_STYLES.map((st) => ({ value: st, label: tr(`sidebar.listStyle.${st}`) })),
       }),
     );
-    parts.push(
+    geomParts.push(
       renderSegRow({
         key: 'sidebarTypographyMode',
         label: tr('sidebar.typographyMode'),
@@ -879,12 +686,12 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
     );
   }
   if (isRightPane) {
-    parts.push(renderSidebarRadiusChips('rightSidebarRadius', eff.rightSidebarRadius));
+    geomParts.push(renderSidebarRadiusChips('rightSidebarRadius', eff.rightSidebarRadius));
   }
 
   // Typography & foreground contrast guardrail (D7)
   if (rid !== 'wco') {
-    parts.push(
+    geomParts.push(
       renderSliderRow({
         key: fsKey,
         label: isSidebar ? tr('sidebar.fontSize') : tr('region.prop.fontSize'),
@@ -903,7 +710,7 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
         resetAction: isSidebar ? 'reset-key' : 'reset-region-prop',
       }),
     );
-    parts.push(
+    geomParts.push(
       renderFontFamilyControl({
         key: `regions.${rid}.fontFamily`,
         region: rid,
@@ -912,7 +719,7 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
       }),
     );
   }
-  parts.push(
+  geomParts.push(
     renderColorPickerWithWcag({
       key: `regions.${rid}.fontColor`,
       region: rid,
@@ -924,10 +731,17 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
       isLight,
       showWcag: true,
       showAllowRaw: true,
-      showCodeHint: rid === 'workspace',
+      showCodeHint: rid === 'workspace' || rid === 'codeBlock' || rid === 'assistantBubble',
       autoLabel: tr('region.prop.radiusAuto'),
     }),
   );
+
+  parts.push(`
+    <div class="prism-region-subblock">
+      <div class="prism-region-subblock-title">${esc(tr('region.geometrySection'))}</div>
+      ${geomParts.join('')}
+    </div>
+  `);
 
   // Region-specific extras
   if (rid === 'workspace') {
@@ -943,14 +757,8 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
     parts.push(`
       <div class="prism-region-subgroup">
         <div class="prism-region-subgroup-head">
-          <span class="prism-region-subgroup-title">${esc(tr('glass.codeMode'))}</span>
+          <span class="prism-region-subgroup-title">${esc(tr('glass.chatFidelity'))}</span>
         </div>
-        ${renderSegRow({
-          key: 'codeReadabilityMode',
-          label: tr('glass.codeMode'),
-          value: eff.codeReadabilityMode,
-          options: CODE_READABILITY_MODES.map((m) => ({ value: m, label: tr(`glass.code.${m}`) })),
-        })}
         ${renderSwitchRow({
           key: 'contrastFloor',
           label: tr('glass.contrastFloor'),
@@ -1425,12 +1233,15 @@ export function renderRegionGroupHtml(regionId, eff = getEffectiveConfig(), pola
     ? renderGlobalRegionBody(eff, polarity)
     : renderStandardRegionBody(regionId, eff, tokens, isLight);
 
-  const customCount = countRegionCustomProps(regionId, eff);
+  const customCount =
+    regionId === 'workspace'
+      ? countRegionCustomProps('workspace', eff) + countRegionCustomProps('card', eff)
+      : countRegionCustomProps(regionId, eff);
 
   // DEF-SE-2 CRITICAL CONTRACT:
-  // Groups 1–7 strictly use `data-action="reset-region" data-region="<id>"`.
-  // Group 8 (`global`) EXCLUSIVELY uses `data-action="reset-module" data-keys="...islandGap..."`
-  // to protect `verify-all.mjs:L4322` (`summary [data-action="reset-module"]`).
+  // Groups 1–11 strictly use `data-action="reset-region" data-region="<id>"`.
+  // Group 12 (`global`) EXCLUSIVELY uses `data-action="reset-module" data-keys="...islandGap..."`
+  // to protect `verify-all.mjs:L7278` (`summary [data-action="reset-module"]`).
   return renderRegionAccordionShell({
     regionId,
     title,
@@ -1444,6 +1255,13 @@ export function renderRegionGroupHtml(regionId, eff = getEffectiveConfig(), pola
   });
 }
 
+const CATEGORY_DIVIDER_BEFORE = Object.freeze({
+  topbar: 'region.cat.chrome',
+  userBubble: 'region.cat.chat',
+  controls: 'region.cat.controls',
+  global: 'region.global',
+});
+
 export function renderPrismSkinTab() {
   const eff = getEffectiveConfig();
   const polarity = getResolvedPolarity(eff);
@@ -1451,7 +1269,13 @@ export function renderPrismSkinTab() {
   return `
     ${renderSkinTopActionBarHtml(eff)}
     <div id="prism-region-accordions" class="prism-regions-stack">
-      ${REGION_UI_ORDER.map((rid) => renderRegionGroupHtml(rid, eff, polarity)).join('')}
+      ${REGION_UI_ORDER.map((rid) => {
+        const catKey = CATEGORY_DIVIDER_BEFORE[rid];
+        const catHtml = catKey
+          ? `<div class="prism-regions-cat-label" role="presentation">${esc(tr(catKey))}</div>`
+          : '';
+        return `${catHtml}${renderRegionGroupHtml(rid, eff, polarity)}`;
+      }).join('')}
     </div>
   `;
 }

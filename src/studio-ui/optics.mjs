@@ -4,12 +4,15 @@
 
 import {
   REGION_IDS,
+  GLASS_STYLES,
+  ZERO_BLUR_BY_DEFAULT_REGIONS,
   SURFACE_TINT_BOUNDS,
   DEFAULT_REGION_ENTRY,
   DEFAULT_CONFIG,
   CJK_SAFE_FONT_PRESETS,
   sanitizeConfig,
   resolveSchemeTokens,
+  resolveRegionEffectiveStyle,
   resolveComponentDefaultAlpha,
   sanitizeFontFamily,
   hexToRgbTriplet,
@@ -208,21 +211,48 @@ export function computeBorderFactor(alpha, bScale, overrideBorderOp = null) {
   return bs * Math.pow(clampNum(a / 0.8, 0, 1), 0.9);
 }
 
-export function computeShadowFactor(alpha, shadowsOn) {
+export function computeShadowFactor(alpha, shadowsOn, elevation = null) {
   const a = Number(alpha);
-  if (!shadowsOn || !Number.isFinite(a) || a <= 0.01) return 0;
+  // Mandatory Guardrail F-02: never emit phantom shadows on zero-opacity elements even when elevation > 0
+  if (!Number.isFinite(a) || a <= 0.01) return 0;
+  if (elevation !== null && elevation !== undefined && elevation !== '') {
+    const el = Number(elevation);
+    if (Number.isFinite(el)) {
+      if (el <= 0.001) return 0;
+      return Math.pow(clampNum(Math.max(a, 0.35) / 0.65, 0, 1), 1.15) * clampNum(el, 0, 2);
+    }
+  }
+  if (!shadowsOn) return 0;
   return Math.pow(clampNum(a / 0.65, 0, 1), 1.15);
 }
 
-export function buildSimBackdrop(px, isLight, isNested = false) {
+export function buildSimBackdrop(px, isLight, isNested = false, customSat = null, effStyle = null) {
+  if (effStyle === 'none' || effStyle === 'tinted' || effStyle === 'solid') return 'none';
   const r = Math.round(clampNum(Number(px) || 0, 0, 64));
   if (r <= 0) return 'none';
-  const sat = isNested
-    ? Math.round(100 + Math.min(15, r * 0.25))
-    : isLight
-      ? Math.round(125 + Math.min(65, r * 1.45))
-      : Math.round(115 + Math.min(65, r * 1.35));
-  return `blur(${r}px) saturate(${sat}%)`;
+  const gpuR = r <= 28 ? r : Math.min(32, Math.round(28 + (4 * (r - 28)) / (r - 28 + 12)));
+  const satBoost = r > 28 ? Math.round(Math.min(18, (r - 28) * 0.5)) : 0;
+  const hasCustomSat =
+    customSat !== null && customSat !== undefined && customSat !== '' && Number.isFinite(Number(customSat));
+  const sat = hasCustomSat
+    ? Math.round(clampNum(Number(customSat), 50, 220))
+    : effStyle === 'crystal'
+      ? isLight
+        ? 165
+        : 150
+      : isNested
+        ? Math.round(100 + Math.min(15, r * 0.25) + satBoost * 0.4)
+        : isLight
+          ? Math.round(125 + Math.min(65, r * 1.45) + satBoost)
+          : Math.round(115 + Math.min(65, r * 1.35) + satBoost);
+  return `blur(${gpuR}px) saturate(${sat}%)`;
+}
+
+function sanitizeSimGlassStyle(v) {
+  if (v === null || v === undefined || v === '' || v === 'auto') return null;
+  if (typeof v !== 'string') return null;
+  const s = v.trim().toLowerCase();
+  return GLASS_STYLES.includes(s) ? s : null;
 }
 
 function getRegionEntryMerged(comp, eff) {
@@ -230,12 +260,15 @@ function getRegionEntryMerged(comp, eff) {
   const tint = eff?.surfaceTints?.[comp];
   const base = { ...DEFAULT_REGION_ENTRY };
   if (tint && typeof tint === 'object') {
+    if (tint.style !== undefined) base.style = tint.style;
     if (tint.glassEnabled !== undefined) base.glassEnabled = tint.glassEnabled;
     if (tint.blur !== undefined) base.blur = tint.blur;
+    if (tint.saturation !== undefined) base.saturation = tint.saturation;
     if (tint.opacity !== undefined) base.opacity = tint.opacity;
     if (tint.tone !== undefined) base.tone = tint.tone;
     if (tint.tint !== undefined) base.tint = tint.tint;
     if (tint.borderOpacity !== undefined) base.borderOpacity = tint.borderOpacity;
+    if (tint.elevation !== undefined) base.elevation = tint.elevation;
   }
   if (reg && typeof reg === 'object') {
     Object.assign(base, reg);
@@ -253,45 +286,78 @@ function getRegionEntryMerged(comp, eff) {
 
 function isWcoEntryAuto(entry) {
   return (
+    entry.style === null &&
     entry.opacity === null &&
     Number(entry.tone || 0) === 0 &&
     !entry.tint &&
     entry.blur === null &&
+    entry.saturation === null &&
     entry.glassEnabled === null &&
     entry.borderOpacity === null &&
+    entry.elevation === null &&
     entry.borderStyle === null &&
     entry.radius === null
   );
 }
 
-function resolveRegionBlurPxSim(comp, entry, eff, topbarBlurPx = null) {
+function resolveRegionBlurPxSim(comp, entry, eff, topbarBlurPx = null, effStyle = null) {
   const glassOn =
     entry.glassEnabled !== null && entry.glassEnabled !== undefined
       ? Boolean(entry.glassEnabled)
       : Boolean(eff.glassSurfaces !== false);
   if (!glassOn) return 0;
 
-  let raw;
-  if (entry.blur !== null && entry.blur !== undefined) {
-    raw = clampNum(Math.round(Number(entry.blur)), 0, 64);
-  } else if (comp === 'card') {
-    raw = 0;
-  } else if (comp === 'sidebar') {
-    const sbRaw = eff.sidebarBlur !== null && eff.sidebarBlur !== undefined ? eff.sidebarBlur : eff.glassBlur;
-    raw = clampNum(Math.round(Number(sbRaw) || 0), 0, 64);
-  } else if (comp === 'composer') {
-    const gb = Number(eff.glassBlur) || 0;
-    raw = gb > 0 ? Math.min(64, Math.round(gb + 4)) : 0;
-  } else if (comp === 'popover') {
-    const gb = Number(eff.glassBlur) || 0;
-    raw = gb > 0 ? Math.min(64, Math.round(gb + 6)) : 0;
-  } else if (comp === 'wco' && topbarBlurPx !== null) {
-    return topbarBlurPx;
-  } else {
-    raw = clampNum(Math.round(Number(eff.glassBlur) || 0), 0, 64);
+  const explicitStyle = sanitizeSimGlassStyle(entry.style);
+  if (explicitStyle === 'none' || explicitStyle === 'tinted' || explicitStyle === 'solid') return 0;
+  if (explicitStyle === null && (effStyle === 'none' || effStyle === 'tinted' || effStyle === 'solid')) {
+    const hasExplicitPosBlur = entry.blur !== null && entry.blur !== undefined && Number(entry.blur) > 0;
+    if (!hasExplicitPosBlur) return 0;
   }
+
+  if (comp === 'wco' && entry.blur === null && entry.glassEnabled === null && explicitStyle === null && topbarBlurPx !== null) {
+    return topbarBlurPx;
+  }
+
+  const gb = Number(eff.glassBlur) || 0;
+  let defaultPx;
+  if (comp === 'wco') {
+    const tbBlur = eff.regions?.topbar?.blur;
+    defaultPx = tbBlur !== null && tbBlur !== undefined ? Number(tbBlur) : gb;
+  } else if (comp === 'sidebar') {
+    const sbRaw = eff.sidebarBlur !== null && eff.sidebarBlur !== undefined ? eff.sidebarBlur : gb;
+    defaultPx = Number(sbRaw) || 0;
+  } else if (comp === 'composer') {
+    defaultPx = gb > 0 ? Math.min(64, Math.round(gb + 4)) : 0;
+  } else if (comp === 'popover') {
+    defaultPx = gb > 0 ? Math.min(64, Math.round(gb + 6)) : 0;
+  } else if (comp === 'codeBlock') {
+    defaultPx =
+      explicitStyle === 'frosted'
+        ? gb > 0
+          ? gb
+          : 16
+        : eff.codeReadabilityMode === 'frosted' && gb > 0
+          ? Math.max(4, Math.round(gb * 0.85))
+          : 0;
+  } else if (ZERO_BLUR_BY_DEFAULT_REGIONS.includes(comp)) {
+    defaultPx = 0;
+  } else {
+    defaultPx = gb;
+  }
+
+  let fallbackPx = defaultPx;
+  if (effStyle === 'frosted') {
+    fallbackPx = defaultPx > 0 ? defaultPx : 16;
+  } else if (effStyle === 'crystal') {
+    fallbackPx = defaultPx > 0 ? Math.max(10, Math.round(defaultPx * 0.75)) : 12;
+  }
+
+  const raw =
+    entry.blur !== null && entry.blur !== undefined
+      ? clampNum(Math.round(Number(entry.blur)), 0, 64)
+      : clampNum(Math.round(Number(fallbackPx) || 0), 0, 64);
   if (raw <= 0) return 0;
-  return Math.round(raw * 0.85);
+  return Math.max(1, Math.round(raw * 0.85));
 }
 
 function resolveBorderWidths(borderStyle) {
@@ -316,10 +382,18 @@ export function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens
     topbarSurface = resolveSimRegionSurface('topbar', eff, tok, light);
   }
 
+  const effStyleRaw = wcoAuto && topbarSurface
+    ? topbarSurface.effStyle
+    : resolveRegionEffectiveStyle(comp, entry, eff);
+  const effEdgeStyle =
+    comp === 'wco' && effStyleRaw === null && topbarSurface ? topbarSurface.effStyle : effStyleRaw;
+
   const baseRgb = parseRgbTriplet(tok.baseRgb, [14, 14, 17]);
   const shadeRgb = parseRgbTriplet(tok.shadeRgb, [9, 9, 11]);
   const tint1Rgb = parseRgbTriplet(tok.tint1Rgb, [20, 20, 24]);
+  const tint2Rgb = parseRgbTriplet(tok.tint2Rgb, [28, 28, 34]);
   const popRgb = parseRgbTriplet(tok.popoverRgb, [22, 22, 28]);
+  const accentRgb = parseRgbTriplet(tok.accentRgb || hexToRgbTriplet(tok.accent), [102, 157, 246]);
   const wallTintRgb = parseRgbTriplet(tok.wallTintRgb, [102, 157, 246]);
   const fgRgb = parseRgbTriplet(hexToRgbTriplet(tok.fg, light ? '15, 23, 42' : '242, 242, 245'));
   const ptRgb = parseRgbTriplet(tok.ptRgb, light ? [15, 23, 42] : [255, 255, 255]);
@@ -347,17 +421,34 @@ export function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens
           : sbBaseRgb
         : comp === 'topbar' || comp === 'sidebar'
           ? sbBaseRgb
-          : comp === 'workspace' || comp === 'rightPane'
+          : comp === 'workspace' || comp === 'rightPane' || comp === 'assistantBubble'
             ? baseRgb
-            : comp === 'popover'
-              ? popRgb
-              : tint1Rgb;
-    const wallWeight =
+            : comp === 'codeBlock'
+              ? effEdgeStyle === 'solid'
+                ? tint1Rgb
+                : baseRgb
+              : comp === 'controls'
+                ? tint2Rgb
+                : comp === 'popover'
+                  ? popRgb
+                  : tint1Rgb;
+    const baseWallWeight =
       comp === 'popover'
         ? wallMix * 0.4
-        : comp === 'composer' || comp === 'card'
-          ? wallMix
-          : wallMix * 0.75;
+        : comp === 'codeBlock'
+          ? wallMix * 0.5
+          : comp === 'composer' || comp === 'card' || comp === 'userBubble'
+            ? wallMix
+            : wallMix * 0.75;
+    const styleWallRgb = effEdgeStyle === 'tinted' && wallMix <= 0 ? accentRgb : wallTintRgb;
+    const wallWeight =
+      effEdgeStyle === 'tinted'
+        ? wallMix > 0
+          ? Math.max(wallMix, 0.22)
+          : 0.18
+        : effEdgeStyle === 'solid'
+          ? baseWallWeight * 0.5
+          : baseWallWeight;
 
     const contrastOn = eff.contrastFloor !== false;
     const hasTint = Boolean(entry.tint);
@@ -367,17 +458,24 @@ export function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens
     let rgb = hasTint ? adaptCustomTintRgb(entry.tint, light, contrastOn) : defaultRgb;
     rgb = applyToneShiftRgb(rgb, toneVal, light);
     preMixRgb = hasToneOrTint && contrastOn ? enforceContrastFloorRgb(rgb, fgRgb, light, 4.5) : rgb;
-    finalRgb = hasTint ? preMixRgb : mixRgbArr(preMixRgb, wallTintRgb, wallWeight);
-    if (hasToneOrTint && contrastOn) {
+    finalRgb = hasTint ? preMixRgb : mixRgbArr(preMixRgb, styleWallRgb, wallWeight);
+    if ((hasToneOrTint || effEdgeStyle === 'tinted') && contrastOn) {
       finalRgb = enforceContrastFloorRgb(finalRgb, fgRgb, light, 4.5);
     }
 
-    const solidChrome = entry.glassEnabled === true ? false : eff.glassSurfaces === false;
-    if (solidChrome && comp !== 'popover') {
+    const solidChrome =
+      comp === 'popover'
+        ? false
+        : entry.glassEnabled === true
+          ? false
+          : comp === 'assistantBubble' && effEdgeStyle === 'none'
+            ? false
+            : eff.glassSurfaces === false;
+    if (solidChrome) {
       alpha = 1;
     } else if (entry.opacity !== null && entry.opacity !== undefined) {
       alpha = clampNum(Number(entry.opacity), bounds.minOpacity, bounds.maxOpacity);
-    } else if (comp === 'wco' && topbarSurface) {
+    } else if (comp === 'wco' && topbarSurface && effStyleRaw === null) {
       alpha = topbarSurface.alpha;
     } else {
       alpha = resolveComponentDefaultAlpha(comp, eff, light);
@@ -386,13 +484,39 @@ export function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens
 
   const isIslands = eff.layoutMode !== 'flush';
   const bScale = eff.borders === 'off' ? 0 : eff.borders === 'subtle' ? 0.5 : 1;
-  const baseBorderA = light ? 0.14 : 0.14;
-  const effectiveBorderStyle = wcoAuto && topbarSurface ? topbarSurface.entry.borderStyle : entry.borderStyle;
+  const baseBorderA = 0.14;
+  const effectiveBorderStyle =
+    wcoAuto && topbarSurface
+      ? topbarSurface.entry.borderStyle
+      : comp === 'assistantBubble' && alpha <= 0.01 && entry.borderStyle === null
+        ? 'none'
+        : entry.borderStyle;
   const effectiveBorderOp = wcoAuto && topbarSurface ? topbarSurface.entry.borderOpacity : entry.borderOpacity;
-  const borderFactor =
-    effectiveBorderStyle === 'none' ? 0 : computeBorderFactor(alpha, bScale, effectiveBorderOp);
+  const effectiveElevation =
+    wcoAuto && topbarSurface
+      ? topbarSurface.entry.elevation
+      : comp === 'wco' && (entry.elevation === null || entry.elevation === undefined) && topbarSurface
+        ? topbarSurface.entry.elevation
+        : entry.elevation;
+
+  const styleBfScale = effEdgeStyle === 'tinted' ? 0.85 : effEdgeStyle === 'solid' ? 0.9 : 1;
+  let borderFactor =
+    effectiveBorderStyle === 'none' ? 0 : computeBorderFactor(alpha, bScale * styleBfScale, effectiveBorderOp);
+  if (
+    effEdgeStyle === 'crystal' &&
+    effectiveBorderStyle !== 'none' &&
+    bScale > 0 &&
+    (effectiveBorderOp === null || effectiveBorderOp === undefined) &&
+    borderFactor > 0
+  ) {
+    borderFactor = Math.min(1, borderFactor * 1.35 + 0.08);
+  }
+
   const shadowEnabled = comp === 'popover' ? Boolean(eff.shadows) : Boolean(isIslands && eff.shadows);
-  const shadowFactor = computeShadowFactor(alpha, shadowEnabled);
+  const shadowFactor = computeShadowFactor(alpha, shadowEnabled, effectiveElevation);
+
+  const specMult = effEdgeStyle === 'crystal' ? 1.45 : effEdgeStyle === 'tinted' ? 0.4 : effEdgeStyle === 'solid' ? 0 : 1;
+  const sheenMult = effEdgeStyle === 'crystal' ? 1.45 : effEdgeStyle === 'tinted' ? 0.4 : effEdgeStyle === 'solid' ? 0 : 1;
 
   const borderColor =
     borderFactor <= 0.001
@@ -402,31 +526,48 @@ export function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens
   const borderWidths = resolveBorderWidths(effectiveBorderStyle);
 
   const specular =
-    borderFactor <= 0.001
+    borderFactor <= 0.001 || specMult <= 0
       ? 'transparent'
-      : `rgba(255, 255, 255, ${((light ? 0.86 : 0.09) * borderFactor).toFixed(3)})`;
+      : `rgba(255, 255, 255, ${clampNum((light ? 0.86 : 0.09) * borderFactor * specMult, 0, 1).toFixed(3)})`;
   const sheen =
-    borderFactor <= 0.001
+    borderFactor <= 0.001 || sheenMult <= 0
       ? 'none'
       : light
-        ? `linear-gradient(172deg, rgba(255, 255, 255, ${(0.68 * borderFactor).toFixed(3)}) 0%, rgba(255, 255, 255, 0) 40%)`
-        : `linear-gradient(172deg, rgba(255, 255, 255, ${(0.045 * borderFactor).toFixed(3)}) 0%, rgba(255, 255, 255, 0) 38%)`;
+        ? `linear-gradient(172deg, rgba(255, 255, 255, ${clampNum(0.68 * borderFactor * sheenMult, 0, 0.96).toFixed(3)}) 0%, rgba(255, 255, 255, 0) 40%)`
+        : `linear-gradient(172deg, rgba(255, 255, 255, ${clampNum(0.045 * borderFactor * sheenMult, 0, 0.24).toFixed(3)}) 0%, rgba(255, 255, 255, 0) 38%)`;
 
   const shadowParts = [];
-  if (borderFactor > 0.001) {
+  if (borderFactor > 0.001 && specMult > 0) {
     shadowParts.push(`inset 0 1px 0 ${specular}`);
   }
   if (shadowFactor > 0.001) {
-    const dropAlpha = (comp === 'popover' ? (light ? 0.24 : 0.54) : light ? 0.12 : 0.38) * shadowFactor;
+    const dropAlpha = clampNum((comp === 'popover' ? (light ? 0.24 : 0.54) : light ? 0.12 : 0.38) * shadowFactor, 0, 0.88);
     shadowParts.push(`0 6px 16px rgba(0, 0, 0, ${dropAlpha.toFixed(3)})`);
   }
   const shadowCss = shadowParts.length > 0 ? shadowParts.join(', ') : 'none';
 
   const blurPx = wcoAuto && topbarSurface
     ? topbarSurface.blurPx
-    : resolveRegionBlurPxSim(comp, entry, eff, topbarSurface ? topbarSurface.blurPx : null);
-  const isNested = comp === 'composer' || comp === 'card';
-  const backdrop = buildSimBackdrop(blurPx, light, isNested);
+    : resolveRegionBlurPxSim(comp, entry, eff, topbarSurface ? topbarSurface.blurPx : null, effEdgeStyle);
+  const isNested =
+    comp === 'composer' ||
+    comp === 'card' ||
+    comp === 'userBubble' ||
+    comp === 'assistantBubble' ||
+    comp === 'codeBlock' ||
+    comp === 'controls';
+  const satOverride =
+    wcoAuto && topbarSurface
+      ? topbarSurface.entry.saturation
+      : comp === 'wco' && (entry.saturation === null || entry.saturation === undefined) && topbarSurface
+        ? topbarSurface.entry.saturation
+        : entry.saturation;
+  const isDefaultPopover =
+    comp === 'popover' &&
+    (entry.style === null || entry.style === undefined) &&
+    (entry.blur === null || entry.blur === undefined);
+  const cutoff = isDefaultPopover ? 0.94 : 0.98;
+  const backdrop = alpha >= cutoff ? 'none' : buildSimBackdrop(blurPx, light, isNested, satOverride, effEdgeStyle);
 
   const rawFgHex = entry.fontColor || eff.globalFontColor || '';
   const fgEval = resolveRegionFgColor({
@@ -449,7 +590,15 @@ export function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens
     radiusCss = `${Math.round(clampNum(Number(entry.radius), 0, 28) * 0.65)}px`;
   } else if (comp === 'topbar' || comp === 'wco') {
     radiusCss = isIslands ? `${Math.max(4, baseR - 2)}px` : '0px';
-  } else if (comp === 'card' || comp === 'composer' || comp === 'popover') {
+  } else if (comp === 'userBubble') {
+    const ubPx = eff.cornerStyle === 'sharp' ? 10 : eff.cornerStyle === 'soft' ? 22 : 20;
+    radiusCss = `${Math.max(6, Math.round(ubPx * 0.65))}px`;
+  } else if (comp === 'codeBlock') {
+    const cbPx = eff.cornerStyle === 'sharp' ? 6 : eff.cornerStyle === 'soft' ? 14 : 12;
+    radiusCss = `${Math.max(3, Math.round(cbPx * 0.65))}px`;
+  } else if (comp === 'controls') {
+    radiusCss = `${Math.max(3, baseR - 4)}px`;
+  } else if (comp === 'card' || comp === 'composer' || comp === 'popover' || comp === 'assistantBubble') {
     radiusCss = `${Math.max(3, baseR - 3)}px`;
   } else if (comp === 'sidebar') {
     const raw = eff.leftSidebarRadius;
@@ -476,6 +625,7 @@ export function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens
     bgCss: rgba,
     blurPx,
     backdrop,
+    effStyle: effEdgeStyle || (blurPx > 0 ? 'frosted' : 'none'),
     borderFactor,
     shadowFactor,
     border: borderColor,
@@ -673,9 +823,17 @@ export function shouldPlayStudioPreviewVideo(eff = getEffectiveConfig()) {
   );
 }
 
+const SIM_KEBAB_ALIASES = Object.freeze({
+  rightPane: 'right-pane',
+  userBubble: 'user-bubble',
+  assistantBubble: 'assistant-bubble',
+  codeBlock: 'code-block',
+});
+
 function applyRegionVarsToTarget(targetEl, comp, surf) {
   if (!targetEl || !targetEl.style) return;
-  const keys = comp === 'rightPane' ? ['rightPane', 'right-pane'] : [comp];
+  const kebab = SIM_KEBAB_ALIASES[comp];
+  const keys = kebab ? [comp, kebab] : [comp];
   for (const k of keys) {
     targetEl.style.setProperty(`--sim-${k}-bg`, surf.rgba);
     targetEl.style.setProperty(`--sim-${k}-backdrop`, surf.backdrop);
@@ -693,6 +851,64 @@ function applyRegionVarsToTarget(targetEl, comp, surf) {
     targetEl.style.setProperty(`--sim-${k}-font-family`, surf.fontFamily || 'inherit');
     targetEl.style.setProperty(`--sim-${k}-font-size`, surf.fontSize ? `${surf.fontSize}px` : '');
   }
+}
+
+function computeAuxSimVars(eff, tokens, isLight, compSurfaces) {
+  const tint1Rgb = parseRgbTriplet(tokens.tint1Rgb, [20, 20, 24]);
+  const tint2Rgb = parseRgbTriplet(tokens.tint2Rgb, [28, 28, 34]);
+  const ptRgb = parseRgbTriplet(tokens.ptRgb, isLight ? [15, 23, 42] : [255, 255, 255]);
+  const accentRgb = parseRgbTriplet(tokens.accentRgb || hexToRgbTriplet(tokens.accent), [102, 157, 246]);
+  const wallTintRgb = parseRgbTriplet(tokens.wallTintRgb, accentRgb);
+  const fgRgb = parseRgbTriplet(hexToRgbTriplet(tokens.fg, isLight ? '15, 23, 42' : '242, 242, 245'));
+  const contrastOn = eff.contrastFloor !== false;
+
+  const asstSurf = compSurfaces.assistantBubble;
+  const asstEntry = asstSurf.entry || DEFAULT_REGION_ENTRY;
+  const asstStyle = asstSurf.effStyle;
+  const turnCardSolid = !(asstEntry.glassEnabled === true) && eff.glassSurfaces === false;
+  const turnCardAlpha = turnCardSolid
+    ? 1
+    : asstEntry.opacity !== null && asstEntry.opacity !== undefined || asstStyle === 'solid'
+      ? asstSurf.alpha
+      : asstStyle === 'frosted' || asstStyle === 'crystal'
+        ? Math.max(asstSurf.alpha, isLight ? 0.56 : 0.44)
+        : clampNum((eff.glassOpacity || 0.76) * (isLight ? 0.8 : 0.64), isLight ? 0.52 : 0.42, 0.88);
+  const turnCardRgb = asstSurf.hasToneOrTint
+    ? asstSurf.rgb
+    : mixRgbArr(tint1Rgb, wallTintRgb, Number(eff.wallTintMix || 0));
+  const turnCardBg = `rgba(${turnCardRgb[0]}, ${turnCardRgb[1]}, ${turnCardRgb[2]}, ${turnCardAlpha.toFixed(3)})`;
+
+  const ctrlSurf = compSurfaces.controls;
+  const ctrlEntry = ctrlSurf.entry || DEFAULT_REGION_ENTRY;
+  const ctrlSolid = !(ctrlEntry.glassEnabled === true) && eff.glassSurfaces === false;
+  const ctrlActiveAlpha = ctrlSolid
+    ? 1
+    : ctrlEntry.opacity !== null && ctrlEntry.opacity !== undefined
+      ? clampNum(Math.max(ctrlSurf.alpha, 0.56), 0.35, 0.96)
+      : ctrlSurf.effStyle === 'solid'
+        ? isLight
+          ? 0.97
+          : 0.96
+        : isLight
+          ? 0.82
+          : 0.74;
+  const rawCtrlActiveRgb = mixRgbArr(ctrlSurf.hasToneOrTint ? ctrlSurf.rgb : tint2Rgb, accentRgb, isLight ? 0.18 : 0.22);
+  const ctrlActiveRgb = contrastOn ? enforceContrastFloorRgb(rawCtrlActiveRgb, fgRgb, isLight, 4.5) : rawCtrlActiveRgb;
+  const controlActiveBg = `rgba(${ctrlActiveRgb[0]}, ${ctrlActiveRgb[1]}, ${ctrlActiveRgb[2]}, ${ctrlActiveAlpha.toFixed(3)})`;
+  const controlHoverBg = `rgba(${ptRgb[0]}, ${ptRgb[1]}, ${ptRgb[2]}, ${isLight ? '0.075' : '0.085'})`;
+
+  const rawSelectedRgb = mixRgbArr(tint2Rgb, accentRgb, isLight ? 0.22 : 0.28);
+  const selectedRgb = contrastOn ? enforceContrastFloorRgb(rawSelectedRgb, fgRgb, isLight, 4.5) : rawSelectedRgb;
+  const selectedBg = `rgba(${selectedRgb[0]}, ${selectedRgb[1]}, ${selectedRgb[2]}, ${isLight ? '0.220' : '0.240'})`;
+  const scrollThumb = `rgba(${ptRgb[0]}, ${ptRgb[1]}, ${ptRgb[2]}, ${isLight ? '0.240' : '0.220'})`;
+
+  return {
+    turnCardBg,
+    controlActiveBg,
+    controlHoverBg,
+    selectedBg,
+    scrollThumb,
+  };
 }
 
 function applyStageAndHubOpticalVars(stage, hub, eff, tokens, isLight, compSurfaces) {
@@ -770,26 +986,15 @@ function applyStageAndHubOpticalVars(stage, hub, eff, tokens, isLight, compSurfa
   hub.dataset.topbarStyle = eff.topbarStyle || 'pills';
   hub.dataset.sidebarStyle = eff.sidebarListStyle || 'capsule';
   hub.dataset.wcoTransparent = eff.transparentWindowControls !== false ? 'true' : 'false';
+  hub.dataset.assistantBlur = compSurfaces.assistantBubble.backdrop !== 'none' ? 'true' : 'false';
 
   const baseR = eff.cornerStyle === 'sharp' ? 4 : eff.cornerStyle === 'soft' ? 12 : 8;
-  const g = eff.glassSurfaces ? eff.glassOpacity : 0.96;
   const blurPx = compSurfaces.workspace.blurPx;
   const sbBlurPx = compSurfaces.sidebar.blurPx;
   const compBlurPx = compSurfaces.composer.blurPx;
-  const codeBlurPx =
-    eff.glassSurfaces && eff.codeReadabilityMode === 'frosted' && blurPx > 0
-      ? Math.max(4, Math.round(blurPx * 0.85))
-      : 0;
-
-  const floorAlpha = eff.contrastFloor ? (isLight ? 0.84 : 0.72) : 0.44;
-  let editorBg = `rgba(${tokens.tint1Rgb}, ${Math.max(floorAlpha, g * 0.78).toFixed(3)})`;
-  let codeBackdrop = 'none';
-  if (eff.codeReadabilityMode === 'solid') {
-    editorBg = `rgb(${tokens.tint1Rgb})`;
-  } else if (eff.codeReadabilityMode === 'frosted') {
-    editorBg = `rgba(${tokens.tint1Rgb}, ${Math.max(floorAlpha, g * 0.85).toFixed(3)})`;
-    codeBackdrop = buildSimBackdrop(codeBlurPx, isLight, true);
-  }
+  const editorBg = compSurfaces.codeBlock.rgba;
+  const codeBackdrop = compSurfaces.codeBlock.backdrop;
+  const auxVars = computeAuxSimVars(eff, tokens, isLight, compSurfaces);
 
   for (const comp of REGION_IDS) {
     applyRegionVarsToTarget(hub, comp, compSurfaces[comp]);
@@ -805,6 +1010,7 @@ function applyStageAndHubOpticalVars(stage, hub, eff, tokens, isLight, compSurfa
       } else {
         el.removeAttribute('data-border-style');
       }
+      el.setAttribute('data-glass-style', compSurfaces[rid].effStyle || 'none');
     });
   }
 
@@ -816,10 +1022,14 @@ function applyStageAndHubOpticalVars(stage, hub, eff, tokens, isLight, compSurfa
   hub.style.setProperty('--sim-r-left', compSurfaces.sidebar.radiusCss);
   hub.style.setProperty('--sim-r-right', compSurfaces.rightPane.radiusCss);
   hub.style.setProperty('--sim-r-card', compSurfaces.card.radiusCss);
+  hub.style.setProperty('--sim-r-user-bubble', compSurfaces.userBubble.radiusCss);
+  hub.style.setProperty('--sim-r-assistant-bubble', compSurfaces.assistantBubble.radiusCss);
+  hub.style.setProperty('--sim-r-code-block', compSurfaces.codeBlock.radiusCss);
+  hub.style.setProperty('--sim-r-controls', compSurfaces.controls.radiusCss);
   hub.style.setProperty('--sim-r-composer', compSurfaces.composer.radiusCss);
   hub.style.setProperty('--sim-r-popover', compSurfaces.popover.radiusCss);
 
-  // Explicit surface & backdrop variables (including decoupled rightPane & wco!)
+  // Explicit surface & backdrop variables (all 12 regions + auxiliary simulation vars)
   hub.style.setProperty('--sim-topbar-bg', compSurfaces.topbar.rgba);
   hub.style.setProperty('--sim-wco-bg', compSurfaces.wco.rgba);
   hub.style.setProperty('--sim-sidebar-bg', compSurfaces.sidebar.rgba);
@@ -828,6 +1038,11 @@ function applyStageAndHubOpticalVars(stage, hub, eff, tokens, isLight, compSurfa
   hub.style.setProperty('--sim-composer-bg', compSurfaces.composer.rgba);
   hub.style.setProperty('--sim-card-bg', compSurfaces.card.rgba);
   hub.style.setProperty('--sim-popover-bg', compSurfaces.popover.rgba);
+  hub.style.setProperty('--sim-turn-card-bg', auxVars.turnCardBg);
+  hub.style.setProperty('--sim-control-active-bg', auxVars.controlActiveBg);
+  hub.style.setProperty('--sim-control-hover-bg', auxVars.controlHoverBg);
+  hub.style.setProperty('--sim-selected-bg', auxVars.selectedBg);
+  hub.style.setProperty('--sim-scroll-thumb', auxVars.scrollThumb);
 
   hub.style.setProperty('--sim-topbar-backdrop', compSurfaces.topbar.backdrop);
   hub.style.setProperty('--sim-wco-backdrop', compSurfaces.wco.backdrop);
@@ -875,16 +1090,24 @@ export function syncOpticalCssVars() {
   root.style.setProperty('--prism-wall-tint-rgb', tokens.wallTintRgb);
   root.style.setProperty('--prism-wall-tint-mix', `${Math.round((eff.wallTintMix || 0) * 1000) / 10}%`);
 
-  // Resolve all 8 region surfaces once so swatches, 21:9 preview & visual editor stay 1:1 live
+  // Resolve all 12 region surfaces once so swatches, 21:9 preview & visual editor stay 1:1 live
   const compSurfaces = {};
   for (const comp of REGION_IDS) {
     compSurfaces[comp] = resolveSimRegionSurface(comp, eff, tokens, isLight);
     applyRegionVarsToTarget(root, comp, compSurfaces[comp]);
   }
+  const auxVars = computeAuxSimVars(eff, tokens, isLight, compSurfaces);
   root.style.setProperty('--sim-chat-bg', compSurfaces.workspace.rgba);
   root.style.setProperty('--sim-chat-backdrop', compSurfaces.workspace.backdrop);
   root.style.setProperty('--sim-right-pane-backdrop', compSurfaces.rightPane.backdrop);
   root.style.setProperty('--sim-wco-symbol', compSurfaces.wco.fg);
+  root.style.setProperty('--sim-editor-bg', compSurfaces.codeBlock.rgba);
+  root.style.setProperty('--sim-code-backdrop', compSurfaces.codeBlock.backdrop);
+  root.style.setProperty('--sim-turn-card-bg', auxVars.turnCardBg);
+  root.style.setProperty('--sim-control-active-bg', auxVars.controlActiveBg);
+  root.style.setProperty('--sim-control-hover-bg', auxVars.controlHoverBg);
+  root.style.setProperty('--sim-selected-bg', auxVars.selectedBg);
+  root.style.setProperty('--sim-scroll-thumb', auxVars.scrollThumb);
 
   const skinEnabledStr = store.skinEnabled ? 'true' : 'false';
   document.querySelectorAll('.prism-preview-card').forEach((card) => {

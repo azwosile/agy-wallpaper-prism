@@ -1,8 +1,8 @@
 {
   "name": "agy-wallpaper-prism",
   "displayName": "Wallpaper Prism",
-  "description": "Obsidian Prism glass skin and Wallpaper Engine studio for Antigravity — Floating Island & Flush glass layouts, dynamic wallpaper accent tinting, Steam Workshop 431960 & local video/web/scene playback, and Ctrl+Alt+W quick controls.",
-  "version": "2.3.0",
+  "description": "Obsidian Prism glass skin and Wallpaper Engine studio for Antigravity — 12-region chat bubbles & host controls glassmorphism, Crisp Glass zero-blur preset, 4K60 HEVC MSE streaming, Steam Workshop 431960 & scene HD .tex playback, and Ctrl+Alt+W quick controls.",
+  "version": "2.4.0",
   "logo": "assets/logo.svg",
   "author": "Antigravity Prism Contributors",
   "homepage": "https://github.com/azwosile/agy-wallpaper-prism",
@@ -10,6 +10,6 @@
   "suggestedPrompts": [
     "Open the Wallpaper Prism studio pane",
     "Check my Wallpaper Prism host connection and active wallpaper status",
-    "Switch Wallpaper Prism to the Islands or Focus glass preset"
+    "Switch Wallpaper Prism to the Crisp Glass, Islands, or Focus preset"
   ]
 }

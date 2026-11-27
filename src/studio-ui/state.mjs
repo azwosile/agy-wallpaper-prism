@@ -10,6 +10,7 @@ import {
   CONTENT_RATINGS,
   REGION_IDS,
   REGION_OPTICAL_KEYS,
+  DEFAULT_REGION_ENTRY,
   FACTORY_PRESETS,
   DEFAULT_CONFIG,
   PER_WALLPAPER_OVERRIDE_KEYS,
@@ -27,13 +28,21 @@ export const VIRTUAL_SCROLL_THRESHOLD = 30;
 export const OPEN_REGIONS_STORAGE_KEY = 'prism.openRegions.v22';
 
 export const REGION_UI_ORDER = Object.freeze([
+  // Shell Chrome
   'topbar',
   'wco',
   'sidebar',
   'workspace',
+  // Chat Bubbles & Content
+  'userBubble',
+  'assistantBubble',
+  'codeBlock',
+  // Interactive Controls & Overlays
+  'controls',
   'composer',
   'rightPane',
   'popover',
+  // Global Canvas, Media & Visual Extensions
   'global',
 ]);
 
@@ -50,11 +59,16 @@ export const REGION_RESET_EXTRA_KEYS = Object.freeze({
   }),
   workspace: Object.freeze({
     hideWelcomeLogo: DEFAULT_CONFIG.hideWelcomeLogo,
-    codeReadabilityMode: DEFAULT_CONFIG.codeReadabilityMode,
     contrastFloor: DEFAULT_CONFIG.contrastFloor,
     chatGlassFidelity: DEFAULT_CONFIG.chatGlassFidelity,
   }),
   card: Object.freeze({}),
+  userBubble: Object.freeze({}),
+  assistantBubble: Object.freeze({}),
+  codeBlock: Object.freeze({
+    codeReadabilityMode: DEFAULT_CONFIG.codeReadabilityMode,
+  }),
+  controls: Object.freeze({}),
   composer: Object.freeze({ caretColor: DEFAULT_CONFIG.caretColor }),
   rightPane: Object.freeze({ rightSidebarRadius: DEFAULT_CONFIG.rightSidebarRadius }),
   popover: Object.freeze({ floaterSolidBase: DEFAULT_CONFIG.floaterSolidBase }),
@@ -812,13 +826,10 @@ function clearOpticalKeysInRegionsMap(baseRegions) {
   for (const id of REGION_IDS) {
     if (out[id] === null) continue;
     const prev = out[id] && typeof out[id] === 'object' ? { ...out[id] } : {};
-    // Strictly reset ONLY the 6 optical keys; preserve borderStyle/radius/font*/allowRawFontColor/listStyle!
-    prev.glassEnabled = null;
-    prev.blur = null;
-    prev.opacity = null;
-    prev.tone = 0;
-    prev.tint = '';
-    prev.borderOpacity = null;
+    // Strictly reset ONLY the 9 optical keys; preserve borderStyle/radius/font*/allowRawFontColor/listStyle!
+    for (const ok of REGION_OPTICAL_KEYS) {
+      prev[ok] = DEFAULT_REGION_ENTRY[ok];
+    }
     out[id] = prev;
   }
   return out;
@@ -830,14 +841,11 @@ function extractMirroredOpticalRegionsFromSurfaceTints(tintsObj) {
   for (const [id, sVal] of Object.entries(tintsObj)) {
     if (!REGION_IDS.includes(id)) continue;
     if (sVal === null) {
-      mirrored[id] = {
-        glassEnabled: null,
-        blur: null,
-        opacity: null,
-        tone: 0,
-        tint: '',
-        borderOpacity: null,
-      };
+      const cleared = {};
+      for (const ok of REGION_OPTICAL_KEYS) {
+        cleared[ok] = DEFAULT_REGION_ENTRY[ok];
+      }
+      mirrored[id] = cleared;
     } else if (sVal && typeof sVal === 'object') {
       const opt = {};
       for (const ok of REGION_OPTICAL_KEYS) {

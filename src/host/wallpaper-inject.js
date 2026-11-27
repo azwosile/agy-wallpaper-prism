@@ -1,4 +1,4 @@
-// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.3.0).
+// Host Prism Skin & Wallpaper Stage Microkernel for Antigravity (agy-wallpaper-prism v2.4.0).
 //
 // Gentle Fail-Open ES2020 browser IIFE loaded post-hydration (`stage.js`) or in headless verification harnesses.
 // Zero `Page.enable`/`Runtime.enable`, zero `app.asar` modifications, `z-index: -1` inert stage,
@@ -9,7 +9,7 @@
 (function agyPrismSkinKernelMain() {
   'use strict';
 
-  var VERSION = '2.3.0';
+  var VERSION = '2.4.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   if (W.top && W !== W.top) return { installed: false, reason: 'subframe' };
@@ -490,13 +490,45 @@
   var COMPOSER_SUBTREE_SEL =
     '[data-testid="agent-input-box"], .surface-composer-card, .agy-composer, .composer-dock';
 
-  // Req #4 / v2.2.0: 8-Region Unified Glass & Typography Constants & Per-Wallpaper Override Keys
-  var REGION_IDS = ['topbar', 'wco', 'sidebar', 'workspace', 'card', 'composer', 'rightPane', 'popover'];
+  // Req #4 / v2.4.0: 12-Region Unified Glass Styles, Optics, Typography Constants & Per-Wallpaper Override Keys
+  var REGION_IDS = [
+    'topbar',
+    'wco',
+    'sidebar',
+    'workspace',
+    'card',
+    'userBubble',
+    'assistantBubble',
+    'codeBlock',
+    'controls',
+    'composer',
+    'rightPane',
+    'popover',
+  ];
   var SURFACE_TINT_COMPONENTS = REGION_IDS;
   var GLASS_COMPONENT_IDS = REGION_IDS;
+  var GLASS_STYLES = ['none', 'frosted', 'crystal', 'tinted', 'solid'];
+  var ZERO_BLUR_BY_DEFAULT_REGIONS = ['card', 'userBubble', 'assistantBubble', 'codeBlock', 'controls'];
+  var ZERO_BLUR_BY_DEFAULT_MAP = {
+    card: 1,
+    userBubble: 1,
+    assistantBubble: 1,
+    codeBlock: 1,
+    controls: 1,
+  };
   var BORDER_STYLES = ['full', 'bottom', 'none'];
   var SIDEBAR_LIST_STYLES = ['capsule', 'underline', 'accordion', 'tree'];
-  var REGION_OPTICAL_KEYS = ['glassEnabled', 'blur', 'opacity', 'tone', 'tint', 'borderOpacity'];
+  var REGION_OPTICAL_KEYS = [
+    'style',
+    'glassEnabled',
+    'blur',
+    'saturation',
+    'opacity',
+    'tone',
+    'tint',
+    'borderOpacity',
+    'elevation',
+  ];
   var REGION_STRUCTURAL_KEYS = ['borderStyle', 'radius', 'fontSize', 'fontFamily', 'fontColor', 'allowRawFontColor'];
   var SIDEBAR_REGION_EXTRA_KEYS = ['listStyle', 'sectionFontSize', 'projectFontSize', 'itemFontSize'];
   var SURFACE_TINT_BOUNDS = {
@@ -505,6 +537,10 @@
     sidebar: { minOpacity: 0, maxOpacity: 0.98 },
     workspace: { minOpacity: 0, maxOpacity: 0.98 },
     card: { minOpacity: 0, maxOpacity: 0.98 },
+    userBubble: { minOpacity: 0, maxOpacity: 0.98 },
+    assistantBubble: { minOpacity: 0, maxOpacity: 0.98 },
+    codeBlock: { minOpacity: 0, maxOpacity: 0.98 },
+    controls: { minOpacity: 0, maxOpacity: 0.98 },
     composer: { minOpacity: 0, maxOpacity: 0.98 },
     rightPane: { minOpacity: 0, maxOpacity: 0.98 },
     popover: { minOpacity: 0.50, maxOpacity: 0.99 },
@@ -515,9 +551,137 @@
     sidebar: { min: 11, max: 15 },
     workspace: { min: 10, max: 24 },
     card: { min: 10, max: 24 },
+    userBubble: { min: 10, max: 24 },
+    assistantBubble: { min: 10, max: 24 },
+    codeBlock: { min: 10, max: 24 },
+    controls: { min: 10, max: 24 },
     composer: { min: 10, max: 24 },
     rightPane: { min: 10, max: 24 },
     popover: { min: 10, max: 24 },
+  };
+  var REGION_FIELD_BOUNDS = {
+    blur: { min: 0, max: 64, decimals: 0 },
+    saturation: { min: 50, max: 220, decimals: 0 },
+    tone: { min: -100, max: 100, decimals: 0 },
+    borderOpacity: { min: 0, max: 1, decimals: 3 },
+    elevation: { min: 0, max: 2, decimals: 2 },
+    radius: { min: 0, max: 28, decimals: 0 },
+    opacityByRegion: SURFACE_TINT_BOUNDS,
+    fontSizeByRegion: REGION_FONT_SIZE_BOUNDS,
+  };
+  var SCENE_PRESETS = {
+    crisp: {
+      id: 'crisp',
+      patch: {
+        preset: 'crisp',
+        borders: 'on',
+        shadows: true,
+        glassSurfaces: true,
+        glassOpacity: 0.76,
+        glassBlur: 0,
+        sidebarOpacity: null,
+        sidebarBlur: null,
+        surfaceTints: null,
+        glassFidelity: 92,
+        chatGlassFidelity: 90,
+        scrimOpacity: 0.24,
+        mediaBlur: 0,
+        vignette: true,
+        grainAlpha: 0.015,
+        paused: false,
+        fpsCap: 60,
+      },
+    },
+    crystal: {
+      id: 'crystal',
+      patch: {
+        preset: 'crystal',
+        borders: 'on',
+        shadows: true,
+        glassSurfaces: true,
+        glassOpacity: 0.64,
+        glassBlur: 18,
+        sidebarOpacity: null,
+        sidebarBlur: null,
+        surfaceTints: null,
+        glassFidelity: 82,
+        chatGlassFidelity: 78,
+        scrimOpacity: 0.18,
+        mediaBlur: 0,
+        vignette: true,
+        grainAlpha: 0.018,
+        paused: false,
+        fpsCap: 60,
+      },
+    },
+    islands: {
+      id: 'islands',
+      patch: {
+        preset: 'islands',
+        borders: 'on',
+        shadows: true,
+        glassSurfaces: true,
+        glassOpacity: 0.76,
+        glassBlur: 16,
+        sidebarOpacity: null,
+        sidebarBlur: null,
+        surfaceTints: null,
+        glassFidelity: 92,
+        chatGlassFidelity: 90,
+        scrimOpacity: 0.26,
+        mediaBlur: 0,
+        vignette: true,
+        grainAlpha: 0.022,
+        paused: false,
+        fpsCap: 60,
+      },
+    },
+    focus: {
+      id: 'focus',
+      patch: {
+        preset: 'focus',
+        borders: 'subtle',
+        shadows: false,
+        glassSurfaces: true,
+        glassOpacity: 0.88,
+        glassBlur: 20,
+        sidebarOpacity: null,
+        sidebarBlur: null,
+        surfaceTints: null,
+        glassFidelity: 100,
+        chatGlassFidelity: 100,
+        scrimOpacity: 0.42,
+        mediaBlur: 8,
+        vignette: true,
+        grainAlpha: 0.012,
+        paused: false,
+        fpsCap: 60,
+      },
+    },
+    eco: {
+      id: 'eco',
+      patch: {
+        preset: 'eco',
+        borders: 'subtle',
+        shadows: false,
+        glassSurfaces: false,
+        glassOpacity: 0.94,
+        glassBlur: 0,
+        sidebarOpacity: null,
+        sidebarBlur: null,
+        surfaceTints: null,
+        glassFidelity: 100,
+        chatGlassFidelity: 100,
+        scrimOpacity: 0.34,
+        mediaBlur: 0,
+        vignette: false,
+        grainAlpha: 0,
+        paused: true,
+        fxEnabled: false,
+        parallaxEnabled: false,
+        fpsCap: 30,
+      },
+    },
   };
   var PER_WALLPAPER_OVERRIDE_KEYS_MAP = {
     layoutMode: 1,
@@ -565,6 +729,7 @@
     chatGlassFidelity: 1,
     contrastFloor: 1,
     floaterSolidBase: 1,
+    codeReadabilityMode: 1,
     regions: 1,
     surfaceTints: 1,
     globalFontSize: 1,
@@ -593,10 +758,12 @@
     '.agy-menu',
     '.agy-toast',
     '[role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]):not(.prism-sheet)',
+    '[role="alertdialog"]',
     '[role="menu"]',
     '[role="listbox"]',
     '[role="tooltip"]',
     '[data-radix-popper-content-wrapper] > *',
+    '[data-base-ui-portal] :is([role="listbox"], [role="menu"], [role="dialog"], .agy-popover, .agy-overlay)',
     '[data-testid="title-menu-bar"] [data-browser-occluder="true"]',
     '.surface-opaque.bg-sidebar:not(.sticky):not([style*="sticky"])',
     '[data-testid="context-menu-popup"]',
@@ -606,6 +773,13 @@
     '[data-testid="toast-notification"]',
     '[class*="bg-popover"]:not([role="tooltip"])',
     '.quick-input-widget',
+    '.agy-fastpick',
+    '.compact-tooltip',
+    '[class*="react-tooltip"]',
+    '.toast-root',
+    '.agy-tip-card',
+    '.agy-selection-pill',
+    '.surface-glass:not(.surface-composer):not(.surface-composer-card):not(.agy-user-bubble):not(.agy-user-bubble-frame):not(.agy-takeover-card):not(.agy-scroll-bottom)',
     '.monaco-hover',
     '.editor-widget.suggest-widget',
     '.parameter-hints-widget',
@@ -923,14 +1097,24 @@
     }
     return dflt;
   }
+  function sanitizeGlassStyle(v) {
+    if (v === null || v === undefined || v === '' || v === 'auto') return null;
+    if (typeof v !== 'string') return null;
+    var s = v.trim().toLowerCase();
+    if (!s || s === 'auto') return null;
+    return oneOf(s, GLASS_STYLES, null);
+  }
   function createDefaultRegionEntry(id) {
     var out = {
+      style: null,
       glassEnabled: null,
       blur: null,
+      saturation: null,
       opacity: null,
       tone: 0,
       tint: '',
       borderOpacity: null,
+      elevation: null,
       borderStyle: null,
       radius: null,
       fontSize: null,
@@ -957,12 +1141,15 @@
     var out = {};
     for (var i = 0; i < GLASS_COMPONENT_IDS.length; i += 1) {
       out[GLASS_COMPONENT_IDS[i]] = {
+        style: null,
         opacity: null,
         tone: 0,
         tint: '',
         blur: null,
+        saturation: null,
         glassEnabled: null,
         borderOpacity: null,
+        elevation: null,
       };
     }
     return out;
@@ -1020,12 +1207,15 @@
     if (isPlainObj(ent)) {
       for (var k in ent) if (hasOwn(ent, k)) next[k] = ent[k];
     }
+    next.style = null;
     next.glassEnabled = null;
     next.blur = null;
+    next.saturation = null;
     next.opacity = null;
     next.tone = 0;
     next.tint = '';
     next.borderOpacity = null;
+    next.elevation = null;
     return next;
   }
   function stripOpticalFromRegionsRaw(regMap) {
@@ -1056,17 +1246,20 @@
     var fsBounds = REGION_FONT_SIZE_BOUNDS[id] || { min: 10, max: 24 };
     var r = isPlainObj(raw) ? raw : {};
     var entry = {
+      style: sanitizeGlassStyle(r.style),
       glassEnabled: nullableBool(r.glassEnabled),
-      blur: nullableNum(r.blur, 0, 64, 0),
+      blur: nullableNum(r.blur, REGION_FIELD_BOUNDS.blur.min, REGION_FIELD_BOUNDS.blur.max, REGION_FIELD_BOUNDS.blur.decimals),
+      saturation: nullableNum(r.saturation, REGION_FIELD_BOUNDS.saturation.min, REGION_FIELD_BOUNDS.saturation.max, REGION_FIELD_BOUNDS.saturation.decimals),
       opacity: nullableUnitOpacity(r.opacity, bounds.minOpacity, bounds.maxOpacity),
-      tone: clamp(Math.round(num(r.tone, 0)), -100, 100),
+      tone: clamp(Math.round(num(r.tone, 0)), REGION_FIELD_BOUNDS.tone.min, REGION_FIELD_BOUNDS.tone.max),
       tint: cleanTintHex(r.tint),
-      borderOpacity: nullableUnitOpacity(r.borderOpacity, 0, 1),
+      borderOpacity: nullableUnitOpacity(r.borderOpacity, REGION_FIELD_BOUNDS.borderOpacity.min, REGION_FIELD_BOUNDS.borderOpacity.max),
+      elevation: nullableNum(r.elevation, REGION_FIELD_BOUNDS.elevation.min, REGION_FIELD_BOUNDS.elevation.max, REGION_FIELD_BOUNDS.elevation.decimals),
       borderStyle:
         r.borderStyle === null || r.borderStyle === undefined || r.borderStyle === '' || r.borderStyle === 'auto'
           ? null
           : oneOf(r.borderStyle, BORDER_STYLES, null),
-      radius: nullableNum(r.radius, 0, 28, 0),
+      radius: nullableNum(r.radius, REGION_FIELD_BOUNDS.radius.min, REGION_FIELD_BOUNDS.radius.max, REGION_FIELD_BOUNDS.radius.decimals),
       fontSize: nullableNum(r.fontSize, fsBounds.min, fsBounds.max, 0),
       fontFamily: sanitizeFontFamily(r.fontFamily),
       fontColor: cleanTintHex(r.fontColor),
@@ -1086,12 +1279,15 @@
       var id = SURFACE_TINT_COMPONENTS[i];
       var r = (regions && regions[id]) || {};
       out[id] = {
+        style: sanitizeGlassStyle(r.style),
         opacity: r.opacity !== undefined ? r.opacity : null,
         tone: Number.isFinite(Number(r.tone)) ? Number(r.tone) : 0,
         tint: r.tint || '',
         blur: r.blur !== undefined ? r.blur : null,
+        saturation: r.saturation !== undefined ? r.saturation : null,
         glassEnabled: r.glassEnabled !== undefined ? r.glassEnabled : null,
         borderOpacity: r.borderOpacity !== undefined ? r.borderOpacity : null,
+        elevation: r.elevation !== undefined ? r.elevation : null,
       };
     }
     return out;
@@ -1350,6 +1546,135 @@
       rightSidebarRadius: rightSidebarRadius,
     };
   }
+  function normFidelity(raw, fallback) {
+    var n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+    if (typeof n !== 'number' || !Number.isFinite(n)) return fallback / 100;
+    return clamp(n > 0 && n < 1 ? n : n / 100, 0, 1);
+  }
+  function resolveRegionEffectiveStyle(comp, entry, cfg) {
+    var c = cfg && typeof cfg === 'object' ? cfg : {};
+    var ent = entry && typeof entry === 'object' ? entry : (c.regions && c.regions[comp]) || (c.surfaceTints && c.surfaceTints[comp]) || null;
+    var explicit = ent ? sanitizeGlassStyle(ent.style) : null;
+    if (explicit !== null) return explicit;
+    if (comp === 'codeBlock') {
+      if (c.codeReadabilityMode === 'solid') return 'solid';
+      if (c.codeReadabilityMode === 'frosted') return 'frosted';
+      return 'none';
+    }
+    if (ZERO_BLUR_BY_DEFAULT_MAP[comp]) return 'none';
+    return null;
+  }
+  function applyStyleAlphaModifier(baseAlpha, effStyle, light, contrastMin, bounds, isCodeBlock, contrastFloor) {
+    if (effStyle === 'solid') {
+      return isCodeBlock && contrastFloor ? 1 : (light ? 0.97 : 0.96);
+    }
+    if (effStyle === 'crystal') {
+      var floor = contrastFloor ? Math.max(bounds.minOpacity, contrastMin) : bounds.minOpacity;
+      return clamp(baseAlpha * 0.78, floor, bounds.maxOpacity);
+    }
+    if (effStyle === 'tinted') {
+      return clamp(baseAlpha * 0.88, bounds.minOpacity, bounds.maxOpacity);
+    }
+    return baseAlpha;
+  }
+  function resolveComponentDefaultAlpha(comp, cfg, isLight, effStyleOverride) {
+    var c = cfg && typeof cfg === 'object' ? cfg : {};
+    var light = typeof isLight === 'string' ? isLight === 'light' : Boolean(isLight);
+    var entry = (c.regions && c.regions[comp]) || (c.surfaceTints && c.surfaceTints[comp]) || null;
+    var effStyle = effStyleOverride !== undefined ? effStyleOverride : resolveRegionEffectiveStyle(comp, entry, c);
+    var bounds = SURFACE_TINT_BOUNDS[comp] || { minOpacity: 0, maxOpacity: 0.98 };
+    var contrastFloor = c.contrastFloor !== false;
+
+    if (comp === 'popover') {
+      var basePop = c.floaterSolidBase !== false ? (light ? 0.97 : 0.96) : 0.94;
+      var popAlpha = applyStyleAlphaModifier(basePop, effStyle, light, 0.5, bounds, false, contrastFloor);
+      return Math.round(clamp(popAlpha, bounds.minOpacity, bounds.maxOpacity) * 1000) / 1000;
+    }
+
+    var g = clamp(num(c.glassOpacity, 0.76), 0.15, 0.98);
+    var glassFid = normFidelity(c.glassFidelity, 92);
+    var chatFid = normFidelity(c.chatGlassFidelity, 90);
+    var layoutMode = c.layoutMode === 'flush' ? 'flush' : 'islands';
+
+    if (comp === 'assistantBubble') {
+      if (effStyle === 'none') return 0;
+      var rawAsstA = light ? clamp(g * 0.46, 0.22, 0.88) : clamp(g * 0.34, 0.18, 0.84);
+      var baseAsstA = Math.max(rawAsstA, (light ? 0.28 : 0.18) * chatFid, 0.18);
+      if (effStyle === 'solid') return light ? 0.97 : 0.96;
+      if (effStyle === 'crystal') {
+        return Math.round(clamp(Math.max(baseAsstA, 0.24) * 0.78, 0.18, bounds.maxOpacity) * 1000) / 1000;
+      }
+      if (effStyle === 'tinted') {
+        return Math.round(clamp(Math.max(baseAsstA, 0.22) * 0.88, 0.16, bounds.maxOpacity) * 1000) / 1000;
+      }
+      if (c.glassSurfaces === false && !(entry && entry.glassEnabled === true)) return 1;
+      return Math.round(clamp(baseAsstA, 0.18, bounds.maxOpacity) * 1000) / 1000;
+    }
+
+    if (c.glassSurfaces === false && !(entry && entry.glassEnabled === true)) return 1;
+
+    var alpha;
+    var contrastMin = 0.2;
+    if (comp === 'wco') {
+      var tbOp = (c.regions && c.regions.topbar && c.regions.topbar.opacity) != null
+        ? c.regions.topbar.opacity
+        : c.surfaceTints && c.surfaceTints.topbar ? c.surfaceTints.topbar.opacity : null;
+      if (effStyle === null && tbOp !== null && tbOp !== undefined && tbOp !== '' && Number.isFinite(Number(tbOp))) {
+        return Math.round(clamp(Number(tbOp), 0, 0.98) * 1000) / 1000;
+      }
+      if (effStyle === null) {
+        return resolveComponentDefaultAlpha('topbar', c, light, resolveRegionEffectiveStyle('topbar', null, c));
+      }
+      alpha = tbOp !== null && tbOp !== undefined && tbOp !== '' && Number.isFinite(Number(tbOp))
+        ? clamp(Number(tbOp), 0, 0.98)
+        : Math.max(g, (contrastFloor ? (light ? 0.48 : 0.36) : 0.15) * glassFid);
+      contrastMin = 0.24;
+    } else if (comp === 'topbar' || comp === 'sidebar') {
+      var minSbFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
+      alpha = Math.max(g, minSbFloor * glassFid);
+      contrastMin = 0.24;
+    } else if (comp === 'workspace' || comp === 'rightPane') {
+      var rawChatA =
+        layoutMode === 'flush' && !light
+          ? clamp(g * 0.24, 0, 0.82)
+          : light
+            ? clamp(g * 0.62, 0.28, 0.92)
+            : clamp(g * 0.42, 0.08, 0.88);
+      var minChatFloor = light ? 0.42 : 0.16;
+      alpha = Math.max(rawChatA, minChatFloor * chatFid);
+      contrastMin = light ? 0.28 : 0.12;
+    } else if (comp === 'composer') {
+      var rawCompA = light ? clamp(g * 0.94, 0.65, 0.99) : clamp(g * 0.92, 0.48, 0.98);
+      var minCompFloor = light ? 0.72 : 0.58;
+      alpha = Math.max(rawCompA, minCompFloor * glassFid);
+      contrastMin = light ? 0.42 : 0.32;
+    } else if (comp === 'card') {
+      var rawCardA = light ? clamp(g * 0.86, 0.50, 0.98) : clamp(g * 0.78, 0.32, 0.96);
+      var minCardFloor = light ? 0.62 : 0.48;
+      alpha = Math.max(rawCardA, minCardFloor * glassFid);
+      contrastMin = light ? 0.42 : 0.32;
+    } else if (comp === 'userBubble') {
+      var rawUbA = light ? clamp(g * 0.95, 0.48, 0.98) : clamp(g * 0.82, 0.34, 0.96);
+      var minUbFloor = contrastFloor ? (light ? 0.60 : 0.48) : 0.25;
+      alpha = Math.max(rawUbA, minUbFloor * glassFid);
+      contrastMin = light ? 0.42 : 0.34;
+    } else if (comp === 'codeBlock') {
+      var minEd = contrastFloor ? (light ? 0.84 : 0.72) : (light ? 0.52 : 0.38);
+      var rawEdA = light ? clamp(g * 0.96, 0.55, 0.99) : clamp(g * 0.92, 0.45, 0.98);
+      alpha = Math.max(rawEdA, minEd * (contrastFloor ? 1 : glassFid));
+      contrastMin = light ? 0.52 : 0.44;
+    } else if (comp === 'controls') {
+      var rawCtlA = light ? clamp(g * 0.64, 0.34, 0.84) : clamp(g * 0.48, 0.26, 0.78);
+      var minCtlFloor = contrastFloor ? (light ? 0.44 : 0.32) : 0.18;
+      alpha = Math.max(rawCtlA, minCtlFloor * glassFid);
+      contrastMin = light ? 0.26 : 0.18;
+    } else {
+      alpha = g;
+    }
+
+    alpha = applyStyleAlphaModifier(alpha, effStyle, light, contrastMin, bounds, comp === 'codeBlock', contrastFloor);
+    return Math.round(clamp(alpha, 0, 1) * 1000) / 1000;
+  }
   function resolveComponentSurface(opts) {
     var entry = opts.entry || { opacity: null, tone: 0, tint: '' };
     var bounds = opts.bounds || { minOpacity: 0, maxOpacity: 0.98 };
@@ -1361,13 +1686,14 @@
     var hasToneOrTint = Boolean(entry.tint) || Number(entry.tone || 0) !== 0;
     var preMixRgb = hasToneOrTint && contrastFloor ? enforceContrastFloorRgb(shiftedRgb, fgRgb, isLight, 4.5) : shiftedRgb;
     var mixedRgb = entry.tint ? preMixRgb : mixRgb(preMixRgb, opts.wallTintRgb, opts.wallMixWeight);
-    var finalRgb = hasToneOrTint && contrastFloor ? enforceContrastFloorRgb(mixedRgb, fgRgb, isLight, 4.5) : mixedRgb;
+    var enforceMix = (hasToneOrTint || Boolean(opts.enforceMixFloor)) && contrastFloor;
+    var finalRgb = enforceMix ? enforceContrastFloorRgb(mixedRgb, fgRgb, isLight, 4.5) : mixedRgb;
     var hasCustomOp = entry.opacity !== null && entry.opacity !== undefined;
     var alpha = opts.solidChrome
       ? 1
       : hasCustomOp
         ? clamp(entry.opacity, bounds.minOpacity, bounds.maxOpacity)
-        : clamp(opts.defaultAlpha, 0, 0.99);
+        : clamp(opts.defaultAlpha, 0, 1);
     return {
       preMixRgb: preMixRgb,
       rgb: finalRgb,
@@ -1389,6 +1715,21 @@
     if (raw <= 0) return 0;
     return mediaBlurPx > 0 ? Math.max(0, Math.round(raw - mediaBlurPx * 0.7)) : raw;
   }
+  function resolveEffectiveRegionBlur(entry, effStyle, defaultPx, globalGlassOn, mediaBlurPx) {
+    var explicitStyle = entry ? sanitizeGlassStyle(entry.style) : null;
+    if (explicitStyle === 'none' || explicitStyle === 'tinted' || explicitStyle === 'solid') return 0;
+    if (explicitStyle === null && (effStyle === 'none' || effStyle === 'tinted' || effStyle === 'solid')) {
+      var hasExplicitPosBlur = Boolean(entry && entry.blur !== null && entry.blur !== undefined && Number(entry.blur) > 0);
+      if (!hasExplicitPosBlur) return 0;
+    }
+    var fallbackPx = defaultPx;
+    if (effStyle === 'frosted') {
+      fallbackPx = defaultPx > 0 ? defaultPx : 16;
+    } else if (effStyle === 'crystal') {
+      fallbackPx = defaultPx > 0 ? Math.max(10, Math.round(defaultPx * 0.75)) : 12;
+    }
+    return resolveRegionBlurPx(entry, fallbackPx, globalGlassOn, mediaBlurPx);
+  }
   function computeBorderFactor(alpha, bScale, overrideBorderOp) {
     if (overrideBorderOp !== null && overrideBorderOp !== undefined) {
       return clamp(Number(overrideBorderOp), 0, 1);
@@ -1396,9 +1737,18 @@
     if (bScale <= 0 || alpha <= 0.005) return 0;
     return bScale * Math.pow(clamp(alpha / 0.80, 0, 1), 0.90);
   }
-  function computeShadowFactor(alpha, shadowsOn) {
-    if (!shadowsOn || alpha <= 0.01) return 0;
-    return Math.pow(clamp(alpha / 0.65, 0, 1), 1.15);
+  function computeShadowFactor(alpha, shadowsOn, elevation) {
+    var a = Number(alpha);
+    if (!Number.isFinite(a) || a <= 0.01) return 0;
+    if (elevation !== null && elevation !== undefined && elevation !== '') {
+      var el = Number(elevation);
+      if (!Number.isFinite(el)) return shadowsOn ? Math.pow(clamp(a / 0.65, 0, 1), 1.15) : 0;
+      el = clamp(el, 0, 2);
+      if (el <= 0.001) return 0;
+      return Math.pow(clamp(Math.max(a, 0.35) / 0.65, 0, 1), 1.15) * el;
+    }
+    if (!shadowsOn) return 0;
+    return Math.pow(clamp(a / 0.65, 0, 1), 1.15);
   }
   function resolveBorderWidths(borderStyle) {
     if (borderStyle === 'none') return { top: '0px', right: '0px', bottom: '0px', left: '0px' };
@@ -1406,28 +1756,43 @@
     return { top: '1px', right: '1px', bottom: '1px', left: '1px' };
   }
   function buildRegionEdgeTokens(opts) {
-    var bf = opts.borderStyle === 'none' ? 0 : computeBorderFactor(opts.alpha, opts.bScale, opts.overrideBorderOp);
+    var effStyle = opts.effStyle || null;
+    var styleBfScale = effStyle === 'tinted' ? 0.85 : effStyle === 'solid' ? 0.90 : 1;
+    var bf = opts.borderStyle === 'none'
+      ? 0
+      : computeBorderFactor(opts.alpha, opts.bScale * styleBfScale, opts.overrideBorderOp);
+    if (effStyle === 'crystal' && opts.borderStyle !== 'none' && opts.bScale > 0 && (opts.overrideBorderOp === null || opts.overrideBorderOp === undefined) && bf > 0) {
+      bf = Math.min(1, bf * 1.35 + 0.08);
+    }
     var shadowsActive = opts.isPopover ? Boolean(opts.shadowsOn) : (opts.layoutMode !== 'flush' && Boolean(opts.shadowsOn));
-    var sf = computeShadowFactor(opts.alpha, shadowsActive);
+    var sf = computeShadowFactor(opts.alpha, shadowsActive, opts.elevation);
+    var specMult = effStyle === 'crystal' ? 1.45 : effStyle === 'tinted' ? 0.40 : effStyle === 'solid' ? 0 : 1;
+    var sheenMult = effStyle === 'crystal' ? 1.45 : effStyle === 'tinted' ? 0.40 : effStyle === 'solid' ? 0 : 1;
     var border = bf <= 0.001 ? 'transparent' : rgbaStr(opts.ptRgb, opts.baseBorderA * bf);
-    var specular = bf <= 0.001 ? 'transparent' : rgbaStr([255, 255, 255], (opts.isLight ? 0.88 : 0.075) * bf);
-    var sheen = bf <= 0.001
+    var specular = bf <= 0.001 || specMult <= 0
+      ? 'transparent'
+      : rgbaStr([255, 255, 255], clamp((opts.isLight ? 0.88 : 0.075) * bf * specMult, 0, 1));
+    var sheen = bf <= 0.001 || sheenMult <= 0
       ? 'none'
       : opts.isLight
-        ? 'linear-gradient(172deg, rgba(255, 255, 255, ' + (0.68 * bf).toFixed(3) + ') 0%, rgba(255, 255, 255, 0) 40%)'
-        : 'linear-gradient(172deg, rgba(255, 255, 255, ' + (0.042 * bf).toFixed(3) + ') 0%, rgba(255, 255, 255, 0) 38%)';
+        ? 'linear-gradient(172deg, rgba(255, 255, 255, ' + clamp(0.68 * bf * sheenMult, 0, 0.96).toFixed(3) + ') 0%, rgba(255, 255, 255, 0) 40%)'
+        : 'linear-gradient(172deg, rgba(255, 255, 255, ' + clamp(0.042 * bf * sheenMult, 0, 0.24).toFixed(3) + ') 0%, rgba(255, 255, 255, 0) 38%)';
     var shadow = 'none';
     if (sf > 0.001) {
       if (opts.isPopover) {
         shadow = opts.isLight
-          ? '0 28px 64px -18px rgba(15, 23, 42, ' + (0.28 * sf).toFixed(3) + '), 0 2px 8px rgba(15, 23, 42, ' + (0.10 * sf).toFixed(3) + ')'
-          : '0 28px 64px -14px rgba(0, 0, 0, ' + (0.64 * sf).toFixed(3) + '), 0 2px 8px rgba(0, 0, 0, ' + (0.30 * sf).toFixed(3) + ')';
+          ? '0 28px 64px -18px rgba(15, 23, 42, ' + clamp(0.28 * sf, 0, 0.72).toFixed(3) + '), 0 2px 8px rgba(15, 23, 42, ' + clamp(0.10 * sf, 0, 0.36).toFixed(3) + ')'
+          : '0 28px 64px -14px rgba(0, 0, 0, ' + clamp(0.64 * sf, 0, 0.88).toFixed(3) + '), 0 2px 8px rgba(0, 0, 0, ' + clamp(0.30 * sf, 0, 0.56).toFixed(3) + ')';
       } else {
         shadow = opts.isLight
-          ? '0 10px 28px -10px rgba(15, 23, 42, ' + (0.14 * sf).toFixed(3) + '), 0 2px 6px rgba(15, 23, 42, ' + (0.06 * sf).toFixed(3) + ')'
-          : '0 10px 28px -8px rgba(0, 0, 0, ' + (0.46 * sf).toFixed(3) + '), 0 2px 6px rgba(0, 0, 0, ' + (0.24 * sf).toFixed(3) + ')';
+          ? '0 10px 28px -10px rgba(15, 23, 42, ' + clamp(0.14 * sf, 0, 0.42).toFixed(3) + '), 0 2px 6px rgba(15, 23, 42, ' + clamp(0.06 * sf, 0, 0.24).toFixed(3) + ')'
+          : '0 10px 28px -8px rgba(0, 0, 0, ' + clamp(0.46 * sf, 0, 0.82).toFixed(3) + '), 0 2px 6px rgba(0, 0, 0, ' + clamp(0.24 * sf, 0, 0.48).toFixed(3) + ')';
       }
     }
+    var boxShadowParts = [];
+    if (bf > 0.001 && specMult > 0) boxShadowParts.push('inset 0 1px 0 ' + specular);
+    if (sf > 0.001) boxShadowParts.push(shadow);
+    var boxShadow = boxShadowParts.length ? boxShadowParts.join(', ') : 'none';
     return {
       bf: bf,
       sf: sf,
@@ -1435,6 +1800,7 @@
       specular: specular,
       sheen: sheen,
       shadow: shadow,
+      boxShadow: boxShadow,
       widths: resolveBorderWidths(opts.borderStyle),
     };
   }
@@ -1446,15 +1812,22 @@
     var satBoost = Math.round(Math.min(18, (r - 28) * 0.5));
     return { r: gpuR, satBoost: satBoost };
   }
-  function buildBackdrop(px, light, isNested) {
+  function buildBackdrop(px, light, isNested, customSat, effStyle) {
     var rawR = Math.round(clamp(px, 0, 64));
     if (rawR <= 0) return 'none';
     var sk = softKneeBlur(rawR);
-    var sat = isNested
-      ? Math.round(100 + Math.min(15, rawR * 0.25) + sk.satBoost * 0.4)
-      : light
-        ? Math.round(125 + Math.min(65, rawR * 1.45) + sk.satBoost)
-        : Math.round(115 + Math.min(65, rawR * 1.35) + sk.satBoost);
+    var sat;
+    if (customSat !== null && customSat !== undefined && customSat !== '' && Number.isFinite(Number(customSat))) {
+      sat = Math.round(clamp(Number(customSat), 50, 220));
+    } else if (effStyle === 'crystal') {
+      sat = light ? 165 : 150;
+    } else {
+      sat = isNested
+        ? Math.round(100 + Math.min(15, rawR * 0.25) + sk.satBoost * 0.4)
+        : light
+          ? Math.round(125 + Math.min(65, rawR * 1.45) + sk.satBoost)
+          : Math.round(115 + Math.min(65, rawR * 1.35) + sk.satBoost);
+    }
     return 'blur(' + sk.r + 'px) saturate(' + sat + '%)';
   }
 
@@ -1987,7 +2360,7 @@
       wallTintMix: normUnit(c.wallTintMix != null ? c.wallTintMix : 0.06, 0.06, 0, 0.22),
       glassSurfaces: bool(c.glassSurfaces != null ? c.glassSurfaces : c.glassEnabled, true),
       glassOpacity: normUnit(c.glassOpacity != null ? c.glassOpacity : c.widgetFill != null ? c.widgetFill : 0.76, 0.76, 0.15, 0.98),
-      glassBlur: clamp(num(c.glassBlur != null ? c.glassBlur : c.blur, 16), 0, 64),
+      glassBlur: clamp(num(c.glassBlur != null ? c.glassBlur : c.blur, c.preset === 'crisp' ? 0 : 16), 0, 64),
       sidebarOpacity: effRegSync.sidebarOpacity,
       sidebarBlur: effRegSync.sidebarBlur,
       regions: effRegSync.regions,
@@ -2112,44 +2485,15 @@
 
     var g = cfg.glassOpacity;
     var solidChrome = !cfg.glassSurfaces;
+    var glassEnabledFlag = Boolean(cfg.glassSurfaces);
     var regions = cfg.regions || createDefaultRegions();
 
     var sbBaseRgb = !isLight && (shadeRgb[0] + shadeRgb[1] + shadeRgb[2] > baseRgb[0] + baseRgb[1] + baseRgb[2]) ? baseRgb : shadeRgb;
     var sbEntry = regions.sidebar || createDefaultRegionEntry('sidebar');
-    var hasCustomSbOp = sbEntry.opacity !== null && sbEntry.opacity !== undefined;
-    var globalMinSbFloor = cfg.contrastFloor ? (isLight ? 0.48 : 0.36) : 0.15;
-    var minSidebarFloor = hasCustomSbOp ? 0 : globalMinSbFloor;
-    var defaultSbAlpha = clamp(Math.max(g, minSidebarFloor * cfg.glassFidelity), 0, 0.99);
-    var defaultTopbarAlpha = clamp(Math.max(g, globalMinSbFloor * cfg.glassFidelity), 0, 0.99);
-
-    var rawChatA = cfg.layoutMode === 'flush' && !isLight ? clamp(g * 0.24, 0, 0.82) : isLight ? clamp(g * 0.62, 0.28, 0.92) : clamp(g * 0.42, 0.08, 0.88);
     var rawEditorA = isLight ? clamp(g * 0.96, 0.55, 0.99) : clamp(g * 0.92, 0.45, 0.98);
-    var rawCardA = isLight ? clamp(g * 0.86, 0.50, 0.98) : clamp(g * 0.78, 0.32, 0.96);
-    var rawCompA = isLight ? clamp(g * 0.94, 0.65, 0.99) : clamp(g * 0.92, 0.48, 0.98);
-
-    var minChatFloor = isLight ? 0.42 : 0.16;
     var minEditorFloor = cfg.contrastFloor ? (isLight ? 0.84 : 0.72) : (isLight ? 0.52 : 0.38);
-    var minCardFloor = isLight ? 0.62 : 0.48;
-    var minCompFloor = isLight ? 0.72 : 0.58;
 
-    var defaultChatAlpha = clamp(Math.max(rawChatA, minChatFloor * cfg.chatGlassFidelity), 0, 0.99);
-    var defaultCardAlpha = clamp(Math.max(rawCardA, minCardFloor * cfg.glassFidelity), 0, 0.99);
-    var defaultCompAlpha = clamp(Math.max(rawCompA, minCompFloor * cfg.glassFidelity), 0, 0.99);
-    var defaultPopoverAlpha = cfg.floaterSolidBase !== false ? (isLight ? 0.97 : 0.96) : 0.94;
-    var defaultQuickPanelAlpha = isLight ? 0.88 : 0.84;
-
-    var topbarRes = resolveComponentSurface({
-      entry: regions.topbar,
-      defaultRgb: sbBaseRgb,
-      fgRgb: fgRgb,
-      wallTintRgb: acc.wallTint,
-      wallMixWeight: cfg.wallTintMix * 0.75,
-      defaultAlpha: defaultTopbarAlpha,
-      bounds: SURFACE_TINT_BOUNDS.topbar,
-      isLight: isLight,
-      contrastFloor: cfg.contrastFloor,
-      solidChrome: regions.topbar.glassEnabled === true ? false : solidChrome,
-    });
+    var effTopbarStyle = resolveRegionEffectiveStyle('topbar', regions.topbar, cfg);
     var wcoEntry = regions.wco;
     var wcoIsAuto =
       wcoEntry.opacity === null &&
@@ -2159,104 +2503,110 @@
       wcoEntry.glassEnabled === null &&
       wcoEntry.borderOpacity === null &&
       wcoEntry.borderStyle === null &&
-      wcoEntry.radius === null;
+      wcoEntry.radius === null &&
+      wcoEntry.style === null &&
+      wcoEntry.saturation === null &&
+      wcoEntry.elevation === null;
+    var effWcoStyle = wcoIsAuto ? effTopbarStyle : resolveRegionEffectiveStyle('wco', wcoEntry, cfg);
+    var effWcoEdgeStyle = effWcoStyle !== null ? effWcoStyle : effTopbarStyle;
+    var effSbStyle = resolveRegionEffectiveStyle('sidebar', sbEntry, cfg);
+    var effWsStyle = resolveRegionEffectiveStyle('workspace', regions.workspace, cfg);
+    var effRightPaneStyle = resolveRegionEffectiveStyle('rightPane', regions.rightPane, cfg);
+    var effCompStyle = resolveRegionEffectiveStyle('composer', regions.composer, cfg);
+    var effCardStyle = resolveRegionEffectiveStyle('card', regions.card, cfg);
+    var effUserBubbleStyle = resolveRegionEffectiveStyle('userBubble', regions.userBubble, cfg);
+    var effAssistantBubbleStyle = resolveRegionEffectiveStyle('assistantBubble', regions.assistantBubble, cfg);
+    var effCodeStyle = resolveRegionEffectiveStyle('codeBlock', regions.codeBlock, cfg);
+    var effControlsStyle = resolveRegionEffectiveStyle('controls', regions.controls, cfg);
+    var effPopStyle = resolveRegionEffectiveStyle('popover', regions.popover, cfg);
+
+    function styleWallRgb(effStyle) {
+      return effStyle === 'tinted' && cfg.wallTintMix <= 0 ? acc.rgb : acc.wallTint;
+    }
+    function styleWallWeight(baseWeight, effStyle) {
+      if (effStyle === 'tinted') {
+        return cfg.wallTintMix > 0 ? Math.max(cfg.wallTintMix, 0.22) : 0.18;
+      }
+      if (effStyle === 'solid') return baseWeight * 0.5;
+      return baseWeight;
+    }
+    function surfSolidFlag(comp, entry, effStyle) {
+      if (comp === 'popover') return false;
+      if (entry && entry.glassEnabled === true) return false;
+      if (comp === 'assistantBubble' && effStyle === 'none') return false;
+      return solidChrome;
+    }
+    function buildRegionSurf(comp, entry, effStyle, defaultRgb, baseWallW) {
+      var defAlpha = resolveComponentDefaultAlpha(comp, cfg, isLight, effStyle);
+      return resolveComponentSurface({
+        entry: entry,
+        defaultRgb: defaultRgb,
+        fgRgb: fgRgb,
+        wallTintRgb: styleWallRgb(effStyle),
+        wallMixWeight: styleWallWeight(baseWallW, effStyle),
+        defaultAlpha: defAlpha,
+        bounds: SURFACE_TINT_BOUNDS[comp],
+        isLight: isLight,
+        contrastFloor: cfg.contrastFloor,
+        solidChrome: surfSolidFlag(comp, entry, effStyle),
+        enforceMixFloor: effStyle === 'tinted',
+      });
+    }
+
+    var topbarRes = buildRegionSurf('topbar', regions.topbar, effTopbarStyle, sbBaseRgb, cfg.wallTintMix * 0.75);
+    var wcoDefaultAlpha = resolveComponentDefaultAlpha('wco', cfg, isLight, effWcoStyle);
     var wcoRes = wcoIsAuto
       ? topbarRes
       : resolveComponentSurface({
           entry: wcoEntry,
           defaultRgb: topbarRes.hasToneOrTint ? topbarRes.preMixRgb : sbBaseRgb,
           fgRgb: fgRgb,
-          wallTintRgb: acc.wallTint,
-          wallMixWeight: cfg.wallTintMix * 0.75,
-          defaultAlpha: topbarRes.alpha,
+          wallTintRgb: styleWallRgb(effWcoEdgeStyle),
+          wallMixWeight: styleWallWeight(cfg.wallTintMix * 0.75, effWcoEdgeStyle),
+          defaultAlpha: wcoDefaultAlpha,
           bounds: SURFACE_TINT_BOUNDS.wco,
           isLight: isLight,
           contrastFloor: cfg.contrastFloor,
-          solidChrome: wcoEntry.glassEnabled === true ? false : solidChrome,
+          solidChrome: surfSolidFlag('wco', wcoEntry, effWcoEdgeStyle),
+          enforceMixFloor: effWcoEdgeStyle === 'tinted',
         });
-    var sbRes = resolveComponentSurface({
-      entry: sbEntry,
-      defaultRgb: sbBaseRgb,
-      fgRgb: fgRgb,
-      wallTintRgb: acc.wallTint,
-      wallMixWeight: cfg.wallTintMix * 0.75,
-      defaultAlpha: defaultSbAlpha,
-      bounds: SURFACE_TINT_BOUNDS.sidebar,
-      isLight: isLight,
-      contrastFloor: cfg.contrastFloor,
-      solidChrome: sbEntry.glassEnabled === true ? false : solidChrome,
-    });
-    var wsRes = resolveComponentSurface({
-      entry: regions.workspace,
-      defaultRgb: baseRgb,
-      fgRgb: fgRgb,
-      wallTintRgb: acc.wallTint,
-      wallMixWeight: cfg.wallTintMix * 0.75,
-      defaultAlpha: defaultChatAlpha,
-      bounds: SURFACE_TINT_BOUNDS.workspace,
-      isLight: isLight,
-      contrastFloor: cfg.contrastFloor,
-      solidChrome: regions.workspace.glassEnabled === true ? false : solidChrome,
-    });
-    var rightPaneRes = resolveComponentSurface({
-      entry: regions.rightPane,
-      defaultRgb: baseRgb,
-      fgRgb: fgRgb,
-      wallTintRgb: acc.wallTint,
-      wallMixWeight: cfg.wallTintMix * 0.75,
-      defaultAlpha: defaultChatAlpha,
-      bounds: SURFACE_TINT_BOUNDS.rightPane,
-      isLight: isLight,
-      contrastFloor: cfg.contrastFloor,
-      solidChrome: regions.rightPane.glassEnabled === true ? false : solidChrome,
-    });
-    var compRes = resolveComponentSurface({
-      entry: regions.composer,
-      defaultRgb: tint1Rgb,
-      fgRgb: fgRgb,
-      wallTintRgb: acc.wallTint,
-      wallMixWeight: cfg.wallTintMix,
-      defaultAlpha: defaultCompAlpha,
-      bounds: SURFACE_TINT_BOUNDS.composer,
-      isLight: isLight,
-      contrastFloor: cfg.contrastFloor,
-      solidChrome: regions.composer.glassEnabled === true ? false : solidChrome,
-    });
-    var cardRes = resolveComponentSurface({
-      entry: regions.card,
-      defaultRgb: tint1Rgb,
-      fgRgb: fgRgb,
-      wallTintRgb: acc.wallTint,
-      wallMixWeight: cfg.wallTintMix,
-      defaultAlpha: defaultCardAlpha,
-      bounds: SURFACE_TINT_BOUNDS.card,
-      isLight: isLight,
-      contrastFloor: cfg.contrastFloor,
-      solidChrome: regions.card.glassEnabled === true ? false : solidChrome,
-    });
-    var popRes = resolveComponentSurface({
-      entry: regions.popover,
-      defaultRgb: popRgb,
-      fgRgb: fgRgb,
-      wallTintRgb: acc.wallTint,
-      wallMixWeight: cfg.wallTintMix * 0.4,
-      defaultAlpha: defaultPopoverAlpha,
-      bounds: SURFACE_TINT_BOUNDS.popover,
-      isLight: isLight,
-      contrastFloor: cfg.contrastFloor,
-      solidChrome: regions.popover.glassEnabled === true ? false : solidChrome,
-    });
+    var sbRes = buildRegionSurf('sidebar', sbEntry, effSbStyle, sbBaseRgb, cfg.wallTintMix * 0.75);
+    var wsRes = buildRegionSurf('workspace', regions.workspace, effWsStyle, baseRgb, cfg.wallTintMix * 0.75);
+    var rightPaneRes = buildRegionSurf('rightPane', regions.rightPane, effRightPaneStyle, baseRgb, cfg.wallTintMix * 0.75);
+    var compRes = buildRegionSurf('composer', regions.composer, effCompStyle, tint1Rgb, cfg.wallTintMix);
+    var cardRes = buildRegionSurf('card', regions.card, effCardStyle, tint1Rgb, cfg.wallTintMix);
+    var userBubbleRes = buildRegionSurf('userBubble', regions.userBubble, effUserBubbleStyle, tint1Rgb, cfg.wallTintMix);
+    var assistantRes = buildRegionSurf('assistantBubble', regions.assistantBubble, effAssistantBubbleStyle, baseRgb, cfg.wallTintMix * 0.75);
+    var codeBlockRes = buildRegionSurf(
+      'codeBlock',
+      regions.codeBlock,
+      effCodeStyle,
+      effCodeStyle === 'solid' ? tint1Rgb : baseRgb,
+      cfg.wallTintMix * 0.5
+    );
+    var ctrlRes = buildRegionSurf('controls', regions.controls, effControlsStyle, tint2Rgb, cfg.wallTintMix * 0.75);
+    var popRes = buildRegionSurf('popover', regions.popover, effPopStyle, popRgb, cfg.wallTintMix * 0.4);
+    var baseQuickPanelAlpha = applyStyleAlphaModifier(
+      isLight ? 0.88 : 0.84,
+      effPopStyle,
+      isLight,
+      0.45,
+      SURFACE_TINT_BOUNDS.popover,
+      false,
+      cfg.contrastFloor
+    );
     var quickPanelRes = resolveComponentSurface({
       entry: regions.popover,
       defaultRgb: popRgb,
       fgRgb: fgRgb,
-      wallTintRgb: acc.wallTint,
-      wallMixWeight: cfg.wallTintMix * 0.4,
-      defaultAlpha: defaultQuickPanelAlpha,
+      wallTintRgb: styleWallRgb(effPopStyle),
+      wallMixWeight: styleWallWeight(cfg.wallTintMix * 0.4, effPopStyle),
+      defaultAlpha: clamp(baseQuickPanelAlpha, 0, 0.99),
       bounds: SURFACE_TINT_BOUNDS.popover,
       isLight: isLight,
       contrastFloor: cfg.contrastFloor,
-      solidChrome: regions.popover.glassEnabled === true ? false : solidChrome,
+      solidChrome: surfSolidFlag('popover', regions.popover, effPopStyle),
+      enforceMixFloor: effPopStyle === 'tinted',
     });
 
     var deepSbRgb = sbRes.customized
@@ -2304,122 +2654,100 @@
     var surfPopover = popRes.rgba;
     var surfQuickPanel = quickPanelRes.rgba;
 
+    var ctrlSolid = surfSolidFlag('controls', regions.controls, effControlsStyle);
+    var ctrlActiveAlpha = ctrlSolid
+      ? 1
+      : regions.controls.opacity !== null
+        ? clamp(Math.max(ctrlRes.alpha, 0.56), 0.35, 0.96)
+        : effControlsStyle === 'solid'
+          ? (isLight ? 0.97 : 0.96)
+          : isLight
+            ? 0.82
+            : 0.74;
+    var rawCtrlActiveRgb = mixRgb(ctrlRes.hasToneOrTint ? ctrlRes.rgb : tint2Rgb, acc.rgb, isLight ? 0.18 : 0.22);
+    var ctrlActiveRgb = cfg.contrastFloor ? enforceContrastFloorRgb(rawCtrlActiveRgb, fgRgb, isLight, 4.5) : rawCtrlActiveRgb;
+    var rawSelectedRgb = mixRgb(tint2Rgb, acc.rgb, isLight ? 0.22 : 0.28);
+    var selectedRgb = cfg.contrastFloor ? enforceContrastFloorRgb(rawSelectedRgb, fgRgb, isLight, 4.5) : rawSelectedRgb;
+    var surfControl = ctrlRes.rgba;
+    var surfControlHover = rgbaStr(ptRgb, isLight ? 0.075 : 0.085);
+    var surfControlActive = rgbaStr(ctrlActiveRgb, ctrlActiveAlpha);
+    var surfSelected = rgbaStr(selectedRgb, isLight ? 0.22 : 0.24);
+    var scrollThumbCss = rgbaStr(ptRgb, isLight ? 0.24 : 0.22);
+    var scrollThumbHoverCss = rgbaStr(ptRgb, isLight ? 0.42 : 0.38);
+
     var bScale = cfg.borders === 'off' ? 0 : cfg.borders === 'subtle' ? 0.5 : 1;
     var shadowsOn = Boolean(cfg.shadows);
     var islandBaseA = isLight ? 0.125 : 0.105;
     var cardBaseA = isLight ? 0.115 : 0.09;
     var popBaseA = isLight ? 0.16 : 0.145;
 
-    var topbarEdge = buildRegionEdgeTokens({
-      alpha: topbarRes.alpha,
-      bScale: bScale,
-      shadowsOn: shadowsOn,
-      isLight: isLight,
-      ptRgb: ptRgb,
-      baseBorderA: islandBaseA,
-      overrideBorderOp: regions.topbar.borderOpacity,
-      borderStyle: regions.topbar.borderStyle,
-      isPopover: false,
-      layoutMode: cfg.layoutMode,
-    });
-    var wcoEdge = wcoIsAuto
-      ? topbarEdge
-      : buildRegionEdgeTokens({
-          alpha: wcoRes.alpha,
-          bScale: bScale,
-          shadowsOn: shadowsOn,
-          isLight: isLight,
-          ptRgb: ptRgb,
-          baseBorderA: islandBaseA,
-          overrideBorderOp: regions.wco.borderOpacity,
-          borderStyle: regions.wco.borderStyle,
-          isPopover: false,
-          layoutMode: cfg.layoutMode,
-        });
-    var sbEdge = buildRegionEdgeTokens({
-      alpha: sbRes.alpha,
-      bScale: bScale,
-      shadowsOn: shadowsOn,
-      isLight: isLight,
-      ptRgb: ptRgb,
-      baseBorderA: islandBaseA,
-      overrideBorderOp: sbEntry.borderOpacity,
-      borderStyle: sbEntry.borderStyle,
-      isPopover: false,
-      layoutMode: cfg.layoutMode,
-    });
-    var wsEdge = buildRegionEdgeTokens({
-      alpha: wsRes.alpha,
-      bScale: bScale,
-      shadowsOn: shadowsOn,
-      isLight: isLight,
-      ptRgb: ptRgb,
-      baseBorderA: islandBaseA,
-      overrideBorderOp: regions.workspace.borderOpacity,
-      borderStyle: regions.workspace.borderStyle,
-      isPopover: false,
-      layoutMode: cfg.layoutMode,
-    });
-    var rightPaneEdge = buildRegionEdgeTokens({
-      alpha: rightPaneRes.alpha,
-      bScale: bScale,
-      shadowsOn: shadowsOn,
-      isLight: isLight,
-      ptRgb: ptRgb,
-      baseBorderA: islandBaseA,
-      overrideBorderOp: regions.rightPane.borderOpacity,
-      borderStyle: regions.rightPane.borderStyle,
-      isPopover: false,
-      layoutMode: cfg.layoutMode,
-    });
-    var cardEdge = buildRegionEdgeTokens({
-      alpha: cardRes.alpha,
-      bScale: bScale,
-      shadowsOn: shadowsOn,
-      isLight: isLight,
-      ptRgb: ptRgb,
-      baseBorderA: cardBaseA,
-      overrideBorderOp: regions.card.borderOpacity,
-      borderStyle: regions.card.borderStyle,
-      isPopover: false,
-      layoutMode: cfg.layoutMode,
-    });
-    var compEdge = buildRegionEdgeTokens({
-      alpha: compRes.alpha,
-      bScale: bScale,
-      shadowsOn: shadowsOn,
-      isLight: isLight,
-      ptRgb: ptRgb,
-      baseBorderA: cardBaseA,
-      overrideBorderOp: regions.composer.borderOpacity,
-      borderStyle: regions.composer.borderStyle,
-      isPopover: false,
-      layoutMode: cfg.layoutMode,
-    });
-    var popEdge = buildRegionEdgeTokens({
-      alpha: popRes.alpha,
-      bScale: bScale,
-      shadowsOn: shadowsOn,
-      isLight: isLight,
-      ptRgb: ptRgb,
-      baseBorderA: popBaseA,
-      overrideBorderOp: regions.popover.borderOpacity,
-      borderStyle: regions.popover.borderStyle,
-      isPopover: true,
-      layoutMode: cfg.layoutMode,
-    });
+    function buildRegionEdges(entry, surfRes, effStyle, baseBorderA, isPopover) {
+      return buildRegionEdgeTokens({
+        alpha: surfRes.alpha,
+        bScale: bScale,
+        shadowsOn: shadowsOn,
+        isLight: isLight,
+        ptRgb: ptRgb,
+        baseBorderA: baseBorderA,
+        overrideBorderOp: entry.borderOpacity,
+        borderStyle: entry.borderStyle,
+        isPopover: Boolean(isPopover),
+        layoutMode: cfg.layoutMode,
+        effStyle: effStyle,
+        elevation: entry.elevation,
+      });
+    }
 
-    var stickyBf = sbEntry.borderStyle === 'none' ? 0 : computeBorderFactor(stickySbAlpha, bScale, sbEntry.borderOpacity);
-    var stickySf = computeShadowFactor(stickySbAlpha, shadowsOn);
+    var topbarEdge = buildRegionEdges(regions.topbar, topbarRes, effTopbarStyle, islandBaseA, false);
+    var wcoEdgeEntry = {
+      borderOpacity: wcoEntry.borderOpacity,
+      borderStyle: wcoEntry.borderStyle,
+      elevation: wcoEntry.elevation !== null && wcoEntry.elevation !== undefined ? wcoEntry.elevation : regions.topbar.elevation,
+    };
+    var wcoEdge = wcoIsAuto ? topbarEdge : buildRegionEdges(wcoEdgeEntry, wcoRes, effWcoEdgeStyle, islandBaseA, false);
+    var sbEdge = buildRegionEdges(sbEntry, sbRes, effSbStyle, islandBaseA, false);
+    var wsEdge = buildRegionEdges(regions.workspace, wsRes, effWsStyle, islandBaseA, false);
+    var rightPaneEdge = buildRegionEdges(regions.rightPane, rightPaneRes, effRightPaneStyle, islandBaseA, false);
+    var cardEdge = buildRegionEdges(regions.card, cardRes, effCardStyle, cardBaseA, false);
+    var compEdge = buildRegionEdges(regions.composer, compRes, effCompStyle, cardBaseA, false);
+    var userBubbleEdge = buildRegionEdges(regions.userBubble, userBubbleRes, effUserBubbleStyle, cardBaseA, false);
+    var assistantEdgeEntry = assistantRes.alpha <= 0.01 && regions.assistantBubble.borderStyle === null
+      ? {
+          borderOpacity: regions.assistantBubble.borderOpacity,
+          borderStyle: 'none',
+          elevation: regions.assistantBubble.elevation,
+        }
+      : regions.assistantBubble;
+    var assistantEdge = buildRegionEdges(assistantEdgeEntry, assistantRes, effAssistantBubbleStyle, cardBaseA, false);
+    var codeBlockEdge = buildRegionEdges(regions.codeBlock, codeBlockRes, effCodeStyle, cardBaseA, false);
+    var ctrlEdge = buildRegionEdges(regions.controls, ctrlRes, effControlsStyle, cardBaseA, false);
+    var popEdge = buildRegionEdges(regions.popover, popRes, effPopStyle, popBaseA, true);
+    var turnCardSolid = !(regions.assistantBubble && regions.assistantBubble.glassEnabled === true) && solidChrome;
+    var turnCardAlpha = turnCardSolid
+      ? 1
+      : assistantRes.hasCustomOp || effAssistantBubbleStyle === 'solid'
+        ? assistantRes.alpha
+        : effAssistantBubbleStyle === 'frosted' || effAssistantBubbleStyle === 'crystal'
+          ? Math.max(assistantRes.alpha, isLight ? 0.56 : 0.44)
+          : clamp(g * (isLight ? 0.80 : 0.64), isLight ? 0.52 : 0.42, 0.88);
+    var turnCardRgb = assistantRes.hasToneOrTint
+      ? assistantRes.rgb
+      : mixRgb(tint1Rgb, styleWallRgb(effAssistantBubbleStyle), styleWallWeight(cfg.wallTintMix, effAssistantBubbleStyle));
+    var surfTurnCard = rgbaStr(turnCardRgb, turnCardAlpha);
+    var turnCardEdge = buildRegionEdges(regions.assistantBubble, { alpha: turnCardAlpha }, effAssistantBubbleStyle, cardBaseA, false);
+
+    var sbStyleBfScale = effSbStyle === 'tinted' ? 0.85 : effSbStyle === 'solid' ? 0.9 : 1;
+    var stickyBf = sbEntry.borderStyle === 'none' ? 0 : computeBorderFactor(stickySbAlpha, bScale * sbStyleBfScale, sbEntry.borderOpacity);
+    var stickySf = computeShadowFactor(stickySbAlpha, shadowsOn, sbEntry.elevation);
     var stickyShadowParts = [];
-    if (stickyBf > 0.001) stickyShadowParts.push('inset 0 1px 0 ' + rgbaStr([255, 255, 255], (isLight ? 0.88 : 0.075) * stickyBf));
+    if (effSbStyle !== 'solid' && stickyBf > 0.001) stickyShadowParts.push('inset 0 1px 0 ' + rgbaStr([255, 255, 255], (isLight ? 0.88 : 0.075) * stickyBf));
     if (stickySf > 0.001) stickyShadowParts.push('0 3px 10px rgba(0, 0, 0, ' + ((isLight ? 0.06 : 0.24) * stickySf).toFixed(3) + ')');
     var stickyShadowCss = stickyShadowParts.length ? stickyShadowParts.join(', ') : 'none';
 
-    var deepBf = sbEntry.borderStyle === 'none' ? 0 : computeBorderFactor(deepSbAlpha, bScale, sbEntry.borderOpacity);
-    var deepSf = computeShadowFactor(deepSbAlpha, shadowsOn);
+    var deepBf = sbEntry.borderStyle === 'none' ? 0 : computeBorderFactor(deepSbAlpha, bScale * sbStyleBfScale, sbEntry.borderOpacity);
+    var deepSf = computeShadowFactor(deepSbAlpha, shadowsOn, sbEntry.elevation);
     var projShadowParts = [];
-    if (deepBf > 0.001) projShadowParts.push('inset 0 1px 0 ' + rgbaStr([255, 255, 255], (isLight ? 0.88 : 0.075) * deepBf));
+    if (effSbStyle !== 'solid' && deepBf > 0.001) projShadowParts.push('inset 0 1px 0 ' + rgbaStr([255, 255, 255], (isLight ? 0.88 : 0.075) * deepBf));
     if (deepSf > 0.001) projShadowParts.push('0 2px 8px rgba(0, 0, 0, ' + ((isLight ? 0.05 : 0.22) * deepSf).toFixed(3) + ')');
     var projShadowCss = projShadowParts.length ? projShadowParts.join(', ') : 'none';
 
@@ -2445,6 +2773,8 @@
       borderStyle: wsRes.hasCustomOp ? regions.workspace.borderStyle : sbEntry.borderStyle,
       isPopover: false,
       layoutMode: cfg.layoutMode,
+      effStyle: wsRes.hasCustomOp ? effWsStyle : effSbStyle,
+      elevation: null,
     });
 
     var autoScrim = !cfg.scrimColor || /^(auto|rgba?\(0,\s*0,\s*0|#000|#000000|black)$/i.test(cfg.scrimColor);
@@ -2464,22 +2794,26 @@
     var blurLg = cfg.glassSurfaces ? rawBlurLg : 0;
     var blurXl = cfg.glassSurfaces ? rawBlurXl : 0;
 
-    var topbarBlurPx = resolveRegionBlurPx(regions.topbar, rawBlurMd, cfg.glassSurfaces, cfg.mediaBlur);
+    var topbarBlurPx = resolveEffectiveRegionBlur(regions.topbar, effTopbarStyle, rawBlurMd, glassEnabledFlag, cfg.mediaBlur);
     var wcoDefaultBlur = regions.topbar.blur !== null && regions.topbar.blur !== undefined ? regions.topbar.blur : rawBlurMd;
     var wcoBlurPx = wcoIsAuto
       ? topbarBlurPx
-      : wcoEntry.blur === null && wcoEntry.glassEnabled === null
+      : wcoEntry.blur === null && wcoEntry.glassEnabled === null && wcoEntry.style === null
         ? topbarBlurPx
-        : resolveRegionBlurPx(wcoEntry, wcoDefaultBlur, cfg.glassSurfaces, cfg.mediaBlur);
-    var sbBlurPx = resolveRegionBlurPx(sbEntry, rawSbBlur, cfg.glassSurfaces, cfg.mediaBlur);
-    var wsBlurPx = resolveRegionBlurPx(regions.workspace, rawBlurMd, cfg.glassSurfaces, cfg.mediaBlur);
-    var rightPaneBlurPx = resolveRegionBlurPx(regions.rightPane, rawBlurMd, cfg.glassSurfaces, cfg.mediaBlur);
-    var compBlurPx = resolveRegionBlurPx(regions.composer, rawBlurLg, cfg.glassSurfaces, cfg.mediaBlur);
-    var cardBlurPx = resolveRegionBlurPx(regions.card, 0, cfg.glassSurfaces, cfg.mediaBlur);
-    var popBlurPx = resolveRegionBlurPx(regions.popover, rawBlurXl, cfg.glassSurfaces, cfg.mediaBlur);
-
-    var chipBlurPx = blurMd > 0 ? Math.max(4, Math.round(blurMd * 0.6)) : 0;
-    var codeBlurPx = cfg.codeReadabilityMode === 'frosted' && wsBlurPx > 0 ? Math.max(4, Math.round(wsBlurPx * 0.85)) : 0;
+        : resolveEffectiveRegionBlur(wcoEntry, effWcoEdgeStyle, wcoDefaultBlur, glassEnabledFlag, cfg.mediaBlur);
+    var sbBlurPx = resolveEffectiveRegionBlur(sbEntry, effSbStyle, rawSbBlur, glassEnabledFlag, cfg.mediaBlur);
+    var wsBlurPx = resolveEffectiveRegionBlur(regions.workspace, effWsStyle, rawBlurMd, glassEnabledFlag, cfg.mediaBlur);
+    var rightPaneBlurPx = resolveEffectiveRegionBlur(regions.rightPane, effRightPaneStyle, rawBlurMd, glassEnabledFlag, cfg.mediaBlur);
+    var compBlurPx = resolveEffectiveRegionBlur(regions.composer, effCompStyle, rawBlurLg, glassEnabledFlag, cfg.mediaBlur);
+    var cardBlurPx = resolveEffectiveRegionBlur(regions.card, effCardStyle, 0, glassEnabledFlag, cfg.mediaBlur);
+    var userBubbleBlurPx = resolveEffectiveRegionBlur(regions.userBubble, effUserBubbleStyle, 0, glassEnabledFlag, cfg.mediaBlur);
+    var assistantBlurPx = resolveEffectiveRegionBlur(regions.assistantBubble, effAssistantBubbleStyle, 0, glassEnabledFlag, cfg.mediaBlur);
+    var codeDefaultBlur = regions.codeBlock.style === 'frosted'
+      ? (rawBlurMd > 0 ? rawBlurMd : 16)
+      : (cfg.codeReadabilityMode === 'frosted' && wsBlurPx > 0 ? Math.max(4, Math.round(wsBlurPx * 0.85)) : 0);
+    var codeBlurPx = resolveEffectiveRegionBlur(regions.codeBlock, effCodeStyle, codeDefaultBlur, glassEnabledFlag, cfg.mediaBlur);
+    var ctrlBlurPx = resolveEffectiveRegionBlur(regions.controls, effControlsStyle, 0, glassEnabledFlag, cfg.mediaBlur);
+    var popBlurPx = resolveEffectiveRegionBlur(regions.popover, effPopStyle, rawBlurXl, glassEnabledFlag, cfg.mediaBlur);
     var effSbListStyle = sbEntry.listStyle || cfg.sidebarListStyle || 'capsule';
 
     var fitCss = cfg.fit === 'center' ? 'none' : cfg.fit;
@@ -2510,48 +2844,45 @@
 
     var leftNum = Number(cfg.leftCornerRadius);
     var rightNum = Number(cfg.rightCornerRadius);
-    var leftRad =
-      sbEntry.radius !== null && sbEntry.radius !== undefined
-        ? clamp(Math.round(Number(sbEntry.radius)), 0, 28) + 'px'
-        : cfg.leftCornerRadius === 'native'
-          ? '0px'
-          : Number.isFinite(leftNum) && cfg.leftCornerRadius !== '' && cfg.leftCornerRadius !== 'auto'
-            ? clamp(Math.round(leftNum), 0, 28) + 'px'
-            : R.island + 'px';
-    var rightRad =
-      regions.rightPane.radius !== null && regions.rightPane.radius !== undefined
-        ? clamp(Math.round(Number(regions.rightPane.radius)), 0, 28) + 'px'
-        : cfg.rightCornerRadius === 'native'
-          ? '0px'
-          : Number.isFinite(rightNum) && cfg.rightCornerRadius !== '' && cfg.rightCornerRadius !== 'auto'
-            ? clamp(Math.round(rightNum), 0, 28) + 'px'
-            : R.island + 'px';
+    function resolveCustomRadius(entry, fallbackPx) {
+      return entry && entry.radius !== null && entry.radius !== undefined
+        ? clamp(Math.round(Number(entry.radius)), 0, 28) + 'px'
+        : fallbackPx;
+    }
+    var leftRad = resolveCustomRadius(
+      sbEntry,
+      cfg.leftCornerRadius === 'native'
+        ? '0px'
+        : Number.isFinite(leftNum) && cfg.leftCornerRadius !== '' && cfg.leftCornerRadius !== 'auto'
+          ? clamp(Math.round(leftNum), 0, 28) + 'px'
+          : R.island + 'px'
+    );
+    var rightRad = resolveCustomRadius(
+      regions.rightPane,
+      cfg.rightCornerRadius === 'native'
+        ? '0px'
+        : Number.isFinite(rightNum) && cfg.rightCornerRadius !== '' && cfg.rightCornerRadius !== 'auto'
+          ? clamp(Math.round(rightNum), 0, 28) + 'px'
+          : R.island + 'px'
+    );
     var defaultTopbarPillRad = cfg.layoutMode === 'flush' ? R.ctl : Math.min(16, R.island);
-    var topbarRad =
-      regions.topbar.radius !== null && regions.topbar.radius !== undefined
-        ? clamp(Math.round(Number(regions.topbar.radius)), 0, 28) + 'px'
-        : defaultTopbarPillRad + 'px';
-    var wcoRad = wcoIsAuto
-      ? topbarRad
-      : regions.wco.radius !== null && regions.wco.radius !== undefined
-        ? clamp(Math.round(Number(regions.wco.radius)), 0, 28) + 'px'
-        : topbarRad;
-    var workspaceRad =
-      regions.workspace.radius !== null && regions.workspace.radius !== undefined
-        ? clamp(Math.round(Number(regions.workspace.radius)), 0, 28) + 'px'
-        : R.island + 'px';
-    var cardRad =
-      regions.card.radius !== null && regions.card.radius !== undefined
-        ? clamp(Math.round(Number(regions.card.radius)), 0, 28) + 'px'
-        : R.card + 'px';
-    var composerRad =
-      regions.composer.radius !== null && regions.composer.radius !== undefined
-        ? clamp(Math.round(Number(regions.composer.radius)), 0, 28) + 'px'
-        : R.card + 'px';
-    var popoverRad =
-      regions.popover.radius !== null && regions.popover.radius !== undefined
-        ? clamp(Math.round(Number(regions.popover.radius)), 0, 28) + 'px'
-        : R.card + 'px';
+    var topbarRad = resolveCustomRadius(regions.topbar, defaultTopbarPillRad + 'px');
+    var wcoRad = wcoIsAuto ? topbarRad : resolveCustomRadius(wcoEntry, topbarRad);
+    var workspaceRad = resolveCustomRadius(regions.workspace, R.island + 'px');
+    var cardRad = resolveCustomRadius(regions.card, R.card + 'px');
+    var composerRad = resolveCustomRadius(regions.composer, R.card + 'px');
+    var defaultUserBubblePx = cfg.cornerStyle === 'sharp' ? 10 : cfg.cornerStyle === 'soft' ? 22 : 20;
+    var userBubbleRad = resolveCustomRadius(regions.userBubble, defaultUserBubblePx + 'px');
+    var userBubbleFrameRad = 'calc(' + userBubbleRad + ' + 1px)';
+    var assistantBubbleRad = resolveCustomRadius(regions.assistantBubble, R.card + 'px');
+    var defaultCodePx = cfg.cornerStyle === 'sharp' ? 6 : cfg.cornerStyle === 'soft' ? 14 : 12;
+    var codeBlockRad = resolveCustomRadius(regions.codeBlock, defaultCodePx + 'px');
+    var ctrlRad = resolveCustomRadius(regions.controls, R.ctl + 'px');
+    var ctrlPillRad = resolveCustomRadius(
+      regions.controls,
+      cfg.cornerStyle === 'sharp' ? R.ctl + 'px' : '9999px'
+    );
+    var popoverRad = resolveCustomRadius(regions.popover, R.card + 'px');
 
     // #9 Sidebar typography scale (11..15px, virtual slot height safe)
     var sbFsRaw = sbEntry.fontSize !== null && sbEntry.fontSize !== undefined ? sbEntry.fontSize : cfg.sidebarFontSize;
@@ -2572,9 +2903,13 @@
       wco: wcoRes,
       sidebar: sbRes,
       workspace: wsRes,
-      card: cardRes,
-      composer: compRes,
       rightPane: rightPaneRes,
+      composer: compRes,
+      card: cardRes,
+      userBubble: userBubbleRes,
+      assistantBubble: assistantRes,
+      codeBlock: codeBlockRes,
+      controls: ctrlRes,
       popover: popRes,
     };
     var regionTypo = {};
@@ -2587,7 +2922,7 @@
       if (rawFgHex) {
         var parsedFg = hexToRgb(rawFgHex);
         if (parsedFg) {
-          if (rEnt.allowRawFontColor === true || rSurface.alpha < 0.55) {
+          if (rEnt.allowRawFontColor === true || !rSurface || rSurface.alpha < 0.55) {
             fgOut = rgbToHex(parsedFg);
           } else {
             fgOut = rgbToHex(enforceFgContrastRgb(parsedFg, rSurface.rgb, isLight, 4.5));
@@ -2599,11 +2934,36 @@
       if (rid !== 'sidebar' && rid !== 'wco') {
         var rawFs = rEnt.fontSize !== null && rEnt.fontSize !== undefined ? rEnt.fontSize : cfg.globalFontSize;
         if (rawFs !== null && rawFs !== undefined && rawFs !== '' && Number.isFinite(Number(rawFs))) {
-          fsOut = clamp(Math.round(Number(rawFs)), 10, 24) + 'px';
+          var fsBounds = REGION_FONT_SIZE_BOUNDS[rid] || { min: 10, max: 24 };
+          fsOut = clamp(Math.round(Number(rawFs)), fsBounds.min, fsBounds.max) + 'px';
         }
       }
       regionTypo[rid] = { fg: fgOut, ff: ffOut, fs: fsOut };
     }
+
+    var popAutoCutoff =
+      regions.popover.style === null && !(regions.popover.blur !== null && Number(regions.popover.blur) > 0)
+        ? 0.94
+        : 0.98;
+    var wcoSat = wcoIsAuto
+      ? regions.topbar.saturation
+      : wcoEntry.saturation !== null && wcoEntry.saturation !== undefined
+        ? wcoEntry.saturation
+        : regions.topbar.saturation;
+    var wsBackdropCss = wsRes.alpha >= 0.98 ? 'none' : buildBackdrop(wsBlurPx, isLight, false, regions.workspace.saturation, effWsStyle);
+    var rightPaneBackdropCss = rightPaneRes.alpha >= 0.98 ? 'none' : buildBackdrop(rightPaneBlurPx, isLight, false, regions.rightPane.saturation, effRightPaneStyle);
+    var topbarBackdropCss = topbarRes.alpha >= 0.98 ? 'none' : buildBackdrop(topbarBlurPx, isLight, false, regions.topbar.saturation, effTopbarStyle);
+    var wcoBackdropCss = wcoRes.alpha >= 0.98 ? 'none' : buildBackdrop(wcoBlurPx, isLight, false, wcoSat, effWcoEdgeStyle);
+    var sbBackdropCss = sbRes.alpha >= 0.98 ? 'none' : buildBackdrop(sbBlurPx, isLight, false, sbEntry.saturation, effSbStyle);
+    var popBackdropCss = popRes.alpha >= popAutoCutoff ? 'none' : buildBackdrop(popBlurPx, isLight, false, regions.popover.saturation, effPopStyle);
+    var quickPanelBackdropCss = quickPanelRes.alpha >= popAutoCutoff ? 'none' : buildBackdrop(popBlurPx, isLight, false, regions.popover.saturation, effPopStyle);
+    var stickyBackdropCss = stickySbAlpha >= 0.88 || effSbListStyle !== 'capsule' ? 'none' : sbBackdropCss;
+    var compBackdropCss = compRes.alpha >= 0.98 ? 'none' : buildBackdrop(compBlurPx, isLight, true, regions.composer.saturation, effCompStyle);
+    var cardBackdropCss = cardRes.alpha >= 0.98 ? 'none' : buildBackdrop(cardBlurPx, isLight, true, regions.card.saturation, effCardStyle);
+    var userBubbleBackdropCss = userBubbleRes.alpha >= 0.98 ? 'none' : buildBackdrop(userBubbleBlurPx, isLight, true, regions.userBubble.saturation, effUserBubbleStyle);
+    var assistantBackdropCss = assistantRes.alpha >= 0.98 ? 'none' : buildBackdrop(assistantBlurPx, isLight, true, regions.assistantBubble.saturation, effAssistantBubbleStyle);
+    var codeBackdropCss = codeBlockRes.alpha >= 0.98 ? 'none' : buildBackdrop(codeBlurPx, isLight, true, regions.codeBlock.saturation, effCodeStyle);
+    var ctrlBackdropCss = ctrlRes.alpha >= 0.98 ? 'none' : buildBackdrop(ctrlBlurPx, isLight, true, regions.controls.saturation, effControlsStyle);
 
     var vars = {
       '--prism-pt-rgb': S.pt,
@@ -2638,9 +2998,16 @@
       '--prism-surface-editor': surfEditor,
       '--prism-surface-card': surfCard,
       '--prism-surface-composer': surfComp,
+      '--prism-surface-bubble-user': userBubbleRes.rgba,
+      '--prism-surface-bubble-assistant': assistantRes.rgba,
+      '--prism-surface-turn-card': surfTurnCard,
       '--prism-surface-popover': surfPopover,
       '--prism-surface-quick-panel': surfQuickPanel,
-      '--prism-surface-code-block': cfg.codeReadabilityMode === 'solid' ? rgbaStr(tint1Rgb, 1) : surfEditor,
+      '--prism-surface-code-block': codeBlockRes.rgba,
+      '--prism-surface-control': surfControl,
+      '--prism-surface-control-hover': surfControlHover,
+      '--prism-surface-control-active': surfControlActive,
+      '--prism-surface-selected': surfSelected,
       '--prism-secondary-bg': rgbaStr(tint2Rgb, isLight ? 0.78 : 0.72),
       '--prism-muted-bg': rgbaStr(tint1Rgb, isLight ? 0.65 : 0.55),
       '--prism-sidebar-muted': 'rgba(' + S.pt + ', ' + (isLight ? '0.075' : '0.078') + ')',
@@ -2649,97 +3016,36 @@
       '--prism-blur-md': blurMd + 'px',
       '--prism-blur-lg': blurLg + 'px',
       '--prism-blur-xl': blurXl + 'px',
-      '--prism-chat-backdrop': buildBackdrop(wsBlurPx, isLight, false),
-      '--prism-right-pane-backdrop': buildBackdrop(rightPaneBlurPx, isLight, false),
-      '--prism-topbar-backdrop': buildBackdrop(topbarBlurPx, isLight, false),
-      '--prism-wco-backdrop': buildBackdrop(wcoBlurPx, isLight, false),
-      '--prism-sidebar-backdrop': buildBackdrop(sbBlurPx, isLight, false),
-      '--prism-popover-backdrop': popRes.alpha >= 0.94 ? 'none' : buildBackdrop(popBlurPx, isLight, false),
-      '--prism-quick-panel-backdrop': quickPanelRes.alpha >= 0.94 ? 'none' : buildBackdrop(popBlurPx, isLight, false),
-      '--prism-sticky-backdrop': stickySbAlpha >= 0.88 || effSbListStyle !== 'capsule' ? 'none' : buildBackdrop(sbBlurPx, isLight, true),
+      '--prism-chat-backdrop': wsBackdropCss,
+      '--prism-right-pane-backdrop': rightPaneBackdropCss,
+      '--prism-topbar-backdrop': topbarBackdropCss,
+      '--prism-wco-backdrop': wcoBackdropCss,
+      '--prism-sidebar-backdrop': sbBackdropCss,
+      '--prism-popover-backdrop': popBackdropCss,
+      '--prism-quick-panel-backdrop': quickPanelBackdropCss,
+      '--prism-sticky-backdrop': stickyBackdropCss,
       '--prism-project-backdrop': 'none',
-      '--prism-composer-backdrop': compRes.alpha >= 0.92 ? 'none' : buildBackdrop(compBlurPx, isLight, true),
-      '--prism-card-backdrop': cardRes.alpha >= 0.92 ? 'none' : buildBackdrop(cardBlurPx, isLight, true),
-      '--prism-code-backdrop': buildBackdrop(codeBlurPx, isLight, true),
-      '--prism-chrome-chip-backdrop': buildBackdrop(chipBlurPx, isLight, true),
-      '--prism-border-topbar': topbarEdge.border,
-      '--prism-specular-topbar': topbarEdge.specular,
-      '--prism-sheen-topbar': topbarEdge.sheen,
-      '--prism-shadow-topbar': topbarEdge.shadow,
-      '--prism-border-wco': wcoEdge.border,
-      '--prism-specular-wco': wcoEdge.specular,
-      '--prism-sheen-wco': wcoEdge.sheen,
-      '--prism-shadow-wco': wcoEdge.shadow,
-      '--prism-border-sidebar': sbEdge.border,
+      '--prism-composer-backdrop': compBackdropCss,
+      '--prism-card-backdrop': cardBackdropCss,
+      '--prism-bubble-user-backdrop': userBubbleBackdropCss,
+      '--prism-bubble-assistant-backdrop': assistantBackdropCss,
+      '--prism-code-backdrop': codeBackdropCss,
+      '--prism-control-backdrop': ctrlBackdropCss,
+      '--prism-chrome-chip-backdrop': ctrlBackdropCss,
       '--prism-border-sidebar-hover': sbChipHoverBorderCss,
-      '--prism-specular-sidebar': sbEdge.specular,
-      '--prism-sheen-sidebar': sbEdge.sheen,
-      '--prism-shadow-sidebar': sbEdge.shadow,
       '--prism-sticky-shadow': stickyShadowCss,
       '--prism-proj-shadow': projShadowCss,
       '--prism-chip-shadow': chipShadowCss,
       '--prism-chip-shadow-hover': chipShadowHoverCss,
-      '--prism-border-workspace': wsEdge.border,
-      '--prism-specular-workspace': wsEdge.specular,
-      '--prism-sheen-workspace': wsEdge.sheen,
-      '--prism-shadow-workspace': wsEdge.shadow,
       '--prism-sheen-main-page': mainPageEdge.sheen,
       '--prism-specular-main-page': mainPageEdge.specular,
-      '--prism-border-right-pane': rightPaneEdge.border,
-      '--prism-specular-right-pane': rightPaneEdge.specular,
-      '--prism-sheen-right-pane': rightPaneEdge.sheen,
-      '--prism-shadow-right-pane': rightPaneEdge.shadow,
-      '--prism-border-card': cardEdge.border,
-      '--prism-specular-card': cardEdge.specular,
-      '--prism-sheen-card': cardEdge.sheen,
-      '--prism-shadow-card': cardEdge.shadow,
-      '--prism-border-composer': compEdge.border,
       '--prism-border-composer-divider': compDividerCss,
-      '--prism-specular-composer': compEdge.specular,
-      '--prism-sheen-composer': compEdge.sheen,
-      '--prism-shadow-composer': compEdge.shadow,
-      '--prism-border-popover': popEdge.border,
-      '--prism-specular-popover': popEdge.specular,
-      '--prism-sheen-popover': popEdge.sheen,
-      '--prism-shadow-popover': popEdge.shadow,
       '--prism-border-sash': borderHairline,
       '--prism-border-hairline': borderHairline,
       '--prism-border-island': sbEdge.border,
       '--prism-specular-top': topbarEdge.specular,
       '--prism-sheen': topbarEdge.sheen,
       '--prism-shadow-island': sbEdge.shadow,
-      '--prism-bw-topbar-top': topbarEdge.widths.top,
-      '--prism-bw-topbar-right': topbarEdge.widths.right,
-      '--prism-bw-topbar-bottom': topbarEdge.widths.bottom,
-      '--prism-bw-topbar-left': topbarEdge.widths.left,
-      '--prism-bw-wco-top': wcoEdge.widths.top,
-      '--prism-bw-wco-right': wcoEdge.widths.right,
-      '--prism-bw-wco-bottom': wcoEdge.widths.bottom,
-      '--prism-bw-wco-left': wcoEdge.widths.left,
-      '--prism-bw-sidebar-top': sbEdge.widths.top,
-      '--prism-bw-sidebar-right': sbEdge.widths.right,
-      '--prism-bw-sidebar-bottom': sbEdge.widths.bottom,
-      '--prism-bw-sidebar-left': sbEdge.widths.left,
-      '--prism-bw-workspace-top': wsEdge.widths.top,
-      '--prism-bw-workspace-right': wsEdge.widths.right,
-      '--prism-bw-workspace-bottom': wsEdge.widths.bottom,
-      '--prism-bw-workspace-left': wsEdge.widths.left,
-      '--prism-bw-card-top': cardEdge.widths.top,
-      '--prism-bw-card-right': cardEdge.widths.right,
-      '--prism-bw-card-bottom': cardEdge.widths.bottom,
-      '--prism-bw-card-left': cardEdge.widths.left,
-      '--prism-bw-composer-top': compEdge.widths.top,
-      '--prism-bw-composer-right': compEdge.widths.right,
-      '--prism-bw-composer-bottom': compEdge.widths.bottom,
-      '--prism-bw-composer-left': compEdge.widths.left,
-      '--prism-bw-right-pane-top': rightPaneEdge.widths.top,
-      '--prism-bw-right-pane-right': rightPaneEdge.widths.right,
-      '--prism-bw-right-pane-bottom': rightPaneEdge.widths.bottom,
-      '--prism-bw-right-pane-left': rightPaneEdge.widths.left,
-      '--prism-bw-popover-top': popEdge.widths.top,
-      '--prism-bw-popover-right': popEdge.widths.right,
-      '--prism-bw-popover-bottom': popEdge.widths.bottom,
-      '--prism-bw-popover-left': popEdge.widths.left,
       '--prism-workspace-pad': (cfg.layoutMode === 'islands' ? cfg.workspacePad : 0) + 'px',
       '--prism-island-gap': (cfg.layoutMode === 'islands' ? cfg.islandGap : 0) + 'px',
       '--prism-r-island': R.island + 'px',
@@ -2750,6 +3056,12 @@
       '--prism-r-workspace': workspaceRad,
       '--prism-r-card': cardRad,
       '--prism-r-composer': composerRad,
+      '--prism-r-bubble-user': userBubbleRad,
+      '--prism-r-bubble-user-frame': userBubbleFrameRad,
+      '--prism-r-bubble-assistant': assistantBubbleRad,
+      '--prism-r-code-block': codeBlockRad,
+      '--prism-r-control': ctrlRad,
+      '--prism-r-control-pill': ctrlPillRad,
       '--prism-r-popover': popoverRad,
       '--prism-r-sheet': R.sheet + 'px',
       '--prism-r-ctl': R.ctl + 'px',
@@ -2791,15 +3103,48 @@
       '--prism-grain-alpha': cfg.grainAlpha.toFixed(3),
       '--prism-selection-bg': 'rgba(' + acc.rgbStr + ', 0.40)',
       '--prism-editor-selection-bg': 'rgba(' + acc.rgbStr + ', 0.38)',
-      '--prism-scroll-thumb': rgbaStr(ptRgb, 0.22),
+      '--prism-scroll-thumb': scrollThumbCss,
+      '--prism-scroll-thumb-hover': scrollThumbHoverCss,
     };
 
+    function assignEdgeVars(target, slug, edge) {
+      target['--prism-border-' + slug] = edge.border;
+      target['--prism-specular-' + slug] = edge.specular;
+      target['--prism-sheen-' + slug] = edge.sheen;
+      target['--prism-shadow-' + slug] = edge.shadow;
+      target['--prism-box-shadow-' + slug] = edge.boxShadow;
+      target['--prism-bw-' + slug + '-top'] = edge.widths.top;
+      target['--prism-bw-' + slug + '-right'] = edge.widths.right;
+      target['--prism-bw-' + slug + '-bottom'] = edge.widths.bottom;
+      target['--prism-bw-' + slug + '-left'] = edge.widths.left;
+    }
+    var edgePairs = [
+      ['topbar', topbarEdge],
+      ['wco', wcoEdge],
+      ['sidebar', sbEdge],
+      ['workspace', wsEdge],
+      ['right-pane', rightPaneEdge],
+      ['card', cardEdge],
+      ['composer', compEdge],
+      ['bubble-user', userBubbleEdge],
+      ['bubble-assistant', assistantEdge],
+      ['turn-card', turnCardEdge],
+      ['code-block', codeBlockEdge],
+      ['control', ctrlEdge],
+      ['popover', popEdge],
+    ];
+    for (var ei = 0; ei < edgePairs.length; ei += 1) {
+      assignEdgeVars(vars, edgePairs[ei][0], edgePairs[ei][1]);
+    }
+
+    var assistantBlurActive = assistantBackdropCss !== 'none';
     var structuralSig = [
       VERSION,
       state.effectiveTheme,
       cfg.colorScheme === 'host-native' ? 'host' : 'prism',
       cfg.layoutMode,
       cfg.topbarStyle,
+      assistantBlurActive ? 'ab1' : 'ab0',
     ].join('|');
 
     state.lastWcoSurface = { rgb: wcoRes.rgb, alpha: wcoRes.alpha };
@@ -2810,6 +3155,7 @@
       acc: acc,
       wcoRes: wcoRes,
       regionTypo: regionTypo,
+      assistantBlurActive: assistantBlurActive,
       vars: vars,
       structuralSig: structuralSig,
     };
@@ -2837,6 +3183,14 @@
           root.style.removeProperty(k);
         }
       }
+      if (typeof root.style.length === 'number') {
+        for (var si = root.style.length - 1; si >= 0; si -= 1) {
+          var propName = root.style[si];
+          if (propName && propName.indexOf('--prism-') === 0) {
+            root.style.removeProperty(propName);
+          }
+        }
+      }
       root.style.removeProperty('--prism-hole-clip');
       root.style.removeProperty('--prism-wco-inset-right');
       root.style.removeProperty('--prism-wco-pill-top');
@@ -2854,6 +3208,9 @@
   function buildStructuralPrismCss(cfg, tok) {
     var GG = 'html[' + GLASS_ATTR + '="ready"]';
     var GW = 'html[' + WALLPAPER_ATTR + '="ready"]';
+    var BODY_THEME = ':is(body[data-agy-theme], body)';
+    var GW_CTL = GW + '[' + GLASS_ATTR + '="ready"] ' + BODY_THEME;
+    var GG_POP = GG + ':is([' + ROOT_ATTR + '], html) ' + BODY_THEME;
     var NOT_HOLE = ':not([data-has-browser-hole="true"]):not([data-browser-hole])';
     var isLight = tok.isLight;
     var out = [];
@@ -2915,7 +3272,7 @@
       '  background-image: var(--prism-sheen-topbar, var(--prism-sheen)) !important;\n' +
       '  backdrop-filter: var(--prism-topbar-backdrop, var(--prism-sidebar-backdrop)) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-topbar-backdrop, var(--prism-sidebar-backdrop)) !important;\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-topbar, var(--prism-specular-top)), var(--prism-shadow-topbar, var(--prism-shadow-island)) !important;\n' +
+      '  box-shadow: var(--prism-box-shadow-topbar, var(--prism-shadow-island)) !important;\n' +
       '}\n' +
       GW + '[' + WCO_ATTR + '="transparent"] #' + WCO_PILL_ID + ' {\n' +
       '  position: fixed !important;\n' +
@@ -2932,7 +3289,7 @@
       '  background-image: var(--prism-sheen-wco, var(--prism-sheen-topbar, var(--prism-sheen))) !important;\n' +
       '  backdrop-filter: var(--prism-wco-backdrop, var(--prism-topbar-backdrop, var(--prism-sidebar-backdrop))) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-wco-backdrop, var(--prism-topbar-backdrop, var(--prism-sidebar-backdrop))) !important;\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-wco, var(--prism-specular-top)), var(--prism-shadow-wco, var(--prism-shadow-island)) !important;\n' +
+      '  box-shadow: var(--prism-box-shadow-wco, var(--prism-shadow-island)) !important;\n' +
       '}\n' +
       GW + '[data-prism-layout="flush"] .agy-prism-topbar-pill {\n' +
       '  border-radius: 0px 0px var(--prism-r-topbar-pill, 6px) var(--prism-r-topbar-pill, 6px) !important;\n' +
@@ -3002,6 +3359,8 @@
       '  --onyx-frame: var(--prism-surface-sidebar) !important;\n' +
       '  --onyx-well: var(--prism-surface-chat) !important;\n' +
       '  --onyx-raised: var(--prism-surface-card) !important;\n' +
+      '  --onyx-selected: var(--prism-surface-selected) !important;\n' +
+      '  --onyx-key: var(--prism-surface-control-active, var(--prism-secondary-bg)) !important;\n' +
       '  --vscode-editor-background: transparent !important;\n' +
       '  --vscode-editorGutter-background: transparent !important;\n' +
       '  --vscode-sideBar-background: transparent !important;\n' +
@@ -3015,6 +3374,23 @@
       '}\n' +
       GW + '[' + WCO_ATTR + '="transparent"] body {\n' +
       '  --background: #00000000 !important;\n' +
+      '}\n' +
+      GW_CTL + ' .agy-user-bubble-frame {\n' +
+      '  --glass: var(--prism-surface-bubble-user) !important;\n' +
+      '  --glass-border: var(--prism-border-bubble-user) !important;\n' +
+      '  --glass-highlight: var(--prism-specular-bubble-user) !important;\n' +
+      '  --glass-shadow: var(--prism-box-shadow-bubble-user, none) !important;\n' +
+      '}\n' +
+      GW_CTL + ' .agy-takeover-frame {\n' +
+      '  --glass: var(--prism-surface-card) !important;\n' +
+      '  --glass-border: var(--prism-border-card) !important;\n' +
+      '  --glass-highlight: var(--prism-specular-card) !important;\n' +
+      '  --glass-shadow: var(--prism-box-shadow-card, none) !important;\n' +
+      '}\n' +
+      GW_CTL + ' .agy-scroll-bottom {\n' +
+      '  --glass: var(--prism-surface-control) !important;\n' +
+      '  --glass-border: var(--prism-border-control) !important;\n' +
+      '  --glass-highlight: var(--prism-specular-control) !important;\n' +
       '}'
     );
 
@@ -3430,7 +3806,14 @@
       SB_STYLE_SEL('accordion') + ' [data-project-card="true"]:is(:hover, :focus-within)::after {\n' +
       '  opacity: 0 !important;\n' +
       '}\n' +
-      SB_STYLE_SEL('accordion') + ' ' + LEFT_SB_SCOPE + ' :is(.agy-sidebar-row, [data-testid="conversation-row-sidebar"])[data-selected="true"] {\n' +
+      GW_CTL + ' ' + LEFT_SB_SCOPE + ' .agy-sidebar-row[data-selected="true"],\n' +
+      GW_CTL + ' ' + LEFT_SB_SCOPE + ' [data-testid="conversation-row-sidebar"][data-selected="true"] {\n' +
+      '  background-color: var(--prism-surface-selected, var(--prism-accent-soft)) !important;\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '  border-radius: var(--prism-r-ctl) !important;\n' +
+      '}\n' +
+      GW_CTL + '[' + SIDEBAR_STYLE_ATTR + '="accordion"] ' + LEFT_SB_SCOPE + ' .agy-sidebar-row[data-selected="true"],\n' +
+      GW_CTL + '[' + SIDEBAR_STYLE_ATTR + '="accordion"] ' + LEFT_SB_SCOPE + ' [data-testid="conversation-row-sidebar"][data-selected="true"] {\n' +
       '  background-color: var(--prism-accent-soft) !important;\n' +
       '  color: var(--prism-accent) !important;\n' +
       '  border-radius: var(--prism-r-ctl) !important;\n' +
@@ -3631,7 +4014,7 @@
       '  -webkit-backdrop-filter: var(--prism-chat-backdrop);\n' +
       '  box-shadow: inset 0 1px 0 var(--prism-specular-main-page);\n' +
       '}\n' +
-      GW + ' :is([data-testid="customization-card"], .agy-spotlight-card, [data-testid="marketplace-bundles-banner"]) {\n' +
+      GW + ' :is([data-testid="customization-card"], .agy-spotlight-card, [data-testid="marketplace-bundles-banner"], .agy-takeover-card, .surface-opaque.bg-background, [data-testid="plugin-detail"] :is(.surface-card, [class*="border"][class*="rounded-"]), .agy-callout, [data-testid="ask-question-option"], [data-testid="permission-target-editor"]) {\n' +
       '  background-color: var(--prism-surface-card) !important;\n' +
       '  background-image: var(--prism-sheen-card) !important;\n' +
       '  border-style: solid !important;\n' +
@@ -3640,17 +4023,23 @@
       '  border-radius: var(--prism-r-card) !important;\n' +
       '  backdrop-filter: var(--prism-card-backdrop) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-card-backdrop) !important;\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-card), var(--prism-shadow-card) !important;\n' +
+      '  box-shadow: var(--prism-box-shadow-card) !important;\n' +
       '}\n' +
-      GW + ' [data-testid="customization-card"]:hover {\n' +
+      GW + ' :is([data-testid="customization-card"], [data-testid="ask-question-option"]):is(:hover, :focus-visible) {\n' +
       '  background-color: var(--prism-secondary-bg) !important;\n' +
       '  border-color: var(--prism-accent-border) !important;\n' +
       '}\n' +
-      GW + ' :is(.agy-field:has([data-testid="customizations-search"]), [data-testid="plugins-tabs"]) {\n' +
-      '  background-color: rgba(var(--prism-sidebar-rgb, var(--prism-shade-rgb)), ' + (isLight ? '0.72' : '0.62') + ') !important;\n' +
-      '  border-color: var(--prism-border-card) !important;\n' +
-      '  backdrop-filter: var(--prism-chrome-chip-backdrop) !important;\n' +
-      '  -webkit-backdrop-filter: var(--prism-chrome-chip-backdrop) !important;\n' +
+      GW + ' .agy-field:has([data-testid="customizations-search"]) {\n' +
+      '  background-color: var(--prism-surface-control) !important;\n' +
+      '  border-color: var(--prism-border-control, var(--prism-border-card)) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' [data-testid="plugins-tabs"] {\n' +
+      '  background-color: var(--prism-surface-control, rgba(var(--prism-sidebar-rgb, var(--prism-shade-rgb)), ' + (isLight ? '0.72' : '0.62') + ')) !important;\n' +
+      '  border-color: var(--prism-border-control, var(--prism-border-card)) !important;\n' +
+      '  backdrop-filter: var(--prism-control-backdrop, none) !important;\n' +
+      '  -webkit-backdrop-filter: var(--prism-control-backdrop, none) !important;\n' +
       '}'
     );
 
@@ -3759,11 +4148,11 @@
       '  border-bottom: 1px solid var(--prism-border-right-pane) !important;\n' +
       '}\n' +
       GW + ' [data-testid="new-tab-search-input"] {\n' +
-      '  background-color: rgba(var(--prism-tint-1-rgb), ' + (isLight ? '0.68' : '0.46') + ') !important;\n' +
-      '  border: 1px solid var(--prism-border-right-pane) !important;\n' +
-      '  border-radius: var(--prism-r-ctl) !important;\n' +
-      '  backdrop-filter: var(--prism-chrome-chip-backdrop) !important;\n' +
-      '  -webkit-backdrop-filter: var(--prism-chrome-chip-backdrop) !important;\n' +
+      '  background-color: var(--prism-surface-control, rgba(var(--prism-tint-1-rgb), ' + (isLight ? '0.68' : '0.46') + ')) !important;\n' +
+      '  border: 1px solid var(--prism-border-control, var(--prism-border-right-pane)) !important;\n' +
+      '  border-radius: var(--prism-r-control, var(--prism-r-ctl)) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
       '}\n' +
       GW + ' [data-testid="new-tab-search-input"]:focus {\n' +
       '  border-color: var(--prism-accent-border) !important;\n' +
@@ -3792,21 +4181,260 @@
       '  background-color: transparent !important;\n' +
       '  backdrop-filter: none !important;\n' +
       '}\n' +
-      GW + ' pre,\n' +
-      GW + ' .code-block,\n' +
-      GW + ' .md-code-block {\n' +
+      GW + ' pre:has(> div.rounded-xl.border),\n' +
+      GW + ' pre:has(> div :is([data-testid="code-block-preview-toggle"], [data-testid="markdown-code-block-preview"])) {\n' +
+      '  background: transparent !important;\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  border: none !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '  padding: 0 !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' pre:not(:has(> div.rounded-xl.border)):not(:has(> div :is([data-testid="code-block-preview-toggle"], [data-testid="markdown-code-block-preview"]))),\n' +
+      GW + ' pre > div.rounded-xl.border,\n' +
+      GW + ' pre > div:has(:is([data-testid="code-block-preview-toggle"], [data-testid="markdown-code-block-preview"])),\n' +
+      GW + ' :is(.code-block, .md-code-block):not(:has(> div.rounded-xl.border)):not(:has(> div :is([data-testid="code-block-preview-toggle"], [data-testid="markdown-code-block-preview"]))):not(pre > div *) {\n' +
       '  background-color: var(--prism-surface-code-block) !important;\n' +
+      '  background-image: var(--prism-sheen-code-block, none) !important;\n' +
       '  border-style: solid !important;\n' +
-      '  border-top-width: var(--prism-bw-card-top, 1px) !important;\n' +
-      '  border-right-width: var(--prism-bw-card-right, 1px) !important;\n' +
-      '  border-bottom-width: var(--prism-bw-card-bottom, 1px) !important;\n' +
-      '  border-left-width: var(--prism-bw-card-left, 1px) !important;\n' +
-      '  border-color: var(--prism-border-card) !important;\n' +
-      '  border-radius: var(--prism-r-ctl) !important;\n' +
+      '  border-color: var(--prism-border-code-block, var(--prism-border-card)) !important;\n' +
+      '  border-width: var(--prism-bw-code-block-top, 1px) var(--prism-bw-code-block-right, 1px) var(--prism-bw-code-block-bottom, 1px) var(--prism-bw-code-block-left, 1px) !important;\n' +
+      '  border-radius: var(--prism-r-code-block, var(--prism-r-ctl)) !important;\n' +
+      '  box-shadow: var(--prism-box-shadow-code-block, none) !important;\n' +
       '  backdrop-filter: var(--prism-code-backdrop) !important;\n' +
       '  -webkit-backdrop-filter: var(--prism-code-backdrop) !important;\n' +
       '}\n' +
-      GW + ' pre code, ' + GW + ' .md-code-block pre { background: transparent !important; border: none !important; backdrop-filter: none !important; }'
+      GW + ' pre code,\n' +
+      GW + ' .md-code-block pre {\n' +
+      '  background: transparent !important;\n' +
+      '  background-color: transparent !important;\n' +
+      '  border: none !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' :is(.agy-md-table, .md-table-frame) {\n' +
+      '  background-color: var(--prism-surface-code-block) !important;\n' +
+      '  border: 1px solid var(--prism-border-code-block, var(--prism-border-card)) !important;\n' +
+      '  border-radius: var(--prism-r-code-block, var(--prism-r-ctl)) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' :is(code:not(pre code), .inline-pill, blockquote) {\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}'
+    );
+
+    // #8 User Bubbles, Assistant Turns, Turn Cards & Antigravity 2.35+ Interactive Controls (F-03 / F-04 / leaf-only blur)
+    out.push(
+      GW + ' :is([data-testid="agent-response"], .agy-user-bubble-frame:not([data-testid="user-message-bubble"]):not(.agy-user-bubble), .agy-takeover-frame:not(.agy-takeover-card)) {\n' +
+      '  background: transparent !important;\n' +
+      '  background-color: transparent !important;\n' +
+      '  background-image: none !important;\n' +
+      '  border: none !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' :is([data-step-rows="true"], [data-step-rows="true"] [role="button"][aria-expanded], button[data-testid="worked-for-collapsible"], button[data-testid="step-plan-chip"], [data-testid="response-toolbar"], [data-testid="message-actions"], [data-testid="cascade-system-message-toolbar"], [data-testid="cascade-system-message-toolbar"] .agy-button-icon, [data-testid="idle-status-text"], [data-testid="user-message-actions"], [data-testid="revert-button"]) {\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' [data-step-rows="true"] [role="button"][aria-expanded]:is(:hover, :focus-visible) {\n' +
+      '  background-color: var(--prism-surface-control-hover) !important;\n' +
+      '  border-radius: var(--prism-r-ctl) !important;\n' +
+      '}\n' +
+      GW + ' :is([data-testid="user-message-bubble"], .agy-user-bubble, .msg-user) {\n' +
+      '  background-color: var(--prism-surface-bubble-user) !important;\n' +
+      '  background-image: var(--prism-sheen-bubble-user, none) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-bubble-user, var(--prism-border-card)) !important;\n' +
+      '  border-width: var(--prism-bw-bubble-user-top, 1px) var(--prism-bw-bubble-user-right, 1px) var(--prism-bw-bubble-user-bottom, 1px) var(--prism-bw-bubble-user-left, 1px) !important;\n' +
+      '  border-radius: var(--prism-r-bubble-user, var(--prism-r-card)) !important;\n' +
+      '  box-shadow: var(--prism-box-shadow-bubble-user, none) !important;\n' +
+      '  backdrop-filter: var(--prism-bubble-user-backdrop, none) !important;\n' +
+      '  -webkit-backdrop-filter: var(--prism-bubble-user-backdrop, none) !important;\n' +
+      '}\n' +
+      GW + ' .agy-user-bubble-header {\n' +
+      '  background-color: transparent !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW + ' :is([data-testid="planner-response-text"], .msg-agent) {\n' +
+      '  background-color: var(--prism-surface-bubble-assistant) !important;\n' +
+      '  background-image: var(--prism-sheen-bubble-assistant, none) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-bubble-assistant, transparent) !important;\n' +
+      '  border-width: var(--prism-bw-bubble-assistant-top, 0px) var(--prism-bw-bubble-assistant-right, 0px) var(--prism-bw-bubble-assistant-bottom, 0px) var(--prism-bw-bubble-assistant-left, 0px) !important;\n' +
+      '  border-radius: var(--prism-r-bubble-assistant, var(--prism-r-card)) !important;\n' +
+      '  box-shadow: var(--prism-box-shadow-bubble-assistant, none) !important;\n' +
+      '  backdrop-filter: var(--prism-bubble-assistant-backdrop, none) !important;\n' +
+      '  -webkit-backdrop-filter: var(--prism-bubble-assistant-backdrop, none) !important;\n' +
+      '}\n' +
+      (tok.assistantBlurActive
+        ? GW + ' [data-testid="planner-response-text"] {\n' +
+          '  --prism-code-backdrop: none !important;\n' +
+          '}\n' +
+          GW + ' [data-testid="planner-response-text"] :is(pre, .code-block, .md-code-block, pre > div.rounded-xl.border, pre > div:has(:is([data-testid="code-block-preview-toggle"], [data-testid="markdown-code-block-preview"]))) {\n' +
+          '  backdrop-filter: none !important;\n' +
+          '  -webkit-backdrop-filter: none !important;\n' +
+          '}\n'
+        : '') +
+      GW + ' :is([data-testid="artifact-card"], .artifact-card, [data-testid="changed-files-card-header"], .files-changed-header),\n' +
+      GW_CTL + ' :is([data-testid="artifact-card"], .artifact-card, [data-testid="changed-files-card-header"], .files-changed-header) {\n' +
+      '  background-color: var(--prism-surface-turn-card) !important;\n' +
+      '  background-image: var(--prism-sheen-turn-card, none) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-turn-card, var(--prism-border-card)) !important;\n' +
+      '  border-width: var(--prism-bw-turn-card-top, 1px) var(--prism-bw-turn-card-right, 1px) var(--prism-bw-turn-card-bottom, 1px) var(--prism-bw-turn-card-left, 1px) !important;\n' +
+      '  border-radius: var(--prism-r-bubble-assistant, var(--prism-r-card)) !important;\n' +
+      '  box-shadow: var(--prism-box-shadow-turn-card, none) !important;\n' +
+      '  backdrop-filter: var(--prism-bubble-assistant-backdrop, none) !important;\n' +
+      '  -webkit-backdrop-filter: var(--prism-bubble-assistant-backdrop, none) !important;\n' +
+      '}\n' +
+      GW_CTL + ' :is(.artifact-card, [data-testid="artifact-card"]):hover:not(:has(.proceed-button:hover)) {\n' +
+      '  background-color: var(--prism-surface-control-hover) !important;\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      GW_CTL + ' :is(.agy-button-secondary, .agy-button-outline, [class*="agy-button-secondary"], [class*="agy-button-outline"]) {\n' +
+      '  background-color: var(--prism-surface-control) !important;\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-control, var(--prism-border-card)) !important;\n' +
+      '  border-width: var(--prism-bw-control-top, 1px) var(--prism-bw-control-right, 1px) var(--prism-bw-control-bottom, 1px) var(--prism-bw-control-left, 1px) !important;\n' +
+      '  border-radius: var(--prism-r-control, var(--prism-r-ctl)) !important;\n' +
+      '  box-shadow: var(--prism-box-shadow-control, none) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW_CTL + ' :is(.agy-button-ghost, [class*="agy-button-ghost"]) {\n' +
+      '  background-color: transparent !important;\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '  border-radius: var(--prism-r-control, var(--prism-r-ctl)) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW_CTL + ' :is(.agy-button-secondary, .agy-button-outline, .agy-button-ghost, [class*="agy-button-"]):not(.agy-button-primary):not([class*="agy-button-primary"]):is(:hover, :focus-visible) {\n' +
+      '  background-color: var(--prism-surface-control-hover) !important;\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      GW_CTL + ' :is(.agy-button-primary, [class*="agy-button-primary"]) {\n' +
+      '  background-color: var(--prism-accent) !important;\n' +
+      '  color: var(--prism-accent-fg) !important;\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '  border-radius: var(--prism-r-control, var(--prism-r-ctl)) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW_CTL + ' input.agy-field,\n' +
+      GW_CTL + ' textarea.agy-textarea {\n' +
+      '  background-color: var(--prism-surface-control) !important;\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-control, var(--prism-border-card)) !important;\n' +
+      '  border-width: var(--prism-bw-control-top, 1px) var(--prism-bw-control-right, 1px) var(--prism-bw-control-bottom, 1px) var(--prism-bw-control-left, 1px) !important;\n' +
+      '  border-radius: var(--prism-r-control, var(--prism-r-ctl)) !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW_CTL + ' input.agy-field:is(:focus, :focus-visible),\n' +
+      GW_CTL + ' textarea.agy-textarea:is(:focus, :focus-visible) {\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      GW_CTL + ' .agy-select-trigger {\n' +
+      '  background-color: var(--prism-surface-control) !important;\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-control, var(--prism-border-card)) !important;\n' +
+      '  border-width: var(--prism-bw-control-top, 1px) var(--prism-bw-control-right, 1px) var(--prism-bw-control-bottom, 1px) var(--prism-bw-control-left, 1px) !important;\n' +
+      '  border-radius: var(--prism-r-control, var(--prism-r-ctl)) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW_CTL + ' .agy-select-trigger:is(:hover, :focus-visible, [data-popup-open], [aria-expanded="true"]) {\n' +
+      '  background-color: var(--prism-surface-control-hover) !important;\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      GW_CTL + ' .agy-aux-tab {\n' +
+      '  background-color: transparent !important;\n' +
+      '  color: var(--prism-fg-muted) !important;\n' +
+      '  border-radius: var(--prism-r-control, var(--prism-r-ctl)) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW_CTL + ' .agy-aux-tab:is(:hover, :focus-visible) {\n' +
+      '  background-color: var(--prism-surface-control-hover) !important;\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '}\n' +
+      GW_CTL + ' .agy-aux-tab:is([aria-selected="true"], [data-selected="true"], [data-active="true"], .active, .bg-secondary) {\n' +
+      '  background-color: var(--prism-surface-control-active) !important;\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      GW_CTL + ' [data-slot="toggle-group"] {\n' +
+      '  background-color: var(--prism-surface-control) !important;\n' +
+      '  border: 1px solid var(--prism-border-control, var(--prism-border-card)) !important;\n' +
+      '  border-radius: var(--prism-r-control, var(--prism-r-ctl)) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW_CTL + ' [data-slot="toggle-group"] > button {\n' +
+      '  color: var(--prism-fg-muted) !important;\n' +
+      '  border-radius: var(--prism-r-xs) !important;\n' +
+      '  backdrop-filter: none !important;\n' +
+      '  -webkit-backdrop-filter: none !important;\n' +
+      '}\n' +
+      GW_CTL + ' [data-slot="toggle-group"] > button[data-pressed]:not([data-pressed="false"]) {\n' +
+      '  background-color: var(--prism-surface-control-active) !important;\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '  box-shadow: none !important;\n' +
+      '}\n' +
+      GW_CTL + ' [data-testid="voice-live-pill"] {\n' +
+      '  background-color: var(--prism-accent) !important;\n' +
+      '  color: var(--prism-accent-fg) !important;\n' +
+      '  border: 1px solid var(--prism-accent-border) !important;\n' +
+      '  border-radius: var(--prism-r-control-pill, 9999px) !important;\n' +
+      '  backdrop-filter: var(--prism-control-backdrop, none) !important;\n' +
+      '  -webkit-backdrop-filter: var(--prism-control-backdrop, none) !important;\n' +
+      '}\n' +
+      GW_CTL + ' [data-testid="overlay-scrollbar-thumb"] {\n' +
+      '  background-color: var(--prism-scroll-thumb) !important;\n' +
+      '  border-radius: 999px !important;\n' +
+      '}\n' +
+      GW_CTL + ' [data-testid="overlay-scrollbar-thumb"]:is(:hover, :active, [data-dragging="true"]) {\n' +
+      '  background-color: var(--prism-scroll-thumb-hover) !important;\n' +
+      '}\n' +
+      GW_CTL + ' [data-testid="subagent-node"][aria-current="true"] {\n' +
+      '  background-color: var(--prism-surface-selected, var(--prism-surface-control-active)) !important;\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      GW_CTL + ' [role="switch"] {\n' +
+      '  background-color: var(--prism-surface-control) !important;\n' +
+      '  border-color: var(--prism-border-control, var(--prism-border-card)) !important;\n' +
+      '}\n' +
+      GW_CTL + ' [role="switch"]:is([aria-checked="true"], [data-checked]) {\n' +
+      '  background-color: var(--prism-accent) !important;\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}\n' +
+      GW_CTL + ' .agy-scroll-bottom {\n' +
+      '  background-color: var(--prism-surface-control) !important;\n' +
+      '  color: var(--prism-fg) !important;\n' +
+      '  border-style: solid !important;\n' +
+      '  border-color: var(--prism-border-control, var(--prism-border-card)) !important;\n' +
+      '  border-width: var(--prism-bw-control-top, 1px) var(--prism-bw-control-right, 1px) var(--prism-bw-control-bottom, 1px) var(--prism-bw-control-left, 1px) !important;\n' +
+      '  border-radius: var(--prism-r-control-pill, 9999px) !important;\n' +
+      '  box-shadow: var(--prism-box-shadow-control, none) !important;\n' +
+      '  backdrop-filter: var(--prism-control-backdrop, none) !important;\n' +
+      '  -webkit-backdrop-filter: var(--prism-control-backdrop, none) !important;\n' +
+      '}\n' +
+      GW_CTL + ' .agy-scroll-bottom:is(:hover, :focus-visible) {\n' +
+      '  background-color: var(--prism-surface-control-hover) !important;\n' +
+      '  border-color: var(--prism-accent-border) !important;\n' +
+      '}'
     );
 
     if (cfg.layoutMode === 'islands') {
@@ -3938,7 +4566,7 @@
       '  -webkit-backdrop-filter: none !important;\n' +
       '}\n\n' +
       SOLID_POPOVERS.map(function (s) {
-        return GG + ' ' + s;
+        return GG_POP + ' ' + s;
       }).join(',\n') +
       ' {\n' +
       '  --background: var(--prism-surface-popover) !important;\n' +
@@ -3952,12 +4580,12 @@
       '  border-style: solid !important;\n' +
       '  border-color: var(--prism-border-popover) !important;\n' +
       '  border-width: var(--prism-bw-popover-top, 1px) var(--prism-bw-popover-right, 1px) var(--prism-bw-popover-bottom, 1px) var(--prism-bw-popover-left, 1px) !important;\n' +
-      '  box-shadow: inset 0 1px 0 var(--prism-specular-popover, var(--prism-specular-top)), var(--prism-shadow-popover) !important;\n' +
+      '  box-shadow: var(--prism-box-shadow-popover) !important;\n' +
       '}\n\n' +
-      GG + ' :is([data-testid="title-menu-bar"] [data-browser-occluder="true"], .surface-opaque.bg-sidebar:not(.sticky):not([style*="sticky"])) {\n' +
+      GG_POP + ' :is([data-testid="title-menu-bar"] [data-browser-occluder="true"], .surface-opaque.bg-sidebar:not(.sticky):not([style*="sticky"])) {\n' +
       '  border-radius: var(--prism-r-popover, var(--prism-r-card)) !important;\n' +
       '}\n\n' +
-      GG + ' :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]):not(.prism-sheet), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {\n' +
+      GG_POP + ' :is(.agy-dialog, .settings-modal-container, [role="dialog"]:not(#gemini-neko-observer-modal):not([data-testid="media-modal"]):not(.prism-sheet), [role="alertdialog"]) :where(.dark, .light, .theme-dark, .theme-light) {\n' +
       '  --background: var(--prism-surface-popover) !important;\n' +
       '  --color-background: var(--prism-surface-popover) !important;\n' +
       '  --content: var(--prism-surface-popover) !important;\n' +
@@ -3989,10 +4617,11 @@
       '}\n' +
       GG + ' ::selection { background-color: var(--prism-selection-bg) !important; color: inherit; }\n' +
       GW + ' ::-webkit-scrollbar-track { background: transparent !important; }\n' +
-      GG + ' ::-webkit-scrollbar-thumb { background: var(--prism-scroll-thumb) !important; border-radius: 999px; }'
+      GG + ' ::-webkit-scrollbar-thumb { background: var(--prism-scroll-thumb) !important; border-radius: 999px; }\n' +
+      GG + ' ::-webkit-scrollbar-thumb:hover { background: var(--prism-scroll-thumb-hover) !important; }'
     );
 
-    // 7. #14 Per-Region Typography (workspace -> card -> composer cascade order; code/svg/pill/sibling/input safe)
+    // 7. #14 Per-Region Typography (workspace -> card -> assistantBubble -> userBubble -> codeBlock -> controls -> composer -> rightPane -> popover cascade)
     var TYPO_SPECS = [
       {
         id: 'topbar',
@@ -4014,8 +4643,34 @@
       },
       {
         id: 'card',
-        scope: ':is(.msg-user, .msg-agent, [data-testid="customization-card"], .agy-spotlight-card, [data-testid="marketplace-bundles-banner"], .surface-opaque.bg-background)',
+        scope: ':is(.agy-takeover-card, [data-testid="customization-card"], .agy-spotlight-card, [data-testid="marketplace-bundles-banner"], .surface-opaque.bg-background, [data-testid="plugin-detail"], .agy-callout, [data-testid="ask-question-option"], [data-testid="permission-target-editor"])',
         extraEx: COMPOSER_DESCENDANT_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
+        hasFs: true,
+      },
+      {
+        id: 'assistantBubble',
+        scope: ':is([data-testid="planner-response-text"], [data-testid="agent-response"], .msg-agent, [data-testid="artifact-card"], .artifact-card, [data-testid="changed-files-card-header"], .files-changed-header, [data-testid="changed-files-card"])',
+        extraEx: COMPOSER_DESCENDANT_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
+        hasFs: true,
+      },
+      {
+        id: 'userBubble',
+        scope: ':is([data-testid="user-message-bubble"], .agy-user-bubble, .msg-user)',
+        extraEx: COMPOSER_DESCENDANT_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
+        hasFs: true,
+      },
+      {
+        id: 'codeBlock',
+        scope: ':is(pre, .code-block, .md-code-block, code:not(pre code), .agy-md-table, .md-table-frame)',
+        extraEx: COMPOSER_DESCENDANT_EXCLUDE + DIALOG_DESCENDANT_EXCLUDE,
+        hasFs: true,
+        protectEx: ':not(svg, svg *)',
+        fgProtectEx: ':not(svg, svg *, pre code span, pre code span *, .token, .token *, [class*="tok-"], [class*="mtk"], [class*="hljs"], code span[style*="color"], code span[class])',
+      },
+      {
+        id: 'controls',
+        scope: ':is(.agy-button-secondary, .agy-button-outline, .agy-button-ghost, .agy-button-primary, input.agy-field, textarea.agy-textarea, .agy-select-trigger, .agy-aux-tab, [data-slot="toggle-group"], [data-testid="voice-live-pill"], .agy-scroll-bottom)',
+        extraEx: DIALOG_DESCENDANT_EXCLUDE,
         hasFs: true,
       },
       {
@@ -4039,25 +4694,29 @@
     ];
     for (var ts = 0; ts < TYPO_SPECS.length; ts += 1) {
       var sp = TYPO_SPECS[ts];
-      var sfx = TYPO_PROTECT_EX + SIBLING_EXCLUDE + SIBLING_DESCENDANT_EXCLUDE + sp.extraEx;
-      var rootSfx = sp.id === 'popover' ? TYPO_PROTECT_EX + SIBLING_DESCENDANT_EXCLUDE : sfx;
-      var mkSel = function (attr, fsTarget) {
+      var baseEx = sp.protectEx || TYPO_PROTECT_EX;
+      var fgBaseEx = sp.fgProtectEx || baseEx;
+      var sfx = baseEx + SIBLING_EXCLUDE + SIBLING_DESCENDANT_EXCLUDE + sp.extraEx;
+      var fgSfx = fgBaseEx + SIBLING_EXCLUDE + SIBLING_DESCENDANT_EXCLUDE + sp.extraEx;
+      var rootSfx = sp.id === 'popover' ? baseEx + SIBLING_DESCENDANT_EXCLUDE : sfx;
+      var fgRootSfx = sp.id === 'popover' ? fgBaseEx + SIBLING_DESCENDANT_EXCLUDE : fgSfx;
+      var mkSel = function (attr, fsTarget, isFg) {
         var rPfx = GW + '[' + attr + '="1"] ' + sp.scope;
         var innerSet = fsTarget
-          ? ':where(p, span, div, li, button, a, label, textarea, input, [contenteditable="true"])'
+          ? ':where(p, span, div, li, button, a, label, textarea, input, code, td, th, [contenteditable="true"])'
           : ':where(*)';
-        return rPfx + rootSfx + ',\n' + rPfx + ' ' + innerSet + sfx;
+        return rPfx + (isFg ? fgRootSfx : rootSfx) + ',\n' + rPfx + ' ' + innerSet + (isFg ? fgSfx : sfx);
       };
       out.push(
-        mkSel('data-prism-fg-' + sp.id, false) + ' {\n' +
+        mkSel('data-prism-fg-' + sp.id, false, true) + ' {\n' +
         '  color: var(--prism-region-' + sp.id + '-fg) !important;\n' +
         '}\n' +
-        mkSel('data-prism-ff-' + sp.id, false) + ' {\n' +
+        mkSel('data-prism-ff-' + sp.id, false, false) + ' {\n' +
         '  font-family: var(--prism-region-' + sp.id + '-ff) !important;\n' +
         '}' +
         (sp.hasFs
           ? '\n' +
-            mkSel('data-prism-fs-' + sp.id, true) + ' {\n' +
+            mkSel('data-prism-fs-' + sp.id, true, false) + ' {\n' +
             '  font-size: var(--prism-region-' + sp.id + '-fs) !important;\n' +
             '}'
           : '')

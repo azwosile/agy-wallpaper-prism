@@ -13,6 +13,7 @@ import {
   FACTORY_PRESETS,
   DEFAULT_CONFIG,
   PER_WALLPAPER_OVERRIDE_KEYS,
+  resolveRegionEffectiveStyle,
   resolveSchemeTokens,
   sanitizeConfig,
   sanitizeFontFamily,
@@ -84,6 +85,7 @@ import {
   syncPairedSlidersInDom,
   syncNullableFollowersInDom,
   syncRegionBadgesInDom,
+  syncRegionStyleControlsInDom,
 } from './controls.mjs';
 
 import {
@@ -1142,13 +1144,29 @@ function bootPrismStudioApp() {
                 </div>
 
                 <div class="mini-island mini-center" data-jump-region="workspace" data-action="jump-to-region" data-region="workspace" title="${esc(tr('region.workspace'))}">
-                  <div style="display:flex;flex-direction:column;gap:3px">
-                    <div class="mini-bubble" data-jump-region="card" data-action="jump-to-region" data-region="card" title="${esc(tr('region.card'))}">
+                  <div class="mini-chat-flow">
+                    <div class="mini-user-bubble" data-jump-region="userBubble" data-action="jump-to-region" data-region="userBubble" title="${esc(tr('region.userBubble'))}">
                       <span class="mini-bubble-line"></span>
                     </div>
-                    <div class="mini-code-card" data-jump-region="card" data-action="jump-to-region" data-region="card">
-                      <span class="mini-code-kw">const</span> prism = <span class="mini-code-fn">glassSkin</span>({ mode: <span class="mini-code-str">'islands'</span> });
+                    <div class="mini-assistant-bubble" data-jump-region="assistantBubble" data-action="jump-to-region" data-region="assistantBubble" title="${esc(tr('region.assistantBubble'))}">
+                      <div class="mini-turn-card">
+                        <span class="mini-bubble-line"></span>
+                      </div>
                     </div>
+                    <div class="mini-code-card" data-jump-region="codeBlock" data-action="jump-to-region" data-region="codeBlock" title="${esc(tr('region.codeBlock'))}">
+                      <div class="mini-code-head">
+                        <span class="mini-code-lang">ts</span>
+                        <div class="mini-ctl-seg" data-jump-region="controls" data-action="jump-to-region" data-region="controls" title="${esc(tr('region.controls'))}">
+                          <span>Raw</span><span class="is-on">UI</span>
+                        </div>
+                      </div>
+                      <div><span class="mini-code-kw">const</span> prism = <span class="mini-code-fn">glassSkin</span>({ mode: <span class="mini-code-str">'islands'</span> });</div>
+                    </div>
+                  </div>
+                  <div class="mini-controls-strip" data-jump-region="controls" data-action="jump-to-region" data-region="controls" title="${esc(tr('region.controls'))}">
+                    <span class="mini-ctl-btn">Apply</span>
+                    <span class="mini-ctl-select">Model</span>
+                    <span class="mini-scroll-pill">↓</span>
                   </div>
                   <div class="mini-composer" data-jump-region="composer" data-action="jump-to-region" data-region="composer" title="${esc(tr('region.composer'))}">
                     <div class="mini-composer-input">
@@ -1163,9 +1181,15 @@ function bootPrismStudioApp() {
                 </div>
 
                 <div class="mini-island mini-aux" data-jump-region="rightPane" data-action="jump-to-region" data-region="rightPane" title="${esc(tr('region.rightPane'))}">
-                  <div class="mini-bar" style="width:58%;margin-bottom:2px"></div>
+                  <div class="mini-aux-tabs" data-jump-region="controls" data-action="jump-to-region" data-region="controls" title="${esc(tr('region.controls'))}">
+                    <span class="mini-aux-tab is-active">Prism</span>
+                    <span class="mini-aux-tab">UI</span>
+                  </div>
                   <div class="mini-nav-row is-active"><span class="mini-bar" style="width:76%"></span></div>
                   <div class="mini-nav-row"><span class="mini-bar" style="width:64%"></span></div>
+                  <div class="mini-standalone-card" data-jump-region="card" data-action="jump-to-region" data-region="card" title="${esc(tr('region.card'))}">
+                    <span class="mini-bar" style="width:68%"></span>
+                  </div>
                 </div>
               </div>
 
@@ -1988,7 +2012,13 @@ function bootPrismStudioApp() {
       return { sidebarOpacity: rawVal, regions: { sidebar: { opacity: rawVal } } };
     }
     if (sliderKey === 'sidebarBlur') {
-      return { sidebarBlur: rawVal, regions: { sidebar: { blur: rawVal } } };
+      const eff = getEffectiveConfig();
+      const curStyle = resolveRegionEffectiveStyle('sidebar', eff.regions?.sidebar, eff);
+      const regPatch = { blur: rawVal };
+      if (rawVal > 0 && (curStyle === 'none' || curStyle === 'tinted' || curStyle === 'solid')) {
+        regPatch.style = 'frosted';
+      }
+      return { sidebarBlur: rawVal, regions: { sidebar: regPatch } };
     }
     if (sliderKey === 'sidebarFontSize') {
       return { sidebarFontSize: rawVal, regions: { sidebar: { fontSize: rawVal } } };
@@ -1996,10 +2026,22 @@ function bootPrismStudioApp() {
     if (sliderKey.startsWith('regions.')) {
       const [, rid, prop] = sliderKey.split('.');
       if (rid && prop && REGION_IDS.includes(rid)) {
-        const val = prop === 'tone' || prop === 'blur' || prop === 'radius' || prop === 'fontSize'
-          ? rawVal === null ? null : Math.round(rawVal)
-          : rawVal;
-        const patch = { preset: 'custom', regions: { [rid]: { [prop]: val } } };
+        // F-05: Keep elevation float precision (0..2); round integer properties only.
+        const val =
+          prop === 'tone' || prop === 'blur' || prop === 'radius' || prop === 'fontSize' || prop === 'saturation'
+            ? rawVal === null
+              ? null
+              : Math.round(rawVal)
+            : rawVal;
+        const regPatch = { [prop]: val };
+        if (prop === 'blur' && typeof val === 'number' && val > 0) {
+          const eff = getEffectiveConfig();
+          const curStyle = resolveRegionEffectiveStyle(rid, eff.regions?.[rid], eff);
+          if (curStyle === 'none' || curStyle === 'tinted' || curStyle === 'solid') {
+            regPatch.style = 'frosted';
+          }
+        }
+        const patch = { preset: 'custom', regions: { [rid]: regPatch } };
         const isPinned = hasPerWallpaperPin(getActiveId());
         if (rid === 'sidebar' && prop === 'radius') {
           if (!isPinned) patch.leftSidebarRadius = val === null ? 'auto' : String(val);
@@ -2155,6 +2197,13 @@ function bootPrismStudioApp() {
         syncPairedSlidersInDom(sliderKey, rawVal, tEl);
         const patch = buildPatchForSliderKey(sliderKey, rawVal);
         queueConfigPatch(patch, false, sliderKey !== 'liveBootDelay');
+        if (patch?.regions) {
+          for (const [changedRid, changedEntry] of Object.entries(patch.regions)) {
+            if (changedEntry && typeof changedEntry === 'object' && 'style' in changedEntry) {
+              syncRegionStyleControlsInDom(changedRid);
+            }
+          }
+        }
         syncRegionBadgesInDom();
         if (
           sliderKey === 'sidebarOpacity' ||
@@ -2660,10 +2709,19 @@ function bootPrismStudioApp() {
           let parsedVal = val;
           if (prop === 'glassEnabled') {
             parsedVal = val === 'true' ? true : val === 'false' ? false : null;
-          } else if (prop === 'borderStyle') {
+          } else if (prop === 'borderStyle' || prop === 'style') {
             parsedVal = val === 'auto' || !val ? null : val;
           }
-          queueConfigPatch({ preset: 'custom', regions: { [rid]: { [prop]: parsedVal } } }, true, true);
+          const regPatch = { [prop]: parsedVal };
+          const patch = { preset: 'custom', regions: { [rid]: regPatch } };
+          if (prop === 'style' && (parsedVal === 'frosted' || parsedVal === 'crystal')) {
+            const curEntry = getEffectiveConfig().regions?.[rid];
+            if (curEntry && curEntry.blur === 0) {
+              regPatch.blur = null;
+              if (rid === 'sidebar') patch.sidebarBlur = null;
+            }
+          }
+          queueConfigPatch(patch, true, true);
           renderActiveSurface();
           break;
         }
@@ -2770,6 +2828,8 @@ function bootPrismStudioApp() {
             if (!isPinned) {
               patch[key] = val;
             }
+          } else if (key === 'codeReadabilityMode') {
+            patch = { [key]: numCandidate, regions: { codeBlock: { style: null } } };
           } else {
             patch =
               key === 'layoutMode' || key === 'colorScheme'

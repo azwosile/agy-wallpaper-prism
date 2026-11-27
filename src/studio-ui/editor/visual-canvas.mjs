@@ -73,9 +73,10 @@ function resolveRegionDataAndStyle(rid, eff, tokens, isLight) {
   if (surf?.fgCss) {
     parts.push(`color:${surf.fgCss}`);
   }
+  const glassStyleAttr = surf?.effStyle ? ` data-glass-style="${esc(surf.effStyle)}"` : '';
   const borderStyleAttr = entry.borderStyle ? ` data-border-style="${esc(entry.borderStyle)}"` : '';
   const styleAttr = parts.length > 0 ? ` style="${esc(parts.join(';'))}"` : '';
-  return `${borderStyleAttr}${styleAttr}`;
+  return `${glassStyleAttr}${borderStyleAttr}${styleAttr}`;
 }
 
 function renderStaticStageBackgroundHtml() {
@@ -162,7 +163,7 @@ export function renderVisualCanvasStageHtml(options = {}) {
               <div class="mini-nav-row"><span>${esc(isZh ? '静帧节能检查' : 'Eco Checklist')}</span></div>
             </div>
 
-            <!-- Center Workspace (contains Card + Composer + Optional Welcome Logo) -->
+            <!-- Center Workspace (User Bubble, Assistant Bubble, Code Block, Controls Strip, Composer) -->
             <div class="mini-island mini-center${selCls('workspace')}" ${regAttrs('workspace')}${regTail('workspace')}>
               ${
                 showWelcome
@@ -171,18 +172,41 @@ export function renderVisualCanvasStageHtml(options = {}) {
                   <span style="font-size:18px" aria-hidden="true">✦</span>
                   <span>${esc(eff.hideWelcomeLogo ? (isZh ? '已隐藏欢迎水印' : 'Welcome Logo Hidden') : 'Antigravity')}</span>
                 </div>
+                <div class="mini-starter-cards">
+                  <div class="mini-standalone-card${selCls('card')}" ${regAttrs('card')}${regTail('card')}>
+                    <span>${esc(isZh ? '快速启动卡片 · Card' : 'Starter Card')}</span>
+                  </div>
+                </div>
               `
                   : `
-                <div style="display:flex;flex-direction:column;gap:5px">
-                  <div class="mini-bubble${selCls('card')}" ${regAttrs('card')}${regTail('card')}>
-                    <span>${esc(isZh ? '消息气泡与卡片' : 'Message Bubble & Card')}</span>
+                <div class="mini-chat-flow">
+                  <div class="mini-user-bubble${selCls('userBubble')}" ${regAttrs('userBubble')}${regTail('userBubble')}>
+                    <span>${esc(isZh ? '用户气泡 · 自定义毛玻璃或零模糊' : 'User Bubble · Custom optics')}</span>
                   </div>
-                  <div class="mini-code-card${selCls('card')}" ${regAttrs('card')}${regTail('card')}>
-                    <span class="mini-code-kw">const</span> prism = <span class="mini-code-fn">glassSkin</span>({ blur: <span class="mini-code-str">'${eff.glassBlur}px'</span> });
+                  <div class="mini-assistant-bubble${selCls('assistantBubble')}" ${regAttrs('assistantBubble')}${regTail('assistantBubble')}>
+                    <div class="mini-turn-card">
+                      <span>${esc(isZh ? 'AI 回复 · 支持独立透光与立体景深' : 'Assistant Turn · Per-region glass')}</span>
+                    </div>
+                  </div>
+                  <div class="mini-code-card${selCls('codeBlock')}" ${regAttrs('codeBlock')}${regTail('codeBlock')}>
+                    <div class="mini-code-head">
+                      <span class="mini-code-lang">prism.ts</span>
+                      <div class="mini-ctl-seg${selCls('controls')}" ${regAttrs('controls')}${regTail('controls')}>
+                        <span>Raw</span>
+                        <span class="is-on">UI</span>
+                      </div>
+                    </div>
+                    <div><span class="mini-code-kw">const</span> prism = <span class="mini-code-fn">glassSkin</span>({ blur: <span class="mini-code-str">'${eff.glassBlur}px'</span> });</div>
                   </div>
                 </div>
               `
               }
+
+              <div class="mini-controls-strip${selCls('controls')}" ${regAttrs('controls')}${regTail('controls')}>
+                <span class="mini-ctl-btn">${esc(isZh ? '应用' : 'Apply')}</span>
+                <span class="mini-ctl-select">Model ▾</span>
+                <span class="mini-scroll-pill">↓</span>
+              </div>
 
               <div class="mini-composer${selCls('composer')}" ${regAttrs('composer')}${regTail('composer')}>
                 <div class="mini-composer-input">
@@ -198,9 +222,15 @@ export function renderVisualCanvasStageHtml(options = {}) {
 
             <!-- Right Aux Pane -->
             <div class="mini-island mini-aux${selCls('rightPane')}" ${regAttrs('rightPane')}${regTail('rightPane')}>
-              <div class="mini-bar" style="width:62%;margin-bottom:2px"></div>
+              <div class="mini-aux-tabs${selCls('controls')}" ${regAttrs('controls')}${regTail('controls')}>
+                <span class="mini-aux-tab is-active">Prism</span>
+                <span class="mini-aux-tab">${esc(isZh ? '样式' : 'Style')}</span>
+              </div>
               <div class="mini-nav-row is-active"><span>Wallpaper Prism</span></div>
               <div class="mini-nav-row"><span>${esc(isZh ? '独立毛玻璃' : 'Independent Blur')}</span></div>
+              <div class="mini-standalone-card${selCls('card')}" ${regAttrs('card')}${regTail('card')}>
+                <span>${esc(isZh ? '独立卡片 · Card' : 'Standalone Card')}</span>
+              </div>
             </div>
 
             <!-- Floating Popover / Quick Prism Menu -->

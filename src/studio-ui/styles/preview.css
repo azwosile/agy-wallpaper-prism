@@ -347,7 +347,7 @@
   background: rgba(var(--prism-pt-rgb), 0.05);
 }
 .mini-nav-row.is-active {
-  background: rgba(var(--prism-accent-rgb), 0.20);
+  background: var(--sim-selected-bg, rgba(var(--prism-accent-rgb), 0.20));
   box-shadow: inset 2px 0 0 var(--prism-accent);
 }
 .mini-hub-shell[data-sidebar-style="underline"] .mini-sidebar .mini-nav-row {
@@ -375,7 +375,55 @@
   background: rgba(var(--prism-pt-rgb), 0.34);
 }
 
-/* Message bubble / code card / composer — zero hardcoded borders; consume --sim-<c>-border & --sim-<c>-shadow */
+/* Chat bubbles, code block, controls & cards — zero hardcoded borders; consume --sim-* */
+.mini-chat-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5px;
+  min-width: 0;
+}
+
+.mini-user-bubble {
+  align-self: flex-end;
+  max-width: 72%;
+  min-height: 8px;
+  padding: 2px 5px;
+  border-radius: var(--sim-user-bubble-radius, var(--sim-userBubble-radius, 8px));
+  background-color: var(--sim-user-bubble-bg, var(--sim-userBubble-bg, rgba(28, 30, 38, 0.72)));
+  background-image: var(--prism-sheen);
+  backdrop-filter: var(--sim-user-bubble-backdrop, var(--sim-userBubble-backdrop, none));
+  -webkit-backdrop-filter: var(--sim-user-bubble-backdrop, var(--sim-userBubble-backdrop, none));
+  border: var(--sim-user-bubble-border, var(--sim-userBubble-border, 1px solid transparent));
+  box-shadow: var(--sim-user-bubble-shadow, var(--sim-userBubble-shadow, none));
+  color: var(--sim-user-bubble-fg, var(--sim-userBubble-fg, var(--prism-fg)));
+  font-family: var(--sim-user-bubble-font-family, var(--sim-userBubble-font-family, inherit));
+  font-size: 7.5px;
+  display: flex;
+  align-items: center;
+}
+
+.mini-assistant-bubble {
+  align-self: stretch;
+  padding: 2px 4px;
+  border-radius: var(--sim-assistant-bubble-radius, var(--sim-assistantBubble-radius, 6px));
+  background-color: var(--sim-assistant-bubble-bg, var(--sim-assistantBubble-bg, transparent));
+  backdrop-filter: var(--sim-assistant-bubble-backdrop, var(--sim-assistantBubble-backdrop, none));
+  -webkit-backdrop-filter: var(--sim-assistant-bubble-backdrop, var(--sim-assistantBubble-backdrop, none));
+  border: var(--sim-assistant-bubble-border, var(--sim-assistantBubble-border, 1px solid transparent));
+  box-shadow: var(--sim-assistant-bubble-shadow, var(--sim-assistantBubble-shadow, none));
+  color: var(--sim-assistant-bubble-fg, var(--sim-assistantBubble-fg, var(--prism-fg)));
+  font-family: var(--sim-assistant-bubble-font-family, var(--sim-assistantBubble-font-family, inherit));
+  font-size: 7.5px;
+}
+
+.mini-turn-card {
+  padding: 1.5px 4px;
+  border-radius: 4px;
+  background: var(--sim-turn-card-bg, rgba(var(--prism-pt-rgb), 0.04));
+  display: flex;
+  align-items: center;
+}
+
 .mini-bubble {
   height: 8px;
   width: 54%;
@@ -400,23 +448,140 @@
 }
 
 .mini-code-card {
-  border-radius: var(--sim-card-radius, var(--sim-r-card, 5px));
-  background: var(--sim-editor-bg, var(--sim-card-bg, rgba(14, 14, 18, 0.74)));
-  backdrop-filter: var(--sim-code-backdrop, var(--sim-card-backdrop, var(--sim-code-blur, none)));
-  -webkit-backdrop-filter: var(--sim-code-backdrop, var(--sim-card-backdrop, var(--sim-code-blur, none)));
-  border: var(--sim-card-border, var(--sim-border, 1px solid transparent));
-  box-shadow: var(--sim-card-shadow, none);
-  padding: 4px 6px;
-  font-family: var(--prism-font-mono);
-  font-size: 8.5px;
-  line-height: 1.35;
-  color: var(--sim-card-fg, var(--prism-fg));
+  border-radius: var(--sim-code-block-radius, var(--sim-codeBlock-radius, var(--sim-card-radius, 5px)));
+  background: var(--sim-code-block-bg, var(--sim-codeBlock-bg, var(--sim-editor-bg, var(--sim-card-bg, rgba(14, 14, 18, 0.74)))));
+  backdrop-filter: var(--sim-code-block-backdrop, var(--sim-codeBlock-backdrop, var(--sim-code-backdrop, var(--sim-code-blur, none))));
+  -webkit-backdrop-filter: var(--sim-code-block-backdrop, var(--sim-codeBlock-backdrop, var(--sim-code-backdrop, var(--sim-code-blur, none))));
+  border: var(--sim-code-block-border, var(--sim-codeBlock-border, var(--sim-card-border, 1px solid transparent)));
+  box-shadow: var(--sim-code-block-shadow, var(--sim-codeBlock-shadow, var(--sim-card-shadow, none)));
+  padding: 3px 5px;
+  font-family: var(--sim-code-block-font-family, var(--sim-codeBlock-font-family, var(--prism-font-mono)));
+  font-size: 7.5px;
+  line-height: 1.3;
+  color: var(--sim-code-block-fg, var(--sim-codeBlock-fg, var(--sim-card-fg, var(--prism-fg))));
   overflow: hidden;
   white-space: nowrap;
+}
+.mini-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 1.5px;
+}
+.mini-code-lang {
+  font-size: 7px;
+  opacity: 0.65;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .mini-code-kw { color: var(--prism-accent); font-weight: 600; }
 .mini-code-fn { color: var(--prism-ok); }
 .mini-code-str { color: var(--prism-warn); }
+
+.mini-ctl-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0.5px 2px;
+  border-radius: var(--sim-controls-radius, 4px);
+  background: var(--sim-controls-bg, rgba(var(--prism-pt-rgb), 0.08));
+  border: var(--sim-controls-border, 1px solid rgba(var(--prism-pt-rgb), 0.12));
+  color: var(--sim-controls-fg, var(--prism-fg-2));
+  font-size: 7px;
+  line-height: 1.2;
+}
+.mini-ctl-seg span {
+  padding: 0 3px;
+  border-radius: 3px;
+}
+.mini-ctl-seg span.is-on {
+  background: var(--sim-control-active-bg, rgba(var(--prism-accent-rgb), 0.24));
+  color: var(--prism-fg);
+  font-weight: 600;
+}
+
+.mini-controls-strip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  padding: 2px 4px;
+  border-radius: var(--sim-controls-radius, 5px);
+  background-color: var(--sim-controls-bg, rgba(24, 26, 34, 0.54));
+  backdrop-filter: var(--sim-controls-backdrop, none);
+  -webkit-backdrop-filter: var(--sim-controls-backdrop, none);
+  border: var(--sim-controls-border, 1px solid rgba(var(--prism-pt-rgb), 0.10));
+  box-shadow: var(--sim-controls-shadow, none);
+  color: var(--sim-controls-fg, var(--prism-fg-2));
+  font-family: var(--sim-controls-font-family, inherit);
+  font-size: 7px;
+}
+.mini-ctl-btn,
+.mini-ctl-select,
+.mini-scroll-pill {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--sim-control-hover-bg, rgba(var(--prism-pt-rgb), 0.08));
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.mini-ctl-btn {
+  background: var(--sim-control-active-bg, rgba(var(--prism-accent-rgb), 0.22));
+  color: var(--sim-controls-fg, var(--prism-fg));
+}
+.mini-scroll-pill {
+  background: var(--sim-scroll-thumb, rgba(var(--prism-pt-rgb), 0.22));
+}
+
+.mini-aux-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1.5px;
+  border-radius: var(--sim-controls-radius, 5px);
+  background: var(--sim-controls-bg, rgba(var(--prism-pt-rgb), 0.06));
+  border: var(--sim-controls-border, 1px solid transparent);
+  color: var(--sim-controls-fg, var(--prism-fg-2));
+}
+.mini-aux-tab {
+  flex: 1 1 0;
+  text-align: center;
+  font-size: 7px;
+  line-height: 1.25;
+  padding: 1px 3px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.mini-aux-tab.is-active {
+  background: var(--sim-control-active-bg, rgba(var(--prism-accent-rgb), 0.22));
+  color: var(--prism-fg);
+  font-weight: 600;
+}
+
+.mini-standalone-card {
+  margin-top: auto;
+  padding: 3px 5px;
+  border-radius: var(--sim-card-radius, var(--sim-r-card, 5px));
+  background-color: var(--sim-card-bg, rgba(22, 24, 32, 0.58));
+  background-image: var(--prism-sheen);
+  backdrop-filter: var(--sim-card-backdrop, none);
+  -webkit-backdrop-filter: var(--sim-card-backdrop, none);
+  border: var(--sim-card-border, var(--sim-border, 1px solid transparent));
+  box-shadow: var(--sim-card-shadow, none);
+  color: var(--sim-card-fg, var(--prism-fg));
+  font-family: var(--sim-card-font-family, inherit);
+  font-size: 7.5px;
+  display: flex;
+  align-items: center;
+}
+
+.mini-starter-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 4px;
+}
 
 .mini-composer {
   border-radius: var(--sim-composer-radius, var(--sim-r-card, 6px));
@@ -604,21 +769,42 @@
 #prism-mini-stage[data-skin-enabled="false"] .mini-wco-pill,
 #prism-mini-stage[data-skin-enabled="false"] .mini-composer,
 #prism-mini-stage[data-skin-enabled="false"] .mini-bubble,
+#prism-mini-stage[data-skin-enabled="false"] .mini-user-bubble,
+#prism-mini-stage[data-skin-enabled="false"] .mini-assistant-bubble,
+#prism-mini-stage[data-skin-enabled="false"] .mini-turn-card,
 #prism-mini-stage[data-skin-enabled="false"] .mini-code-card,
+#prism-mini-stage[data-skin-enabled="false"] .mini-controls-strip,
+#prism-mini-stage[data-skin-enabled="false"] .mini-ctl-seg,
+#prism-mini-stage[data-skin-enabled="false"] .mini-aux-tabs,
+#prism-mini-stage[data-skin-enabled="false"] .mini-standalone-card,
 #prism-mini-stage[data-skin-enabled="false"] .mini-popover,
 .prism-mini-stage[data-skin-enabled="false"] .mini-island,
 .prism-mini-stage[data-skin-enabled="false"] .mini-topbar-pill,
 .prism-mini-stage[data-skin-enabled="false"] .mini-wco-pill,
 .prism-mini-stage[data-skin-enabled="false"] .mini-composer,
 .prism-mini-stage[data-skin-enabled="false"] .mini-bubble,
+.prism-mini-stage[data-skin-enabled="false"] .mini-user-bubble,
+.prism-mini-stage[data-skin-enabled="false"] .mini-assistant-bubble,
+.prism-mini-stage[data-skin-enabled="false"] .mini-turn-card,
 .prism-mini-stage[data-skin-enabled="false"] .mini-code-card,
+.prism-mini-stage[data-skin-enabled="false"] .mini-controls-strip,
+.prism-mini-stage[data-skin-enabled="false"] .mini-ctl-seg,
+.prism-mini-stage[data-skin-enabled="false"] .mini-aux-tabs,
+.prism-mini-stage[data-skin-enabled="false"] .mini-standalone-card,
 .prism-mini-stage[data-skin-enabled="false"] .mini-popover,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-island,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-topbar-pill,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-wco-pill,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-composer,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-bubble,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-user-bubble,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-assistant-bubble,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-turn-card,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-code-card,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-controls-strip,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-ctl-seg,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-aux-tabs,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-standalone-card,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-popover {
   border-radius: 0 !important;
   backdrop-filter: none !important;

@@ -56,6 +56,10 @@ const FALLBACK_REGION_IDS = Object.freeze([
   'sidebar',
   'workspace',
   'card',
+  'userBubble',
+  'assistantBubble',
+  'codeBlock',
+  'controls',
   'composer',
   'rightPane',
   'popover',
@@ -1307,20 +1311,26 @@ export async function createPrismStudioServer(options = {}) {
   };
 
   const REGION_OPTICAL_KEYS = Object.freeze([
+    'style',
     'glassEnabled',
     'blur',
+    'saturation',
     'opacity',
     'tone',
     'tint',
     'borderOpacity',
+    'elevation',
   ]);
   const REGION_OPTICAL_RESET_VALUES = Object.freeze({
+    style: null,
     glassEnabled: null,
     blur: null,
+    saturation: null,
     opacity: null,
     tone: 0,
     tint: '',
     borderOpacity: null,
+    elevation: null,
   });
   const isPlainObj = (x) => Boolean(x && typeof x === 'object' && !Array.isArray(x));
   const hasOwn = (o, k) => Boolean(o && Object.prototype.hasOwnProperty.call(o, k));
@@ -1429,7 +1439,7 @@ export async function createPrismStudioServer(options = {}) {
         } else if (k === 'surfaceTints') {
           if (v === null) {
             nextOv.surfaceTints = null;
-            // Hard invariant: SCENE_PRESETS (`surfaceTints: null`) resets only optical 6 keys, preserving non-optical keys in `nextOv.regions`.
+            // Hard invariant: SCENE_PRESETS (`surfaceTints: null`) resets only optical 9 keys, preserving non-optical keys in `nextOv.regions`.
             if (!hasPatchRegions && isPlainObj(nextOv.regions)) {
               const clearedRegions = { ...nextOv.regions };
               for (const [rid, rEntry] of Object.entries(clearedRegions)) {

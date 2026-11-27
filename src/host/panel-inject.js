@@ -1,4 +1,4 @@
-// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.3.0).
+// In-Host Quick Prism Popover & Statusbar/Corner Trigger for Antigravity (agy-wallpaper-prism v2.4.0).
 //
 // Self-contained ES2020 browser IIFE injected over CDP alongside `wallpaper-inject.js`.
 // Strictly isolated inside `#agy-prism-popover` (`all: initial; position: fixed; z-index: 45`)
@@ -9,7 +9,7 @@
 (function agyPrismPanelMain() {
   'use strict';
 
-  var VERSION = '2.3.0';
+  var VERSION = '2.4.0';
   var W = typeof window !== 'undefined' ? window : null;
   if (!W || !W.document) return { installed: false, reason: 'no-window' };
   try {
@@ -98,18 +98,54 @@
     language: 'zh',
   };
 
-  var SURFACE_TINT_COMPONENTS = ['topbar', 'wco', 'sidebar', 'workspace', 'card', 'composer', 'rightPane', 'popover'];
+  var SURFACE_TINT_COMPONENTS = [
+    'topbar',
+    'wco',
+    'sidebar',
+    'workspace',
+    'userBubble',
+    'assistantBubble',
+    'codeBlock',
+    'card',
+    'controls',
+    'composer',
+    'rightPane',
+    'popover',
+  ];
   var SURFACE_TINT_BOUNDS = {
     topbar: { min: 0, max: 0.98 },
     wco: { min: 0, max: 0.98 },
     sidebar: { min: 0, max: 0.98 },
     workspace: { min: 0, max: 0.98 },
+    userBubble: { min: 0, max: 0.98 },
+    assistantBubble: { min: 0, max: 0.98 },
+    codeBlock: { min: 0, max: 0.98 },
     card: { min: 0, max: 0.98 },
+    controls: { min: 0, max: 0.98 },
     composer: { min: 0, max: 0.98 },
     rightPane: { min: 0, max: 0.98 },
     popover: { min: 0.5, max: 0.99 },
   };
-  var REGION_OPTICAL_KEYS = ['glassEnabled', 'blur', 'opacity', 'tone', 'tint', 'borderOpacity'];
+  var GLASS_STYLES = ['none', 'frosted', 'crystal', 'tinted', 'solid'];
+  var STYLE_CYCLE_ORDER = [null, 'none', 'frosted', 'crystal', 'tinted', 'solid'];
+  var ZERO_BLUR_BY_DEFAULT_REGIONS = {
+    card: 1,
+    userBubble: 1,
+    assistantBubble: 1,
+    codeBlock: 1,
+    controls: 1,
+  };
+  var REGION_OPTICAL_KEYS = [
+    'style',
+    'glassEnabled',
+    'blur',
+    'saturation',
+    'opacity',
+    'tone',
+    'tint',
+    'borderOpacity',
+    'elevation',
+  ];
   var PER_WALLPAPER_OVERRIDE_KEY_MAP = {
     layoutMode: 1,
     colorScheme: 1,
@@ -143,6 +179,25 @@
   };
 
   var SCENE_PRESETS = {
+    crisp: {
+      preset: 'crisp',
+      borders: 'on',
+      shadows: true,
+      glassSurfaces: true,
+      glassOpacity: 0.76,
+      glassBlur: 0,
+      sidebarOpacity: null,
+      sidebarBlur: null,
+      surfaceTints: null,
+      glassFidelity: 92,
+      chatGlassFidelity: 90,
+      scrimOpacity: 0.24,
+      mediaBlur: 0,
+      vignette: true,
+      grainAlpha: 0.015,
+      paused: false,
+      fpsCap: 60,
+    },
     crystal: {
       preset: 'crystal',
       borders: 'on',
@@ -268,6 +323,8 @@
       layoutLabel: 'LAYOUT',
       flush: '紧凑一体 Flush',
       islands: '浮岛画境 Islands',
+      preset_crisp: '清雾',
+      preset_crispTitle: '清透无雾 · 全局零毛玻璃模糊',
       preset_crystal: '通透',
       preset_islands: '浮岛',
       preset_focus: '柔焦',
@@ -311,16 +368,33 @@
       topbar_bar: '整条通栏 Bar',
       compTitle: '各组件玻璃深浅精调',
       compResetAll: '重置全部组件',
+      compCat_shell: '框架与工作区',
+      compCat_chat: '对话气泡与代码',
+      compCat_controls: '卡片、控件与浮窗',
       comp_topbar: '顶部菜单胶囊',
       comp_wco: '右上角窗口控制胶囊',
       wcoNeedsTransparent: '请先开启右上角控制按钮透明',
       wcoDisabledHint: '请先开启上方「右上角窗口按钮透明」以生效',
       comp_sidebar: '左侧边栏与项目导航',
       comp_workspace: '主对话与工作区',
+      comp_userBubble: '用户消息气泡',
+      comp_assistantBubble: 'AI 回复与任务卡',
+      comp_codeBlock: '代码块与表格',
       comp_rightPane: '右侧辅助面板',
       comp_composer: '底部对话输入框',
-      comp_card: '消息气泡与卡片',
+      comp_card: '扩展与接管卡片',
+      comp_controls: '按钮与交互控件',
       comp_popover: '浮窗菜单与快捷面板',
+      style_auto: '跟随',
+      style_autoNoBlur: '默认无雾',
+      style_autoFrosted: '跟随·磨砂',
+      style_autoSolid: '跟随·纯色',
+      style_none: '无毛玻璃',
+      style_frosted: '毛玻璃',
+      style_crystal: '水晶',
+      style_tinted: '着色',
+      style_solid: '纯色',
+      styleCycleTip: '点击切换玻璃风格（当前：{style}）',
       sidebarStyleLabel: '侧栏风格',
       sidebarStyle_capsule: '胶囊',
       sidebarStyle_underline: '底边',
@@ -373,6 +447,8 @@
       layoutLabel: 'LAYOUT',
       flush: 'Flush',
       islands: 'Islands',
+      preset_crisp: 'Crisp',
+      preset_crispTitle: 'Crisp Glass · Zero backdrop blur everywhere',
       preset_crystal: 'Crystal',
       preset_islands: 'Islands',
       preset_focus: 'Focus',
@@ -416,16 +492,33 @@
       topbar_bar: 'Full Bar',
       compTitle: 'Component Glass Depth',
       compResetAll: 'Reset All Components',
+      compCat_shell: 'Shell & Panes',
+      compCat_chat: 'Chat Bubbles & Code',
+      compCat_controls: 'Cards, Controls & Popovers',
       comp_topbar: 'Topbar Menu Pills',
       comp_wco: 'Window Control Pill (WCO)',
       wcoNeedsTransparent: 'Enable transparent window controls first',
       wcoDisabledHint: 'Enable "Transparent Window Buttons" first',
       comp_sidebar: 'Left Sidebar & Projects',
       comp_workspace: 'Chat & Main Workspace',
+      comp_userBubble: 'User Chat Bubble',
+      comp_assistantBubble: 'Assistant Reply & Cards',
+      comp_codeBlock: 'Code Blocks & Tables',
       comp_rightPane: 'Right Side / Aux Pane',
       comp_composer: 'Input Composer Box',
-      comp_card: 'Message Bubbles & Cards',
+      comp_card: 'Extension & Takeover Cards',
+      comp_controls: 'Host Controls & Pills',
       comp_popover: 'Popovers & Quick Prism',
+      style_auto: 'Auto',
+      style_autoNoBlur: 'No Blur',
+      style_autoFrosted: 'Auto·Frost',
+      style_autoSolid: 'Auto·Solid',
+      style_none: 'No Blur',
+      style_frosted: 'Frosted',
+      style_crystal: 'Crystal',
+      style_tinted: 'Tinted',
+      style_solid: 'Solid',
+      styleCycleTip: 'Click to cycle glass style (current: {style})',
       sidebarStyleLabel: 'Sidebar Style',
       sidebarStyle_capsule: 'Capsule',
       sidebarStyle_underline: 'Underline',
@@ -791,6 +884,19 @@
     }
     return out;
   }
+  function createOpticalResetObj() {
+    return {
+      style: null,
+      glassEnabled: null,
+      blur: null,
+      saturation: null,
+      opacity: null,
+      tone: 0,
+      tint: '',
+      borderOpacity: null,
+      elevation: null,
+    };
+  }
   function stripOpticalFromRegionEntry(ent) {
     var next = {};
     if (ent && typeof ent === 'object' && !Array.isArray(ent)) {
@@ -798,12 +904,10 @@
         if (Object.prototype.hasOwnProperty.call(ent, k)) next[k] = ent[k];
       }
     }
-    next.glassEnabled = null;
-    next.blur = null;
-    next.opacity = null;
-    next.tone = 0;
-    next.tint = '';
-    next.borderOpacity = null;
+    var rst = createOpticalResetObj();
+    for (var rk in rst) {
+      if (Object.prototype.hasOwnProperty.call(rst, rk)) next[rk] = rst[rk];
+    }
     return next;
   }
   function stripOpticalFromRegionsObj(obj) {
@@ -844,13 +948,142 @@
         if (!Object.prototype.hasOwnProperty.call(incoming, ik)) continue;
         var iv = incoming[ik];
         if (iv === null) {
-          out[ik] = { opacity: null, tone: 0, tint: '', blur: null, glassEnabled: null, borderOpacity: null };
+          out[ik] = createOpticalResetObj();
         } else if (iv && typeof iv === 'object') {
           out[ik] = Object.assign({}, out[ik] && typeof out[ik] === 'object' ? out[ik] : {}, iv);
         }
       }
     }
     return out;
+  }
+  function normalizeStyleValue(v) {
+    if (v === null || v === undefined || v === '' || v === 'auto') return null;
+    var s = String(v).trim();
+    return GLASS_STYLES.indexOf(s) >= 0 ? s : null;
+  }
+  function resolveRegionPropFromLayer(layer, compId, prop) {
+    if (!layer || typeof layer !== 'object') return { found: false, value: undefined, reset: false };
+    var hasReg = Object.prototype.hasOwnProperty.call(layer, 'regions');
+    var reg = hasReg ? layer.regions : undefined;
+    var regResetAll = hasReg && reg === null;
+    var regHasComp =
+      hasReg &&
+      reg &&
+      typeof reg === 'object' &&
+      !Array.isArray(reg) &&
+      Object.prototype.hasOwnProperty.call(reg, compId);
+    var regCompVal = regHasComp ? reg[compId] : undefined;
+    var regTouched =
+      regResetAll ||
+      (regHasComp && regCompVal === null) ||
+      (regHasComp && regCompVal && typeof regCompVal === 'object' && Object.prototype.hasOwnProperty.call(regCompVal, prop));
+
+    var hasSt = Object.prototype.hasOwnProperty.call(layer, 'surfaceTints');
+    var st = hasSt ? layer.surfaceTints : undefined;
+    var stResetAll = hasSt && st === null;
+    var stHasComp =
+      hasSt &&
+      st &&
+      typeof st === 'object' &&
+      !Array.isArray(st) &&
+      Object.prototype.hasOwnProperty.call(st, compId);
+    var stCompVal = stHasComp ? st[compId] : undefined;
+    var stTouched =
+      stResetAll ||
+      (stHasComp && stCompVal === null) ||
+      (stHasComp && stCompVal && typeof stCompVal === 'object' && Object.prototype.hasOwnProperty.call(stCompVal, prop));
+
+    if (regTouched) {
+      return {
+        found: true,
+        value: regResetAll || (regHasComp && regCompVal === null) ? undefined : regCompVal[prop],
+        reset: regResetAll || (regHasComp && regCompVal === null),
+      };
+    }
+    if (stTouched) {
+      return {
+        found: true,
+        value: stResetAll || (stHasComp && stCompVal === null) ? undefined : stCompVal[prop],
+        reset: stResetAll || (stHasComp && stCompVal === null),
+      };
+    }
+    return { found: false, value: undefined, reset: false };
+  }
+  function readComponentOpticalProp(compId, prop, defVal) {
+    var layers = [patchQueue, getActiveOverride(), store.config];
+    for (var i = 0; i < layers.length; i += 1) {
+      var res = resolveRegionPropFromLayer(layers[i], compId, prop);
+      if (res.found) return res.reset ? defVal : res.value;
+    }
+    return defVal;
+  }
+  function readComponentStyle(compId) {
+    return normalizeStyleValue(readComponentOpticalProp(compId, 'style', null));
+  }
+  function readComponentBlur(compId) {
+    return parseNullableBlur(readComponentOpticalProp(compId, 'blur', null));
+  }
+  function isComponentOpticallyDirty(compId) {
+    if (readComponentOpacity(compId) !== null) return true;
+    var curBlur = compId === 'sidebar' ? readSidebarBlur() : readComponentBlur(compId);
+    if (curBlur !== null) return true;
+    if (readComponentStyle(compId) !== null) return true;
+    var ge = readComponentOpticalProp(compId, 'glassEnabled', null);
+    if (typeof ge === 'boolean') return true;
+    var sat = readComponentOpticalProp(compId, 'saturation', null);
+    if (sat !== null && sat !== undefined && sat !== '' && Number.isFinite(Number(sat))) return true;
+    var tone = readComponentOpticalProp(compId, 'tone', 0);
+    if (Number.isFinite(Number(tone)) && Number(tone) !== 0) return true;
+    var tint = readComponentOpticalProp(compId, 'tint', '');
+    if (typeof tint === 'string' && tint.trim()) return true;
+    var bop = readComponentOpticalProp(compId, 'borderOpacity', null);
+    if (bop !== null && bop !== undefined && bop !== '' && Number.isFinite(Number(bop))) return true;
+    var elev = readComponentOpticalProp(compId, 'elevation', null);
+    if (elev !== null && elev !== undefined && elev !== '' && Number.isFinite(Number(elev))) return true;
+    return false;
+  }
+  function resolveEffectiveComponentStyle(compId, explicitStyle, cfg) {
+    var norm = normalizeStyleValue(explicitStyle);
+    if (norm) return norm;
+    if (compId === 'codeBlock') {
+      var cm = String((cfg && cfg.codeReadabilityMode) || DEFAULTS.codeReadabilityMode || 'translucent');
+      if (cm === 'solid') return 'solid';
+      if (cm === 'frosted') return 'frosted';
+      return 'none';
+    }
+    if (ZERO_BLUR_BY_DEFAULT_REGIONS[compId]) return 'none';
+    return null;
+  }
+  function styleChipLabel(compId, explicitStyle, cfg) {
+    var norm = normalizeStyleValue(explicitStyle);
+    if (norm) return tr('style_' + norm);
+    if (compId === 'codeBlock') {
+      var cm = String((cfg && cfg.codeReadabilityMode) || DEFAULTS.codeReadabilityMode || 'translucent');
+      if (cm === 'solid') return tr('style_autoSolid');
+      if (cm === 'frosted') return tr('style_autoFrosted');
+      return tr('style_autoNoBlur');
+    }
+    if (ZERO_BLUR_BY_DEFAULT_REGIONS[compId]) return tr('style_autoNoBlur');
+    return tr('style_auto');
+  }
+  function nextCycleStyle(compId, explicitStyle, cfg) {
+    var norm = normalizeStyleValue(explicitStyle);
+    if (norm === null) {
+      if (compId === 'codeBlock') {
+        var cm = String((cfg && cfg.codeReadabilityMode) || DEFAULTS.codeReadabilityMode || 'translucent');
+        if (cm === 'frosted') return 'crystal';
+        if (cm === 'solid') return 'none';
+        return 'frosted';
+      }
+      if (ZERO_BLUR_BY_DEFAULT_REGIONS[compId]) return 'frosted';
+      return 'none';
+    }
+    if (ZERO_BLUR_BY_DEFAULT_REGIONS[compId] && compId !== 'codeBlock' && norm === 'solid') {
+      return null;
+    }
+    var idx = STYLE_CYCLE_ORDER.indexOf(norm);
+    if (idx < 0) return 'none';
+    return STYLE_CYCLE_ORDER[(idx + 1) % STYLE_CYCLE_ORDER.length];
   }
   function readComponentOpacity(compId) {
     var r1 = resolveCompOpFromLayer(patchQueue, compId);
@@ -861,33 +1094,80 @@
     if (r3.found) return r3.value;
     return null;
   }
+  function applyStyleAlphaModifier(baseAlpha, effStyle, light, contrastMin, bounds, isCodeBlock, contrastFloor) {
+    if (effStyle === 'solid') {
+      return isCodeBlock && contrastFloor ? 1 : (light ? 0.97 : 0.96);
+    }
+    if (effStyle === 'crystal') {
+      var floor = contrastFloor ? Math.max(bounds.min, contrastMin) : bounds.min;
+      return clamp(baseAlpha * 0.78, floor, bounds.max);
+    }
+    if (effStyle === 'tinted') {
+      return clamp(baseAlpha * 0.88, bounds.min, bounds.max);
+    }
+    return baseAlpha;
+  }
   function resolveComponentDefaultAlpha(comp, cfg, isLight) {
     var c = cfg && typeof cfg === 'object' ? cfg : {};
     var light = typeof isLight === 'string' ? isLight === 'light' : Boolean(isLight);
+    var bounds = SURFACE_TINT_BOUNDS[comp] || { min: 0, max: 0.98 };
+    var entry = c.regions && c.regions[comp] && typeof c.regions[comp] === 'object' ? c.regions[comp] : null;
+    var explicitStyle = entry ? normalizeStyleValue(entry.style) : null;
+    var effStyle = resolveEffectiveComponentStyle(comp, explicitStyle, c);
+    var glassEnabled = entry && typeof entry.glassEnabled === 'boolean' ? entry.glassEnabled : null;
+    var contrastFloor = c.contrastFloor !== false;
+
     if (comp === 'popover') {
-      return c.floaterSolidBase !== false ? (light ? 0.97 : 0.96) : 0.94;
+      var popBase = c.floaterSolidBase !== false ? (light ? 0.97 : 0.96) : 0.94;
+      var popAlpha = applyStyleAlphaModifier(popBase, effStyle, light, 0.5, bounds, false, contrastFloor);
+      return Math.round(clamp(popAlpha, bounds.min, bounds.max) * 1000) / 1000;
     }
-    if (c.glassSurfaces === false) return 1;
+
     var gRaw = Number(c.glassOpacity !== undefined ? c.glassOpacity : DEFAULTS.glassOpacity);
     var g = clamp(Number.isFinite(gRaw) ? gRaw : DEFAULTS.glassOpacity, 0.15, 0.98);
     var gfRaw = Number(c.glassFidelity !== undefined ? c.glassFidelity : DEFAULTS.glassFidelity);
     var gf = clamp(Number.isFinite(gfRaw) ? (gfRaw > 0 && gfRaw < 1 ? gfRaw : gfRaw / 100) : 0.92, 0, 1);
     var cgfRaw = Number(c.chatGlassFidelity !== undefined ? c.chatGlassFidelity : DEFAULTS.chatGlassFidelity);
     var cgf = clamp(Number.isFinite(cgfRaw) ? (cgfRaw > 0 && cgfRaw < 1 ? cgfRaw : cgfRaw / 100) : 0.90, 0, 1);
-    var contrastFloor = c.contrastFloor !== false;
     var layoutMode = c.layoutMode === 'flush' ? 'flush' : 'islands';
 
+    if (comp === 'assistantBubble') {
+      if (effStyle === 'none') return 0;
+      var rawAsstA = light ? clamp(g * 0.46, 0.22, 0.88) : clamp(g * 0.34, 0.18, 0.84);
+      var baseAsstA = Math.max(rawAsstA, (light ? 0.28 : 0.18) * cgf, 0.18);
+      if (effStyle === 'solid') return light ? 0.97 : 0.96;
+      if (effStyle === 'crystal') {
+        return Math.round(clamp(Math.max(baseAsstA, 0.24) * 0.78, 0.18, bounds.max) * 1000) / 1000;
+      }
+      if (effStyle === 'tinted') {
+        return Math.round(clamp(Math.max(baseAsstA, 0.22) * 0.88, 0.16, bounds.max) * 1000) / 1000;
+      }
+      if (c.glassSurfaces === false && glassEnabled !== true) return 1;
+      return Math.round(clamp(baseAsstA, 0.18, bounds.max) * 1000) / 1000;
+    }
+
+    if (c.glassSurfaces === false && glassEnabled !== true) return 1;
+
     var alpha;
+    var contrastMin = 0.2;
     if (comp === 'wco') {
       var tbOp = readComponentOpacity('topbar');
-      if (tbOp !== null && tbOp !== undefined && Number.isFinite(Number(tbOp))) {
+      if (effStyle === null && tbOp !== null && tbOp !== undefined && Number.isFinite(Number(tbOp))) {
         return Math.round(clamp(Number(tbOp), 0, 0.98) * 1000) / 1000;
       }
-      var minWcoFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
-      alpha = Math.max(g, minWcoFloor * gf);
+      if (effStyle === null) {
+        return resolveComponentDefaultAlpha('topbar', c, light);
+      }
+      var tbBase =
+        tbOp !== null && tbOp !== undefined && Number.isFinite(Number(tbOp))
+          ? clamp(Number(tbOp), 0, 0.98)
+          : Math.max(g, (contrastFloor ? (light ? 0.48 : 0.36) : 0.15) * gf);
+      alpha = tbBase;
+      contrastMin = 0.24;
     } else if (comp === 'topbar' || comp === 'sidebar') {
       var minSbFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
       alpha = Math.max(g, minSbFloor * gf);
+      contrastMin = 0.24;
     } else if (comp === 'workspace' || comp === 'rightPane') {
       var rawChatA =
         layoutMode === 'flush' && !light
@@ -897,20 +1177,49 @@
             : clamp(g * 0.42, 0.08, 0.88);
       var minChatFloor = light ? 0.42 : 0.16;
       alpha = Math.max(rawChatA, minChatFloor * cgf);
+      contrastMin = light ? 0.28 : 0.12;
+    } else if (comp === 'userBubble') {
+      var rawUbA = light ? clamp(g * 0.95, 0.48, 0.98) : clamp(g * 0.82, 0.34, 0.96);
+      var minUbFloor = contrastFloor ? (light ? 0.60 : 0.48) : 0.25;
+      alpha = Math.max(rawUbA, minUbFloor * gf);
+      contrastMin = light ? 0.42 : 0.34;
+    } else if (comp === 'codeBlock') {
+      var minEd = contrastFloor ? (light ? 0.84 : 0.72) : (light ? 0.52 : 0.38);
+      var rawEdA = light ? clamp(g * 0.96, 0.55, 0.99) : clamp(g * 0.92, 0.45, 0.98);
+      alpha = Math.max(rawEdA, minEd * (contrastFloor ? 1 : gf));
+      contrastMin = light ? 0.52 : 0.44;
+    } else if (comp === 'controls') {
+      var rawCtlA = light ? clamp(g * 0.64, 0.34, 0.84) : clamp(g * 0.48, 0.26, 0.78);
+      var minCtlFloor = contrastFloor ? (light ? 0.44 : 0.32) : 0.18;
+      alpha = Math.max(rawCtlA, minCtlFloor * gf);
+      contrastMin = light ? 0.26 : 0.18;
     } else if (comp === 'composer') {
       var rawCompA = light ? clamp(g * 0.94, 0.65, 0.99) : clamp(g * 0.92, 0.48, 0.98);
       var minCompFloor = light ? 0.72 : 0.58;
       alpha = Math.max(rawCompA, minCompFloor * gf);
+      contrastMin = light ? 0.42 : 0.32;
     } else if (comp === 'card') {
       var rawCardA = light ? clamp(g * 0.86, 0.5, 0.98) : clamp(g * 0.78, 0.32, 0.96);
       var minCardFloor = light ? 0.62 : 0.48;
       alpha = Math.max(rawCardA, minCardFloor * gf);
+      contrastMin = light ? 0.42 : 0.32;
     } else {
       alpha = g;
     }
-    return Math.round(clamp(alpha, 0, 0.99) * 1000) / 1000;
+
+    alpha = applyStyleAlphaModifier(alpha, effStyle, light, contrastMin, bounds, comp === 'codeBlock', contrastFloor);
+    return Math.round(clamp(alpha, 0, 1) * 1000) / 1000;
   }
   function effectiveOpticsCfg() {
+    var regs = {};
+    for (var i = 0; i < SURFACE_TINT_COMPONENTS.length; i += 1) {
+      var cid = SURFACE_TINT_COMPONENTS[i];
+      var ge = readComponentOpticalProp(cid, 'glassEnabled', null);
+      regs[cid] = {
+        style: readComponentStyle(cid),
+        glassEnabled: typeof ge === 'boolean' ? ge : null,
+      };
+    }
     return {
       glassOpacity: cfgVal('glassOpacity'),
       glassSurfaces: cfgVal('glassSurfaces'),
@@ -919,6 +1228,8 @@
       chatGlassFidelity: cfgVal('chatGlassFidelity'),
       contrastFloor: cfgVal('contrastFloor'),
       floaterSolidBase: cfgVal('floaterSolidBase'),
+      codeReadabilityMode: cfgVal('codeReadabilityMode'),
+      regions: regs,
     };
   }
 
@@ -1022,8 +1333,8 @@
     '#R .pp-topdeck{display:flex;flex-direction:column;gap:6px;margin:8px 10px 0;padding:8px 9px;border-radius:var(--pp-r-card);border:1px solid var(--pp-border);background:var(--pp-fill);flex-shrink:0;}',
     '#R .pp-deck-row{display:flex;align-items:center;gap:6px;}',
     '#R .pp-micro{font-family:var(--pp-mono);font-size:9.5px;font-weight:600;letter-spacing:.06em;color:var(--pp-muted);width:44px;flex-shrink:0;}',
-    '#R .pp-presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;flex:1;}',
-    '#R .pp-preset{height:25px;padding:0 6px;border-radius:6px;border:1px solid var(--pp-border);background:transparent;color:var(--pp-fg2);font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:all .14s ease;}',
+    '#R .pp-presets{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;flex:1;}',
+    '#R .pp-preset{height:25px;padding:0 3px;border-radius:6px;border:1px solid var(--pp-border);background:transparent;color:var(--pp-fg2);font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:all .14s ease;}',
     '#R .pp-preset:hover{background:var(--pp-hover);color:var(--pp-fg);}',
     '#R .pp-preset[aria-pressed="true"]{border-color:color-mix(in srgb,var(--pp-accent) 65%,transparent);background:color-mix(in srgb,var(--pp-accent) 15%,transparent);color:var(--pp-accent);font-weight:600;}',
     '#R .pp-seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px;padding:2px;border-radius:8px;border:1px solid var(--pp-border);background:var(--pp-fill);flex:1;}',
@@ -1069,8 +1380,15 @@
     '#R .pp-color{width:24px;height:22px;padding:0;border:1px solid var(--pp-border2);border-radius:5px;background:transparent;cursor:pointer;}',
     // Slider Row with Tabular Readout + 1-Click Reset (`↺`)
     '#R .pp-srow{display:grid;grid-template-columns:1fr auto auto;grid-template-rows:auto auto;align-items:center;column-gap:6px;row-gap:3px;padding:4px 0;border-top:1px solid var(--pp-border);}',
-    '#R .pp-srow:first-of-type{border-top:none;}',
+    '#R .pp-srow.pp-comp-srow{grid-template-columns:minmax(0,1fr) auto auto auto;column-gap:4px;}',
+    '#R .pp-slabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+    '#R .pp-srow:first-of-type,#R .pp-comp-cat + .pp-srow{border-top:none;}',
     '#R .pp-sval{font-family:var(--pp-mono);font-size:11px;font-variant-numeric:tabular-nums;color:var(--pp-fg2);}',
+    '#R .pp-style-chip{height:18px;padding:0 6px;border-radius:999px;border:1px solid var(--pp-border2);background:var(--pp-fill);color:var(--pp-fg2);font-size:10px;font-weight:500;line-height:1;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:background .12s,border-color .12s,color .12s;}',
+    '#R .pp-style-chip:hover{border-color:var(--pp-accent);color:var(--pp-fg);background:var(--pp-hover);}',
+    '#R .pp-style-chip[data-custom="true"]{border-color:color-mix(in srgb,var(--pp-accent) 60%,transparent);background:color-mix(in srgb,var(--pp-accent) 14%,transparent);color:var(--pp-accent);font-weight:600;}',
+    '#R .pp-comp-cat{font-size:10px;font-weight:600;color:var(--pp-muted);letter-spacing:.03em;padding:6px 0 2px;margin-top:2px;}',
+    '#R .pp-comp-cat:first-child{padding-top:4px;margin-top:0;}',
     '#R .pp-rst{width:18px;height:18px;padding:0;border:none;border-radius:4px;background:transparent;color:var(--pp-faint);opacity:.22;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:opacity .12s,color .12s,background .12s;}',
     '#R .pp-srow[data-dirty="true"] .pp-rst{opacity:.9;color:var(--pp-accent);}',
     '#R .pp-srow[data-dirty="true"] .pp-rst:hover{opacity:1;background:color-mix(in srgb,var(--pp-accent) 16%,transparent);}',
@@ -2125,6 +2443,47 @@
       if (compId === 'sidebar') p.sidebarOpacity = v;
       return p;
     }
+    function makeCompResetPatch() {
+      var regPatch = {};
+      regPatch[compId] = createOpticalResetObj();
+      var stPatch = {};
+      stPatch[compId] = null;
+      var p = { preset: 'custom', regions: regPatch, surfaceTints: stPatch };
+      if (compId === 'sidebar') {
+        p.sidebarOpacity = null;
+        p.sidebarBlur = null;
+      }
+      return p;
+    }
+    var styleBtn = h('button', {
+      type: 'button',
+      class: 'pp-style-chip',
+      'data-comp-style-btn': compId,
+      'data-testid': 'prism-pop-style-' + compId,
+      'data-style': 'auto',
+      'data-eff-style': ZERO_BLUR_BY_DEFAULT_REGIONS[compId] ? 'none' : 'auto',
+      'data-custom': 'false',
+      onclick: function () {
+        var curStyle = readComponentStyle(compId);
+        var nextStyle = nextCycleStyle(compId, curStyle, store.config);
+        var regEntry = { style: nextStyle };
+        var stEntry = { style: nextStyle };
+        var curBlur = compId === 'sidebar' ? readSidebarBlur() : readComponentBlur(compId);
+        if ((nextStyle === 'frosted' || nextStyle === 'crystal') && curBlur === 0) {
+          regEntry.blur = null;
+          stEntry.blur = null;
+        }
+        var regPatch = {};
+        regPatch[compId] = regEntry;
+        var stPatch = {};
+        stPatch[compId] = stEntry;
+        var patch = { preset: 'custom', regions: regPatch, surfaceTints: stPatch };
+        if (compId === 'sidebar' && Object.prototype.hasOwnProperty.call(regEntry, 'blur')) {
+          patch.sidebarBlur = null;
+        }
+        pushConfigPatch(patch, true);
+      },
+    });
     var rstBtn = h('button', {
       type: 'button',
       class: 'pp-rst',
@@ -2132,7 +2491,7 @@
       'data-comp': compId,
       html: ICONS.reset,
       onclick: function () {
-        pushConfigPatch(makeCompPatch(null), true);
+        pushConfigPatch(makeCompResetPatch(), true);
       },
     });
     var range = h('input', {
@@ -2159,13 +2518,14 @@
             hidden: true,
           })
         : null;
-    var rowKids = [labelSpan, valSpan, rstBtn, range];
+    var rowKids = [labelSpan, styleBtn, valSpan, rstBtn, range];
     if (wcoHint) rowKids.push(wcoHint);
-    var row = h('div', { class: 'pp-srow', 'data-dirty': 'false', 'data-comp': compId }, rowKids);
+    var row = h('div', { class: 'pp-srow pp-comp-srow', 'data-dirty': 'false', 'data-comp': compId }, rowKids);
     compSliderRefs[compId] = {
       compId: compId,
       row: row,
       label: labelSpan,
+      styleBtn: styleBtn,
       val: valSpan,
       rst: rstBtn,
       range: range,
@@ -2309,9 +2669,9 @@
       els.closeBtn,
     ]);
 
-    // Topdeck: 4 Scene Presets + Flush/Islands toggle
+    // Topdeck: 5 Scene Presets + Flush/Islands toggle
     els.presetBtns = {};
-    var presetKids = ['crystal', 'islands', 'focus', 'eco'].map(function (pid) {
+    var presetKids = ['crisp', 'crystal', 'islands', 'focus', 'eco'].map(function (pid) {
       var b = h('button', {
         type: 'button',
         class: 'pp-preset',
@@ -2583,8 +2943,15 @@
         pushConfigPatch({ preset: 'custom', surfaceTints: null, sidebarOpacity: null, sidebarBlur: null }, true);
       },
     });
-    var compRows = SURFACE_TINT_COMPONENTS.map(function (cid) {
-      return buildComponentOpacityRow(cid);
+    els.compCatShell = h('div', { class: 'pp-comp-cat' });
+    els.compCatChat = h('div', { class: 'pp-comp-cat' });
+    els.compCatControls = h('div', { class: 'pp-comp-cat' });
+    var compRows = [];
+    SURFACE_TINT_COMPONENTS.forEach(function (cid) {
+      if (cid === 'topbar') compRows.push(els.compCatShell);
+      else if (cid === 'userBubble') compRows.push(els.compCatChat);
+      else if (cid === 'card') compRows.push(els.compCatControls);
+      compRows.push(buildComponentOpacityRow(cid));
     });
     compRows.push(els.compResetAllBtn);
     els.compAccordion = h('details', { class: 'pp-sec pp-comp-sec', 'data-testid': 'prism-comp-accordion' }, [
@@ -2653,7 +3020,13 @@
       ['translucent', 'frosted', 'solid'].map(function (cm) {
         var b = h('button', {
           type: 'button',
-          onclick: function () { pushConfigPatch({ codeReadabilityMode: cm }, true); },
+          onclick: function () {
+            pushConfigPatch({
+              codeReadabilityMode: cm,
+              regions: { codeBlock: { style: null } },
+              surfaceTints: { codeBlock: { style: null } },
+            }, true);
+          },
         });
         els.codeBtns[cm] = b;
         return b;
@@ -3020,6 +3393,7 @@
     var curPreset = String(cfgVal('preset') || 'custom');
     for (var pid in els.presetBtns) {
       els.presetBtns[pid].textContent = tr('preset_' + pid);
+      els.presetBtns[pid].title = pid === 'crisp' ? tr('preset_crispTitle') : tr('preset_' + pid);
       els.presetBtns[pid].setAttribute('aria-pressed', curPreset === pid ? 'true' : 'false');
     }
     var lMode = cfgVal('layoutMode') === 'flush' ? 'flush' : 'islands';
@@ -3118,19 +3492,32 @@
       }
     }
 
-    // Per-Component Glass Depth Accordion (8 components with true resolveComponentDefaultAlpha Auto-follow)
+    // Per-Component Glass Depth Accordion (12 components with resolveComponentDefaultAlpha Auto-follow & style cycler)
     var effOptics = effectiveOpticsCfg();
     var isLightTheme = store.theme === 'light';
     var wcoDisabled = cfgVal('transparentWindowControls') === false;
     var customCompCount = 0;
     if (els.compSummaryTitle) els.compSummaryTitle.textContent = tr('compTitle');
     if (els.compResetAllBtn) els.compResetAllBtn.textContent = tr('compResetAll');
+    if (els.compCatShell) els.compCatShell.textContent = tr('compCat_shell');
+    if (els.compCatChat) els.compCatChat.textContent = tr('compCat_chat');
+    if (els.compCatControls) els.compCatControls.textContent = tr('compCat_controls');
     for (var ci = 0; ci < SURFACE_TINT_COMPONENTS.length; ci += 1) {
       var cid = SURFACE_TINT_COMPONENTS[ci];
       var cr = compSliderRefs[cid];
       if (!cr) continue;
       cr.label.textContent = tr('comp_' + cid);
       cr.rst.title = tr('resetTip');
+      if (cr.styleBtn) {
+        var explicitStyle = readComponentStyle(cid);
+        var effStyle = resolveEffectiveComponentStyle(cid, explicitStyle, effOptics);
+        var styleTxt = styleChipLabel(cid, explicitStyle, effOptics);
+        cr.styleBtn.textContent = styleTxt;
+        cr.styleBtn.title = tr('styleCycleTip').replace('{style}', styleTxt);
+        cr.styleBtn.setAttribute('data-style', explicitStyle || 'auto');
+        cr.styleBtn.setAttribute('data-eff-style', effStyle || 'auto');
+        cr.styleBtn.setAttribute('data-custom', explicitStyle ? 'true' : 'false');
+      }
       if (cid === 'wco' && cr.wcoHint) {
         cr.wcoHint.hidden = !wcoDisabled;
         cr.wcoHint.textContent = tr('wcoDisabledHint');
@@ -3145,18 +3532,17 @@
         cr.val.textContent = tr('autoFollowPrefix') + cr.fmt(defAlpha);
         if (!compDragging) cr.range.value = String(clampedDef);
         cr.range.style.setProperty('--pct', defPct.toFixed(1) + '%');
-        cr.row.setAttribute('data-dirty', 'false');
-        cr.range.setAttribute('data-dirty', 'false');
       } else {
-        customCompCount += 1;
         var clampedVal = clamp(compRaw, cr.min, cr.max);
         var compPct = ((clampedVal - cr.min) / (cr.max - cr.min)) * 100;
         cr.val.textContent = cr.fmt(clampedVal);
         if (!compDragging) cr.range.value = String(clampedVal);
         cr.range.style.setProperty('--pct', compPct.toFixed(1) + '%');
-        cr.row.setAttribute('data-dirty', 'true');
-        cr.range.setAttribute('data-dirty', 'true');
       }
+      var optDirty = isComponentOpticallyDirty(cid);
+      if (optDirty) customCompCount += 1;
+      cr.row.setAttribute('data-dirty', optDirty ? 'true' : 'false');
+      cr.range.setAttribute('data-dirty', compRaw !== null ? 'true' : 'false');
     }
     if (els.compBadge) {
       els.compBadge.hidden = customCompCount === 0;

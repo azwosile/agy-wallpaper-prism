@@ -3035,7 +3035,7 @@ button, input, select, textarea {
   background: rgba(var(--prism-pt-rgb), 0.05);
 }
 .mini-nav-row.is-active {
-  background: rgba(var(--prism-accent-rgb), 0.20);
+  background: var(--sim-selected-bg, rgba(var(--prism-accent-rgb), 0.20));
   box-shadow: inset 2px 0 0 var(--prism-accent);
 }
 .mini-hub-shell[data-sidebar-style="underline"] .mini-sidebar .mini-nav-row {
@@ -3063,7 +3063,55 @@ button, input, select, textarea {
   background: rgba(var(--prism-pt-rgb), 0.34);
 }
 
-/* Message bubble / code card / composer — zero hardcoded borders; consume --sim-<c>-border & --sim-<c>-shadow */
+/* Chat bubbles, code block, controls & cards — zero hardcoded borders; consume --sim-* */
+.mini-chat-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5px;
+  min-width: 0;
+}
+
+.mini-user-bubble {
+  align-self: flex-end;
+  max-width: 72%;
+  min-height: 8px;
+  padding: 2px 5px;
+  border-radius: var(--sim-user-bubble-radius, var(--sim-userBubble-radius, 8px));
+  background-color: var(--sim-user-bubble-bg, var(--sim-userBubble-bg, rgba(28, 30, 38, 0.72)));
+  background-image: var(--prism-sheen);
+  backdrop-filter: var(--sim-user-bubble-backdrop, var(--sim-userBubble-backdrop, none));
+  -webkit-backdrop-filter: var(--sim-user-bubble-backdrop, var(--sim-userBubble-backdrop, none));
+  border: var(--sim-user-bubble-border, var(--sim-userBubble-border, 1px solid transparent));
+  box-shadow: var(--sim-user-bubble-shadow, var(--sim-userBubble-shadow, none));
+  color: var(--sim-user-bubble-fg, var(--sim-userBubble-fg, var(--prism-fg)));
+  font-family: var(--sim-user-bubble-font-family, var(--sim-userBubble-font-family, inherit));
+  font-size: 7.5px;
+  display: flex;
+  align-items: center;
+}
+
+.mini-assistant-bubble {
+  align-self: stretch;
+  padding: 2px 4px;
+  border-radius: var(--sim-assistant-bubble-radius, var(--sim-assistantBubble-radius, 6px));
+  background-color: var(--sim-assistant-bubble-bg, var(--sim-assistantBubble-bg, transparent));
+  backdrop-filter: var(--sim-assistant-bubble-backdrop, var(--sim-assistantBubble-backdrop, none));
+  -webkit-backdrop-filter: var(--sim-assistant-bubble-backdrop, var(--sim-assistantBubble-backdrop, none));
+  border: var(--sim-assistant-bubble-border, var(--sim-assistantBubble-border, 1px solid transparent));
+  box-shadow: var(--sim-assistant-bubble-shadow, var(--sim-assistantBubble-shadow, none));
+  color: var(--sim-assistant-bubble-fg, var(--sim-assistantBubble-fg, var(--prism-fg)));
+  font-family: var(--sim-assistant-bubble-font-family, var(--sim-assistantBubble-font-family, inherit));
+  font-size: 7.5px;
+}
+
+.mini-turn-card {
+  padding: 1.5px 4px;
+  border-radius: 4px;
+  background: var(--sim-turn-card-bg, rgba(var(--prism-pt-rgb), 0.04));
+  display: flex;
+  align-items: center;
+}
+
 .mini-bubble {
   height: 8px;
   width: 54%;
@@ -3088,23 +3136,140 @@ button, input, select, textarea {
 }
 
 .mini-code-card {
-  border-radius: var(--sim-card-radius, var(--sim-r-card, 5px));
-  background: var(--sim-editor-bg, var(--sim-card-bg, rgba(14, 14, 18, 0.74)));
-  backdrop-filter: var(--sim-code-backdrop, var(--sim-card-backdrop, var(--sim-code-blur, none)));
-  -webkit-backdrop-filter: var(--sim-code-backdrop, var(--sim-card-backdrop, var(--sim-code-blur, none)));
-  border: var(--sim-card-border, var(--sim-border, 1px solid transparent));
-  box-shadow: var(--sim-card-shadow, none);
-  padding: 4px 6px;
-  font-family: var(--prism-font-mono);
-  font-size: 8.5px;
-  line-height: 1.35;
-  color: var(--sim-card-fg, var(--prism-fg));
+  border-radius: var(--sim-code-block-radius, var(--sim-codeBlock-radius, var(--sim-card-radius, 5px)));
+  background: var(--sim-code-block-bg, var(--sim-codeBlock-bg, var(--sim-editor-bg, var(--sim-card-bg, rgba(14, 14, 18, 0.74)))));
+  backdrop-filter: var(--sim-code-block-backdrop, var(--sim-codeBlock-backdrop, var(--sim-code-backdrop, var(--sim-code-blur, none))));
+  -webkit-backdrop-filter: var(--sim-code-block-backdrop, var(--sim-codeBlock-backdrop, var(--sim-code-backdrop, var(--sim-code-blur, none))));
+  border: var(--sim-code-block-border, var(--sim-codeBlock-border, var(--sim-card-border, 1px solid transparent)));
+  box-shadow: var(--sim-code-block-shadow, var(--sim-codeBlock-shadow, var(--sim-card-shadow, none)));
+  padding: 3px 5px;
+  font-family: var(--sim-code-block-font-family, var(--sim-codeBlock-font-family, var(--prism-font-mono)));
+  font-size: 7.5px;
+  line-height: 1.3;
+  color: var(--sim-code-block-fg, var(--sim-codeBlock-fg, var(--sim-card-fg, var(--prism-fg))));
   overflow: hidden;
   white-space: nowrap;
+}
+.mini-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 1.5px;
+}
+.mini-code-lang {
+  font-size: 7px;
+  opacity: 0.65;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .mini-code-kw { color: var(--prism-accent); font-weight: 600; }
 .mini-code-fn { color: var(--prism-ok); }
 .mini-code-str { color: var(--prism-warn); }
+
+.mini-ctl-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0.5px 2px;
+  border-radius: var(--sim-controls-radius, 4px);
+  background: var(--sim-controls-bg, rgba(var(--prism-pt-rgb), 0.08));
+  border: var(--sim-controls-border, 1px solid rgba(var(--prism-pt-rgb), 0.12));
+  color: var(--sim-controls-fg, var(--prism-fg-2));
+  font-size: 7px;
+  line-height: 1.2;
+}
+.mini-ctl-seg span {
+  padding: 0 3px;
+  border-radius: 3px;
+}
+.mini-ctl-seg span.is-on {
+  background: var(--sim-control-active-bg, rgba(var(--prism-accent-rgb), 0.24));
+  color: var(--prism-fg);
+  font-weight: 600;
+}
+
+.mini-controls-strip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  padding: 2px 4px;
+  border-radius: var(--sim-controls-radius, 5px);
+  background-color: var(--sim-controls-bg, rgba(24, 26, 34, 0.54));
+  backdrop-filter: var(--sim-controls-backdrop, none);
+  -webkit-backdrop-filter: var(--sim-controls-backdrop, none);
+  border: var(--sim-controls-border, 1px solid rgba(var(--prism-pt-rgb), 0.10));
+  box-shadow: var(--sim-controls-shadow, none);
+  color: var(--sim-controls-fg, var(--prism-fg-2));
+  font-family: var(--sim-controls-font-family, inherit);
+  font-size: 7px;
+}
+.mini-ctl-btn,
+.mini-ctl-select,
+.mini-scroll-pill {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--sim-control-hover-bg, rgba(var(--prism-pt-rgb), 0.08));
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.mini-ctl-btn {
+  background: var(--sim-control-active-bg, rgba(var(--prism-accent-rgb), 0.22));
+  color: var(--sim-controls-fg, var(--prism-fg));
+}
+.mini-scroll-pill {
+  background: var(--sim-scroll-thumb, rgba(var(--prism-pt-rgb), 0.22));
+}
+
+.mini-aux-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1.5px;
+  border-radius: var(--sim-controls-radius, 5px);
+  background: var(--sim-controls-bg, rgba(var(--prism-pt-rgb), 0.06));
+  border: var(--sim-controls-border, 1px solid transparent);
+  color: var(--sim-controls-fg, var(--prism-fg-2));
+}
+.mini-aux-tab {
+  flex: 1 1 0;
+  text-align: center;
+  font-size: 7px;
+  line-height: 1.25;
+  padding: 1px 3px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.mini-aux-tab.is-active {
+  background: var(--sim-control-active-bg, rgba(var(--prism-accent-rgb), 0.22));
+  color: var(--prism-fg);
+  font-weight: 600;
+}
+
+.mini-standalone-card {
+  margin-top: auto;
+  padding: 3px 5px;
+  border-radius: var(--sim-card-radius, var(--sim-r-card, 5px));
+  background-color: var(--sim-card-bg, rgba(22, 24, 32, 0.58));
+  background-image: var(--prism-sheen);
+  backdrop-filter: var(--sim-card-backdrop, none);
+  -webkit-backdrop-filter: var(--sim-card-backdrop, none);
+  border: var(--sim-card-border, var(--sim-border, 1px solid transparent));
+  box-shadow: var(--sim-card-shadow, none);
+  color: var(--sim-card-fg, var(--prism-fg));
+  font-family: var(--sim-card-font-family, inherit);
+  font-size: 7.5px;
+  display: flex;
+  align-items: center;
+}
+
+.mini-starter-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 4px;
+}
 
 .mini-composer {
   border-radius: var(--sim-composer-radius, var(--sim-r-card, 6px));
@@ -3292,21 +3457,42 @@ button, input, select, textarea {
 #prism-mini-stage[data-skin-enabled="false"] .mini-wco-pill,
 #prism-mini-stage[data-skin-enabled="false"] .mini-composer,
 #prism-mini-stage[data-skin-enabled="false"] .mini-bubble,
+#prism-mini-stage[data-skin-enabled="false"] .mini-user-bubble,
+#prism-mini-stage[data-skin-enabled="false"] .mini-assistant-bubble,
+#prism-mini-stage[data-skin-enabled="false"] .mini-turn-card,
 #prism-mini-stage[data-skin-enabled="false"] .mini-code-card,
+#prism-mini-stage[data-skin-enabled="false"] .mini-controls-strip,
+#prism-mini-stage[data-skin-enabled="false"] .mini-ctl-seg,
+#prism-mini-stage[data-skin-enabled="false"] .mini-aux-tabs,
+#prism-mini-stage[data-skin-enabled="false"] .mini-standalone-card,
 #prism-mini-stage[data-skin-enabled="false"] .mini-popover,
 .prism-mini-stage[data-skin-enabled="false"] .mini-island,
 .prism-mini-stage[data-skin-enabled="false"] .mini-topbar-pill,
 .prism-mini-stage[data-skin-enabled="false"] .mini-wco-pill,
 .prism-mini-stage[data-skin-enabled="false"] .mini-composer,
 .prism-mini-stage[data-skin-enabled="false"] .mini-bubble,
+.prism-mini-stage[data-skin-enabled="false"] .mini-user-bubble,
+.prism-mini-stage[data-skin-enabled="false"] .mini-assistant-bubble,
+.prism-mini-stage[data-skin-enabled="false"] .mini-turn-card,
 .prism-mini-stage[data-skin-enabled="false"] .mini-code-card,
+.prism-mini-stage[data-skin-enabled="false"] .mini-controls-strip,
+.prism-mini-stage[data-skin-enabled="false"] .mini-ctl-seg,
+.prism-mini-stage[data-skin-enabled="false"] .mini-aux-tabs,
+.prism-mini-stage[data-skin-enabled="false"] .mini-standalone-card,
 .prism-mini-stage[data-skin-enabled="false"] .mini-popover,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-island,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-topbar-pill,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-wco-pill,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-composer,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-bubble,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-user-bubble,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-assistant-bubble,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-turn-card,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-code-card,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-controls-strip,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-ctl-seg,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-aux-tabs,
+#prism-visual-canvas-stage[data-skin-enabled="false"] .mini-standalone-card,
 #prism-visual-canvas-stage[data-skin-enabled="false"] .mini-popover {
   border-radius: 0 !important;
   backdrop-filter: none !important;
@@ -3698,7 +3884,7 @@ html[data-prism-dormant="1"] .prism-spinner {
 }
 
 /* ==========================================================================
-   8-Region Default-Collapsed Accordions (details[data-region])
+   12-Region Default-Collapsed Accordions (details[data-region])
    ========================================================================== */
 .prism-regions-stack {
   display: flex;
@@ -3706,7 +3892,27 @@ html[data-prism-dormant="1"] .prism-spinner {
   gap: 8px;
 }
 
+.prism-regions-cat-label {
+  padding: 6px 2px 1px;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--prism-fg-muted);
+}
+
+.prism-scene-grid[class] {
+  grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+}
+@media (max-width: 420px) {
+  .prism-scene-grid[class] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .prism-region-group {
+  scroll-margin-top: 56px;
   transition: border-color var(--prism-dur-fast) ease;
 }
 .prism-region-group[open] {
@@ -3794,7 +4000,97 @@ html[data-prism-dormant="1"] .prism-spinner {
   color: var(--prism-accent);
 }
 
+.prism-region-style-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid var(--prism-border-hairline);
+  background: rgba(var(--prism-pt-rgb), 0.04);
+  color: var(--prism-fg-muted);
+  font-size: 10px;
+  font-weight: 550;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.prism-region-style-chip[data-style-kind="frosted"],
+.prism-region-style-chip[data-style-kind="crystal"] {
+  border-color: rgba(var(--prism-accent-rgb), 0.34);
+  background: rgba(var(--prism-accent-rgb), 0.10);
+  color: var(--prism-accent);
+}
+.prism-region-style-chip[data-style-kind="tinted"] {
+  border-color: rgba(var(--prism-ok-rgb), 0.34);
+  background: rgba(var(--prism-ok-rgb), 0.10);
+  color: var(--prism-ok);
+}
+.prism-region-style-chip[data-style-kind="solid"] {
+  border-color: rgba(var(--prism-warn-rgb), 0.36);
+  background: rgba(var(--prism-warn-rgb), 0.10);
+  color: var(--prism-fg-2);
+}
+
+.prism-style-ctl {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px 0 6px;
+}
+
+.prism-style-seg {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+  padding: 3px;
+}
+.prism-style-seg .prism-seg-btn {
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 360px) {
+  .prism-style-seg {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.prism-optical-sat-wrap {
+  transition: opacity var(--prism-dur-fast) ease;
+}
+.prism-optical-sat-wrap[data-blur-active="false"] {
+  opacity: 0.54;
+}
+
+.prism-region-subblock {
+  margin-top: 6px;
+  padding: 7px 9px;
+  border-radius: var(--prism-r-ctl);
+  border: 1px solid var(--prism-border-hairline);
+  background: rgba(var(--prism-pt-rgb), 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prism-region-subblock-title {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  color: var(--prism-fg-muted);
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--prism-border-hairline);
+}
+
 .prism-region-subgroup {
+  scroll-margin-top: 56px;
   margin-top: 6px;
   padding: 8px 10px;
   border-radius: var(--prism-r-ctl);
@@ -4312,6 +4608,19 @@ html[data-prism-dormant="1"] .prism-spinner {
   }
 }
 
+@media (max-width: 720px) {
+  .prism-ve-modal-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(180px, 38%) minmax(0, 1fr);
+  }
+  .prism-ve-modal-body .prism-ve-canvas-pane {
+    flex: none;
+    max-height: none;
+    min-height: 180px;
+  }
+}
+
 /* ==========================================================================
    Form 2: Standalone Browser /?mode=visual-editor 3-Column IDE
    grid-template-columns: 220px minmax(0, 1fr) 340px
@@ -4346,6 +4655,9 @@ html[data-prism-dormant="1"] .prism-spinner {
     flex-wrap: nowrap;
     overflow-x: auto;
   }
+  .prism-ve-ide-grid .prism-ve-tree-cat {
+    display: none;
+  }
   .prism-ve-ide-grid .prism-ve-canvas-pane {
     flex: 0 0 42%;
     min-height: 180px;
@@ -4358,7 +4670,7 @@ html[data-prism-dormant="1"] .prism-spinner {
   }
 }
 
-/* Column 1: 8-Region Structure Tree */
+/* Column 1: 12-Region Structure Tree */
 .prism-ve-tree-pane {
   height: 100%;
   min-height: 0;
@@ -4384,6 +4696,32 @@ html[data-prism-dormant="1"] .prism-spinner {
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+.prism-ve-tree-cat {
+  padding: 6px 6px 2px;
+  font-size: 9.5px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--prism-fg-muted);
+}
+
+.prism-ve-tree-style {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: var(--prism-r-pill);
+  border: 1px solid var(--prism-border-hairline);
+  background: rgba(var(--prism-pt-rgb), 0.04);
+  color: var(--prism-fg-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.prism-ve-tree-style[data-style-kind="frosted"],
+.prism-ve-tree-style[data-style-kind="crystal"] {
+  border-color: rgba(var(--prism-accent-rgb), 0.34);
+  color: var(--prism-accent);
 }
 
 .prism-ve-tree-item {
@@ -4517,6 +4855,9 @@ html[data-prism-dormant="1"] .prism-spinner {
   width: 6px;
   height: 2.5px;
 }
+.prism-ve-stage .mini-island {
+  overflow: visible;
+}
 .prism-ve-stage .mini-sidebar,
 .prism-ve-stage .mini-center,
 .prism-ve-stage .mini-aux {
@@ -4536,9 +4877,60 @@ html[data-prism-dormant="1"] .prism-spinner {
   font-size: 10px;
   line-height: 1.3;
 }
+.prism-ve-stage .mini-chat-flow {
+  gap: 5px;
+}
+.prism-ve-stage .mini-user-bubble {
+  padding: 4px 8px;
+  font-size: 9.5px;
+  line-height: 1.3;
+  max-width: 78%;
+}
+.prism-ve-stage .mini-assistant-bubble {
+  padding: 4px 7px;
+  font-size: 9.5px;
+  line-height: 1.3;
+}
+.prism-ve-stage .mini-turn-card {
+  padding: 3px 6px;
+}
 .prism-ve-stage .mini-code-card {
-  padding: 7px 9px;
-  font-size: 10px;
+  padding: 6px 8px;
+  font-size: 9.5px;
+  white-space: normal;
+}
+.prism-ve-stage .mini-code-head {
+  margin-bottom: 3px;
+}
+.prism-ve-stage .mini-code-lang {
+  font-size: 8.5px;
+}
+.prism-ve-stage .mini-ctl-seg {
+  font-size: 8.5px;
+  padding: 1px 2px;
+}
+.prism-ve-stage .mini-controls-strip {
+  padding: 3px 5px;
+  gap: 5px;
+  font-size: 8.5px;
+}
+.prism-ve-stage .mini-ctl-btn,
+.prism-ve-stage .mini-ctl-select,
+.prism-ve-stage .mini-scroll-pill {
+  padding: 2px 6px;
+  font-size: 8.5px;
+}
+.prism-ve-stage .mini-aux-tabs {
+  gap: 3px;
+  padding: 2px;
+}
+.prism-ve-stage .mini-aux-tab {
+  font-size: 9px;
+  padding: 2px 6px;
+}
+.prism-ve-stage .mini-standalone-card {
+  padding: 5px 7px;
+  font-size: 9.5px;
 }
 .prism-ve-stage .mini-composer {
   padding: 7px 9px;
@@ -4547,7 +4939,7 @@ html[data-prism-dormant="1"] .prism-spinner {
   font-size: 10px;
 }
 
-/* Interactive 8-Region Selection Ring & Hover Label */
+/* Interactive 12-Region Selection Ring & Non-Clipped Hover Label (F-06) */
 .prism-ve-stage [data-editor-region] {
   position: relative;
   cursor: pointer;
@@ -4575,7 +4967,7 @@ html[data-prism-dormant="1"] .prism-spinner {
   z-index: 12;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(10, 12, 18, 0.86);
+  background: rgba(10, 12, 18, 0.88);
   border: 1px solid var(--prism-accent-border);
   color: #F8FAFC;
   font-family: var(--prism-font-sans);
@@ -4585,6 +4977,48 @@ html[data-prism-dormant="1"] .prism-spinner {
   letter-spacing: 0.01em;
   white-space: nowrap;
   pointer-events: none;
+}
+.prism-ve-stage [data-editor-region="topbar"]:hover::after,
+.prism-ve-stage [data-editor-region="topbar"].is-selected::after,
+.prism-ve-stage [data-editor-region="topbar"][data-selected="true"]::after,
+.prism-ve-stage .mini-aux-tabs:hover::after,
+.prism-ve-stage .mini-aux-tabs.is-selected::after,
+.prism-ve-stage .mini-aux-tabs[data-selected="true"]::after,
+.prism-ve-stage .mini-ctl-seg:hover::after,
+.prism-ve-stage .mini-ctl-seg.is-selected::after,
+.prism-ve-stage .mini-ctl-seg[data-selected="true"]::after {
+  top: calc(100% + 2px);
+  bottom: auto;
+  left: 0;
+}
+.prism-ve-stage [data-editor-region="wco"]:hover::after,
+.prism-ve-stage [data-editor-region="wco"].is-selected::after,
+.prism-ve-stage [data-editor-region="wco"][data-selected="true"]::after {
+  top: calc(100% + 2px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+}
+.prism-ve-stage .mini-user-bubble:hover::after,
+.prism-ve-stage .mini-user-bubble.is-selected::after,
+.prism-ve-stage .mini-user-bubble[data-selected="true"]::after,
+.prism-ve-stage .mini-controls-strip:hover::after,
+.prism-ve-stage .mini-controls-strip.is-selected::after,
+.prism-ve-stage .mini-controls-strip[data-selected="true"]::after,
+.prism-ve-stage .mini-standalone-card:hover::after,
+.prism-ve-stage .mini-standalone-card.is-selected::after,
+.prism-ve-stage .mini-standalone-card[data-selected="true"]::after {
+  top: auto;
+  bottom: calc(100% + 2px);
+  left: 0;
+}
+.prism-ve-stage .mini-code-card:hover::after,
+.prism-ve-stage .mini-code-card.is-selected::after,
+.prism-ve-stage .mini-code-card[data-selected="true"]::after {
+  top: auto;
+  bottom: 2px;
+  left: auto;
+  right: 4px;
 }
 
 /* Simulated Popover Preview inside Visual Canvas */
@@ -4844,13 +5278,13 @@ const __prism_mod_2 = (function() {
 // Shared across src/engine, src/host, src/studio-ui, sidecars/prism_studio, and test/verify-all.
 const PLUGIN_ID = 'agy-wallpaper-prism';
 const PLUGIN_DISPLAY_NAME = 'Wallpaper Prism';
-const PLUGIN_VERSION = '2.3.0';
+const PLUGIN_VERSION = '2.4.0';
 const SIDECAR_ID = 'prism_studio';
 const SIDECAR_URI = 'sidecar://agy-wallpaper-prism/prism_studio/';
 const CUSTOMIZATION_URI = 'customization://agy-wallpaper-prism';
 const DEFAULT_DEBUG_PORT = 9339;
 const PRISM_DOM = Object.freeze({
-  skinVersion: '2.3.0',
+  skinVersion: '2.4.0',
   skinAttr: 'data-agy-prism-skin',
   glassAttr: 'data-agy-prism-glass',
   wallpaperAttr: 'data-agy-prism-wallpaper',
@@ -5245,13 +5679,17 @@ const ACCENT_PRESETS = Object.freeze({
   mono: Object.freeze({ dark: '#D4D7E0', darkFg: '#0E0F14', light: '#334155', lightFg: '#FFFFFF' }),
 });
 
-/** 8 Independent Glass & Appearance Region IDs (v2.2.0 unified regions schema). */
+/** 12 Independent Glass & Appearance Region IDs (v2.4.0 expanded unified regions schema). */
 const REGION_IDS = Object.freeze([
   'topbar',
   'wco',
   'sidebar',
   'workspace',
   'card',
+  'userBubble',
+  'assistantBubble',
+  'codeBlock',
+  'controls',
   'composer',
   'rightPane',
   'popover',
@@ -5259,6 +5697,22 @@ const REGION_IDS = Object.freeze([
 const SURFACE_TINT_COMPONENTS = REGION_IDS;
 const GLASS_COMPONENT_IDS = REGION_IDS;
 const SKIN_REGION_KEYS = REGION_IDS;
+const GLASS_STYLES = Object.freeze([
+  'none',
+  'frosted',
+  'crystal',
+  'tinted',
+  'solid',
+]);
+const ZERO_BLUR_BY_DEFAULT_REGIONS = Object.freeze([
+  'card',
+  'userBubble',
+  'assistantBubble',
+  'codeBlock',
+  'controls',
+]);
+
+const ZERO_BLUR_DEFAULT_SET = new Set(ZERO_BLUR_BY_DEFAULT_REGIONS);
 function getValidRegionIdSet() {
   return new Set(REGION_IDS);
 }
@@ -5268,6 +5722,10 @@ const SURFACE_TINT_BOUNDS = Object.freeze({
   sidebar: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
   workspace: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
   card: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  userBubble: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  assistantBubble: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  codeBlock: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
+  controls: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
   composer: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
   rightPane: Object.freeze({ minOpacity: 0, maxOpacity: 0.98 }),
   popover: Object.freeze({ minOpacity: 0.5, maxOpacity: 0.99 }),
@@ -5278,19 +5736,36 @@ const REGION_FONT_SIZE_BOUNDS = Object.freeze({
   sidebar: Object.freeze({ min: 11, max: 15 }),
   workspace: Object.freeze({ min: 10, max: 24 }),
   card: Object.freeze({ min: 10, max: 24 }),
+  userBubble: Object.freeze({ min: 10, max: 24 }),
+  assistantBubble: Object.freeze({ min: 10, max: 24 }),
+  codeBlock: Object.freeze({ min: 10, max: 24 }),
+  controls: Object.freeze({ min: 10, max: 24 }),
   composer: Object.freeze({ min: 10, max: 24 }),
   rightPane: Object.freeze({ min: 10, max: 24 }),
   popover: Object.freeze({ min: 10, max: 24 }),
 });
+const REGION_FIELD_BOUNDS = Object.freeze({
+  blur: Object.freeze({ min: 0, max: 64, decimals: 0 }),
+  saturation: Object.freeze({ min: 50, max: 220, decimals: 0 }),
+  tone: Object.freeze({ min: -100, max: 100, decimals: 0 }),
+  borderOpacity: Object.freeze({ min: 0, max: 1, decimals: 3 }),
+  elevation: Object.freeze({ min: 0, max: 2, decimals: 2 }),
+  radius: Object.freeze({ min: 0, max: 28, decimals: 0 }),
+  opacityByRegion: SURFACE_TINT_BOUNDS,
+  fontSizeByRegion: REGION_FONT_SIZE_BOUNDS,
+});
 
 /** Optical keys reset by SCENE_PRESETS (`surfaceTints: null`); structural keys are preserved. */
 const REGION_OPTICAL_KEYS = Object.freeze([
+  'style',
   'glassEnabled',
   'blur',
+  'saturation',
   'opacity',
   'tone',
   'tint',
   'borderOpacity',
+  'elevation',
 ]);
 const REGION_STRUCTURAL_KEYS = Object.freeze([
   'borderStyle',
@@ -5307,12 +5782,15 @@ const SIDEBAR_REGION_EXTRA_KEYS = Object.freeze([
   'itemFontSize',
 ]);
 const DEFAULT_REGION_ENTRY = Object.freeze({
+  style: null,              // null (auto) | 'none' | 'frosted' | 'crystal' | 'tinted' | 'solid'
   glassEnabled: null,       // boolean | null (null = follow global glassSurfaces)
   blur: null,               // int 0..64 (px) | null
+  saturation: null,         // int 50..220 (%) | null
   opacity: null,            // float 0..0.98 (popover: 0.50..0.99) | null
   tone: 0,                  // int -100..+100
   tint: '',                 // '#RRGGBB' | ''
   borderOpacity: null,      // float 0..1 | null (null = auto-fade via computeBorderFactor #4)
+  elevation: null,          // float 0..2 | null
   borderStyle: null,        // 'full' | 'bottom' | 'none' | null
   radius: null,             // int 0..28 (px) | null
   fontSize: null,           // int 10..24 (sidebar clamped 11..15) | null
@@ -5333,17 +5811,24 @@ const DEFAULT_REGIONS = Object.freeze({
   sidebar: DEFAULT_SIDEBAR_REGION_ENTRY,
   workspace: DEFAULT_REGION_ENTRY,
   card: DEFAULT_REGION_ENTRY,
+  userBubble: DEFAULT_REGION_ENTRY,
+  assistantBubble: DEFAULT_REGION_ENTRY,
+  codeBlock: DEFAULT_REGION_ENTRY,
+  controls: DEFAULT_REGION_ENTRY,
   composer: DEFAULT_REGION_ENTRY,
   rightPane: DEFAULT_REGION_ENTRY,
   popover: DEFAULT_REGION_ENTRY,
 });
 const DEFAULT_SURFACE_TINT_ENTRY = Object.freeze({
+  style: null,
   opacity: null,
   tone: 0,
   tint: '',
   blur: null,
+  saturation: null,
   glassEnabled: null,
   borderOpacity: null,
+  elevation: null,
 });
 const DEFAULT_SURFACE_TINTS = Object.freeze({
   topbar: DEFAULT_SURFACE_TINT_ENTRY,
@@ -5351,6 +5836,10 @@ const DEFAULT_SURFACE_TINTS = Object.freeze({
   sidebar: DEFAULT_SURFACE_TINT_ENTRY,
   workspace: DEFAULT_SURFACE_TINT_ENTRY,
   card: DEFAULT_SURFACE_TINT_ENTRY,
+  userBubble: DEFAULT_SURFACE_TINT_ENTRY,
+  assistantBubble: DEFAULT_SURFACE_TINT_ENTRY,
+  codeBlock: DEFAULT_SURFACE_TINT_ENTRY,
+  controls: DEFAULT_SURFACE_TINT_ENTRY,
   composer: DEFAULT_SURFACE_TINT_ENTRY,
   rightPane: DEFAULT_SURFACE_TINT_ENTRY,
   popover: DEFAULT_SURFACE_TINT_ENTRY,
@@ -5376,8 +5865,32 @@ function createDefaultSurfaceTints() {
   return out;
 }
 
-/** 4 Quick Optical Scene Presets (Crystal | Islands | Focus | Eco — strictly optical-only, zero layout keys). */
+/** 5 Quick Optical Scene Presets (Crisp | Crystal | Islands | Focus | Eco — strictly optical-only, zero layout keys). */
 const SCENE_PRESETS = Object.freeze({
+  crisp: Object.freeze({
+    id: 'crisp',
+    nameZh: '清透无雾',
+    nameEn: 'Crisp Glass',
+    patch: Object.freeze({
+      preset: 'crisp',
+      borders: 'on',
+      shadows: true,
+      glassSurfaces: true,
+      glassOpacity: 0.76,
+      glassBlur: 0,
+      sidebarOpacity: null,
+      sidebarBlur: null,
+      surfaceTints: null,
+      glassFidelity: 92,
+      chatGlassFidelity: 90,
+      scrimOpacity: 0.24,
+      mediaBlur: 0,
+      vignette: true,
+      grainAlpha: 0.015,
+      paused: false,
+      fpsCap: 60,
+    }),
+  }),
   crystal: Object.freeze({
     id: 'crystal',
     nameZh: '通透流光',
@@ -6371,21 +6884,40 @@ function nullableUnitOpacity(v, min, max) {
   return Math.round(clamp(n, min, max) * 1000) / 1000;
 }
 
+function sanitizeGlassStyle(v) {
+  if (v === null || v === undefined || v === '' || v === 'auto') return null;
+  if (typeof v !== 'string') return null;
+  const s = v.trim().toLowerCase();
+  if (!s || s === 'auto') return null;
+  return oneOf(s, GLASS_STYLES, null);
+}
+
+/** Reset ONLY the 9 optical keys on a region entry while preserving structural/typography/sidebar keys. */
+function stripOpticalFromRegionEntry(ent) {
+  const next = isPlainObj(ent) ? { ...ent } : {};
+  for (const ok of REGION_OPTICAL_KEYS) {
+    next[ok] = DEFAULT_REGION_ENTRY[ok];
+  }
+  return next;
+}
 function sanitizeRegionEntry(id, raw) {
   const bounds = SURFACE_TINT_BOUNDS[id] || { minOpacity: 0, maxOpacity: 0.98 };
   const fsBounds = REGION_FONT_SIZE_BOUNDS[id] || { min: 10, max: 24 };
   const r = isPlainObj(raw) ? raw : {};
   const entry = {
+    style: sanitizeGlassStyle(r.style),
     glassEnabled: nullableBool(r.glassEnabled),
-    blur: nullableNum(r.blur, 0, 64, 0),
+    blur: nullableNum(r.blur, REGION_FIELD_BOUNDS.blur.min, REGION_FIELD_BOUNDS.blur.max, REGION_FIELD_BOUNDS.blur.decimals),
+    saturation: nullableNum(r.saturation, REGION_FIELD_BOUNDS.saturation.min, REGION_FIELD_BOUNDS.saturation.max, REGION_FIELD_BOUNDS.saturation.decimals),
     opacity: nullableUnitOpacity(r.opacity, bounds.minOpacity, bounds.maxOpacity),
-    tone: num(r.tone, 0, -100, 100, 0),
+    tone: num(r.tone, 0, REGION_FIELD_BOUNDS.tone.min, REGION_FIELD_BOUNDS.tone.max, REGION_FIELD_BOUNDS.tone.decimals),
     tint: cleanTintHex(r.tint),
-    borderOpacity: nullableUnitOpacity(r.borderOpacity, 0, 1),
+    borderOpacity: nullableUnitOpacity(r.borderOpacity, REGION_FIELD_BOUNDS.borderOpacity.min, REGION_FIELD_BOUNDS.borderOpacity.max),
+    elevation: nullableNum(r.elevation, REGION_FIELD_BOUNDS.elevation.min, REGION_FIELD_BOUNDS.elevation.max, REGION_FIELD_BOUNDS.elevation.decimals),
     borderStyle: r.borderStyle === null || r.borderStyle === undefined || r.borderStyle === '' || r.borderStyle === 'auto'
       ? null
       : oneOf(r.borderStyle, BORDER_STYLES, null),
-    radius: nullableNum(r.radius, 0, 28, 0),
+    radius: nullableNum(r.radius, REGION_FIELD_BOUNDS.radius.min, REGION_FIELD_BOUNDS.radius.max, REGION_FIELD_BOUNDS.radius.decimals),
     fontSize: nullableNum(r.fontSize, fsBounds.min, fsBounds.max, 0),
     fontFamily: sanitizeFontFamily(r.fontFamily),
     fontColor: cleanTintHex(r.fontColor),
@@ -6447,18 +6979,21 @@ function projectSurfaceTintsFromRegions(regions) {
   for (const id of SURFACE_TINT_COMPONENTS) {
     const r = regions?.[id] || DEFAULT_REGION_ENTRY;
     out[id] = {
+      style: sanitizeGlassStyle(r.style),
       opacity: r.opacity ?? null,
       tone: Number.isFinite(r.tone) ? r.tone : 0,
       tint: r.tint || '',
       blur: r.blur ?? null,
+      saturation: r.saturation ?? null,
       glassEnabled: r.glassEnabled ?? null,
       borderOpacity: r.borderOpacity ?? null,
+      elevation: r.elevation ?? null,
     };
   }
   return out;
 }
 function sanitizeSurfaceTints(raw, baseTints = null) {
-  // Explicit `null` resets ALL 8 components back to Auto defaults (used by presets & "Reset All Components")
+  // Explicit `null` resets ALL 12 components back to Auto defaults (used by presets & "Reset All Components")
   if (raw === null) return createDefaultSurfaceTints();
   const baseMap = isPlainObj(baseTints) ? baseTints : {};
   const srcMap = isPlainObj(raw) ? raw : {};
@@ -6474,19 +7009,25 @@ function sanitizeSurfaceTints(raw, baseTints = null) {
       continue;
     }
     const sEnt = isPlainObj(sRaw) ? sRaw : {};
+    const rawStyle = hasOwn(sEnt, 'style') ? sEnt.style : bEnt.style;
     const rawOp = hasOwn(sEnt, 'opacity') ? sEnt.opacity : bEnt.opacity;
     const rawTone = hasOwn(sEnt, 'tone') ? sEnt.tone : bEnt.tone;
     const rawTint = hasOwn(sEnt, 'tint') ? sEnt.tint : bEnt.tint;
     const rawBlur = hasOwn(sEnt, 'blur') ? sEnt.blur : bEnt.blur;
+    const rawSat = hasOwn(sEnt, 'saturation') ? sEnt.saturation : bEnt.saturation;
     const rawGlass = hasOwn(sEnt, 'glassEnabled') ? sEnt.glassEnabled : bEnt.glassEnabled;
     const rawBorderOp = hasOwn(sEnt, 'borderOpacity') ? sEnt.borderOpacity : bEnt.borderOpacity;
+    const rawElev = hasOwn(sEnt, 'elevation') ? sEnt.elevation : bEnt.elevation;
     out[id] = {
+      style: sanitizeGlassStyle(rawStyle),
       opacity: nullableUnitOpacity(rawOp, bounds.minOpacity, bounds.maxOpacity),
-      tone: num(rawTone, 0, -100, 100, 0),
+      tone: num(rawTone, 0, REGION_FIELD_BOUNDS.tone.min, REGION_FIELD_BOUNDS.tone.max, REGION_FIELD_BOUNDS.tone.decimals),
       tint: cleanTintHex(rawTint),
-      blur: nullableNum(rawBlur, 0, 64, 0),
+      blur: nullableNum(rawBlur, REGION_FIELD_BOUNDS.blur.min, REGION_FIELD_BOUNDS.blur.max, REGION_FIELD_BOUNDS.blur.decimals),
+      saturation: nullableNum(rawSat, REGION_FIELD_BOUNDS.saturation.min, REGION_FIELD_BOUNDS.saturation.max, REGION_FIELD_BOUNDS.saturation.decimals),
       glassEnabled: nullableBool(rawGlass),
-      borderOpacity: nullableUnitOpacity(rawBorderOp, 0, 1),
+      borderOpacity: nullableUnitOpacity(rawBorderOp, REGION_FIELD_BOUNDS.borderOpacity.min, REGION_FIELD_BOUNDS.borderOpacity.max),
+      elevation: nullableNum(rawElev, REGION_FIELD_BOUNDS.elevation.min, REGION_FIELD_BOUNDS.elevation.max, REGION_FIELD_BOUNDS.elevation.decimals),
     };
   }
   return out;
@@ -6554,33 +7095,96 @@ function normFidelity(raw, fallback) {
 }
 
 /**
+ * Resolve the effective glass material style for a region:
+ * explicit `entry.style` -> `codeBlock` bridge from `codeReadabilityMode` -> `'none'` for zero-blur regions -> `null` (global chrome).
+ */
+function resolveRegionEffectiveStyle(comp, entry = null, cfg = DEFAULT_CONFIG) {
+  const c = cfg && typeof cfg === 'object' ? cfg : DEFAULT_CONFIG;
+  const ent = entry && typeof entry === 'object' ? entry : (c.regions?.[comp] || c.surfaceTints?.[comp] || null);
+  const explicit = sanitizeGlassStyle(ent?.style);
+  if (explicit !== null) return explicit;
+  if (comp === 'codeBlock') {
+    if (c.codeReadabilityMode === 'solid') return 'solid';
+    if (c.codeReadabilityMode === 'frosted') return 'frosted';
+    return 'none';
+  }
+  if (ZERO_BLUR_DEFAULT_SET.has(comp)) return 'none';
+  return null;
+}
+
+function applyStyleAlphaModifier(baseAlpha, effStyle, light, contrastMin, bounds, isCodeBlock = false, contrastFloor = true) {
+  if (effStyle === 'solid') {
+    return isCodeBlock && contrastFloor ? 1 : (light ? 0.97 : 0.96);
+  }
+  if (effStyle === 'crystal') {
+    const floor = contrastFloor ? Math.max(bounds.minOpacity, contrastMin) : bounds.minOpacity;
+    return clamp(baseAlpha * 0.78, floor, bounds.maxOpacity);
+  }
+  if (effStyle === 'tinted') {
+    return clamp(baseAlpha * 0.88, bounds.minOpacity, bounds.maxOpacity);
+  }
+  return baseAlpha;
+}
+
+/**
  * Compute the true rendered default alpha for a glass component when its override `opacity` is `null`.
  * Mirrors `wallpaper-inject.js` (`computeSkinTokens`) so Auto-follow UI readouts match actual rendered glass.
  */
 function resolveComponentDefaultAlpha(comp, cfg = DEFAULT_CONFIG, isLight = false) {
   const c = cfg && typeof cfg === 'object' ? cfg : DEFAULT_CONFIG;
   const light = typeof isLight === 'string' ? isLight === 'light' : Boolean(isLight);
+  const entry = c.regions?.[comp] || c.surfaceTints?.[comp] || null;
+  const effStyle = resolveRegionEffectiveStyle(comp, entry, c);
+  const bounds = SURFACE_TINT_BOUNDS[comp] || { minOpacity: 0, maxOpacity: 0.98 };
+  const contrastFloor = c.contrastFloor !== false;
+
   if (comp === 'popover') {
-    return c.floaterSolidBase !== false ? (light ? 0.97 : 0.96) : 0.94;
+    const basePop = c.floaterSolidBase !== false ? (light ? 0.97 : 0.96) : 0.94;
+    const popAlpha = applyStyleAlphaModifier(basePop, effStyle, light, 0.5, bounds, false, contrastFloor);
+    return Math.round(clamp(popAlpha, bounds.minOpacity, bounds.maxOpacity) * 1000) / 1000;
   }
-  if (c.glassSurfaces === false) return 1;
+
   const g = num(c.glassOpacity, DEFAULT_CONFIG.glassOpacity, 0.15, 0.98, 3);
   const glassFid = normFidelity(c.glassFidelity, DEFAULT_CONFIG.glassFidelity);
   const chatFid = normFidelity(c.chatGlassFidelity, DEFAULT_CONFIG.chatGlassFidelity);
-  const contrastFloor = c.contrastFloor !== false;
   const layoutMode = c.layoutMode === 'flush' ? 'flush' : 'islands';
 
+  if (comp === 'assistantBubble') {
+    if (effStyle === 'none') return 0;
+    const rawAsstA = light ? clamp(g * 0.46, 0.22, 0.88) : clamp(g * 0.34, 0.18, 0.84);
+    const baseAsstA = Math.max(rawAsstA, (light ? 0.28 : 0.18) * chatFid, 0.18);
+    if (effStyle === 'solid') return light ? 0.97 : 0.96;
+    if (effStyle === 'crystal') {
+      return Math.round(clamp(Math.max(baseAsstA, 0.24) * 0.78, 0.18, bounds.maxOpacity) * 1000) / 1000;
+    }
+    if (effStyle === 'tinted') {
+      return Math.round(clamp(Math.max(baseAsstA, 0.22) * 0.88, 0.16, bounds.maxOpacity) * 1000) / 1000;
+    }
+    if (c.glassSurfaces === false && entry?.glassEnabled !== true) return 1;
+    return Math.round(clamp(baseAsstA, 0.18, bounds.maxOpacity) * 1000) / 1000;
+  }
+
+  if (c.glassSurfaces === false && entry?.glassEnabled !== true) return 1;
+
   let alpha;
+  let contrastMin = 0.2;
   if (comp === 'wco') {
     const tbOp = c.regions?.topbar?.opacity ?? c.surfaceTints?.topbar?.opacity;
-    if (tbOp !== null && tbOp !== undefined && tbOp !== '' && Number.isFinite(Number(tbOp))) {
+    if (effStyle === null && tbOp !== null && tbOp !== undefined && tbOp !== '' && Number.isFinite(Number(tbOp))) {
       return Math.round(clamp(Number(tbOp), 0, 0.98) * 1000) / 1000;
     }
-    const minSbFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
-    alpha = Math.max(g, minSbFloor * glassFid);
+    if (effStyle === null) {
+      return resolveComponentDefaultAlpha('topbar', c, light);
+    }
+    const tbBase = tbOp !== null && tbOp !== undefined && tbOp !== '' && Number.isFinite(Number(tbOp))
+      ? clamp(Number(tbOp), 0, 0.98)
+      : Math.max(g, (contrastFloor ? (light ? 0.48 : 0.36) : 0.15) * glassFid);
+    alpha = tbBase;
+    contrastMin = 0.24;
   } else if (comp === 'topbar' || comp === 'sidebar') {
     const minSbFloor = contrastFloor ? (light ? 0.48 : 0.36) : 0.15;
     alpha = Math.max(g, minSbFloor * glassFid);
+    contrastMin = 0.24;
   } else if (comp === 'workspace' || comp === 'rightPane') {
     const rawChatA =
       layoutMode === 'flush' && !light
@@ -6590,18 +7194,38 @@ function resolveComponentDefaultAlpha(comp, cfg = DEFAULT_CONFIG, isLight = fals
           : clamp(g * 0.42, 0.08, 0.88);
     const minChatFloor = light ? 0.42 : 0.16;
     alpha = Math.max(rawChatA, minChatFloor * chatFid);
+    contrastMin = light ? 0.28 : 0.12;
   } else if (comp === 'composer') {
     const rawCompA = light ? clamp(g * 0.94, 0.65, 0.99) : clamp(g * 0.92, 0.48, 0.98);
     const minCompFloor = light ? 0.72 : 0.58;
     alpha = Math.max(rawCompA, minCompFloor * glassFid);
+    contrastMin = light ? 0.42 : 0.32;
   } else if (comp === 'card') {
     const rawCardA = light ? clamp(g * 0.86, 0.5, 0.98) : clamp(g * 0.78, 0.32, 0.96);
     const minCardFloor = light ? 0.62 : 0.48;
     alpha = Math.max(rawCardA, minCardFloor * glassFid);
+    contrastMin = light ? 0.42 : 0.32;
+  } else if (comp === 'userBubble') {
+    const rawUbA = light ? clamp(g * 0.95, 0.48, 0.98) : clamp(g * 0.82, 0.34, 0.96);
+    const minUbFloor = contrastFloor ? (light ? 0.60 : 0.48) : 0.25;
+    alpha = Math.max(rawUbA, minUbFloor * glassFid);
+    contrastMin = light ? 0.42 : 0.34;
+  } else if (comp === 'codeBlock') {
+    const minEd = contrastFloor ? (light ? 0.84 : 0.72) : (light ? 0.52 : 0.38);
+    const rawEdA = light ? clamp(g * 0.96, 0.55, 0.99) : clamp(g * 0.92, 0.45, 0.98);
+    alpha = Math.max(rawEdA, minEd * (contrastFloor ? 1 : glassFid));
+    contrastMin = light ? 0.52 : 0.44;
+  } else if (comp === 'controls') {
+    const rawCtlA = light ? clamp(g * 0.64, 0.34, 0.84) : clamp(g * 0.48, 0.26, 0.78);
+    const minCtlFloor = contrastFloor ? (light ? 0.44 : 0.32) : 0.18;
+    alpha = Math.max(rawCtlA, minCtlFloor * glassFid);
+    contrastMin = light ? 0.26 : 0.18;
   } else {
     alpha = g;
   }
-  return Math.round(clamp(alpha, 0, 0.99) * 1000) / 1000;
+
+  alpha = applyStyleAlphaModifier(alpha, effStyle, light, contrastMin, bounds, comp === 'codeBlock', contrastFloor);
+  return Math.round(clamp(alpha, 0, 1) * 1000) / 1000;
 }
 
 /** Sanitize and merge a full or partial config object against `base`. */
@@ -6627,7 +7251,7 @@ function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
     muted = !audioEnabled;
   }
 
-  // Step 1: Hydrate 8-region baseline from `b.regions` (lossless fallback to `b.surfaceTints` for v2.1.0 configs)
+  // Step 1: Hydrate 12-region baseline from `b.regions` (lossless fallback to `b.surfaceTints` for v2.1.0 configs)
   const hasBaseRegions = isPlainObj(b.regions);
   const baseRegions = {};
   for (const id of REGION_IDS) {
@@ -6661,12 +7285,9 @@ function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
       workingRegions[id] = createDefaultRegionEntry(id);
     }
   } else if (srcResetAllTints) {
-    // SCENE_PRESETS (`surfaceTints: null`) reset ONLY the 6 optical keys; structural/font/radius/listStyle stay intact!
+    // SCENE_PRESETS (`surfaceTints: null`) reset ONLY the 9 optical keys; structural/font/radius/listStyle stay intact!
     for (const id of REGION_IDS) {
-      const def = createDefaultRegionEntry(id);
-      for (const ok of REGION_OPTICAL_KEYS) {
-        workingRegions[id][ok] = def[ok];
-      }
+      workingRegions[id] = stripOpticalFromRegionEntry(workingRegions[id]);
     }
   }
 
@@ -6675,10 +7296,7 @@ function sanitizeConfig(input = {}, base = DEFAULT_CONFIG) {
       if (!hasOwn(src.surfaceTints, id)) continue;
       const sRaw = src.surfaceTints[id];
       if (sRaw === null) {
-        const def = createDefaultRegionEntry(id);
-        for (const ok of REGION_OPTICAL_KEYS) {
-          workingRegions[id][ok] = def[ok];
-        }
+        workingRegions[id] = stripOpticalFromRegionEntry(workingRegions[id]);
       } else if (isPlainObj(sRaw)) {
         for (const ok of REGION_OPTICAL_KEYS) {
           if (hasOwn(sRaw, ok)) {
@@ -7047,7 +7665,7 @@ function resolveEffectiveConfig(config = DEFAULT_CONFIG, wallpaperId = config.ac
   return sanitizeConfig(filtered, clean);
 }
 
-return { getValidRegionIdSet: getValidRegionIdSet, createDefaultRegionEntry: createDefaultRegionEntry, createDefaultRegions: createDefaultRegions, createDefaultSurfaceTints: createDefaultSurfaceTints, nullableNum: nullableNum, sanitizeFontFamily: sanitizeFontFamily, sanitizeSidebarRadius: sanitizeSidebarRadius, hexToRgbTriplet: hexToRgbTriplet, contrastFgForHex: contrastFgForHex, hexToRgbArray: hexToRgbArray, rgbArrayToHex: rgbArrayToHex, relLumRgb: relLumRgb, contrastRatioRgb: contrastRatioRgb, enforceFgContrastRgb: enforceFgContrastRgb, resolveRegionFgColor: resolveRegionFgColor, resolveSchemeTokens: resolveSchemeTokens, mergeRegionsPatch: mergeRegionsPatch, sanitizeRegions: sanitizeRegions, projectSurfaceTintsFromRegions: projectSurfaceTintsFromRegions, sanitizeSurfaceTints: sanitizeSurfaceTints, resolveComponentDefaultAlpha: resolveComponentDefaultAlpha, sanitizeConfig: sanitizeConfig, applyResetScope: applyResetScope, resolveEffectiveConfig: resolveEffectiveConfig, PLUGIN_ID: PLUGIN_ID, PLUGIN_DISPLAY_NAME: PLUGIN_DISPLAY_NAME, PLUGIN_VERSION: PLUGIN_VERSION, SIDECAR_ID: SIDECAR_ID, SIDECAR_URI: SIDECAR_URI, CUSTOMIZATION_URI: CUSTOMIZATION_URI, DEFAULT_DEBUG_PORT: DEFAULT_DEBUG_PORT, PRISM_DOM: PRISM_DOM, STARTUP_MODES: STARTUP_MODES, CANARY_STATES: CANARY_STATES, WALLPAPER_KINDS: WALLPAPER_KINDS, LIBRARY_KINDS: LIBRARY_KINDS, CONTENT_RATINGS: CONTENT_RATINGS, LAYOUT_MODES: LAYOUT_MODES, TOPBAR_STYLES: TOPBAR_STYLES, CORNER_STYLES: CORNER_STYLES, BORDER_MODES: BORDER_MODES, THEME_MODES: THEME_MODES, CODE_READABILITY_MODES: CODE_READABILITY_MODES, FIT_MODES: FIT_MODES, FILTER_PRESETS: FILTER_PRESETS, SWITCH_TRANSITIONS: SWITCH_TRANSITIONS, SWITCH_DIRECTIONS: SWITCH_DIRECTIONS, SWITCH_SPEEDS: SWITCH_SPEEDS, ROTATION_ORDERS: ROTATION_ORDERS, ROTATION_TRIGGERS: ROTATION_TRIGGERS, TRIGGER_MODES: TRIGGER_MODES, LANGUAGES: LANGUAGES, SIDEBAR_RADII: SIDEBAR_RADII, SIDEBAR_RADIUS_RANGE: SIDEBAR_RADIUS_RANGE, BORDER_STYLES: BORDER_STYLES, SIDEBAR_LIST_STYLES: SIDEBAR_LIST_STYLES, SIDEBAR_TYPOGRAPHY_MODES: SIDEBAR_TYPOGRAPHY_MODES, LIBRARY_ANIMATED_THUMB_MODES: LIBRARY_ANIMATED_THUMB_MODES, CJK_SAFE_FONT_PRESETS: CJK_SAFE_FONT_PRESETS, COLOR_SCHEMES: COLOR_SCHEMES, COLOR_SCHEME_IDS: COLOR_SCHEME_IDS, ACCENT_MODES: ACCENT_MODES, ACCENT_PRESETS: ACCENT_PRESETS, REGION_IDS: REGION_IDS, SURFACE_TINT_COMPONENTS: SURFACE_TINT_COMPONENTS, GLASS_COMPONENT_IDS: GLASS_COMPONENT_IDS, SKIN_REGION_KEYS: SKIN_REGION_KEYS, SURFACE_TINT_BOUNDS: SURFACE_TINT_BOUNDS, REGION_FONT_SIZE_BOUNDS: REGION_FONT_SIZE_BOUNDS, REGION_OPTICAL_KEYS: REGION_OPTICAL_KEYS, REGION_STRUCTURAL_KEYS: REGION_STRUCTURAL_KEYS, SIDEBAR_REGION_EXTRA_KEYS: SIDEBAR_REGION_EXTRA_KEYS, DEFAULT_REGION_ENTRY: DEFAULT_REGION_ENTRY, DEFAULT_SIDEBAR_REGION_ENTRY: DEFAULT_SIDEBAR_REGION_ENTRY, DEFAULT_REGIONS: DEFAULT_REGIONS, DEFAULT_SURFACE_TINT_ENTRY: DEFAULT_SURFACE_TINT_ENTRY, DEFAULT_SURFACE_TINTS: DEFAULT_SURFACE_TINTS, SCENE_PRESETS: SCENE_PRESETS, SCENE_PRESET_IDS: SCENE_PRESET_IDS, FACTORY_PRESETS: FACTORY_PRESETS, DEFAULT_CONFIG: DEFAULT_CONFIG, RESET_SCOPES: RESET_SCOPES, PER_WALLPAPER_OVERRIDE_KEYS: PER_WALLPAPER_OVERRIDE_KEYS, FAST_OPTICAL_KEYS: FAST_OPTICAL_KEYS, FAST_OPTICAL_KEYS_MAP: FAST_OPTICAL_KEYS_MAP, FONT_FAMILY_FORBIDDEN_CHARS_RE: FONT_FAMILY_FORBIDDEN_CHARS_RE, FONT_FAMILY_FORBIDDEN_KW_RE: FONT_FAMILY_FORBIDDEN_KW_RE, FONT_FAMILY_TOKEN_RE: FONT_FAMILY_TOKEN_RE };
+return { getValidRegionIdSet: getValidRegionIdSet, createDefaultRegionEntry: createDefaultRegionEntry, createDefaultRegions: createDefaultRegions, createDefaultSurfaceTints: createDefaultSurfaceTints, nullableNum: nullableNum, sanitizeFontFamily: sanitizeFontFamily, sanitizeSidebarRadius: sanitizeSidebarRadius, hexToRgbTriplet: hexToRgbTriplet, contrastFgForHex: contrastFgForHex, hexToRgbArray: hexToRgbArray, rgbArrayToHex: rgbArrayToHex, relLumRgb: relLumRgb, contrastRatioRgb: contrastRatioRgb, enforceFgContrastRgb: enforceFgContrastRgb, resolveRegionFgColor: resolveRegionFgColor, resolveSchemeTokens: resolveSchemeTokens, stripOpticalFromRegionEntry: stripOpticalFromRegionEntry, sanitizeRegionEntry: sanitizeRegionEntry, mergeRegionsPatch: mergeRegionsPatch, sanitizeRegions: sanitizeRegions, projectSurfaceTintsFromRegions: projectSurfaceTintsFromRegions, sanitizeSurfaceTints: sanitizeSurfaceTints, resolveRegionEffectiveStyle: resolveRegionEffectiveStyle, resolveComponentDefaultAlpha: resolveComponentDefaultAlpha, sanitizeConfig: sanitizeConfig, applyResetScope: applyResetScope, resolveEffectiveConfig: resolveEffectiveConfig, PLUGIN_ID: PLUGIN_ID, PLUGIN_DISPLAY_NAME: PLUGIN_DISPLAY_NAME, PLUGIN_VERSION: PLUGIN_VERSION, SIDECAR_ID: SIDECAR_ID, SIDECAR_URI: SIDECAR_URI, CUSTOMIZATION_URI: CUSTOMIZATION_URI, DEFAULT_DEBUG_PORT: DEFAULT_DEBUG_PORT, PRISM_DOM: PRISM_DOM, STARTUP_MODES: STARTUP_MODES, CANARY_STATES: CANARY_STATES, WALLPAPER_KINDS: WALLPAPER_KINDS, LIBRARY_KINDS: LIBRARY_KINDS, CONTENT_RATINGS: CONTENT_RATINGS, LAYOUT_MODES: LAYOUT_MODES, TOPBAR_STYLES: TOPBAR_STYLES, CORNER_STYLES: CORNER_STYLES, BORDER_MODES: BORDER_MODES, THEME_MODES: THEME_MODES, CODE_READABILITY_MODES: CODE_READABILITY_MODES, FIT_MODES: FIT_MODES, FILTER_PRESETS: FILTER_PRESETS, SWITCH_TRANSITIONS: SWITCH_TRANSITIONS, SWITCH_DIRECTIONS: SWITCH_DIRECTIONS, SWITCH_SPEEDS: SWITCH_SPEEDS, ROTATION_ORDERS: ROTATION_ORDERS, ROTATION_TRIGGERS: ROTATION_TRIGGERS, TRIGGER_MODES: TRIGGER_MODES, LANGUAGES: LANGUAGES, SIDEBAR_RADII: SIDEBAR_RADII, SIDEBAR_RADIUS_RANGE: SIDEBAR_RADIUS_RANGE, BORDER_STYLES: BORDER_STYLES, SIDEBAR_LIST_STYLES: SIDEBAR_LIST_STYLES, SIDEBAR_TYPOGRAPHY_MODES: SIDEBAR_TYPOGRAPHY_MODES, LIBRARY_ANIMATED_THUMB_MODES: LIBRARY_ANIMATED_THUMB_MODES, CJK_SAFE_FONT_PRESETS: CJK_SAFE_FONT_PRESETS, COLOR_SCHEMES: COLOR_SCHEMES, COLOR_SCHEME_IDS: COLOR_SCHEME_IDS, ACCENT_MODES: ACCENT_MODES, ACCENT_PRESETS: ACCENT_PRESETS, REGION_IDS: REGION_IDS, SURFACE_TINT_COMPONENTS: SURFACE_TINT_COMPONENTS, GLASS_COMPONENT_IDS: GLASS_COMPONENT_IDS, SKIN_REGION_KEYS: SKIN_REGION_KEYS, GLASS_STYLES: GLASS_STYLES, ZERO_BLUR_BY_DEFAULT_REGIONS: ZERO_BLUR_BY_DEFAULT_REGIONS, SURFACE_TINT_BOUNDS: SURFACE_TINT_BOUNDS, REGION_FONT_SIZE_BOUNDS: REGION_FONT_SIZE_BOUNDS, REGION_FIELD_BOUNDS: REGION_FIELD_BOUNDS, REGION_OPTICAL_KEYS: REGION_OPTICAL_KEYS, REGION_STRUCTURAL_KEYS: REGION_STRUCTURAL_KEYS, SIDEBAR_REGION_EXTRA_KEYS: SIDEBAR_REGION_EXTRA_KEYS, DEFAULT_REGION_ENTRY: DEFAULT_REGION_ENTRY, DEFAULT_SIDEBAR_REGION_ENTRY: DEFAULT_SIDEBAR_REGION_ENTRY, DEFAULT_REGIONS: DEFAULT_REGIONS, DEFAULT_SURFACE_TINT_ENTRY: DEFAULT_SURFACE_TINT_ENTRY, DEFAULT_SURFACE_TINTS: DEFAULT_SURFACE_TINTS, SCENE_PRESETS: SCENE_PRESETS, SCENE_PRESET_IDS: SCENE_PRESET_IDS, FACTORY_PRESETS: FACTORY_PRESETS, DEFAULT_CONFIG: DEFAULT_CONFIG, RESET_SCOPES: RESET_SCOPES, PER_WALLPAPER_OVERRIDE_KEYS: PER_WALLPAPER_OVERRIDE_KEYS, FAST_OPTICAL_KEYS: FAST_OPTICAL_KEYS, FAST_OPTICAL_KEYS_MAP: FAST_OPTICAL_KEYS_MAP, FONT_FAMILY_FORBIDDEN_CHARS_RE: FONT_FAMILY_FORBIDDEN_CHARS_RE, FONT_FAMILY_FORBIDDEN_KW_RE: FONT_FAMILY_FORBIDDEN_KW_RE, FONT_FAMILY_TOKEN_RE: FONT_FAMILY_TOKEN_RE };
 })();
 
 const __prism_mod_4 = (function() {
@@ -7091,6 +7709,8 @@ const DICT = Object.freeze({
 
     // Scene & Profile Presets
     'preset.sceneTitle': '光学场景预设',
+    'preset.crisp': '清透无雾',
+    'preset.crisp.desc': '76% 透明玻璃 · 全区域 0px 零模糊',
     'preset.crystal': '通透流光',
     'preset.islands': '浮岛画境',
     'preset.focus': '沉静柔焦',
@@ -7180,7 +7800,11 @@ const DICT = Object.freeze({
     'glass.comp.workspace': '主对话与工作区',
     'glass.comp.rightPane': '右侧辅助面板',
     'glass.comp.composer': '底部对话输入框',
-    'glass.comp.card': '消息气泡与卡片',
+    'glass.comp.card': '独立功能与接管卡片',
+    'glass.comp.userBubble': '用户消息气泡',
+    'glass.comp.assistantBubble': 'AI 回复与任务卡',
+    'glass.comp.codeBlock': '代码块与表格',
+    'glass.comp.controls': '按钮与交互控件',
     'glass.comp.popover': '浮窗菜单与快捷面板',
     'glass.comp.swatchTip': '点击展开/收起色彩深浅与自定义底色',
     'glass.comp.tone': '色彩深浅（明暗微调）',
@@ -7369,18 +7993,29 @@ const DICT = Object.freeze({
     'common.close': '关闭',
     'common.deleteConfirm': '确认删除？',
 
-    // v2.2.0: 8-Region Controls & Per-Region Properties (47 keys)
+    // v2.2.0 / v2.4.0: 12-Region Controls & Per-Region Properties
     'glass.comp.wco': '右上角窗口控制胶囊',
     'glass.comp.wcoRequiresTransparent': '请先开启「右上角窗口控制按钮透明」以独立调节 WCO 胶囊',
     'region.topbar': '顶部菜单胶囊',
     'region.wco': '右上角窗口控制',
     'region.sidebar': '左侧边栏与导航',
     'region.workspace': '中央主工作区',
-    'region.card': '消息气泡与卡片',
+    'region.card': '独立功能与接管卡片',
+    'region.userBubble': '用户消息气泡',
+    'region.userBubble.desc': '用户提问气泡胶囊与顶部附件头',
+    'region.assistantBubble': 'AI 回复与任务卡',
+    'region.assistantBubble.desc': 'AI 回复正文、思考步骤行与产物/变更卡片',
+    'region.codeBlock': '代码块与表格',
+    'region.codeBlock.desc': '代码块卡片、预览切换与 Markdown 表格',
+    'region.controls': '按钮与交互控件',
+    'region.controls.desc': '按钮、输入框、分段开关、滚动条与浮动控制胶囊',
     'region.composer': '底部对话输入框',
     'region.rightPane': '右侧辅助面板',
     'region.popover': '浮窗菜单与快捷面板',
     'region.global': '全局壁纸、配色与特效',
+    'region.cat.chrome': '桌面框架与分区',
+    'region.cat.chat': '对话气泡与代码',
+    'region.cat.controls': '控件、卡片与浮窗',
     'region.expandAll': '全部展开',
     'region.collapseAll': '全部收起',
     'region.resetRegion': '重置本区域',
@@ -7389,13 +8024,29 @@ const DICT = Object.freeze({
     'region.customCount': '{n} 项自定义',
     'region.scopeGlobal': '全局默认',
     'region.scopeWallpaper': '📌 当前壁纸覆盖',
+    'region.prop.style': '玻璃材质风格',
+    'region.prop.styleHint': '各新区域与卡片默认「无毛玻璃」，按需切换磨砂、水晶、着色或纯色',
+    'region.style.auto': '跟随默认',
+    'region.style.autoNoBlur': '默认·无毛玻璃',
+    'region.style.none': '无毛玻璃',
+    'region.style.frosted': '毛玻璃',
+    'region.style.crystal': '水晶玻璃',
+    'region.style.tinted': '半透着色',
+    'region.style.solid': '纯色',
     'region.prop.glassEnabled': '启用本区域毛玻璃',
     'region.prop.blur': '毛玻璃模糊半径',
+    'region.prop.blurAutoEnableHint': '当前为无毛玻璃 — 拖动模糊滑块将自动切换为「毛玻璃」',
+    'region.prop.saturation': '玻璃色彩饱和度',
+    'region.prop.saturationHint': '仅在开启毛玻璃或水晶玻璃模糊时生效（默认 135%–165%）',
     'region.prop.opacity': '表面不透明度',
     'region.prop.tone': '色彩深浅',
     'region.prop.tint': '自定义底色',
     'region.prop.borderOpacity': '边框不透明度',
     'region.prop.borderOpacityAuto': '自动随透明度渐隐',
+    'region.prop.elevation': '投影深度倍率',
+    'region.prop.elevationHint': '调节浮岛/卡片环境阴影深度倍率（0× 关闭投影，1× 标准）',
+    'region.controlsHint': '微按钮与行内代码保持零模糊，仅浮动按钮等安全元素响应毛玻璃模糊',
+    'region.geometrySection': '边框几何与排版（高级）',
     'region.prop.borderStyle': '边框形态',
     'region.prop.borderStyle.auto': '跟随默认',
     'region.prop.borderStyle.full': '全四边',
@@ -7567,6 +8218,8 @@ const DICT = Object.freeze({
 
     // Scene & Profile Presets
     'preset.sceneTitle': 'Optical Scene Presets',
+    'preset.crisp': 'Crisp Glass',
+    'preset.crisp.desc': '76% translucent · 0px blur everywhere',
     'preset.crystal': 'Crystal',
     'preset.islands': 'Islands',
     'preset.focus': 'Focus',
@@ -7656,7 +8309,11 @@ const DICT = Object.freeze({
     'glass.comp.workspace': 'Chat & Main Workspace',
     'glass.comp.rightPane': 'Right Side / Aux Pane',
     'glass.comp.composer': 'Input Composer Box',
-    'glass.comp.card': 'Message Bubbles & Cards',
+    'glass.comp.card': 'Feature & Takeover Cards',
+    'glass.comp.userBubble': 'User Chat Bubble',
+    'glass.comp.assistantBubble': 'Assistant Reply & Cards',
+    'glass.comp.codeBlock': 'Code Blocks & Tables',
+    'glass.comp.controls': 'Host Controls & Pills',
     'glass.comp.popover': 'Popovers & Quick Prism',
     'glass.comp.swatchTip': 'Click to toggle shade depth & custom tint',
     'glass.comp.tone': 'Shade Depth (Darker / Lighter)',
@@ -7845,18 +8502,29 @@ const DICT = Object.freeze({
     'common.close': 'Close',
     'common.deleteConfirm': 'Confirm delete?',
 
-    // v2.2.0: 8-Region Controls & Per-Region Properties (47 keys)
+    // v2.2.0 / v2.4.0: 12-Region Controls & Per-Region Properties
     'glass.comp.wco': 'Window Controls Pill (WCO)',
     'glass.comp.wcoRequiresTransparent': 'Enable "Transparent Window Control Buttons" first to customize the WCO pill',
     'region.topbar': 'Topbar & Pills',
     'region.wco': 'Window Controls (WCO)',
     'region.sidebar': 'Left Sidebar & Navigation',
     'region.workspace': 'Center Workspace',
-    'region.card': 'Message Bubbles & Cards',
+    'region.card': 'Feature & Takeover Cards',
+    'region.userBubble': 'User Chat Bubble',
+    'region.userBubble.desc': 'User prompt capsules & attachment header',
+    'region.assistantBubble': 'Assistant Reply & Cards',
+    'region.assistantBubble.desc': 'Assistant prose, thinking steps, artifact & changed-files cards',
+    'region.codeBlock': 'Code Blocks & Tables',
+    'region.codeBlock.desc': 'Code block cards, preview toggle & Markdown tables',
+    'region.controls': 'Host Controls & Pills',
+    'region.controls.desc': 'Buttons, inputs, toggles, scrollbars & floating pills',
     'region.composer': 'Input Composer',
     'region.rightPane': 'Right Aux Pane',
     'region.popover': 'Popovers & Quick Prism',
     'region.global': 'Global Wallpaper, Theme & FX',
+    'region.cat.chrome': 'Shell Chrome',
+    'region.cat.chat': 'Chat Bubbles & Code',
+    'region.cat.controls': 'Controls, Cards & Overlays',
     'region.expandAll': 'Expand All',
     'region.collapseAll': 'Collapse All',
     'region.resetRegion': 'Reset Region',
@@ -7865,13 +8533,29 @@ const DICT = Object.freeze({
     'region.customCount': '{n} custom',
     'region.scopeGlobal': 'Global',
     'region.scopeWallpaper': '📌 Active Wallpaper',
+    'region.prop.style': 'Glass Material Style',
+    'region.prop.styleHint': 'New surfaces default to No Blur; switch to Frosted, Crystal, Tinted, or Solid anytime',
+    'region.style.auto': 'Default',
+    'region.style.autoNoBlur': 'Default · No Blur',
+    'region.style.none': 'No Blur',
+    'region.style.frosted': 'Frosted',
+    'region.style.crystal': 'Crystal',
+    'region.style.tinted': 'Tinted',
+    'region.style.solid': 'Solid',
     'region.prop.glassEnabled': 'Region Frosted Glass',
     'region.prop.blur': 'Backdrop Blur',
+    'region.prop.blurAutoEnableHint': 'No blur active — drag slider > 0 px to enable Frosted Glass',
+    'region.prop.saturation': 'Glass Saturation',
+    'region.prop.saturationHint': 'Applies when Frosted or Crystal backdrop blur is active (default 135%–165%)',
     'region.prop.opacity': 'Surface Opacity',
     'region.prop.tone': 'Shade Depth',
     'region.prop.tint': 'Custom Tint',
     'region.prop.borderOpacity': 'Border Opacity',
     'region.prop.borderOpacityAuto': 'Auto-fade with opacity',
+    'region.prop.elevation': 'Shadow Elevation',
+    'region.prop.elevationHint': 'Scales surface drop-shadow depth (0× off, 1× standard)',
+    'region.controlsHint': 'Micro-buttons & inline code stay unblurred for legibility; only safe floating pills apply blur',
+    'region.geometrySection': 'Borders, Geometry & Typography',
     'region.prop.borderStyle': 'Border Style',
     'region.prop.borderStyle.auto': 'Auto',
     'region.prop.borderStyle.full': 'Full',
@@ -8041,6 +8725,7 @@ const LIBRARY_KINDS = __prism_mod_2.LIBRARY_KINDS;
 const CONTENT_RATINGS = __prism_mod_2.CONTENT_RATINGS;
 const REGION_IDS = __prism_mod_2.REGION_IDS;
 const REGION_OPTICAL_KEYS = __prism_mod_2.REGION_OPTICAL_KEYS;
+const DEFAULT_REGION_ENTRY = __prism_mod_2.DEFAULT_REGION_ENTRY;
 const FACTORY_PRESETS = __prism_mod_2.FACTORY_PRESETS;
 const DEFAULT_CONFIG = __prism_mod_2.DEFAULT_CONFIG;
 const PER_WALLPAPER_OVERRIDE_KEYS = __prism_mod_2.PER_WALLPAPER_OVERRIDE_KEYS;
@@ -8058,13 +8743,21 @@ const API_TIMEOUT_MS = 8000;
 const VIRTUAL_SCROLL_THRESHOLD = 30;
 const OPEN_REGIONS_STORAGE_KEY = 'prism.openRegions.v22';
 const REGION_UI_ORDER = Object.freeze([
+  // Shell Chrome
   'topbar',
   'wco',
   'sidebar',
   'workspace',
+  // Chat Bubbles & Content
+  'userBubble',
+  'assistantBubble',
+  'codeBlock',
+  // Interactive Controls & Overlays
+  'controls',
   'composer',
   'rightPane',
   'popover',
+  // Global Canvas, Media & Visual Extensions
   'global',
 ]);
 const REGION_RESET_EXTRA_KEYS = Object.freeze({
@@ -8080,11 +8773,16 @@ const REGION_RESET_EXTRA_KEYS = Object.freeze({
   }),
   workspace: Object.freeze({
     hideWelcomeLogo: DEFAULT_CONFIG.hideWelcomeLogo,
-    codeReadabilityMode: DEFAULT_CONFIG.codeReadabilityMode,
     contrastFloor: DEFAULT_CONFIG.contrastFloor,
     chatGlassFidelity: DEFAULT_CONFIG.chatGlassFidelity,
   }),
   card: Object.freeze({}),
+  userBubble: Object.freeze({}),
+  assistantBubble: Object.freeze({}),
+  codeBlock: Object.freeze({
+    codeReadabilityMode: DEFAULT_CONFIG.codeReadabilityMode,
+  }),
+  controls: Object.freeze({}),
   composer: Object.freeze({ caretColor: DEFAULT_CONFIG.caretColor }),
   rightPane: Object.freeze({ rightSidebarRadius: DEFAULT_CONFIG.rightSidebarRadius }),
   popover: Object.freeze({ floaterSolidBase: DEFAULT_CONFIG.floaterSolidBase }),
@@ -8815,13 +9513,10 @@ function clearOpticalKeysInRegionsMap(baseRegions) {
   for (const id of REGION_IDS) {
     if (out[id] === null) continue;
     const prev = out[id] && typeof out[id] === 'object' ? { ...out[id] } : {};
-    // Strictly reset ONLY the 6 optical keys; preserve borderStyle/radius/font*/allowRawFontColor/listStyle!
-    prev.glassEnabled = null;
-    prev.blur = null;
-    prev.opacity = null;
-    prev.tone = 0;
-    prev.tint = '';
-    prev.borderOpacity = null;
+    // Strictly reset ONLY the 9 optical keys; preserve borderStyle/radius/font*/allowRawFontColor/listStyle!
+    for (const ok of REGION_OPTICAL_KEYS) {
+      prev[ok] = DEFAULT_REGION_ENTRY[ok];
+    }
     out[id] = prev;
   }
   return out;
@@ -8833,14 +9528,11 @@ function extractMirroredOpticalRegionsFromSurfaceTints(tintsObj) {
   for (const [id, sVal] of Object.entries(tintsObj)) {
     if (!REGION_IDS.includes(id)) continue;
     if (sVal === null) {
-      mirrored[id] = {
-        glassEnabled: null,
-        blur: null,
-        opacity: null,
-        tone: 0,
-        tint: '',
-        borderOpacity: null,
-      };
+      const cleared = {};
+      for (const ok of REGION_OPTICAL_KEYS) {
+        cleared[ok] = DEFAULT_REGION_ENTRY[ok];
+      }
+      mirrored[id] = cleared;
     } else if (sVal && typeof sVal === 'object') {
       const opt = {};
       for (const ok of REGION_OPTICAL_KEYS) {
@@ -9953,12 +10645,15 @@ return { detectInitialHostPolarity: detectInitialHostPolarity, loadOpenRegions: 
 
 const __prism_mod_5 = (function() {
 const REGION_IDS = __prism_mod_2.REGION_IDS;
+const GLASS_STYLES = __prism_mod_2.GLASS_STYLES;
+const ZERO_BLUR_BY_DEFAULT_REGIONS = __prism_mod_2.ZERO_BLUR_BY_DEFAULT_REGIONS;
 const SURFACE_TINT_BOUNDS = __prism_mod_2.SURFACE_TINT_BOUNDS;
 const DEFAULT_REGION_ENTRY = __prism_mod_2.DEFAULT_REGION_ENTRY;
 const DEFAULT_CONFIG = __prism_mod_2.DEFAULT_CONFIG;
 const CJK_SAFE_FONT_PRESETS = __prism_mod_2.CJK_SAFE_FONT_PRESETS;
 const sanitizeConfig = __prism_mod_2.sanitizeConfig;
 const resolveSchemeTokens = __prism_mod_2.resolveSchemeTokens;
+const resolveRegionEffectiveStyle = __prism_mod_2.resolveRegionEffectiveStyle;
 const resolveComponentDefaultAlpha = __prism_mod_2.resolveComponentDefaultAlpha;
 const sanitizeFontFamily = __prism_mod_2.sanitizeFontFamily;
 const hexToRgbTriplet = __prism_mod_2.hexToRgbTriplet;
@@ -10145,20 +10840,47 @@ function computeBorderFactor(alpha, bScale, overrideBorderOp = null) {
   if (!Number.isFinite(bs) || bs <= 0 || !Number.isFinite(a) || a <= 0.005) return 0;
   return bs * Math.pow(clampNum(a / 0.8, 0, 1), 0.9);
 }
-function computeShadowFactor(alpha, shadowsOn) {
+function computeShadowFactor(alpha, shadowsOn, elevation = null) {
   const a = Number(alpha);
-  if (!shadowsOn || !Number.isFinite(a) || a <= 0.01) return 0;
+  // Mandatory Guardrail F-02: never emit phantom shadows on zero-opacity elements even when elevation > 0
+  if (!Number.isFinite(a) || a <= 0.01) return 0;
+  if (elevation !== null && elevation !== undefined && elevation !== '') {
+    const el = Number(elevation);
+    if (Number.isFinite(el)) {
+      if (el <= 0.001) return 0;
+      return Math.pow(clampNum(Math.max(a, 0.35) / 0.65, 0, 1), 1.15) * clampNum(el, 0, 2);
+    }
+  }
+  if (!shadowsOn) return 0;
   return Math.pow(clampNum(a / 0.65, 0, 1), 1.15);
 }
-function buildSimBackdrop(px, isLight, isNested = false) {
+function buildSimBackdrop(px, isLight, isNested = false, customSat = null, effStyle = null) {
+  if (effStyle === 'none' || effStyle === 'tinted' || effStyle === 'solid') return 'none';
   const r = Math.round(clampNum(Number(px) || 0, 0, 64));
   if (r <= 0) return 'none';
-  const sat = isNested
-    ? Math.round(100 + Math.min(15, r * 0.25))
-    : isLight
-      ? Math.round(125 + Math.min(65, r * 1.45))
-      : Math.round(115 + Math.min(65, r * 1.35));
-  return `blur(${r}px) saturate(${sat}%)`;
+  const gpuR = r <= 28 ? r : Math.min(32, Math.round(28 + (4 * (r - 28)) / (r - 28 + 12)));
+  const satBoost = r > 28 ? Math.round(Math.min(18, (r - 28) * 0.5)) : 0;
+  const hasCustomSat =
+    customSat !== null && customSat !== undefined && customSat !== '' && Number.isFinite(Number(customSat));
+  const sat = hasCustomSat
+    ? Math.round(clampNum(Number(customSat), 50, 220))
+    : effStyle === 'crystal'
+      ? isLight
+        ? 165
+        : 150
+      : isNested
+        ? Math.round(100 + Math.min(15, r * 0.25) + satBoost * 0.4)
+        : isLight
+          ? Math.round(125 + Math.min(65, r * 1.45) + satBoost)
+          : Math.round(115 + Math.min(65, r * 1.35) + satBoost);
+  return `blur(${gpuR}px) saturate(${sat}%)`;
+}
+
+function sanitizeSimGlassStyle(v) {
+  if (v === null || v === undefined || v === '' || v === 'auto') return null;
+  if (typeof v !== 'string') return null;
+  const s = v.trim().toLowerCase();
+  return GLASS_STYLES.includes(s) ? s : null;
 }
 
 function getRegionEntryMerged(comp, eff) {
@@ -10166,12 +10888,15 @@ function getRegionEntryMerged(comp, eff) {
   const tint = eff?.surfaceTints?.[comp];
   const base = { ...DEFAULT_REGION_ENTRY };
   if (tint && typeof tint === 'object') {
+    if (tint.style !== undefined) base.style = tint.style;
     if (tint.glassEnabled !== undefined) base.glassEnabled = tint.glassEnabled;
     if (tint.blur !== undefined) base.blur = tint.blur;
+    if (tint.saturation !== undefined) base.saturation = tint.saturation;
     if (tint.opacity !== undefined) base.opacity = tint.opacity;
     if (tint.tone !== undefined) base.tone = tint.tone;
     if (tint.tint !== undefined) base.tint = tint.tint;
     if (tint.borderOpacity !== undefined) base.borderOpacity = tint.borderOpacity;
+    if (tint.elevation !== undefined) base.elevation = tint.elevation;
   }
   if (reg && typeof reg === 'object') {
     Object.assign(base, reg);
@@ -10189,45 +10914,78 @@ function getRegionEntryMerged(comp, eff) {
 
 function isWcoEntryAuto(entry) {
   return (
+    entry.style === null &&
     entry.opacity === null &&
     Number(entry.tone || 0) === 0 &&
     !entry.tint &&
     entry.blur === null &&
+    entry.saturation === null &&
     entry.glassEnabled === null &&
     entry.borderOpacity === null &&
+    entry.elevation === null &&
     entry.borderStyle === null &&
     entry.radius === null
   );
 }
 
-function resolveRegionBlurPxSim(comp, entry, eff, topbarBlurPx = null) {
+function resolveRegionBlurPxSim(comp, entry, eff, topbarBlurPx = null, effStyle = null) {
   const glassOn =
     entry.glassEnabled !== null && entry.glassEnabled !== undefined
       ? Boolean(entry.glassEnabled)
       : Boolean(eff.glassSurfaces !== false);
   if (!glassOn) return 0;
 
-  let raw;
-  if (entry.blur !== null && entry.blur !== undefined) {
-    raw = clampNum(Math.round(Number(entry.blur)), 0, 64);
-  } else if (comp === 'card') {
-    raw = 0;
-  } else if (comp === 'sidebar') {
-    const sbRaw = eff.sidebarBlur !== null && eff.sidebarBlur !== undefined ? eff.sidebarBlur : eff.glassBlur;
-    raw = clampNum(Math.round(Number(sbRaw) || 0), 0, 64);
-  } else if (comp === 'composer') {
-    const gb = Number(eff.glassBlur) || 0;
-    raw = gb > 0 ? Math.min(64, Math.round(gb + 4)) : 0;
-  } else if (comp === 'popover') {
-    const gb = Number(eff.glassBlur) || 0;
-    raw = gb > 0 ? Math.min(64, Math.round(gb + 6)) : 0;
-  } else if (comp === 'wco' && topbarBlurPx !== null) {
-    return topbarBlurPx;
-  } else {
-    raw = clampNum(Math.round(Number(eff.glassBlur) || 0), 0, 64);
+  const explicitStyle = sanitizeSimGlassStyle(entry.style);
+  if (explicitStyle === 'none' || explicitStyle === 'tinted' || explicitStyle === 'solid') return 0;
+  if (explicitStyle === null && (effStyle === 'none' || effStyle === 'tinted' || effStyle === 'solid')) {
+    const hasExplicitPosBlur = entry.blur !== null && entry.blur !== undefined && Number(entry.blur) > 0;
+    if (!hasExplicitPosBlur) return 0;
   }
+
+  if (comp === 'wco' && entry.blur === null && entry.glassEnabled === null && explicitStyle === null && topbarBlurPx !== null) {
+    return topbarBlurPx;
+  }
+
+  const gb = Number(eff.glassBlur) || 0;
+  let defaultPx;
+  if (comp === 'wco') {
+    const tbBlur = eff.regions?.topbar?.blur;
+    defaultPx = tbBlur !== null && tbBlur !== undefined ? Number(tbBlur) : gb;
+  } else if (comp === 'sidebar') {
+    const sbRaw = eff.sidebarBlur !== null && eff.sidebarBlur !== undefined ? eff.sidebarBlur : gb;
+    defaultPx = Number(sbRaw) || 0;
+  } else if (comp === 'composer') {
+    defaultPx = gb > 0 ? Math.min(64, Math.round(gb + 4)) : 0;
+  } else if (comp === 'popover') {
+    defaultPx = gb > 0 ? Math.min(64, Math.round(gb + 6)) : 0;
+  } else if (comp === 'codeBlock') {
+    defaultPx =
+      explicitStyle === 'frosted'
+        ? gb > 0
+          ? gb
+          : 16
+        : eff.codeReadabilityMode === 'frosted' && gb > 0
+          ? Math.max(4, Math.round(gb * 0.85))
+          : 0;
+  } else if (ZERO_BLUR_BY_DEFAULT_REGIONS.includes(comp)) {
+    defaultPx = 0;
+  } else {
+    defaultPx = gb;
+  }
+
+  let fallbackPx = defaultPx;
+  if (effStyle === 'frosted') {
+    fallbackPx = defaultPx > 0 ? defaultPx : 16;
+  } else if (effStyle === 'crystal') {
+    fallbackPx = defaultPx > 0 ? Math.max(10, Math.round(defaultPx * 0.75)) : 12;
+  }
+
+  const raw =
+    entry.blur !== null && entry.blur !== undefined
+      ? clampNum(Math.round(Number(entry.blur)), 0, 64)
+      : clampNum(Math.round(Number(fallbackPx) || 0), 0, 64);
   if (raw <= 0) return 0;
-  return Math.round(raw * 0.85);
+  return Math.max(1, Math.round(raw * 0.85));
 }
 
 function resolveBorderWidths(borderStyle) {
@@ -10251,10 +11009,18 @@ function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens = null
     topbarSurface = resolveSimRegionSurface('topbar', eff, tok, light);
   }
 
+  const effStyleRaw = wcoAuto && topbarSurface
+    ? topbarSurface.effStyle
+    : resolveRegionEffectiveStyle(comp, entry, eff);
+  const effEdgeStyle =
+    comp === 'wco' && effStyleRaw === null && topbarSurface ? topbarSurface.effStyle : effStyleRaw;
+
   const baseRgb = parseRgbTriplet(tok.baseRgb, [14, 14, 17]);
   const shadeRgb = parseRgbTriplet(tok.shadeRgb, [9, 9, 11]);
   const tint1Rgb = parseRgbTriplet(tok.tint1Rgb, [20, 20, 24]);
+  const tint2Rgb = parseRgbTriplet(tok.tint2Rgb, [28, 28, 34]);
   const popRgb = parseRgbTriplet(tok.popoverRgb, [22, 22, 28]);
+  const accentRgb = parseRgbTriplet(tok.accentRgb || hexToRgbTriplet(tok.accent), [102, 157, 246]);
   const wallTintRgb = parseRgbTriplet(tok.wallTintRgb, [102, 157, 246]);
   const fgRgb = parseRgbTriplet(hexToRgbTriplet(tok.fg, light ? '15, 23, 42' : '242, 242, 245'));
   const ptRgb = parseRgbTriplet(tok.ptRgb, light ? [15, 23, 42] : [255, 255, 255]);
@@ -10282,17 +11048,34 @@ function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens = null
           : sbBaseRgb
         : comp === 'topbar' || comp === 'sidebar'
           ? sbBaseRgb
-          : comp === 'workspace' || comp === 'rightPane'
+          : comp === 'workspace' || comp === 'rightPane' || comp === 'assistantBubble'
             ? baseRgb
-            : comp === 'popover'
-              ? popRgb
-              : tint1Rgb;
-    const wallWeight =
+            : comp === 'codeBlock'
+              ? effEdgeStyle === 'solid'
+                ? tint1Rgb
+                : baseRgb
+              : comp === 'controls'
+                ? tint2Rgb
+                : comp === 'popover'
+                  ? popRgb
+                  : tint1Rgb;
+    const baseWallWeight =
       comp === 'popover'
         ? wallMix * 0.4
-        : comp === 'composer' || comp === 'card'
-          ? wallMix
-          : wallMix * 0.75;
+        : comp === 'codeBlock'
+          ? wallMix * 0.5
+          : comp === 'composer' || comp === 'card' || comp === 'userBubble'
+            ? wallMix
+            : wallMix * 0.75;
+    const styleWallRgb = effEdgeStyle === 'tinted' && wallMix <= 0 ? accentRgb : wallTintRgb;
+    const wallWeight =
+      effEdgeStyle === 'tinted'
+        ? wallMix > 0
+          ? Math.max(wallMix, 0.22)
+          : 0.18
+        : effEdgeStyle === 'solid'
+          ? baseWallWeight * 0.5
+          : baseWallWeight;
 
     const contrastOn = eff.contrastFloor !== false;
     const hasTint = Boolean(entry.tint);
@@ -10302,17 +11085,24 @@ function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens = null
     let rgb = hasTint ? adaptCustomTintRgb(entry.tint, light, contrastOn) : defaultRgb;
     rgb = applyToneShiftRgb(rgb, toneVal, light);
     preMixRgb = hasToneOrTint && contrastOn ? enforceContrastFloorRgb(rgb, fgRgb, light, 4.5) : rgb;
-    finalRgb = hasTint ? preMixRgb : mixRgbArr(preMixRgb, wallTintRgb, wallWeight);
-    if (hasToneOrTint && contrastOn) {
+    finalRgb = hasTint ? preMixRgb : mixRgbArr(preMixRgb, styleWallRgb, wallWeight);
+    if ((hasToneOrTint || effEdgeStyle === 'tinted') && contrastOn) {
       finalRgb = enforceContrastFloorRgb(finalRgb, fgRgb, light, 4.5);
     }
 
-    const solidChrome = entry.glassEnabled === true ? false : eff.glassSurfaces === false;
-    if (solidChrome && comp !== 'popover') {
+    const solidChrome =
+      comp === 'popover'
+        ? false
+        : entry.glassEnabled === true
+          ? false
+          : comp === 'assistantBubble' && effEdgeStyle === 'none'
+            ? false
+            : eff.glassSurfaces === false;
+    if (solidChrome) {
       alpha = 1;
     } else if (entry.opacity !== null && entry.opacity !== undefined) {
       alpha = clampNum(Number(entry.opacity), bounds.minOpacity, bounds.maxOpacity);
-    } else if (comp === 'wco' && topbarSurface) {
+    } else if (comp === 'wco' && topbarSurface && effStyleRaw === null) {
       alpha = topbarSurface.alpha;
     } else {
       alpha = resolveComponentDefaultAlpha(comp, eff, light);
@@ -10321,13 +11111,39 @@ function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens = null
 
   const isIslands = eff.layoutMode !== 'flush';
   const bScale = eff.borders === 'off' ? 0 : eff.borders === 'subtle' ? 0.5 : 1;
-  const baseBorderA = light ? 0.14 : 0.14;
-  const effectiveBorderStyle = wcoAuto && topbarSurface ? topbarSurface.entry.borderStyle : entry.borderStyle;
+  const baseBorderA = 0.14;
+  const effectiveBorderStyle =
+    wcoAuto && topbarSurface
+      ? topbarSurface.entry.borderStyle
+      : comp === 'assistantBubble' && alpha <= 0.01 && entry.borderStyle === null
+        ? 'none'
+        : entry.borderStyle;
   const effectiveBorderOp = wcoAuto && topbarSurface ? topbarSurface.entry.borderOpacity : entry.borderOpacity;
-  const borderFactor =
-    effectiveBorderStyle === 'none' ? 0 : computeBorderFactor(alpha, bScale, effectiveBorderOp);
+  const effectiveElevation =
+    wcoAuto && topbarSurface
+      ? topbarSurface.entry.elevation
+      : comp === 'wco' && (entry.elevation === null || entry.elevation === undefined) && topbarSurface
+        ? topbarSurface.entry.elevation
+        : entry.elevation;
+
+  const styleBfScale = effEdgeStyle === 'tinted' ? 0.85 : effEdgeStyle === 'solid' ? 0.9 : 1;
+  let borderFactor =
+    effectiveBorderStyle === 'none' ? 0 : computeBorderFactor(alpha, bScale * styleBfScale, effectiveBorderOp);
+  if (
+    effEdgeStyle === 'crystal' &&
+    effectiveBorderStyle !== 'none' &&
+    bScale > 0 &&
+    (effectiveBorderOp === null || effectiveBorderOp === undefined) &&
+    borderFactor > 0
+  ) {
+    borderFactor = Math.min(1, borderFactor * 1.35 + 0.08);
+  }
+
   const shadowEnabled = comp === 'popover' ? Boolean(eff.shadows) : Boolean(isIslands && eff.shadows);
-  const shadowFactor = computeShadowFactor(alpha, shadowEnabled);
+  const shadowFactor = computeShadowFactor(alpha, shadowEnabled, effectiveElevation);
+
+  const specMult = effEdgeStyle === 'crystal' ? 1.45 : effEdgeStyle === 'tinted' ? 0.4 : effEdgeStyle === 'solid' ? 0 : 1;
+  const sheenMult = effEdgeStyle === 'crystal' ? 1.45 : effEdgeStyle === 'tinted' ? 0.4 : effEdgeStyle === 'solid' ? 0 : 1;
 
   const borderColor =
     borderFactor <= 0.001
@@ -10337,31 +11153,48 @@ function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens = null
   const borderWidths = resolveBorderWidths(effectiveBorderStyle);
 
   const specular =
-    borderFactor <= 0.001
+    borderFactor <= 0.001 || specMult <= 0
       ? 'transparent'
-      : `rgba(255, 255, 255, ${((light ? 0.86 : 0.09) * borderFactor).toFixed(3)})`;
+      : `rgba(255, 255, 255, ${clampNum((light ? 0.86 : 0.09) * borderFactor * specMult, 0, 1).toFixed(3)})`;
   const sheen =
-    borderFactor <= 0.001
+    borderFactor <= 0.001 || sheenMult <= 0
       ? 'none'
       : light
-        ? `linear-gradient(172deg, rgba(255, 255, 255, ${(0.68 * borderFactor).toFixed(3)}) 0%, rgba(255, 255, 255, 0) 40%)`
-        : `linear-gradient(172deg, rgba(255, 255, 255, ${(0.045 * borderFactor).toFixed(3)}) 0%, rgba(255, 255, 255, 0) 38%)`;
+        ? `linear-gradient(172deg, rgba(255, 255, 255, ${clampNum(0.68 * borderFactor * sheenMult, 0, 0.96).toFixed(3)}) 0%, rgba(255, 255, 255, 0) 40%)`
+        : `linear-gradient(172deg, rgba(255, 255, 255, ${clampNum(0.045 * borderFactor * sheenMult, 0, 0.24).toFixed(3)}) 0%, rgba(255, 255, 255, 0) 38%)`;
 
   const shadowParts = [];
-  if (borderFactor > 0.001) {
+  if (borderFactor > 0.001 && specMult > 0) {
     shadowParts.push(`inset 0 1px 0 ${specular}`);
   }
   if (shadowFactor > 0.001) {
-    const dropAlpha = (comp === 'popover' ? (light ? 0.24 : 0.54) : light ? 0.12 : 0.38) * shadowFactor;
+    const dropAlpha = clampNum((comp === 'popover' ? (light ? 0.24 : 0.54) : light ? 0.12 : 0.38) * shadowFactor, 0, 0.88);
     shadowParts.push(`0 6px 16px rgba(0, 0, 0, ${dropAlpha.toFixed(3)})`);
   }
   const shadowCss = shadowParts.length > 0 ? shadowParts.join(', ') : 'none';
 
   const blurPx = wcoAuto && topbarSurface
     ? topbarSurface.blurPx
-    : resolveRegionBlurPxSim(comp, entry, eff, topbarSurface ? topbarSurface.blurPx : null);
-  const isNested = comp === 'composer' || comp === 'card';
-  const backdrop = buildSimBackdrop(blurPx, light, isNested);
+    : resolveRegionBlurPxSim(comp, entry, eff, topbarSurface ? topbarSurface.blurPx : null, effEdgeStyle);
+  const isNested =
+    comp === 'composer' ||
+    comp === 'card' ||
+    comp === 'userBubble' ||
+    comp === 'assistantBubble' ||
+    comp === 'codeBlock' ||
+    comp === 'controls';
+  const satOverride =
+    wcoAuto && topbarSurface
+      ? topbarSurface.entry.saturation
+      : comp === 'wco' && (entry.saturation === null || entry.saturation === undefined) && topbarSurface
+        ? topbarSurface.entry.saturation
+        : entry.saturation;
+  const isDefaultPopover =
+    comp === 'popover' &&
+    (entry.style === null || entry.style === undefined) &&
+    (entry.blur === null || entry.blur === undefined);
+  const cutoff = isDefaultPopover ? 0.94 : 0.98;
+  const backdrop = alpha >= cutoff ? 'none' : buildSimBackdrop(blurPx, light, isNested, satOverride, effEdgeStyle);
 
   const rawFgHex = entry.fontColor || eff.globalFontColor || '';
   const fgEval = resolveRegionFgColor({
@@ -10384,7 +11217,15 @@ function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens = null
     radiusCss = `${Math.round(clampNum(Number(entry.radius), 0, 28) * 0.65)}px`;
   } else if (comp === 'topbar' || comp === 'wco') {
     radiusCss = isIslands ? `${Math.max(4, baseR - 2)}px` : '0px';
-  } else if (comp === 'card' || comp === 'composer' || comp === 'popover') {
+  } else if (comp === 'userBubble') {
+    const ubPx = eff.cornerStyle === 'sharp' ? 10 : eff.cornerStyle === 'soft' ? 22 : 20;
+    radiusCss = `${Math.max(6, Math.round(ubPx * 0.65))}px`;
+  } else if (comp === 'codeBlock') {
+    const cbPx = eff.cornerStyle === 'sharp' ? 6 : eff.cornerStyle === 'soft' ? 14 : 12;
+    radiusCss = `${Math.max(3, Math.round(cbPx * 0.65))}px`;
+  } else if (comp === 'controls') {
+    radiusCss = `${Math.max(3, baseR - 4)}px`;
+  } else if (comp === 'card' || comp === 'composer' || comp === 'popover' || comp === 'assistantBubble') {
     radiusCss = `${Math.max(3, baseR - 3)}px`;
   } else if (comp === 'sidebar') {
     const raw = eff.leftSidebarRadius;
@@ -10411,6 +11252,7 @@ function resolveSimRegionSurface(comp, eff = getEffectiveConfig(), tokens = null
     bgCss: rgba,
     blurPx,
     backdrop,
+    effStyle: effEdgeStyle || (blurPx > 0 ? 'frosted' : 'none'),
     borderFactor,
     shadowFactor,
     border: borderColor,
@@ -10607,9 +11449,17 @@ function shouldPlayStudioPreviewVideo(eff = getEffectiveConfig()) {
   );
 }
 
+const SIM_KEBAB_ALIASES = Object.freeze({
+  rightPane: 'right-pane',
+  userBubble: 'user-bubble',
+  assistantBubble: 'assistant-bubble',
+  codeBlock: 'code-block',
+});
+
 function applyRegionVarsToTarget(targetEl, comp, surf) {
   if (!targetEl || !targetEl.style) return;
-  const keys = comp === 'rightPane' ? ['rightPane', 'right-pane'] : [comp];
+  const kebab = SIM_KEBAB_ALIASES[comp];
+  const keys = kebab ? [comp, kebab] : [comp];
   for (const k of keys) {
     targetEl.style.setProperty(`--sim-${k}-bg`, surf.rgba);
     targetEl.style.setProperty(`--sim-${k}-backdrop`, surf.backdrop);
@@ -10627,6 +11477,64 @@ function applyRegionVarsToTarget(targetEl, comp, surf) {
     targetEl.style.setProperty(`--sim-${k}-font-family`, surf.fontFamily || 'inherit');
     targetEl.style.setProperty(`--sim-${k}-font-size`, surf.fontSize ? `${surf.fontSize}px` : '');
   }
+}
+
+function computeAuxSimVars(eff, tokens, isLight, compSurfaces) {
+  const tint1Rgb = parseRgbTriplet(tokens.tint1Rgb, [20, 20, 24]);
+  const tint2Rgb = parseRgbTriplet(tokens.tint2Rgb, [28, 28, 34]);
+  const ptRgb = parseRgbTriplet(tokens.ptRgb, isLight ? [15, 23, 42] : [255, 255, 255]);
+  const accentRgb = parseRgbTriplet(tokens.accentRgb || hexToRgbTriplet(tokens.accent), [102, 157, 246]);
+  const wallTintRgb = parseRgbTriplet(tokens.wallTintRgb, accentRgb);
+  const fgRgb = parseRgbTriplet(hexToRgbTriplet(tokens.fg, isLight ? '15, 23, 42' : '242, 242, 245'));
+  const contrastOn = eff.contrastFloor !== false;
+
+  const asstSurf = compSurfaces.assistantBubble;
+  const asstEntry = asstSurf.entry || DEFAULT_REGION_ENTRY;
+  const asstStyle = asstSurf.effStyle;
+  const turnCardSolid = !(asstEntry.glassEnabled === true) && eff.glassSurfaces === false;
+  const turnCardAlpha = turnCardSolid
+    ? 1
+    : asstEntry.opacity !== null && asstEntry.opacity !== undefined || asstStyle === 'solid'
+      ? asstSurf.alpha
+      : asstStyle === 'frosted' || asstStyle === 'crystal'
+        ? Math.max(asstSurf.alpha, isLight ? 0.56 : 0.44)
+        : clampNum((eff.glassOpacity || 0.76) * (isLight ? 0.8 : 0.64), isLight ? 0.52 : 0.42, 0.88);
+  const turnCardRgb = asstSurf.hasToneOrTint
+    ? asstSurf.rgb
+    : mixRgbArr(tint1Rgb, wallTintRgb, Number(eff.wallTintMix || 0));
+  const turnCardBg = `rgba(${turnCardRgb[0]}, ${turnCardRgb[1]}, ${turnCardRgb[2]}, ${turnCardAlpha.toFixed(3)})`;
+
+  const ctrlSurf = compSurfaces.controls;
+  const ctrlEntry = ctrlSurf.entry || DEFAULT_REGION_ENTRY;
+  const ctrlSolid = !(ctrlEntry.glassEnabled === true) && eff.glassSurfaces === false;
+  const ctrlActiveAlpha = ctrlSolid
+    ? 1
+    : ctrlEntry.opacity !== null && ctrlEntry.opacity !== undefined
+      ? clampNum(Math.max(ctrlSurf.alpha, 0.56), 0.35, 0.96)
+      : ctrlSurf.effStyle === 'solid'
+        ? isLight
+          ? 0.97
+          : 0.96
+        : isLight
+          ? 0.82
+          : 0.74;
+  const rawCtrlActiveRgb = mixRgbArr(ctrlSurf.hasToneOrTint ? ctrlSurf.rgb : tint2Rgb, accentRgb, isLight ? 0.18 : 0.22);
+  const ctrlActiveRgb = contrastOn ? enforceContrastFloorRgb(rawCtrlActiveRgb, fgRgb, isLight, 4.5) : rawCtrlActiveRgb;
+  const controlActiveBg = `rgba(${ctrlActiveRgb[0]}, ${ctrlActiveRgb[1]}, ${ctrlActiveRgb[2]}, ${ctrlActiveAlpha.toFixed(3)})`;
+  const controlHoverBg = `rgba(${ptRgb[0]}, ${ptRgb[1]}, ${ptRgb[2]}, ${isLight ? '0.075' : '0.085'})`;
+
+  const rawSelectedRgb = mixRgbArr(tint2Rgb, accentRgb, isLight ? 0.22 : 0.28);
+  const selectedRgb = contrastOn ? enforceContrastFloorRgb(rawSelectedRgb, fgRgb, isLight, 4.5) : rawSelectedRgb;
+  const selectedBg = `rgba(${selectedRgb[0]}, ${selectedRgb[1]}, ${selectedRgb[2]}, ${isLight ? '0.220' : '0.240'})`;
+  const scrollThumb = `rgba(${ptRgb[0]}, ${ptRgb[1]}, ${ptRgb[2]}, ${isLight ? '0.240' : '0.220'})`;
+
+  return {
+    turnCardBg,
+    controlActiveBg,
+    controlHoverBg,
+    selectedBg,
+    scrollThumb,
+  };
 }
 
 function applyStageAndHubOpticalVars(stage, hub, eff, tokens, isLight, compSurfaces) {
@@ -10704,26 +11612,15 @@ function applyStageAndHubOpticalVars(stage, hub, eff, tokens, isLight, compSurfa
   hub.dataset.topbarStyle = eff.topbarStyle || 'pills';
   hub.dataset.sidebarStyle = eff.sidebarListStyle || 'capsule';
   hub.dataset.wcoTransparent = eff.transparentWindowControls !== false ? 'true' : 'false';
+  hub.dataset.assistantBlur = compSurfaces.assistantBubble.backdrop !== 'none' ? 'true' : 'false';
 
   const baseR = eff.cornerStyle === 'sharp' ? 4 : eff.cornerStyle === 'soft' ? 12 : 8;
-  const g = eff.glassSurfaces ? eff.glassOpacity : 0.96;
   const blurPx = compSurfaces.workspace.blurPx;
   const sbBlurPx = compSurfaces.sidebar.blurPx;
   const compBlurPx = compSurfaces.composer.blurPx;
-  const codeBlurPx =
-    eff.glassSurfaces && eff.codeReadabilityMode === 'frosted' && blurPx > 0
-      ? Math.max(4, Math.round(blurPx * 0.85))
-      : 0;
-
-  const floorAlpha = eff.contrastFloor ? (isLight ? 0.84 : 0.72) : 0.44;
-  let editorBg = `rgba(${tokens.tint1Rgb}, ${Math.max(floorAlpha, g * 0.78).toFixed(3)})`;
-  let codeBackdrop = 'none';
-  if (eff.codeReadabilityMode === 'solid') {
-    editorBg = `rgb(${tokens.tint1Rgb})`;
-  } else if (eff.codeReadabilityMode === 'frosted') {
-    editorBg = `rgba(${tokens.tint1Rgb}, ${Math.max(floorAlpha, g * 0.85).toFixed(3)})`;
-    codeBackdrop = buildSimBackdrop(codeBlurPx, isLight, true);
-  }
+  const editorBg = compSurfaces.codeBlock.rgba;
+  const codeBackdrop = compSurfaces.codeBlock.backdrop;
+  const auxVars = computeAuxSimVars(eff, tokens, isLight, compSurfaces);
 
   for (const comp of REGION_IDS) {
     applyRegionVarsToTarget(hub, comp, compSurfaces[comp]);
@@ -10739,6 +11636,7 @@ function applyStageAndHubOpticalVars(stage, hub, eff, tokens, isLight, compSurfa
       } else {
         el.removeAttribute('data-border-style');
       }
+      el.setAttribute('data-glass-style', compSurfaces[rid].effStyle || 'none');
     });
   }
 
@@ -10750,10 +11648,14 @@ function applyStageAndHubOpticalVars(stage, hub, eff, tokens, isLight, compSurfa
   hub.style.setProperty('--sim-r-left', compSurfaces.sidebar.radiusCss);
   hub.style.setProperty('--sim-r-right', compSurfaces.rightPane.radiusCss);
   hub.style.setProperty('--sim-r-card', compSurfaces.card.radiusCss);
+  hub.style.setProperty('--sim-r-user-bubble', compSurfaces.userBubble.radiusCss);
+  hub.style.setProperty('--sim-r-assistant-bubble', compSurfaces.assistantBubble.radiusCss);
+  hub.style.setProperty('--sim-r-code-block', compSurfaces.codeBlock.radiusCss);
+  hub.style.setProperty('--sim-r-controls', compSurfaces.controls.radiusCss);
   hub.style.setProperty('--sim-r-composer', compSurfaces.composer.radiusCss);
   hub.style.setProperty('--sim-r-popover', compSurfaces.popover.radiusCss);
 
-  // Explicit surface & backdrop variables (including decoupled rightPane & wco!)
+  // Explicit surface & backdrop variables (all 12 regions + auxiliary simulation vars)
   hub.style.setProperty('--sim-topbar-bg', compSurfaces.topbar.rgba);
   hub.style.setProperty('--sim-wco-bg', compSurfaces.wco.rgba);
   hub.style.setProperty('--sim-sidebar-bg', compSurfaces.sidebar.rgba);
@@ -10762,6 +11664,11 @@ function applyStageAndHubOpticalVars(stage, hub, eff, tokens, isLight, compSurfa
   hub.style.setProperty('--sim-composer-bg', compSurfaces.composer.rgba);
   hub.style.setProperty('--sim-card-bg', compSurfaces.card.rgba);
   hub.style.setProperty('--sim-popover-bg', compSurfaces.popover.rgba);
+  hub.style.setProperty('--sim-turn-card-bg', auxVars.turnCardBg);
+  hub.style.setProperty('--sim-control-active-bg', auxVars.controlActiveBg);
+  hub.style.setProperty('--sim-control-hover-bg', auxVars.controlHoverBg);
+  hub.style.setProperty('--sim-selected-bg', auxVars.selectedBg);
+  hub.style.setProperty('--sim-scroll-thumb', auxVars.scrollThumb);
 
   hub.style.setProperty('--sim-topbar-backdrop', compSurfaces.topbar.backdrop);
   hub.style.setProperty('--sim-wco-backdrop', compSurfaces.wco.backdrop);
@@ -10808,16 +11715,24 @@ function syncOpticalCssVars() {
   root.style.setProperty('--prism-wall-tint-rgb', tokens.wallTintRgb);
   root.style.setProperty('--prism-wall-tint-mix', `${Math.round((eff.wallTintMix || 0) * 1000) / 10}%`);
 
-  // Resolve all 8 region surfaces once so swatches, 21:9 preview & visual editor stay 1:1 live
+  // Resolve all 12 region surfaces once so swatches, 21:9 preview & visual editor stay 1:1 live
   const compSurfaces = {};
   for (const comp of REGION_IDS) {
     compSurfaces[comp] = resolveSimRegionSurface(comp, eff, tokens, isLight);
     applyRegionVarsToTarget(root, comp, compSurfaces[comp]);
   }
+  const auxVars = computeAuxSimVars(eff, tokens, isLight, compSurfaces);
   root.style.setProperty('--sim-chat-bg', compSurfaces.workspace.rgba);
   root.style.setProperty('--sim-chat-backdrop', compSurfaces.workspace.backdrop);
   root.style.setProperty('--sim-right-pane-backdrop', compSurfaces.rightPane.backdrop);
   root.style.setProperty('--sim-wco-symbol', compSurfaces.wco.fg);
+  root.style.setProperty('--sim-editor-bg', compSurfaces.codeBlock.rgba);
+  root.style.setProperty('--sim-code-backdrop', compSurfaces.codeBlock.backdrop);
+  root.style.setProperty('--sim-turn-card-bg', auxVars.turnCardBg);
+  root.style.setProperty('--sim-control-active-bg', auxVars.controlActiveBg);
+  root.style.setProperty('--sim-control-hover-bg', auxVars.controlHoverBg);
+  root.style.setProperty('--sim-selected-bg', auxVars.selectedBg);
+  root.style.setProperty('--sim-scroll-thumb', auxVars.scrollThumb);
 
   const skinEnabledStr = store.skinEnabled ? 'true' : 'false';
   document.querySelectorAll('.prism-preview-card').forEach((card) => {
@@ -11280,12 +12195,17 @@ return { clampNum: clampNum, parseRgbTriplet: parseRgbTriplet, mixRgbArr: mixRgb
 
 const __prism_mod_6 = (function() {
 const REGION_IDS = __prism_mod_2.REGION_IDS;
+const GLASS_STYLES = __prism_mod_2.GLASS_STYLES;
+const ZERO_BLUR_BY_DEFAULT_REGIONS = __prism_mod_2.ZERO_BLUR_BY_DEFAULT_REGIONS;
+const SURFACE_TINT_BOUNDS = __prism_mod_2.SURFACE_TINT_BOUNDS;
+const REGION_FIELD_BOUNDS = __prism_mod_2.REGION_FIELD_BOUNDS;
 const DEFAULT_REGION_ENTRY = __prism_mod_2.DEFAULT_REGION_ENTRY;
 const DEFAULT_SIDEBAR_REGION_ENTRY = __prism_mod_2.DEFAULT_SIDEBAR_REGION_ENTRY;
 const SCENE_PRESETS = __prism_mod_2.SCENE_PRESETS;
 const SCENE_PRESET_IDS = __prism_mod_2.SCENE_PRESET_IDS;
 const DEFAULT_CONFIG = __prism_mod_2.DEFAULT_CONFIG;
 const CJK_SAFE_FONT_PRESETS = __prism_mod_2.CJK_SAFE_FONT_PRESETS;
+const resolveRegionEffectiveStyle = __prism_mod_2.resolveRegionEffectiveStyle;
 const resolveComponentDefaultAlpha = __prism_mod_2.resolveComponentDefaultAlpha;
 const sanitizeFontFamily = __prism_mod_2.sanitizeFontFamily;
 const store = __prism_mod_3.store;
@@ -11299,6 +12219,7 @@ const getEffectiveConfig = __prism_mod_3.getEffectiveConfig;
 const getResolvedPolarity = __prism_mod_3.getResolvedPolarity;
 const isRegionOpen = __prism_mod_3.isRegionOpen;
 const evaluateRegionFgContrast = __prism_mod_5.evaluateRegionFgContrast;
+const resolveSimRegionSurface = __prism_mod_5.resolveSimRegionSurface;
 // Wallpaper Prism Studio UI — Layer 3 Reusable Tactile Controls, WCAG Picker & Region Shell
 // Strict DAG L3: imports ONLY ../shared/schema.mjs, ./state.mjs, and ./optics.mjs.
 // Zero `export let` live bindings; directly reuses schema.mjs `CJK_SAFE_FONT_PRESETS`.
@@ -11465,9 +12386,21 @@ function renderConfirmRow({ confirmKey, label, hint = '', btnLabel, danger = fal
   `;
 }
 function renderScenePresetsHtml(eff) {
-  const icons = { crystal: '✦', islands: '❖', focus: '◐', eco: '🍃' };
-  const subsZh = { crystal: '64% 高透光感', islands: '76% 均衡磨砂', focus: '柔焦护眼阅读', eco: '静帧零模糊' };
-  const subsEn = { crystal: '64% airy acrylic', islands: '76% balanced glass', focus: 'Soft reading veil', eco: 'Paused 0-blur' };
+  const icons = { crisp: '◇', crystal: '✦', islands: '❖', focus: '◐', eco: '🍃' };
+  const subsZh = {
+    crisp: '76% 零模糊透底',
+    crystal: '64% 高透光感',
+    islands: '76% 均衡磨砂',
+    focus: '柔焦护眼阅读',
+    eco: '静帧零模糊',
+  };
+  const subsEn = {
+    crisp: '76% 0-blur crisp',
+    crystal: '64% airy acrylic',
+    islands: '76% balanced glass',
+    focus: 'Soft reading veil',
+    eco: 'Paused 0-blur',
+  };
   const isZh = curLocale() === 'zh';
 
   return `
@@ -11488,6 +12421,353 @@ function renderScenePresetsHtml(eff) {
       }).join('')}
     </div>
   `;
+}
+
+// ============================================================================
+// Shared L3 Region Optical Controls (Reused by Accordion, Card & Inspector)
+// ============================================================================
+function formatRegionStyleBadge(rid, eff = getEffectiveConfig()) {
+  const entry = eff?.regions?.[rid] || null;
+  const explicit = entry?.style && GLASS_STYLES.includes(entry.style) ? entry.style : null;
+  const effStyle = resolveRegionEffectiveStyle(rid, entry, eff);
+  if (explicit === null) {
+    if (ZERO_BLUR_BY_DEFAULT_REGIONS.includes(rid) && effStyle === 'none') {
+      return { text: tr('region.style.autoNoBlur'), kind: 'none', explicit: false };
+    }
+    if (effStyle === 'solid' || effStyle === 'frosted' || effStyle === 'crystal' || effStyle === 'tinted') {
+      return { text: tr(`region.style.${effStyle}`), kind: effStyle, explicit: false };
+    }
+    const globalBlurOff = eff?.glassSurfaces === false || Number(eff?.glassBlur ?? 16) <= 0;
+    return {
+      text: globalBlurOff ? tr('region.style.none') : tr('region.style.frosted'),
+      kind: globalBlurOff ? 'none' : 'frosted',
+      explicit: false,
+    };
+  }
+  return { text: tr(`region.style.${explicit}`), kind: explicit, explicit: true };
+}
+function renderRegionStyleRow(rid, entry, eff = getEffectiveConfig()) {
+  const curVal = entry?.style && GLASS_STYLES.includes(entry.style) ? entry.style : 'auto';
+  const effStyle = resolveRegionEffectiveStyle(rid, entry, eff);
+  const autoLabel =
+    rid === 'codeBlock'
+      ? effStyle === 'none'
+        ? tr('region.style.autoNoBlur')
+        : `${tr('region.style.auto')} · ${tr(`region.style.${effStyle}`)}`
+      : ZERO_BLUR_BY_DEFAULT_REGIONS.includes(rid)
+        ? tr('region.style.autoNoBlur')
+        : tr('region.style.auto');
+  const opts = [
+    { val: 'auto', label: autoLabel },
+    { val: 'none', label: tr('region.style.none') },
+    { val: 'frosted', label: tr('region.style.frosted') },
+    { val: 'crystal', label: tr('region.style.crystal') },
+    { val: 'tinted', label: tr('region.style.tinted') },
+    { val: 'solid', label: tr('region.style.solid') },
+  ];
+  const hint = ZERO_BLUR_BY_DEFAULT_REGIONS.includes(rid) ? tr('region.prop.styleHint') : '';
+  return `
+    <div class="prism-style-ctl" data-region-style-ctl="${esc(rid)}">
+      <div class="prism-ctl-label">
+        <span class="prism-ctl-name">${esc(tr('region.prop.style'))}</span>
+        ${hint ? `<span class="prism-ctl-hint">${esc(hint)}</span>` : ''}
+      </div>
+      <div class="prism-seg prism-style-seg" role="group" aria-label="${esc(tr('region.prop.style'))}">
+        ${opts
+          .map(
+            (o) => `
+          <button type="button" class="prism-seg-btn ${curVal === o.val ? 'is-active' : ''}"
+                  data-action="set-region-prop" data-region="${esc(rid)}" data-prop="style" data-val="${esc(o.val)}">
+            ${esc(o.label)}
+          </button>
+        `,
+          )
+          .join('')}
+      </div>
+    </div>
+  `;
+}
+function renderRegionGlassEnabledRow(rid, glassEnabled) {
+  const curVal = glassEnabled === true ? 'true' : glassEnabled === false ? 'false' : 'auto';
+  const opts = [
+    { val: 'auto', label: tr('region.followGlobal') },
+    { val: 'true', label: tr('layout.borders.on') },
+    { val: 'false', label: tr('layout.borders.off') },
+  ];
+  return `
+    <div class="prism-ctl-row">
+      <div class="prism-ctl-label">
+        <span class="prism-ctl-name">${esc(tr('region.prop.glassEnabled'))}</span>
+      </div>
+      <div class="prism-seg">
+        ${opts
+          .map(
+            (o) => `
+          <button type="button" class="prism-seg-btn ${curVal === o.val ? 'is-active' : ''}"
+                  data-action="set-region-prop" data-region="${esc(rid)}" data-prop="glassEnabled" data-val="${esc(o.val)}">
+            ${esc(o.label)}
+          </button>
+        `,
+          )
+          .join('')}
+      </div>
+    </div>
+  `;
+}
+function renderRegionBorderStyleRow(rid, borderStyle) {
+  const curVal = borderStyle || 'auto';
+  const opts = [
+    { val: 'auto', label: tr('region.prop.borderStyle.auto') },
+    { val: 'full', label: tr('region.prop.borderStyle.full') },
+    { val: 'bottom', label: tr('region.prop.borderStyle.bottom') },
+    { val: 'none', label: tr('region.prop.borderStyle.none') },
+  ];
+  return `
+    <div class="prism-ctl-row">
+      <div class="prism-ctl-label">
+        <span class="prism-ctl-name">${esc(tr('region.prop.borderStyle'))}</span>
+      </div>
+      <div class="prism-seg">
+        ${opts
+          .map(
+            (o) => `
+          <button type="button" class="prism-seg-btn ${curVal === o.val ? 'is-active' : ''}"
+                  data-action="set-region-prop" data-region="${esc(rid)}" data-prop="borderStyle" data-val="${esc(o.val)}">
+            ${esc(o.label)}
+          </button>
+        `,
+          )
+          .join('')}
+      </div>
+    </div>
+  `;
+}
+function renderRegionTintRow(rid, entry, surfaceFill) {
+  const curTint = typeof entry.tint === 'string' ? entry.tint.trim().toUpperCase() : '';
+  const pickerHex = /^#[0-9a-f]{6}$/i.test(curTint) ? curTint : '#141417';
+
+  return `
+    <div class="prism-fg-color-ctl">
+      <div class="prism-fg-color-top prism-ctl-row">
+        <div class="prism-ctl-label">
+          <span class="prism-ctl-name">${esc(tr('region.prop.tint'))}</span>
+          <span class="prism-ctl-hint">${esc(tr('glass.comp.tintGuardHint'))}</span>
+        </div>
+        <div class="prism-color-picker-wrap">
+          <span class="prism-region-swatch" aria-hidden="true">
+            <span class="prism-region-swatch-fill" style="background:${esc(surfaceFill)}"></span>
+          </span>
+          <input type="color" class="prism-color-input" value="${esc(pickerHex)}"
+                 data-action="set-region-color" data-region="${esc(rid)}" data-prop="tint" />
+          <button type="button" class="prism-btn prism-btn-sm ${!curTint ? 'prism-btn-primary' : ''}"
+                  data-action="clear-region-prop" data-region="${esc(rid)}" data-prop="tint">
+            ${esc(tr('glass.comp.tintAuto'))}
+          </button>
+        </div>
+      </div>
+      <div class="prism-filter-group">
+        ${CURATED_TINT_SWATCHES.map((sw) => {
+          const swHex = String(sw.hex || '#141417').toUpperCase();
+          const isSel = curTint === swHex;
+          const swLabel = tr(sw.key || sw.labelKey || swHex);
+          return `
+            <button type="button" class="prism-chip ${isSel ? 'is-active' : ''}"
+                    data-action="pick-region-tint" data-region="${esc(rid)}" data-hex="${esc(swHex)}" title="${esc(swHex)}">
+              <span class="prism-accent-dot" style="background:${esc(swHex)}"></span>
+              <span>${esc(swLabel)}</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+function renderRegionOpticalControlsHtml(
+  rid,
+  entry,
+  eff = getEffectiveConfig(),
+  tokens = null,
+  isLight = getResolvedPolarity(eff) === 'light',
+  opts = {},
+) {
+  const surf = opts.surf || resolveSimRegionSurface(rid, eff, tokens, isLight);
+  const surfaceFill = surf?.bgCss || surf?.rgba || 'rgba(20, 20, 24, 0.76)';
+  const bounds = SURFACE_TINT_BOUNDS[rid] || { minOpacity: 0, maxOpacity: 0.98 };
+  const defAlpha = resolveComponentDefaultAlpha(rid, eff, isLight);
+  const effStyle = resolveRegionEffectiveStyle(rid, entry, eff);
+  const isBlurDisabledStyle = effStyle === 'none' || effStyle === 'tinted' || effStyle === 'solid';
+  const isSidebar = rid === 'sidebar';
+
+  const opKey = isSidebar ? 'sidebarOpacity' : `regions.${rid}.opacity`;
+  const opVal = isSidebar ? (eff.sidebarOpacity ?? entry.opacity ?? null) : (entry.opacity ?? null);
+  const blurKey = isSidebar ? 'sidebarBlur' : `regions.${rid}.blur`;
+  const blurVal = isSidebar ? (eff.sidebarBlur ?? entry.blur ?? null) : (entry.blur ?? null);
+
+  let blurFallback;
+  if (rid === 'codeBlock') {
+    blurFallback = effStyle === 'frosted' ? (eff.glassBlur > 0 ? eff.glassBlur : 16) : 0;
+  } else if (ZERO_BLUR_BY_DEFAULT_REGIONS.includes(rid)) {
+    blurFallback =
+      effStyle === 'frosted'
+        ? eff.glassBlur > 0
+          ? eff.glassBlur
+          : 16
+        : effStyle === 'crystal'
+          ? eff.glassBlur > 0
+            ? Math.max(10, Math.round(eff.glassBlur * 0.75))
+            : 12
+          : 0;
+  } else {
+    blurFallback =
+      effStyle === 'crystal'
+        ? eff.glassBlur > 0
+          ? Math.max(10, Math.round(eff.glassBlur * 0.75))
+          : 12
+        : eff.glassBlur;
+  }
+
+  const satFallback = effStyle === 'crystal' ? (isLight ? 165 : 150) : 135;
+  const elevFallback = eff.shadows ? 1 : 0;
+  const ctxHint =
+    rid === 'controls'
+      ? `<div class="prism-region-notice">ℹ ${esc(tr('region.controlsHint'))}</div>`
+      : rid === 'userBubble' || rid === 'assistantBubble' || rid === 'codeBlock'
+        ? `<div class="prism-ctl-hint" style="padding:2px 0">${esc(tr(`region.${rid}.desc`))}</div>`
+        : '';
+
+  return [
+    renderRegionStyleRow(rid, entry, eff),
+    ctxHint,
+    renderRegionGlassEnabledRow(rid, entry.glassEnabled),
+    renderSliderRow({
+      key: opKey,
+      label: isSidebar && opts.sidebarLabels !== false ? tr('glass.sidebarOpacity') : tr('region.prop.opacity'),
+      value: opVal,
+      defaultValue: defAlpha,
+      min: bounds.minOpacity,
+      max: bounds.maxOpacity,
+      step: 0.01,
+      scale: 100,
+      decimals: 0,
+      suffix: ' %',
+      nullable: true,
+      nullableFallbackKey: rid === 'popover' ? '' : 'glassOpacity',
+      fallbackValue: defAlpha,
+      comp: rid,
+      region: rid,
+      prop: 'opacity',
+      resetAction: isSidebar ? 'reset-key' : 'reset-region-prop',
+    }),
+    renderSliderRow({
+      key: blurKey,
+      label: isSidebar && opts.sidebarLabels !== false ? tr('glass.sidebarBlur') : tr('region.prop.blur'),
+      value: blurVal,
+      defaultValue: blurFallback,
+      min: REGION_FIELD_BOUNDS.blur.min,
+      max: REGION_FIELD_BOUNDS.blur.max,
+      step: 1,
+      suffix: ' px',
+      nullable: true,
+      nullableFallbackKey: ZERO_BLUR_BY_DEFAULT_REGIONS.includes(rid) ? '' : 'glassBlur',
+      fallbackValue: blurFallback,
+      comp: rid,
+      region: rid,
+      prop: 'blur',
+      resetAction: isSidebar ? 'reset-key' : 'reset-region-prop',
+      hint: isBlurDisabledStyle ? tr('region.prop.blurAutoEnableHint') : '',
+    }),
+    `<div class="prism-optical-sat-wrap" data-optical-sat-wrap="${esc(rid)}" data-blur-active="${isBlurDisabledStyle ? 'false' : 'true'}">
+      ${renderSliderRow({
+        key: `regions.${rid}.saturation`,
+        label: tr('region.prop.saturation'),
+        value: entry.saturation ?? null,
+        defaultValue: satFallback,
+        min: REGION_FIELD_BOUNDS.saturation.min,
+        max: REGION_FIELD_BOUNDS.saturation.max,
+        step: 1,
+        suffix: ' %',
+        nullable: true,
+        fallbackValue: satFallback,
+        comp: rid,
+        region: rid,
+        prop: 'saturation',
+        resetAction: 'reset-region-prop',
+        hint: tr('region.prop.saturationHint'),
+      })}
+    </div>`,
+    renderSliderRow({
+      key: `regions.${rid}.tone`,
+      label: tr('region.prop.tone'),
+      value: Number(entry.tone || 0),
+      defaultValue: 0,
+      min: REGION_FIELD_BOUNDS.tone.min,
+      max: REGION_FIELD_BOUNDS.tone.max,
+      step: 1,
+      suffix: '',
+      comp: rid,
+      region: rid,
+      prop: 'tone',
+      resetAction: 'reset-region-prop',
+    }),
+    renderRegionTintRow(rid, entry, surfaceFill),
+    renderSliderRow({
+      key: `regions.${rid}.borderOpacity`,
+      label: tr('region.prop.borderOpacity'),
+      value: entry.borderOpacity ?? null,
+      defaultValue: 1,
+      min: REGION_FIELD_BOUNDS.borderOpacity.min,
+      max: REGION_FIELD_BOUNDS.borderOpacity.max,
+      step: 0.01,
+      scale: 100,
+      decimals: 0,
+      suffix: ' %',
+      nullable: true,
+      fallbackValue: surf?.borderFactor ?? 0.5,
+      comp: rid,
+      region: rid,
+      prop: 'borderOpacity',
+      resetAction: 'reset-region-prop',
+      hint: opts.showBorderAutoHint ? tr('region.prop.borderOpacityAuto') : '',
+    }),
+    renderSliderRow({
+      key: `regions.${rid}.elevation`,
+      label: tr('region.prop.elevation'),
+      value: entry.elevation ?? null,
+      defaultValue: elevFallback,
+      min: REGION_FIELD_BOUNDS.elevation.min,
+      max: REGION_FIELD_BOUNDS.elevation.max,
+      step: 0.05,
+      decimals: 2,
+      suffix: ' ×',
+      nullable: true,
+      fallbackValue: elevFallback,
+      comp: rid,
+      region: rid,
+      prop: 'elevation',
+      resetAction: 'reset-region-prop',
+      hint: tr('region.prop.elevationHint'),
+    }),
+  ].join('');
+}
+function syncRegionStyleControlsInDom(rid, eff = getEffectiveConfig()) {
+  if (typeof document === 'undefined' || !rid || !REGION_IDS.includes(rid)) return;
+  const entry = eff?.regions?.[rid] || DEFAULT_REGION_ENTRY;
+  const curStyle = entry?.style && GLASS_STYLES.includes(entry.style) ? entry.style : 'auto';
+  const effStyle = resolveRegionEffectiveStyle(rid, entry, eff);
+  const blurActive = !(effStyle === 'none' || effStyle === 'tinted' || effStyle === 'solid');
+
+  document
+    .querySelectorAll(`[data-action="set-region-prop"][data-region="${rid}"][data-prop="style"]`)
+    .forEach((btn) => {
+      if (btn instanceof HTMLElement) {
+        btn.classList.toggle('is-active', (btn.dataset.val || 'auto') === curStyle);
+      }
+    });
+  document.querySelectorAll(`[data-optical-sat-wrap="${rid}"]`).forEach((wrap) => {
+    if (wrap instanceof HTMLElement) {
+      wrap.dataset.blurActive = blurActive ? 'true' : 'false';
+    }
+  });
 }
 
 // ============================================================================
@@ -11726,8 +13006,12 @@ function renderRegionAccordionShell({
       : '';
   const resolvedBadge =
     badgeText || (customCount > 0 ? tr('region.customCount', { n: customCount }) : tr('region.followGlobal'));
+  const styleInfo = !isGlobal ? formatRegionStyleBadge(regionId) : null;
+  const styleChipHtml = styleInfo
+    ? `<span class="prism-region-style-chip" data-region-style-chip="${esc(regionId)}" data-style-kind="${esc(styleInfo.kind)}">${esc(styleInfo.text)}</span>`
+    : '';
 
-  // DEF-SE-2: Groups 1-7 strictly use `reset-region`; Group 8 (`global`) exclusively owns `reset-module`!
+  // DEF-SE-2: Groups 1-11 strictly use `reset-region`; Group 12 (`global`) exclusively owns `reset-module`!
   const resetAttrs =
     isGlobal || resetAction === 'reset-module'
       ? `data-action="reset-module" data-keys="${esc(resetKeys)}"`
@@ -11742,6 +13026,7 @@ function renderRegionAccordionShell({
           <span class="prism-region-title">${esc(title)}</span>
         </div>
         <div class="prism-region-summary-actions">
+          ${styleChipHtml}
           <span class="prism-region-badge prism-region-custom-badge ${customCount > 0 ? 'is-custom' : ''}" data-region-badge="${esc(regionId)}">${esc(resolvedBadge)}</span>
           <button type="button" class="prism-btn prism-btn-sm prism-region-reset-btn" ${resetAttrs}
                   title="${esc(tr('region.resetRegion'))}">↺</button>
@@ -11830,12 +13115,15 @@ function countSingleRegionEntryDiffs(regionId, eff) {
   const def = regionId === 'sidebar' ? DEFAULT_SIDEBAR_REGION_ENTRY : DEFAULT_REGION_ENTRY;
   let count = 0;
 
+  if (ent.style !== null && ent.style !== undefined) count += 1;
   if (ent.glassEnabled !== null && ent.glassEnabled !== undefined) count += 1;
   if (ent.blur !== null && ent.blur !== undefined) count += 1;
+  if (ent.saturation !== null && ent.saturation !== undefined) count += 1;
   if (ent.opacity !== null && ent.opacity !== undefined) count += 1;
   if (Number(ent.tone || 0) !== 0) count += 1;
   if (typeof ent.tint === 'string' && ent.tint.trim() !== '') count += 1;
   if (ent.borderOpacity !== null && ent.borderOpacity !== undefined) count += 1;
+  if (ent.elevation !== null && ent.elevation !== undefined) count += 1;
   if (ent.borderStyle !== null && ent.borderStyle !== undefined) count += 1;
   if (ent.radius !== null && ent.radius !== undefined) count += 1;
   if (ent.fontSize !== null && ent.fontSize !== undefined) count += 1;
@@ -11915,9 +13203,11 @@ function countRegionCustomProps(regionId, eff = getEffectiveConfig()) {
     if (eff.sidebarTypographyMode !== DEFAULT_CONFIG.sidebarTypographyMode) count += 1;
   } else if (regionId === 'workspace') {
     if (eff.hideWelcomeLogo !== DEFAULT_CONFIG.hideWelcomeLogo) count += 1;
-    if (eff.codeReadabilityMode !== DEFAULT_CONFIG.codeReadabilityMode) count += 1;
     if (eff.contrastFloor !== DEFAULT_CONFIG.contrastFloor) count += 1;
     if (Math.abs(Number(eff.chatGlassFidelity) - Number(DEFAULT_CONFIG.chatGlassFidelity)) > 0.5) count += 1;
+  } else if (regionId === 'codeBlock') {
+    // Mandatory F-05: codeReadabilityMode belongs to `codeBlock`, not `workspace`
+    if (eff.codeReadabilityMode !== DEFAULT_CONFIG.codeReadabilityMode) count += 1;
   } else if (regionId === 'composer') {
     if (eff.caretColor && eff.caretColor !== DEFAULT_CONFIG.caretColor) count += 1;
   } else if (regionId === 'rightPane') {
@@ -11930,8 +13220,13 @@ function countRegionCustomProps(regionId, eff = getEffectiveConfig()) {
 }
 function countTotalCustomizedRegions(eff = getEffectiveConfig(), regionIds = REGION_UI_ORDER) {
   let total = 0;
+  const hasSeparateCard = regionIds.includes('card');
   for (const id of regionIds) {
-    if (countRegionCustomProps(id, eff) > 0) {
+    const cnt =
+      id === 'workspace' && !hasSeparateCard
+        ? countRegionCustomProps('workspace', eff) + countRegionCustomProps('card', eff)
+        : countRegionCustomProps(id, eff);
+    if (cnt > 0) {
       total += 1;
     }
   }
@@ -12018,12 +13313,26 @@ function syncNullableFollowersInDom(fallbackKey, fallbackRawVal) {
 function syncRegionBadgesInDom(eff = getEffectiveConfig()) {
   if (typeof document === 'undefined') return;
   const allRegionKeys = [...new Set([...REGION_UI_ORDER, ...REGION_IDS])];
+  const cardCount = countRegionCustomProps('card', eff);
   for (const id of allRegionKeys) {
     const cnt = countRegionCustomProps(id, eff);
     document.querySelectorAll(`[data-region-badge="${id}"]`).forEach((badge) => {
-      badge.textContent = cnt > 0 ? tr('region.customCount', { n: cnt }) : tr('region.followGlobal');
-      badge.classList.toggle('is-custom', cnt > 0);
+      const isAccSummary = id === 'workspace' && Boolean(badge.closest('.prism-region-group > summary'));
+      const badgeCount = isAccSummary ? cnt + cardCount : cnt;
+      badge.textContent = badgeCount > 0 ? tr('region.customCount', { n: badgeCount }) : tr('region.followGlobal');
+      badge.classList.toggle('is-custom', badgeCount > 0);
     });
+    if (id !== 'global') {
+      const styleInfo = formatRegionStyleBadge(id, eff);
+      document.querySelectorAll(`[data-region-style-chip="${id}"]`).forEach((chip) => {
+        chip.textContent = styleInfo.text;
+        chip.dataset.styleKind = styleInfo.kind;
+      });
+      document.querySelectorAll(`[data-region-tree-style="${id}"]`).forEach((tag) => {
+        tag.textContent = styleInfo.text;
+        tag.dataset.styleKind = styleInfo.kind;
+      });
+    }
     document.querySelectorAll(`[data-region-tree-count="${id}"]`).forEach((node) => {
       node.textContent = cnt > 0 ? String(cnt) : 'Auto';
       node.classList.toggle('is-custom', cnt > 0);
@@ -12036,7 +13345,7 @@ function syncRegionBadgesInDom(eff = getEffectiveConfig()) {
   });
 }
 
-return { sliderMeta: sliderMeta, renderSliderRow: renderSliderRow, renderSwitchRow: renderSwitchRow, renderSegRow: renderSegRow, renderConfirmRow: renderConfirmRow, renderScenePresetsHtml: renderScenePresetsHtml, renderColorPickerWithWcag: renderColorPickerWithWcag, renderFontFamilyControl: renderFontFamilyControl, renderRegionAccordionShell: renderRegionAccordionShell, renderSaveStatusPillHtml: renderSaveStatusPillHtml, renderMediaHealthAlertsHtml: renderMediaHealthAlertsHtml, countRegionCustomProps: countRegionCustomProps, countTotalCustomizedRegions: countTotalCustomizedRegions, syncPairedSlidersInDom: syncPairedSlidersInDom, syncNullableFollowersInDom: syncNullableFollowersInDom, syncRegionBadgesInDom: syncRegionBadgesInDom, CURATED_TINT_SWATCHES: CURATED_TINT_SWATCHES };
+return { sliderMeta: sliderMeta, renderSliderRow: renderSliderRow, renderSwitchRow: renderSwitchRow, renderSegRow: renderSegRow, renderConfirmRow: renderConfirmRow, renderScenePresetsHtml: renderScenePresetsHtml, formatRegionStyleBadge: formatRegionStyleBadge, renderRegionStyleRow: renderRegionStyleRow, renderRegionGlassEnabledRow: renderRegionGlassEnabledRow, renderRegionBorderStyleRow: renderRegionBorderStyleRow, renderRegionTintRow: renderRegionTintRow, renderRegionOpticalControlsHtml: renderRegionOpticalControlsHtml, syncRegionStyleControlsInDom: syncRegionStyleControlsInDom, renderColorPickerWithWcag: renderColorPickerWithWcag, renderFontFamilyControl: renderFontFamilyControl, renderRegionAccordionShell: renderRegionAccordionShell, renderSaveStatusPillHtml: renderSaveStatusPillHtml, renderMediaHealthAlertsHtml: renderMediaHealthAlertsHtml, countRegionCustomProps: countRegionCustomProps, countTotalCustomizedRegions: countTotalCustomizedRegions, syncPairedSlidersInDom: syncPairedSlidersInDom, syncNullableFollowersInDom: syncNullableFollowersInDom, syncRegionBadgesInDom: syncRegionBadgesInDom, CURATED_TINT_SWATCHES: CURATED_TINT_SWATCHES };
 })();
 
 const __prism_mod_7 = (function() {
@@ -12572,12 +13881,10 @@ const COLOR_SCHEMES = __prism_mod_2.COLOR_SCHEMES;
 const COLOR_SCHEME_IDS = __prism_mod_2.COLOR_SCHEME_IDS;
 const ACCENT_MODES = __prism_mod_2.ACCENT_MODES;
 const ACCENT_PRESETS = __prism_mod_2.ACCENT_PRESETS;
-const SURFACE_TINT_BOUNDS = __prism_mod_2.SURFACE_TINT_BOUNDS;
 const DEFAULT_REGION_ENTRY = __prism_mod_2.DEFAULT_REGION_ENTRY;
 const DEFAULT_SIDEBAR_REGION_ENTRY = __prism_mod_2.DEFAULT_SIDEBAR_REGION_ENTRY;
 const FACTORY_PRESETS = __prism_mod_2.FACTORY_PRESETS;
 const DEFAULT_CONFIG = __prism_mod_2.DEFAULT_CONFIG;
-const resolveComponentDefaultAlpha = __prism_mod_2.resolveComponentDefaultAlpha;
 const resolveSchemeTokens = __prism_mod_2.resolveSchemeTokens;
 const store = __prism_mod_3.store;
 const REGION_UI_ORDER = __prism_mod_3.REGION_UI_ORDER;
@@ -12593,12 +13900,14 @@ const isRegionOpen = __prism_mod_3.isRegionOpen;
 const hasAnyRegionOpen = __prism_mod_3.hasAnyRegionOpen;
 const resolveSimRegionSurface = __prism_mod_5.resolveSimRegionSurface;
 const renderExtractedSwatchesHtml = __prism_mod_5.renderExtractedSwatchesHtml;
-const CURATED_TINT_SWATCHES = __prism_mod_6.CURATED_TINT_SWATCHES;
 const renderSliderRow = __prism_mod_6.renderSliderRow;
 const renderSwitchRow = __prism_mod_6.renderSwitchRow;
 const renderSegRow = __prism_mod_6.renderSegRow;
 const renderColorPickerWithWcag = __prism_mod_6.renderColorPickerWithWcag;
 const renderFontFamilyControl = __prism_mod_6.renderFontFamilyControl;
+const renderRegionOpticalControlsHtml = __prism_mod_6.renderRegionOpticalControlsHtml;
+const renderRegionBorderStyleRow = __prism_mod_6.renderRegionBorderStyleRow;
+const formatRegionStyleBadge = __prism_mod_6.formatRegionStyleBadge;
 const renderRegionAccordionShell = __prism_mod_6.renderRegionAccordionShell;
 const countRegionCustomProps = __prism_mod_6.countRegionCustomProps;
 const countTotalCustomizedRegions = __prism_mod_6.countTotalCustomizedRegions;
@@ -12686,12 +13995,15 @@ function isRegionOpticalCustomized(eff, rid) {
   const op = rid === 'sidebar' ? (eff.sidebarOpacity ?? ent.opacity ?? null) : (ent.opacity ?? null);
   const bl = rid === 'sidebar' ? (eff.sidebarBlur ?? ent.blur ?? null) : (ent.blur ?? null);
   return (
+    ent.style !== null ||
     ent.glassEnabled !== null ||
     bl !== null ||
+    ent.saturation !== null ||
     op !== null ||
     Number(ent.tone || 0) !== 0 ||
     Boolean(ent.tint && String(ent.tint).trim()) ||
-    ent.borderOpacity !== null
+    ent.borderOpacity !== null ||
+    ent.elevation !== null
   );
 }
 function isCurrentStateDirtyFromPreset(eff = getEffectiveConfig()) {
@@ -13028,104 +14340,6 @@ function renderPresetsManagerDrawerHtml() {
   `;
 }
 
-function renderRegionGlassEnabledRow(rid, glassEnabled) {
-  const curVal = glassEnabled === true ? 'true' : glassEnabled === false ? 'false' : 'auto';
-  const opts = [
-    { val: 'auto', label: tr('region.followGlobal') },
-    { val: 'true', label: tr('layout.borders.on') },
-    { val: 'false', label: tr('layout.borders.off') },
-  ];
-  return `
-    <div class="prism-ctl-row">
-      <div class="prism-ctl-label">
-        <span class="prism-ctl-name">${esc(tr('region.prop.glassEnabled'))}</span>
-      </div>
-      <div class="prism-seg">
-        ${opts
-          .map(
-            (o) => `
-          <button type="button" class="prism-seg-btn ${curVal === o.val ? 'is-active' : ''}"
-                  data-action="set-region-prop" data-region="${esc(rid)}" data-prop="glassEnabled" data-val="${esc(o.val)}">
-            ${esc(o.label)}
-          </button>
-        `,
-          )
-          .join('')}
-      </div>
-    </div>
-  `;
-}
-
-function renderRegionBorderStyleRow(rid, borderStyle) {
-  const curVal = borderStyle || 'auto';
-  const opts = [
-    { val: 'auto', label: tr('region.prop.borderStyle.auto') },
-    { val: 'full', label: tr('region.prop.borderStyle.full') },
-    { val: 'bottom', label: tr('region.prop.borderStyle.bottom') },
-    { val: 'none', label: tr('region.prop.borderStyle.none') },
-  ];
-  return `
-    <div class="prism-ctl-row">
-      <div class="prism-ctl-label">
-        <span class="prism-ctl-name">${esc(tr('region.prop.borderStyle'))}</span>
-      </div>
-      <div class="prism-seg">
-        ${opts
-          .map(
-            (o) => `
-          <button type="button" class="prism-seg-btn ${curVal === o.val ? 'is-active' : ''}"
-                  data-action="set-region-prop" data-region="${esc(rid)}" data-prop="borderStyle" data-val="${esc(o.val)}">
-            ${esc(o.label)}
-          </button>
-        `,
-          )
-          .join('')}
-      </div>
-    </div>
-  `;
-}
-
-function renderRegionTintRow(rid, entry, surfaceFill) {
-  const curTint = typeof entry.tint === 'string' ? entry.tint.trim() : '';
-  const pickerHex = /^#[0-9a-f]{6}$/i.test(curTint) ? curTint : '#141417';
-
-  return `
-    <div class="prism-fg-color-ctl">
-      <div class="prism-fg-color-top">
-        <div class="prism-ctl-label">
-          <span class="prism-ctl-name">${esc(tr('region.prop.tint'))}</span>
-          <span class="prism-ctl-hint">${esc(tr('glass.comp.tintGuardHint'))}</span>
-        </div>
-        <div class="prism-color-picker-wrap">
-          <span class="prism-region-swatch" aria-hidden="true">
-            <span class="prism-region-swatch-fill" style="background:${esc(surfaceFill)}"></span>
-          </span>
-          <input type="color" class="prism-color-input" value="${esc(pickerHex)}"
-                 data-action="set-region-color" data-region="${esc(rid)}" data-prop="tint" />
-          <button type="button" class="prism-btn prism-btn-sm ${!curTint ? 'prism-btn-primary' : ''}"
-                  data-action="clear-region-prop" data-region="${esc(rid)}" data-prop="tint">
-            ${esc(tr('glass.comp.tintAuto'))}
-          </button>
-        </div>
-      </div>
-      <div class="prism-filter-group">
-        ${CURATED_TINT_SWATCHES.map((sw) => {
-          const swHex = String(sw.hex || '#141417').toUpperCase();
-          const isSel = curTint.toUpperCase() === swHex;
-          const swLabel = tr(sw.key || sw.labelKey || swHex);
-          return `
-            <button type="button" class="prism-chip ${isSel ? 'is-active' : ''}"
-                    data-action="pick-region-tint" data-region="${esc(rid)}" data-hex="${esc(swHex)}" title="${esc(swHex)}">
-              <span class="prism-accent-dot" style="background:${esc(swHex)}"></span>
-              <span>${esc(swLabel)}</span>
-            </button>
-          `;
-        }).join('')}
-      </div>
-    </div>
-  `;
-}
-
 function renderSidebarRadiusChips(legacyKey, currentVal) {
   const cur = String(currentVal || 'auto');
   const chips = [
@@ -13152,129 +14366,96 @@ function renderSidebarRadiusChips(legacyKey, currentVal) {
 function renderCardSubgroupHtml(eff, tokens, isLight) {
   const rid = 'card';
   const entry = getRegionEntry(eff, rid);
-  const bounds = SURFACE_TINT_BOUNDS.card || { minOpacity: 0, maxOpacity: 0.98 };
+  const fsBounds = REGION_FONT_SIZE_BOUNDS.card || { min: 10, max: 24 };
   const surf = resolveSimRegionSurface(rid, eff, tokens, isLight);
   const surfaceFill = surf?.rgba || 'rgba(20, 20, 24, 0.78)';
-  const defAlpha = resolveComponentDefaultAlpha(rid, eff, isLight);
   const radiusFallback = eff.layoutMode === 'flush' ? 0 : eff.cornerStyle === 'sharp' ? 6 : eff.cornerStyle === 'soft' ? 16 : 12;
+  const fsFallback = eff.globalFontSize ?? 14;
   const customN = countRegionCustomProps(rid, eff);
+  const styleInfo = formatRegionStyleBadge(rid, eff);
 
   return `
     <div class="prism-region-subgroup" data-region-subgroup="card">
       <div class="prism-region-subgroup-head">
-        <div style="display:flex;align-items:center;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap">
           <span class="prism-region-swatch" aria-hidden="true">
             <span class="prism-region-swatch-fill" style="background:${esc(surfaceFill)}"></span>
           </span>
           <span class="prism-region-subgroup-title">${esc(tr('region.card'))}</span>
+          <span class="prism-region-style-chip" data-region-style-chip="card" data-style-kind="${esc(styleInfo.kind)}">${esc(styleInfo.text)}</span>
           ${customN > 0 ? `<span class="prism-region-badge is-custom" data-region-badge="card">${esc(tr('region.customCount', { n: customN }))}</span>` : ''}
         </div>
         <button type="button" class="prism-btn prism-btn-sm" data-action="reset-region" data-region="card" title="${esc(tr('region.resetRegion'))}">↺</button>
       </div>
-      ${renderSliderRow({
-        key: 'regions.card.opacity',
-        label: tr('region.prop.opacity'),
-        value: entry.opacity ?? null,
-        defaultValue: defAlpha,
-        min: bounds.minOpacity,
-        max: bounds.maxOpacity,
-        step: 0.01,
-        scale: 100,
-        decimals: 0,
-        suffix: ' %',
-        nullable: true,
-        nullableFallbackKey: 'glassOpacity',
-        fallbackValue: defAlpha,
-        comp: 'card',
-        region: 'card',
-        prop: 'opacity',
-        resetAction: 'reset-region-prop',
-      })}
-      ${renderSliderRow({
-        key: 'regions.card.blur',
-        label: tr('region.prop.blur'),
-        value: entry.blur ?? null,
-        defaultValue: 0,
-        min: 0,
-        max: 64,
-        step: 1,
-        suffix: ' px',
-        nullable: true,
-        fallbackValue: 0,
-        comp: 'card',
-        region: 'card',
-        prop: 'blur',
-        resetAction: 'reset-region-prop',
-      })}
-      ${renderSliderRow({
-        key: 'regions.card.tone',
-        label: tr('region.prop.tone'),
-        value: Number(entry.tone || 0),
-        defaultValue: 0,
-        min: -100,
-        max: 100,
-        step: 1,
-        suffix: '',
-        comp: 'card',
-        region: 'card',
-        prop: 'tone',
-        resetAction: 'reset-region-prop',
-      })}
-      ${renderRegionTintRow('card', entry, surfaceFill)}
-      ${renderSliderRow({
-        key: 'regions.card.borderOpacity',
-        label: tr('region.prop.borderOpacity'),
-        value: entry.borderOpacity ?? null,
-        defaultValue: 1,
-        min: 0,
-        max: 1,
-        step: 0.01,
-        scale: 100,
-        decimals: 0,
-        suffix: ' %',
-        nullable: true,
-        fallbackValue: surf?.borderFactor ?? 0.5,
-        comp: 'card',
-        region: 'card',
-        prop: 'borderOpacity',
-        resetAction: 'reset-region-prop',
-      })}
-      ${renderRegionBorderStyleRow('card', entry.borderStyle)}
-      ${renderSliderRow({
-        key: 'regions.card.radius',
-        label: tr('region.prop.radius'),
-        value: entry.radius ?? null,
-        defaultValue: radiusFallback,
-        min: 0,
-        max: 28,
-        step: 1,
-        suffix: ' px',
-        nullable: true,
-        fallbackValue: radiusFallback,
-        comp: 'card',
-        region: 'card',
-        prop: 'radius',
-        resetAction: 'reset-region-prop',
-      })}
+      ${renderRegionOpticalControlsHtml(rid, entry, eff, tokens, isLight, { surf })}
+      <div class="prism-region-subblock">
+        <div class="prism-region-subblock-title">${esc(tr('region.geometrySection'))}</div>
+        ${renderRegionBorderStyleRow(rid, entry.borderStyle)}
+        ${renderSliderRow({
+          key: 'regions.card.radius',
+          label: tr('region.prop.radius'),
+          value: entry.radius ?? null,
+          defaultValue: radiusFallback,
+          min: 0,
+          max: 28,
+          step: 1,
+          suffix: ' px',
+          nullable: true,
+          fallbackValue: radiusFallback,
+          comp: rid,
+          region: rid,
+          prop: 'radius',
+          resetAction: 'reset-region-prop',
+        })}
+        ${renderSliderRow({
+          key: 'regions.card.fontSize',
+          label: tr('region.prop.fontSize'),
+          value: entry.fontSize ?? null,
+          defaultValue: fsFallback,
+          min: fsBounds.min,
+          max: fsBounds.max,
+          step: 1,
+          suffix: ' px',
+          nullable: true,
+          fallbackValue: fsFallback,
+          comp: rid,
+          region: rid,
+          prop: 'fontSize',
+          resetAction: 'reset-region-prop',
+        })}
+        ${renderFontFamilyControl({
+          key: 'regions.card.fontFamily',
+          region: rid,
+          label: tr('region.prop.fontFamily'),
+          value: entry.fontFamily || '',
+        })}
+        ${renderColorPickerWithWcag({
+          key: 'regions.card.fontColor',
+          region: rid,
+          label: tr('region.prop.fontColor'),
+          value: entry.fontColor || '',
+          allowRaw: Boolean(entry.allowRawFontColor),
+          eff,
+          tokens,
+          isLight,
+          showWcag: true,
+          showAllowRaw: true,
+          showCodeHint: false,
+          autoLabel: tr('region.prop.radiusAuto'),
+        })}
+      </div>
     </div>
   `;
 }
 
 function renderStandardRegionBody(rid, eff, tokens, isLight) {
   const entry = getRegionEntry(eff, rid);
-  const bounds = SURFACE_TINT_BOUNDS[rid] || { minOpacity: 0, maxOpacity: 0.98 };
   const fsBounds = REGION_FONT_SIZE_BOUNDS[rid] || { min: 10, max: 24 };
   const surf = resolveSimRegionSurface(rid, eff, tokens, isLight);
-  const surfaceFill = surf?.rgba || 'rgba(20, 20, 24, 0.76)';
-  const defAlpha = resolveComponentDefaultAlpha(rid, eff, isLight);
   const isSidebar = rid === 'sidebar';
   const isRightPane = rid === 'rightPane';
   const radiusFallback = eff.layoutMode === 'flush' ? 0 : eff.cornerStyle === 'sharp' ? 6 : eff.cornerStyle === 'soft' ? 16 : 12;
 
-  const opKey = isSidebar ? 'sidebarOpacity' : `regions.${rid}.opacity`;
-  const opVal = isSidebar ? (eff.sidebarOpacity ?? entry.opacity ?? null) : (entry.opacity ?? null);
-  const blurKey = isSidebar ? 'sidebarBlur' : `regions.${rid}.blur`;
-  const blurVal = isSidebar ? (eff.sidebarBlur ?? entry.blur ?? null) : (entry.blur ?? null);
   const fsKey = isSidebar ? 'sidebarFontSize' : `regions.${rid}.fontSize`;
   const fsVal = isSidebar ? (eff.sidebarFontSize ?? entry.fontSize ?? null) : (entry.fontSize ?? null);
   const fsFallback = eff.globalFontSize ?? (isSidebar ? 13 : 14);
@@ -13306,89 +14487,24 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
     }
   }
 
-  // Optical 6 keys (keeping sidebarOpacity & sidebarBlur inside details[data-region="sidebar"]!)
-  parts.push(renderRegionGlassEnabledRow(rid, entry.glassEnabled));
-  parts.push(
-    renderSliderRow({
-      key: opKey,
-      label: isSidebar ? tr('glass.sidebarOpacity') : tr('region.prop.opacity'),
-      value: opVal,
-      defaultValue: defAlpha,
-      min: bounds.minOpacity,
-      max: bounds.maxOpacity,
-      step: 0.01,
-      scale: 100,
-      decimals: 0,
-      suffix: ' %',
-      nullable: true,
-      nullableFallbackKey: rid === 'popover' ? '' : 'glassOpacity',
-      fallbackValue: defAlpha,
-      comp: rid,
-      region: rid,
-      prop: 'opacity',
-      resetAction: isSidebar ? 'reset-key' : 'reset-region-prop',
-    }),
-  );
-  parts.push(
-    renderSliderRow({
-      key: blurKey,
-      label: isSidebar ? tr('glass.sidebarBlur') : tr('region.prop.blur'),
-      value: blurVal,
-      defaultValue: eff.glassBlur,
-      min: 0,
-      max: 64,
-      step: 1,
-      suffix: ' px',
-      nullable: true,
-      nullableFallbackKey: 'glassBlur',
-      fallbackValue: eff.glassBlur,
-      comp: rid,
-      region: rid,
-      prop: 'blur',
-      resetAction: isSidebar ? 'reset-key' : 'reset-region-prop',
-    }),
-  );
-  parts.push(
-    renderSliderRow({
-      key: `regions.${rid}.tone`,
-      label: tr('region.prop.tone'),
-      value: Number(entry.tone || 0),
-      defaultValue: 0,
-      min: -100,
-      max: 100,
-      step: 1,
-      suffix: '',
-      comp: rid,
-      region: rid,
-      prop: 'tone',
-      resetAction: 'reset-region-prop',
-    }),
-  );
-  parts.push(renderRegionTintRow(rid, entry, surfaceFill));
-  parts.push(
-    renderSliderRow({
-      key: `regions.${rid}.borderOpacity`,
-      label: tr('region.prop.borderOpacity'),
-      value: entry.borderOpacity ?? null,
-      defaultValue: 1,
-      min: 0,
-      max: 1,
-      step: 0.01,
-      scale: 100,
-      decimals: 0,
-      suffix: ' %',
-      nullable: true,
-      fallbackValue: surf?.borderFactor ?? 0.5,
-      comp: rid,
-      region: rid,
-      prop: 'borderOpacity',
-      resetAction: 'reset-region-prop',
-    }),
-  );
+  if (rid === 'codeBlock') {
+    parts.push(
+      renderSegRow({
+        key: 'codeReadabilityMode',
+        label: tr('glass.codeMode'),
+        value: eff.codeReadabilityMode,
+        options: CODE_READABILITY_MODES.map((m) => ({ value: m, label: tr(`glass.code.${m}`) })),
+      }),
+    );
+  }
 
-  // Border style & radius
-  parts.push(renderRegionBorderStyleRow(rid, entry.borderStyle));
-  parts.push(
+  // Unified L3 Optical 9-Key Block (style, glassEnabled, opacity, blur, saturation, tone, tint, borderOpacity, elevation)
+  parts.push(renderRegionOpticalControlsHtml(rid, entry, eff, tokens, isLight, { surf }));
+
+  // Geometry, Borders & Typography
+  const geomParts = [];
+  geomParts.push(renderRegionBorderStyleRow(rid, entry.borderStyle));
+  geomParts.push(
     renderSliderRow({
       key: `regions.${rid}.radius`,
       label: isSidebar
@@ -13411,8 +14527,8 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
     }),
   );
   if (isSidebar) {
-    parts.push(renderSidebarRadiusChips('leftSidebarRadius', eff.leftSidebarRadius));
-    parts.push(
+    geomParts.push(renderSidebarRadiusChips('leftSidebarRadius', eff.leftSidebarRadius));
+    geomParts.push(
       renderSegRow({
         key: 'sidebarListStyle',
         label: tr('sidebar.listStyle'),
@@ -13421,7 +14537,7 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
         options: SIDEBAR_LIST_STYLES.map((st) => ({ value: st, label: tr(`sidebar.listStyle.${st}`) })),
       }),
     );
-    parts.push(
+    geomParts.push(
       renderSegRow({
         key: 'sidebarTypographyMode',
         label: tr('sidebar.typographyMode'),
@@ -13431,12 +14547,12 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
     );
   }
   if (isRightPane) {
-    parts.push(renderSidebarRadiusChips('rightSidebarRadius', eff.rightSidebarRadius));
+    geomParts.push(renderSidebarRadiusChips('rightSidebarRadius', eff.rightSidebarRadius));
   }
 
   // Typography & foreground contrast guardrail (D7)
   if (rid !== 'wco') {
-    parts.push(
+    geomParts.push(
       renderSliderRow({
         key: fsKey,
         label: isSidebar ? tr('sidebar.fontSize') : tr('region.prop.fontSize'),
@@ -13455,7 +14571,7 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
         resetAction: isSidebar ? 'reset-key' : 'reset-region-prop',
       }),
     );
-    parts.push(
+    geomParts.push(
       renderFontFamilyControl({
         key: `regions.${rid}.fontFamily`,
         region: rid,
@@ -13464,7 +14580,7 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
       }),
     );
   }
-  parts.push(
+  geomParts.push(
     renderColorPickerWithWcag({
       key: `regions.${rid}.fontColor`,
       region: rid,
@@ -13476,10 +14592,17 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
       isLight,
       showWcag: true,
       showAllowRaw: true,
-      showCodeHint: rid === 'workspace',
+      showCodeHint: rid === 'workspace' || rid === 'codeBlock' || rid === 'assistantBubble',
       autoLabel: tr('region.prop.radiusAuto'),
     }),
   );
+
+  parts.push(`
+    <div class="prism-region-subblock">
+      <div class="prism-region-subblock-title">${esc(tr('region.geometrySection'))}</div>
+      ${geomParts.join('')}
+    </div>
+  `);
 
   // Region-specific extras
   if (rid === 'workspace') {
@@ -13495,14 +14618,8 @@ function renderStandardRegionBody(rid, eff, tokens, isLight) {
     parts.push(`
       <div class="prism-region-subgroup">
         <div class="prism-region-subgroup-head">
-          <span class="prism-region-subgroup-title">${esc(tr('glass.codeMode'))}</span>
+          <span class="prism-region-subgroup-title">${esc(tr('glass.chatFidelity'))}</span>
         </div>
-        ${renderSegRow({
-          key: 'codeReadabilityMode',
-          label: tr('glass.codeMode'),
-          value: eff.codeReadabilityMode,
-          options: CODE_READABILITY_MODES.map((m) => ({ value: m, label: tr(`glass.code.${m}`) })),
-        })}
         ${renderSwitchRow({
           key: 'contrastFloor',
           label: tr('glass.contrastFloor'),
@@ -13974,12 +15091,15 @@ function renderRegionGroupHtml(regionId, eff = getEffectiveConfig(), polarity = 
     ? renderGlobalRegionBody(eff, polarity)
     : renderStandardRegionBody(regionId, eff, tokens, isLight);
 
-  const customCount = countRegionCustomProps(regionId, eff);
+  const customCount =
+    regionId === 'workspace'
+      ? countRegionCustomProps('workspace', eff) + countRegionCustomProps('card', eff)
+      : countRegionCustomProps(regionId, eff);
 
   // DEF-SE-2 CRITICAL CONTRACT:
-  // Groups 1–7 strictly use `data-action="reset-region" data-region="<id>"`.
-  // Group 8 (`global`) EXCLUSIVELY uses `data-action="reset-module" data-keys="...islandGap..."`
-  // to protect `verify-all.mjs:L4322` (`summary [data-action="reset-module"]`).
+  // Groups 1–11 strictly use `data-action="reset-region" data-region="<id>"`.
+  // Group 12 (`global`) EXCLUSIVELY uses `data-action="reset-module" data-keys="...islandGap..."`
+  // to protect `verify-all.mjs:L7278` (`summary [data-action="reset-module"]`).
   return renderRegionAccordionShell({
     regionId,
     title,
@@ -13992,6 +15112,13 @@ function renderRegionGroupHtml(regionId, eff = getEffectiveConfig(), polarity = 
     bodyHtml,
   });
 }
+
+const CATEGORY_DIVIDER_BEFORE = Object.freeze({
+  topbar: 'region.cat.chrome',
+  userBubble: 'region.cat.chat',
+  controls: 'region.cat.controls',
+  global: 'region.global',
+});
 function renderPrismSkinTab() {
   const eff = getEffectiveConfig();
   const polarity = getResolvedPolarity(eff);
@@ -13999,7 +15126,13 @@ function renderPrismSkinTab() {
   return `
     ${renderSkinTopActionBarHtml(eff)}
     <div id="prism-region-accordions" class="prism-regions-stack">
-      ${REGION_UI_ORDER.map((rid) => renderRegionGroupHtml(rid, eff, polarity)).join('')}
+      ${REGION_UI_ORDER.map((rid) => {
+        const catKey = CATEGORY_DIVIDER_BEFORE[rid];
+        const catHtml = catKey
+          ? `<div class="prism-regions-cat-label" role="presentation">${esc(tr(catKey))}</div>`
+          : '';
+        return `${catHtml}${renderRegionGroupHtml(rid, eff, polarity)}`;
+      }).join('')}
     </div>
   `;
 }
@@ -15171,13 +16304,11 @@ return { renderUpdateBannerHtml: renderUpdateBannerHtml, renderUpdateReconnectOv
 
 const __prism_mod_12 = (function() {
 const REGION_IDS = __prism_mod_2.REGION_IDS;
-const SURFACE_TINT_BOUNDS = __prism_mod_2.SURFACE_TINT_BOUNDS;
 const REGION_FONT_SIZE_BOUNDS = __prism_mod_2.REGION_FONT_SIZE_BOUNDS;
 const DEFAULT_REGION_ENTRY = __prism_mod_2.DEFAULT_REGION_ENTRY;
 const DEFAULT_SIDEBAR_REGION_ENTRY = __prism_mod_2.DEFAULT_SIDEBAR_REGION_ENTRY;
 const SIDEBAR_LIST_STYLES = __prism_mod_2.SIDEBAR_LIST_STYLES;
 const SIDEBAR_TYPOGRAPHY_MODES = __prism_mod_2.SIDEBAR_TYPOGRAPHY_MODES;
-const resolveComponentDefaultAlpha = __prism_mod_2.resolveComponentDefaultAlpha;
 const resolveSchemeTokens = __prism_mod_2.resolveSchemeTokens;
 const store = __prism_mod_3.store;
 const curLocale = __prism_mod_3.curLocale;
@@ -15189,25 +16320,37 @@ const hasPerWallpaperPin = __prism_mod_3.hasPerWallpaperPin;
 const getActiveId = __prism_mod_3.getActiveId;
 const resolveSimRegionSurface = __prism_mod_5.resolveSimRegionSurface;
 const evaluateRegionFgContrast = __prism_mod_5.evaluateRegionFgContrast;
-const CURATED_TINT_SWATCHES = __prism_mod_6.CURATED_TINT_SWATCHES;
 const renderSliderRow = __prism_mod_6.renderSliderRow;
 const renderSwitchRow = __prism_mod_6.renderSwitchRow;
 const renderSegRow = __prism_mod_6.renderSegRow;
 const renderColorPickerWithWcag = __prism_mod_6.renderColorPickerWithWcag;
 const renderFontFamilyControl = __prism_mod_6.renderFontFamilyControl;
 const countRegionCustomProps = __prism_mod_6.countRegionCustomProps;
-// Wallpaper Prism Studio UI — Layer 4: 11-Property Region Inspector & Region Tree
+const formatRegionStyleBadge = __prism_mod_6.formatRegionStyleBadge;
+const renderRegionBorderStyleRow = __prism_mod_6.renderRegionBorderStyleRow;
+const renderRegionOpticalControlsHtml = __prism_mod_6.renderRegionOpticalControlsHtml;
+// Wallpaper Prism Studio UI — Layer 4: Per-Region Optical & Geometry Inspector & Region Tree
 // Strict DAG L4: imports ONLY L0 (schema), L1 (state), L2 (optics), L3 (controls).
 // Pure named exports only (no `export let`, no destructured exports).
 const INSPECTABLE_REGIONS = Object.freeze([
-  Object.freeze({ id: 'topbar', labelKey: 'region.topbar', glyph: '▭' }),
-  Object.freeze({ id: 'wco', labelKey: 'region.wco', glyph: '◫' }),
-  Object.freeze({ id: 'sidebar', labelKey: 'region.sidebar', glyph: '◧' }),
-  Object.freeze({ id: 'workspace', labelKey: 'region.workspace', glyph: '▢' }),
-  Object.freeze({ id: 'card', labelKey: 'region.card', glyph: '▤' }),
-  Object.freeze({ id: 'composer', labelKey: 'region.composer', glyph: '⌨' }),
-  Object.freeze({ id: 'rightPane', labelKey: 'region.rightPane', glyph: '◨' }),
-  Object.freeze({ id: 'popover', labelKey: 'region.popover', glyph: '❏' }),
+  Object.freeze({ id: 'topbar', labelKey: 'region.topbar', glyph: '▭', cat: 'chrome' }),
+  Object.freeze({ id: 'wco', labelKey: 'region.wco', glyph: '◫', cat: 'chrome' }),
+  Object.freeze({ id: 'sidebar', labelKey: 'region.sidebar', glyph: '◧', cat: 'chrome' }),
+  Object.freeze({ id: 'workspace', labelKey: 'region.workspace', glyph: '▢', cat: 'chrome' }),
+  Object.freeze({ id: 'userBubble', labelKey: 'region.userBubble', glyph: '💬', cat: 'chat' }),
+  Object.freeze({ id: 'assistantBubble', labelKey: 'region.assistantBubble', glyph: '✦', cat: 'chat' }),
+  Object.freeze({ id: 'codeBlock', labelKey: 'region.codeBlock', glyph: '</>', cat: 'chat' }),
+  Object.freeze({ id: 'card', labelKey: 'region.card', glyph: '▤', cat: 'chat' }),
+  Object.freeze({ id: 'controls', labelKey: 'region.controls', glyph: '⊞', cat: 'controls' }),
+  Object.freeze({ id: 'composer', labelKey: 'region.composer', glyph: '⌨', cat: 'controls' }),
+  Object.freeze({ id: 'rightPane', labelKey: 'region.rightPane', glyph: '◨', cat: 'controls' }),
+  Object.freeze({ id: 'popover', labelKey: 'region.popover', glyph: '❏', cat: 'controls' }),
+]);
+
+const TREE_CATEGORIES = Object.freeze([
+  Object.freeze({ id: 'chrome', labelKey: 'region.cat.chrome' }),
+  Object.freeze({ id: 'chat', labelKey: 'region.cat.chat' }),
+  Object.freeze({ id: 'controls', labelKey: 'region.cat.controls' }),
 ]);
 
 function getRegionMeta(regionId) {
@@ -15218,104 +16361,6 @@ function getRegionEntry(eff, rid) {
   const base = rid === 'sidebar' ? DEFAULT_SIDEBAR_REGION_ENTRY : DEFAULT_REGION_ENTRY;
   const raw = eff?.regions?.[rid];
   return raw && typeof raw === 'object' ? { ...base, ...raw } : { ...base };
-}
-
-function renderGlassEnabledRow(rid, glassEnabled) {
-  const curVal = glassEnabled === true ? 'true' : glassEnabled === false ? 'false' : 'auto';
-  const opts = [
-    { val: 'auto', label: tr('region.followGlobal') },
-    { val: 'true', label: tr('layout.borders.on') },
-    { val: 'false', label: tr('layout.borders.off') },
-  ];
-  return `
-    <div class="prism-ctl-row">
-      <div class="prism-ctl-label">
-        <span class="prism-ctl-name">${esc(tr('region.prop.glassEnabled'))}</span>
-      </div>
-      <div class="prism-seg">
-        ${opts
-          .map(
-            (o) => `
-          <button type="button" class="prism-seg-btn ${curVal === o.val ? 'is-active' : ''}"
-                  data-action="set-region-prop" data-region="${esc(rid)}" data-prop="glassEnabled" data-val="${esc(o.val)}">
-            ${esc(o.label)}
-          </button>
-        `,
-          )
-          .join('')}
-      </div>
-    </div>
-  `;
-}
-
-function renderBorderStyleRow(rid, borderStyle) {
-  const curVal = borderStyle || 'auto';
-  const opts = [
-    { val: 'auto', label: tr('region.prop.borderStyle.auto') },
-    { val: 'full', label: tr('region.prop.borderStyle.full') },
-    { val: 'bottom', label: tr('region.prop.borderStyle.bottom') },
-    { val: 'none', label: tr('region.prop.borderStyle.none') },
-  ];
-  return `
-    <div class="prism-ctl-row">
-      <div class="prism-ctl-label">
-        <span class="prism-ctl-name">${esc(tr('region.prop.borderStyle'))}</span>
-      </div>
-      <div class="prism-seg">
-        ${opts
-          .map(
-            (o) => `
-          <button type="button" class="prism-seg-btn ${curVal === o.val ? 'is-active' : ''}"
-                  data-action="set-region-prop" data-region="${esc(rid)}" data-prop="borderStyle" data-val="${esc(o.val)}">
-            ${esc(o.label)}
-          </button>
-        `,
-          )
-          .join('')}
-      </div>
-    </div>
-  `;
-}
-
-function renderTintPickerRow(rid, entry, surfaceFill) {
-  const curTint = typeof entry.tint === 'string' ? entry.tint.trim().toUpperCase() : '';
-  const pickerHex = /^#[0-9a-f]{6}$/i.test(curTint) ? curTint : '#141417';
-
-  return `
-    <div class="prism-fg-color-ctl">
-      <div class="prism-fg-color-top prism-ctl-row">
-        <div class="prism-ctl-label">
-          <span class="prism-ctl-name">${esc(tr('region.prop.tint'))}</span>
-          <span class="prism-ctl-hint">${esc(tr('glass.comp.tintGuardHint'))}</span>
-        </div>
-        <div class="prism-color-picker-wrap">
-          <span class="prism-region-swatch" aria-hidden="true">
-            <span class="prism-region-swatch-fill" style="background:${esc(surfaceFill)}"></span>
-          </span>
-          <input type="color" class="prism-color-input" value="${esc(pickerHex)}"
-                 data-action="set-region-color" data-region="${esc(rid)}" data-prop="tint" />
-          <button type="button" class="prism-btn prism-btn-sm ${!curTint ? 'prism-btn-primary' : ''}"
-                  data-action="clear-region-prop" data-region="${esc(rid)}" data-prop="tint">
-            ${esc(tr('glass.comp.tintAuto'))}
-          </button>
-        </div>
-      </div>
-      <div class="prism-filter-group">
-        ${CURATED_TINT_SWATCHES.map((sw) => {
-          const swHex = String(sw.hex || '#141417').toUpperCase();
-          const isSel = curTint === swHex;
-          const swLabel = sw.key ? tr(sw.key) : swHex;
-          return `
-            <button type="button" class="prism-chip ${isSel ? 'is-active' : ''}"
-                    data-action="pick-region-tint" data-region="${esc(rid)}" data-hex="${esc(swHex)}" title="${esc(swHex)}">
-              <span class="prism-accent-dot" style="background:${esc(swHex)}"></span>
-              <span>${esc(swLabel)}</span>
-            </button>
-          `;
-        }).join('')}
-      </div>
-    </div>
-  `;
 }
 
 function renderSidebarRadiusExtraChips(legacyKey, currentVal, regionRadius = null) {
@@ -15349,26 +16394,38 @@ function renderRegionTreeHtml(selectedRegion = store.selectedRegion) {
 
   return `
     <div class="prism-ve-tree-list" role="listbox" aria-label="${esc(tr('editor.treeTitle'))}">
-      ${INSPECTABLE_REGIONS.map((meta) => {
-        const rid = meta.id;
-        const isSel = rid === activeRid;
-        const surf = resolveSimRegionSurface(rid, eff, tokens, isLight);
-        const customN = countRegionCustomProps(rid, eff);
-        const fill = surf?.bgCss || surf?.rgba || 'rgba(20, 20, 24, 0.76)';
+      ${TREE_CATEGORIES.map((cat) => {
+        const items = INSPECTABLE_REGIONS.filter((m) => m.cat === cat.id);
         return `
-          <button type="button" class="prism-ve-tree-item ${isSel ? 'is-selected' : ''}"
-                  role="option" aria-selected="${isSel ? 'true' : 'false'}"
-                  data-action="select-editor-region" data-region="${esc(rid)}">
-            <span class="prism-ve-tree-item-left">
-              <span class="prism-region-swatch" aria-hidden="true">
-                <span class="prism-region-swatch-fill" style="background:${esc(fill)}"></span>
-              </span>
-              <span class="prism-ve-tree-name">${esc(tr(meta.labelKey))}</span>
-            </span>
-            <span class="prism-ve-tree-count ${customN > 0 ? 'is-custom' : ''}" data-region-tree-count="${esc(rid)}">
-              ${customN > 0 ? customN : 'Auto'}
-            </span>
-          </button>
+          <div class="prism-ve-tree-cat" role="presentation">${esc(tr(cat.labelKey))}</div>
+          ${items
+            .map((meta) => {
+              const rid = meta.id;
+              const isSel = rid === activeRid;
+              const surf = resolveSimRegionSurface(rid, eff, tokens, isLight);
+              const styleBadge = formatRegionStyleBadge(rid, eff);
+              const customN = countRegionCustomProps(rid, eff);
+              const fill = surf?.bgCss || surf?.rgba || 'rgba(20, 20, 24, 0.76)';
+              return `
+                <button type="button" class="prism-ve-tree-item ${isSel ? 'is-selected' : ''}"
+                        role="option" aria-selected="${isSel ? 'true' : 'false'}"
+                        data-action="select-editor-region" data-region="${esc(rid)}">
+                  <span class="prism-ve-tree-item-left">
+                    <span class="prism-region-swatch" aria-hidden="true">
+                      <span class="prism-region-swatch-fill" style="background:${esc(fill)}"></span>
+                    </span>
+                    <span class="prism-ve-tree-name">${esc(tr(meta.labelKey))}</span>
+                  </span>
+                  <span style="display:inline-flex;align-items:center;gap:4px">
+                    <span class="prism-ve-tree-style" data-region-tree-style="${esc(rid)}" data-style-kind="${esc(styleBadge.kind)}">${esc(styleBadge.text)}</span>
+                    <span class="prism-ve-tree-count ${customN > 0 ? 'is-custom' : ''}" data-region-tree-count="${esc(rid)}">
+                      ${customN > 0 ? customN : 'Auto'}
+                    </span>
+                  </span>
+                </button>
+              `;
+            })
+            .join('')}
         `;
       }).join('')}
     </div>
@@ -15382,7 +16439,6 @@ function renderRegionInspectorHtml(regionId = store.selectedRegion) {
   const isLight = polarity === 'light';
   const tokens = resolveSchemeTokens(eff, polarity);
   const entry = getRegionEntry(eff, rid);
-  const bounds = SURFACE_TINT_BOUNDS[rid] || { minOpacity: 0, maxOpacity: 0.98 };
   const fsBounds = REGION_FONT_SIZE_BOUNDS[rid] || { min: 10, max: 24 };
   const surf = resolveSimRegionSurface(rid, eff, tokens, isLight);
   const wcag = evaluateRegionFgContrast(rid, eff, tokens, isLight);
@@ -15390,12 +16446,6 @@ function renderRegionInspectorHtml(regionId = store.selectedRegion) {
   const pinned = hasPerWallpaperPin(getActiveId());
   const isZh = curLocale() === 'zh';
 
-  const defaultAlpha = resolveComponentDefaultAlpha(rid, eff, isLight);
-  const opKey = rid === 'sidebar' ? 'sidebarOpacity' : `regions.${rid}.opacity`;
-  const opVal = rid === 'sidebar' ? (eff.sidebarOpacity ?? entry.opacity ?? null) : (entry.opacity ?? null);
-  const blurKey = rid === 'sidebar' ? 'sidebarBlur' : `regions.${rid}.blur`;
-  const blurVal = rid === 'sidebar' ? (eff.sidebarBlur ?? entry.blur ?? null) : (entry.blur ?? null);
-  const blurFallback = rid === 'card' ? 0 : eff.glassBlur;
   const radiusFallback =
     eff.layoutMode === 'flush' ? 0 : eff.cornerStyle === 'sharp' ? 6 : eff.cornerStyle === 'soft' ? 16 : 12;
   const fsKey = rid === 'sidebar' ? 'sidebarFontSize' : `regions.${rid}.fontSize`;
@@ -15440,6 +16490,15 @@ function renderRegionInspectorHtml(regionId = store.selectedRegion) {
       }),
     );
     contextRows.push(
+      renderSwitchRow({
+        key: 'contrastFloor',
+        label: tr('glass.contrastFloor'),
+        checked: eff.contrastFloor,
+      }),
+    );
+  }
+  if (rid === 'codeBlock') {
+    contextRows.push(
       renderSegRow({
         key: 'codeReadabilityMode',
         label: tr('glass.codeMode'),
@@ -15449,13 +16508,6 @@ function renderRegionInspectorHtml(regionId = store.selectedRegion) {
           { value: 'frosted', label: tr('glass.code.frosted') },
           { value: 'solid', label: tr('glass.code.solid') },
         ],
-      }),
-    );
-    contextRows.push(
-      renderSwitchRow({
-        key: 'contrastFloor',
-        label: tr('glass.contrastFloor'),
-        checked: eff.contrastFloor,
       }),
     );
   }
@@ -15618,86 +16670,20 @@ function renderRegionInspectorHtml(regionId = store.selectedRegion) {
 
       ${contextRows.length > 0 ? `<div class="prism-ve-inspector-group">${contextRows.join('')}</div>` : ''}
 
-      <!-- Optical 6 Keys: glassEnabled, opacity, blur, tone, tint, borderOpacity -->
+      <!-- Optical 9 Keys: style, glassEnabled, opacity, blur, saturation, tone, tint, borderOpacity, elevation -->
       <div class="prism-ve-inspector-group">
-        <div class="prism-ve-inspector-group-title">${esc(isZh ? '毛玻璃与光学属性' : 'Glass & Optics')}</div>
-        ${renderGlassEnabledRow(rid, entry.glassEnabled)}
-        ${renderSliderRow({
-          key: opKey,
-          label: tr('region.prop.opacity'),
-          value: opVal,
-          defaultValue: defaultAlpha,
-          min: bounds.minOpacity,
-          max: bounds.maxOpacity,
-          step: 0.01,
-          scale: 100,
-          decimals: 0,
-          suffix: ' %',
-          nullable: true,
-          nullableFallbackKey: rid === 'popover' ? '' : 'glassOpacity',
-          fallbackValue: defaultAlpha,
-          comp: rid,
-          region: rid,
-          prop: 'opacity',
-          resetAction: rid === 'sidebar' ? 'reset-key' : 'reset-region-prop',
-        })}
-        ${renderSliderRow({
-          key: blurKey,
-          label: tr('region.prop.blur'),
-          value: blurVal,
-          defaultValue: blurFallback,
-          min: 0,
-          max: 64,
-          step: 1,
-          suffix: ' px',
-          nullable: true,
-          nullableFallbackKey: rid === 'card' ? '' : 'glassBlur',
-          fallbackValue: blurFallback,
-          comp: rid,
-          region: rid,
-          prop: 'blur',
-          resetAction: rid === 'sidebar' ? 'reset-key' : 'reset-region-prop',
-        })}
-        ${renderSliderRow({
-          key: `regions.${rid}.tone`,
-          label: tr('region.prop.tone'),
-          value: Number(entry.tone || 0),
-          defaultValue: 0,
-          min: -100,
-          max: 100,
-          step: 1,
-          suffix: '',
-          comp: rid,
-          region: rid,
-          prop: 'tone',
-          resetAction: 'reset-region-prop',
-        })}
-        ${renderTintPickerRow(rid, entry, surfaceFill)}
-        ${renderSliderRow({
-          key: `regions.${rid}.borderOpacity`,
-          label: tr('region.prop.borderOpacity'),
-          value: entry.borderOpacity ?? null,
-          defaultValue: 1,
-          min: 0,
-          max: 1,
-          step: 0.01,
-          scale: 100,
-          decimals: 0,
-          suffix: ' %',
-          nullable: true,
-          fallbackValue: surf?.borderFactor ?? 0.5,
-          comp: rid,
-          region: rid,
-          prop: 'borderOpacity',
-          resetAction: 'reset-region-prop',
-          hint: tr('region.prop.borderOpacityAuto'),
+        <div class="prism-ve-inspector-group-title">${esc(isZh ? '毛玻璃样式与光学属性' : 'Glass Style & Optics')}</div>
+        ${renderRegionOpticalControlsHtml(rid, entry, eff, tokens, isLight, {
+          surf,
+          sidebarLabels: false,
+          showBorderAutoHint: true,
         })}
       </div>
 
       <!-- Geometry & Borders: borderStyle, radius -->
       <div class="prism-ve-inspector-group">
         <div class="prism-ve-inspector-group-title">${esc(isZh ? '边框与圆角几何' : 'Border & Geometry')}</div>
-        ${renderBorderStyleRow(rid, entry.borderStyle)}
+        ${renderRegionBorderStyleRow(rid, entry.borderStyle)}
         ${renderSliderRow({
           key: `regions.${rid}.radius`,
           label: tr('region.prop.radius'),
@@ -15822,9 +16808,10 @@ function resolveRegionDataAndStyle(rid, eff, tokens, isLight) {
   if (surf?.fgCss) {
     parts.push(`color:${surf.fgCss}`);
   }
+  const glassStyleAttr = surf?.effStyle ? ` data-glass-style="${esc(surf.effStyle)}"` : '';
   const borderStyleAttr = entry.borderStyle ? ` data-border-style="${esc(entry.borderStyle)}"` : '';
   const styleAttr = parts.length > 0 ? ` style="${esc(parts.join(';'))}"` : '';
-  return `${borderStyleAttr}${styleAttr}`;
+  return `${glassStyleAttr}${borderStyleAttr}${styleAttr}`;
 }
 
 function renderStaticStageBackgroundHtml() {
@@ -15910,7 +16897,7 @@ function renderVisualCanvasStageHtml(options = {}) {
               <div class="mini-nav-row"><span>${esc(isZh ? '静帧节能检查' : 'Eco Checklist')}</span></div>
             </div>
 
-            <!-- Center Workspace (contains Card + Composer + Optional Welcome Logo) -->
+            <!-- Center Workspace (User Bubble, Assistant Bubble, Code Block, Controls Strip, Composer) -->
             <div class="mini-island mini-center${selCls('workspace')}" ${regAttrs('workspace')}${regTail('workspace')}>
               ${
                 showWelcome
@@ -15919,18 +16906,41 @@ function renderVisualCanvasStageHtml(options = {}) {
                   <span style="font-size:18px" aria-hidden="true">✦</span>
                   <span>${esc(eff.hideWelcomeLogo ? (isZh ? '已隐藏欢迎水印' : 'Welcome Logo Hidden') : 'Antigravity')}</span>
                 </div>
+                <div class="mini-starter-cards">
+                  <div class="mini-standalone-card${selCls('card')}" ${regAttrs('card')}${regTail('card')}>
+                    <span>${esc(isZh ? '快速启动卡片 · Card' : 'Starter Card')}</span>
+                  </div>
+                </div>
               `
                   : `
-                <div style="display:flex;flex-direction:column;gap:5px">
-                  <div class="mini-bubble${selCls('card')}" ${regAttrs('card')}${regTail('card')}>
-                    <span>${esc(isZh ? '消息气泡与卡片' : 'Message Bubble & Card')}</span>
+                <div class="mini-chat-flow">
+                  <div class="mini-user-bubble${selCls('userBubble')}" ${regAttrs('userBubble')}${regTail('userBubble')}>
+                    <span>${esc(isZh ? '用户气泡 · 自定义毛玻璃或零模糊' : 'User Bubble · Custom optics')}</span>
                   </div>
-                  <div class="mini-code-card${selCls('card')}" ${regAttrs('card')}${regTail('card')}>
-                    <span class="mini-code-kw">const</span> prism = <span class="mini-code-fn">glassSkin</span>({ blur: <span class="mini-code-str">'${eff.glassBlur}px'</span> });
+                  <div class="mini-assistant-bubble${selCls('assistantBubble')}" ${regAttrs('assistantBubble')}${regTail('assistantBubble')}>
+                    <div class="mini-turn-card">
+                      <span>${esc(isZh ? 'AI 回复 · 支持独立透光与立体景深' : 'Assistant Turn · Per-region glass')}</span>
+                    </div>
+                  </div>
+                  <div class="mini-code-card${selCls('codeBlock')}" ${regAttrs('codeBlock')}${regTail('codeBlock')}>
+                    <div class="mini-code-head">
+                      <span class="mini-code-lang">prism.ts</span>
+                      <div class="mini-ctl-seg${selCls('controls')}" ${regAttrs('controls')}${regTail('controls')}>
+                        <span>Raw</span>
+                        <span class="is-on">UI</span>
+                      </div>
+                    </div>
+                    <div><span class="mini-code-kw">const</span> prism = <span class="mini-code-fn">glassSkin</span>({ blur: <span class="mini-code-str">'${eff.glassBlur}px'</span> });</div>
                   </div>
                 </div>
               `
               }
+
+              <div class="mini-controls-strip${selCls('controls')}" ${regAttrs('controls')}${regTail('controls')}>
+                <span class="mini-ctl-btn">${esc(isZh ? '应用' : 'Apply')}</span>
+                <span class="mini-ctl-select">Model ▾</span>
+                <span class="mini-scroll-pill">↓</span>
+              </div>
 
               <div class="mini-composer${selCls('composer')}" ${regAttrs('composer')}${regTail('composer')}>
                 <div class="mini-composer-input">
@@ -15946,9 +16956,15 @@ function renderVisualCanvasStageHtml(options = {}) {
 
             <!-- Right Aux Pane -->
             <div class="mini-island mini-aux${selCls('rightPane')}" ${regAttrs('rightPane')}${regTail('rightPane')}>
-              <div class="mini-bar" style="width:62%;margin-bottom:2px"></div>
+              <div class="mini-aux-tabs${selCls('controls')}" ${regAttrs('controls')}${regTail('controls')}>
+                <span class="mini-aux-tab is-active">Prism</span>
+                <span class="mini-aux-tab">${esc(isZh ? '样式' : 'Style')}</span>
+              </div>
               <div class="mini-nav-row is-active"><span>Wallpaper Prism</span></div>
               <div class="mini-nav-row"><span>${esc(isZh ? '独立毛玻璃' : 'Independent Blur')}</span></div>
+              <div class="mini-standalone-card${selCls('card')}" ${regAttrs('card')}${regTail('card')}>
+                <span>${esc(isZh ? '独立卡片 · Card' : 'Standalone Card')}</span>
+              </div>
             </div>
 
             <!-- Floating Popover / Quick Prism Menu -->
@@ -16329,6 +17345,7 @@ const SCENE_PRESETS = __prism_mod_2.SCENE_PRESETS;
 const FACTORY_PRESETS = __prism_mod_2.FACTORY_PRESETS;
 const DEFAULT_CONFIG = __prism_mod_2.DEFAULT_CONFIG;
 const PER_WALLPAPER_OVERRIDE_KEYS = __prism_mod_2.PER_WALLPAPER_OVERRIDE_KEYS;
+const resolveRegionEffectiveStyle = __prism_mod_2.resolveRegionEffectiveStyle;
 const resolveSchemeTokens = __prism_mod_2.resolveSchemeTokens;
 const sanitizeConfig = __prism_mod_2.sanitizeConfig;
 const sanitizeFontFamily = __prism_mod_2.sanitizeFontFamily;
@@ -16391,6 +17408,7 @@ const renderMediaHealthAlertsHtml = __prism_mod_6.renderMediaHealthAlertsHtml;
 const syncPairedSlidersInDom = __prism_mod_6.syncPairedSlidersInDom;
 const syncNullableFollowersInDom = __prism_mod_6.syncNullableFollowersInDom;
 const syncRegionBadgesInDom = __prism_mod_6.syncRegionBadgesInDom;
+const syncRegionStyleControlsInDom = __prism_mod_6.syncRegionStyleControlsInDom;
 const computeVirtualSlice = __prism_mod_7.computeVirtualSlice;
 const renderLibraryGridHtml = __prism_mod_7.renderLibraryGridHtml;
 const renderLibraryTab = __prism_mod_7.renderLibraryTab;
@@ -17454,13 +18472,29 @@ function bootPrismStudioApp() {
                 </div>
 
                 <div class="mini-island mini-center" data-jump-region="workspace" data-action="jump-to-region" data-region="workspace" title="${esc(tr('region.workspace'))}">
-                  <div style="display:flex;flex-direction:column;gap:3px">
-                    <div class="mini-bubble" data-jump-region="card" data-action="jump-to-region" data-region="card" title="${esc(tr('region.card'))}">
+                  <div class="mini-chat-flow">
+                    <div class="mini-user-bubble" data-jump-region="userBubble" data-action="jump-to-region" data-region="userBubble" title="${esc(tr('region.userBubble'))}">
                       <span class="mini-bubble-line"></span>
                     </div>
-                    <div class="mini-code-card" data-jump-region="card" data-action="jump-to-region" data-region="card">
-                      <span class="mini-code-kw">const</span> prism = <span class="mini-code-fn">glassSkin</span>({ mode: <span class="mini-code-str">'islands'</span> });
+                    <div class="mini-assistant-bubble" data-jump-region="assistantBubble" data-action="jump-to-region" data-region="assistantBubble" title="${esc(tr('region.assistantBubble'))}">
+                      <div class="mini-turn-card">
+                        <span class="mini-bubble-line"></span>
+                      </div>
                     </div>
+                    <div class="mini-code-card" data-jump-region="codeBlock" data-action="jump-to-region" data-region="codeBlock" title="${esc(tr('region.codeBlock'))}">
+                      <div class="mini-code-head">
+                        <span class="mini-code-lang">ts</span>
+                        <div class="mini-ctl-seg" data-jump-region="controls" data-action="jump-to-region" data-region="controls" title="${esc(tr('region.controls'))}">
+                          <span>Raw</span><span class="is-on">UI</span>
+                        </div>
+                      </div>
+                      <div><span class="mini-code-kw">const</span> prism = <span class="mini-code-fn">glassSkin</span>({ mode: <span class="mini-code-str">'islands'</span> });</div>
+                    </div>
+                  </div>
+                  <div class="mini-controls-strip" data-jump-region="controls" data-action="jump-to-region" data-region="controls" title="${esc(tr('region.controls'))}">
+                    <span class="mini-ctl-btn">Apply</span>
+                    <span class="mini-ctl-select">Model</span>
+                    <span class="mini-scroll-pill">↓</span>
                   </div>
                   <div class="mini-composer" data-jump-region="composer" data-action="jump-to-region" data-region="composer" title="${esc(tr('region.composer'))}">
                     <div class="mini-composer-input">
@@ -17475,9 +18509,15 @@ function bootPrismStudioApp() {
                 </div>
 
                 <div class="mini-island mini-aux" data-jump-region="rightPane" data-action="jump-to-region" data-region="rightPane" title="${esc(tr('region.rightPane'))}">
-                  <div class="mini-bar" style="width:58%;margin-bottom:2px"></div>
+                  <div class="mini-aux-tabs" data-jump-region="controls" data-action="jump-to-region" data-region="controls" title="${esc(tr('region.controls'))}">
+                    <span class="mini-aux-tab is-active">Prism</span>
+                    <span class="mini-aux-tab">UI</span>
+                  </div>
                   <div class="mini-nav-row is-active"><span class="mini-bar" style="width:76%"></span></div>
                   <div class="mini-nav-row"><span class="mini-bar" style="width:64%"></span></div>
+                  <div class="mini-standalone-card" data-jump-region="card" data-action="jump-to-region" data-region="card" title="${esc(tr('region.card'))}">
+                    <span class="mini-bar" style="width:68%"></span>
+                  </div>
                 </div>
               </div>
 
@@ -18300,7 +19340,13 @@ function bootPrismStudioApp() {
       return { sidebarOpacity: rawVal, regions: { sidebar: { opacity: rawVal } } };
     }
     if (sliderKey === 'sidebarBlur') {
-      return { sidebarBlur: rawVal, regions: { sidebar: { blur: rawVal } } };
+      const eff = getEffectiveConfig();
+      const curStyle = resolveRegionEffectiveStyle('sidebar', eff.regions?.sidebar, eff);
+      const regPatch = { blur: rawVal };
+      if (rawVal > 0 && (curStyle === 'none' || curStyle === 'tinted' || curStyle === 'solid')) {
+        regPatch.style = 'frosted';
+      }
+      return { sidebarBlur: rawVal, regions: { sidebar: regPatch } };
     }
     if (sliderKey === 'sidebarFontSize') {
       return { sidebarFontSize: rawVal, regions: { sidebar: { fontSize: rawVal } } };
@@ -18308,10 +19354,22 @@ function bootPrismStudioApp() {
     if (sliderKey.startsWith('regions.')) {
       const [, rid, prop] = sliderKey.split('.');
       if (rid && prop && REGION_IDS.includes(rid)) {
-        const val = prop === 'tone' || prop === 'blur' || prop === 'radius' || prop === 'fontSize'
-          ? rawVal === null ? null : Math.round(rawVal)
-          : rawVal;
-        const patch = { preset: 'custom', regions: { [rid]: { [prop]: val } } };
+        // F-05: Keep elevation float precision (0..2); round integer properties only.
+        const val =
+          prop === 'tone' || prop === 'blur' || prop === 'radius' || prop === 'fontSize' || prop === 'saturation'
+            ? rawVal === null
+              ? null
+              : Math.round(rawVal)
+            : rawVal;
+        const regPatch = { [prop]: val };
+        if (prop === 'blur' && typeof val === 'number' && val > 0) {
+          const eff = getEffectiveConfig();
+          const curStyle = resolveRegionEffectiveStyle(rid, eff.regions?.[rid], eff);
+          if (curStyle === 'none' || curStyle === 'tinted' || curStyle === 'solid') {
+            regPatch.style = 'frosted';
+          }
+        }
+        const patch = { preset: 'custom', regions: { [rid]: regPatch } };
         const isPinned = hasPerWallpaperPin(getActiveId());
         if (rid === 'sidebar' && prop === 'radius') {
           if (!isPinned) patch.leftSidebarRadius = val === null ? 'auto' : String(val);
@@ -18467,6 +19525,13 @@ function bootPrismStudioApp() {
         syncPairedSlidersInDom(sliderKey, rawVal, tEl);
         const patch = buildPatchForSliderKey(sliderKey, rawVal);
         queueConfigPatch(patch, false, sliderKey !== 'liveBootDelay');
+        if (patch?.regions) {
+          for (const [changedRid, changedEntry] of Object.entries(patch.regions)) {
+            if (changedEntry && typeof changedEntry === 'object' && 'style' in changedEntry) {
+              syncRegionStyleControlsInDom(changedRid);
+            }
+          }
+        }
         syncRegionBadgesInDom();
         if (
           sliderKey === 'sidebarOpacity' ||
@@ -18972,10 +20037,19 @@ function bootPrismStudioApp() {
           let parsedVal = val;
           if (prop === 'glassEnabled') {
             parsedVal = val === 'true' ? true : val === 'false' ? false : null;
-          } else if (prop === 'borderStyle') {
+          } else if (prop === 'borderStyle' || prop === 'style') {
             parsedVal = val === 'auto' || !val ? null : val;
           }
-          queueConfigPatch({ preset: 'custom', regions: { [rid]: { [prop]: parsedVal } } }, true, true);
+          const regPatch = { [prop]: parsedVal };
+          const patch = { preset: 'custom', regions: { [rid]: regPatch } };
+          if (prop === 'style' && (parsedVal === 'frosted' || parsedVal === 'crystal')) {
+            const curEntry = getEffectiveConfig().regions?.[rid];
+            if (curEntry && curEntry.blur === 0) {
+              regPatch.blur = null;
+              if (rid === 'sidebar') patch.sidebarBlur = null;
+            }
+          }
+          queueConfigPatch(patch, true, true);
           renderActiveSurface();
           break;
         }
@@ -19082,6 +20156,8 @@ function bootPrismStudioApp() {
             if (!isPinned) {
               patch[key] = val;
             }
+          } else if (key === 'codeReadabilityMode') {
+            patch = { [key]: numCandidate, regions: { codeBlock: { style: null } } };
           } else {
             patch =
               key === 'layoutMode' || key === 'colorScheme'

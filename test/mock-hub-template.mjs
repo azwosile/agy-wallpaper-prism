@@ -52,9 +52,15 @@ export function buildMockAntigravityHubHtml({
       --card-border: rgba(255, 255, 255, 0.07);
       --color-card-border: rgba(255, 255, 255, 0.09);
       --card-edge: rgba(255, 255, 255, 0.08);
-      --glass: rgba(19, 19, 23, 0.78);
+      --glass: #131317;
       --glass-border: rgba(255, 255, 255, 0.14);
       --glass-highlight: rgba(255, 255, 255, 0.08);
+      --onyx-frame: #111114;
+      --onyx-well: #111118;
+      --onyx-raised: #191920;
+      --onyx-selected: #1F1F24;
+      --onyx-key: #24252A;
+      --muted: rgba(255, 255, 255, 0.043);
       --sidebar: #111114;
       --sidebar-muted: rgba(255, 255, 255, 0.04);
       --sidebar-secondary: rgba(255, 255, 255, 0.07);
@@ -77,9 +83,15 @@ export function buildMockAntigravityHubHtml({
       --card-border: rgba(15, 23, 42, 0.09);
       --color-card-border: rgba(15, 23, 42, 0.11);
       --card-edge: rgba(15, 23, 42, 0.09);
-      --glass: rgba(255, 255, 255, 0.82);
+      --glass: #ffffff;
       --glass-border: rgba(15, 23, 42, 0.12);
       --glass-highlight: rgba(255, 255, 255, 0.65);
+      --onyx-frame: #eeeef1;
+      --onyx-well: #e9eaee;
+      --onyx-raised: #f4f4f6;
+      --onyx-selected: #e5e7eb;
+      --onyx-key: #e2e8f0;
+      --muted: rgba(15, 23, 42, 0.045);
       --sidebar: #eeeef1;
       --sidebar-muted: rgba(15, 23, 42, 0.04);
       --sidebar-secondary: rgba(15, 23, 42, 0.07);
@@ -511,6 +523,152 @@ export function buildMockAntigravityHubHtml({
       font-size: 11.5px;
     }
 
+    /* Antigravity 2.35+ Chat Bubbles, Code Blocks, Controls & Surface-Glass Cascade (F-03 / F-04) */
+    .agy-user-bubble-frame {
+      display: flex;
+      justify-content: flex-end;
+      width: 100%;
+    }
+    body[data-agy-theme] .agy-user-bubble {
+      max-width: 82%;
+      padding: 10px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--card-border);
+      background-color: var(--glass);
+      color: var(--foreground);
+      line-height: 1.5;
+    }
+    body[data-agy-theme] [data-testid="agent-response"] {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 94%;
+    }
+    body[data-agy-theme] [data-testid="planner-response-text"] {
+      padding: 8px 12px;
+      border-radius: 12px;
+      line-height: 1.55;
+    }
+    body[data-agy-theme] [data-testid="artifact-card"].artifact-card,
+    body[data-agy-theme] [data-testid="changed-files-card-header"] {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      background-color: var(--card);
+    }
+    body[data-agy-theme] pre > div.rounded-xl.bg-muted.border {
+      padding: 8px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      background-color: var(--muted);
+      overflow-x: auto;
+      font-family: 'Cascadia Code', Consolas, monospace;
+      font-size: 12px;
+    }
+    body[data-agy-theme] :is(.agy-button-xs, .agy-button-sm, .agy-button-md, .agy-button-lg):not([class*="rounded-none"]) {
+      border-radius: 9999px;
+      border: 1px solid var(--card-border);
+      background-color: var(--onyx-raised);
+      color: var(--foreground);
+      padding: 4px 10px;
+      font-size: 11.5px;
+      cursor: pointer;
+    }
+    body[data-agy-theme] input.agy-field {
+      border-radius: 9999px !important;
+      border: 1px solid var(--card-border);
+      background-color: var(--onyx-well);
+      color: var(--foreground);
+      padding: 4px 10px;
+      font-size: 11.5px;
+    }
+    body[data-agy-theme] .agy-aux-tab {
+      border-radius: 9999px;
+      border: 1px solid var(--card-border);
+      background-color: var(--onyx-key);
+      color: var(--foreground);
+      padding: 3px 10px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    body[data-agy-theme].dark .agy-sidebar-row[data-selected="true"] {
+      background-color: var(--onyx-selected, #1F1F24);
+    }
+    body[data-agy-theme].dark [data-slot="toggle-group"] > button[data-pressed] {
+      background-color: var(--onyx-key, #24252A);
+      color: var(--foreground);
+      border-radius: 9999px;
+      padding: 2px 8px;
+      font-size: 11px;
+    }
+    [data-slot="toggle-group"] {
+      display: inline-flex;
+      gap: 4px;
+      padding: 2px;
+      border-radius: 9999px;
+      border: 1px solid var(--card-border);
+    }
+    [data-slot="toggle-group"] > button {
+      border: 1px solid var(--card-border);
+      background: transparent;
+      color: var(--foreground);
+      border-radius: 9999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    [data-testid="worked-for-collapsible"] {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      align-self: flex-start;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--card-border);
+      background-color: var(--card);
+      color: var(--foreground);
+      font-size: 11.5px;
+      cursor: pointer;
+    }
+    .agy-scroll-bottom {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--card-border);
+      background-color: var(--card);
+      color: var(--foreground);
+      font-size: 11px;
+      cursor: pointer;
+    }
+    [data-testid="overlay-scrollbar-thumb"] {
+      width: 6px;
+      height: 26px;
+      border-radius: 999px;
+      background-color: rgba(255, 255, 255, 0.24);
+    }
+    body[data-agy-theme] .agy-takeover-frame {
+      position: relative;
+      padding: 4px;
+      border-radius: 16px;
+    }
+    body[data-agy-theme] .agy-takeover-card {
+      padding: 8px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--card-border);
+      background-color: var(--glass);
+    }
+    .agy-fastpick.surface-glass {
+      background-color: var(--glass);
+      backdrop-filter: blur(40px) saturate(1.8);
+      -webkit-backdrop-filter: blur(40px) saturate(1.8);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 8px 12px;
+    }
+
     .composer-dock {
       padding: 8px 28px 16px;
       flex-shrink: 0;
@@ -644,7 +802,7 @@ export function buildMockAntigravityHubHtml({
     }
   </style>
 </head>
-<body class="${initialTheme}"${bodyHoleAttr}>
+<body class="${initialTheme}" data-agy-theme=""${bodyHoleAttr}>
   <div id="root"${holeAncAttr}>
     <div id="v234-root-theme-wrap" class="h-full w-full ${initialTheme}"${holeAncAttr}>
       <div${holeAncAttr}>
@@ -768,6 +926,49 @@ export function buildMockAntigravityHubHtml({
                         </div>
                       </div>
                     </div>
+
+                    <div class="agy-user-bubble-frame">
+                      <div id="v235-user-bubble" data-testid="user-message-bubble" class="agy-user-bubble bg-card">
+                        Antigravity <code>2.35+</code> native user bubble with <code>--glass</code> specificity and OQ-1A zero-blur default.
+                      </div>
+                    </div>
+
+                    <div id="v235-agent-response" data-testid="agent-response">
+                      <button id="v235-worked-for" type="button" data-testid="worked-for-collapsible" aria-expanded="false">Thought for 4s</button>
+                      <div data-step-rows="true">
+                        <div data-step-index="0">
+                          <div id="v235-step-row-btn" role="button" aria-expanded="false" style="padding:2px 6px">Inspected live CSS rules</div>
+                        </div>
+                      </div>
+                      <div id="v235-planner-response" data-testid="planner-response-text">
+                        <div data-markdown-root="true">
+                          Verified <code id="v235-inline-code">surfaceTints</code> parity and <pre id="v235-nested-code-pre" class="bg-card" style="margin:6px 0 0;padding:8px;border:1px solid var(--card-border);border-radius:12px;background-color:var(--card)"><div id="v235-nested-code-box" class="rounded-xl bg-muted border"><div style="margin-bottom:6px"><div id="v235-code-toggle-group" role="group" data-slot="toggle-group" data-testid="code-block-preview-toggle"><button id="v235-code-preview-btn" type="button" data-testid="code-block-preview-button" data-pressed="true">Preview</button><button id="v235-code-raw-btn" type="button" data-testid="code-block-raw-button">Raw</button></div></div><pre style="margin:0"><code><span style="color:#ff8800">const</span> prism = <span style="color:#82aaff">240</span>;</code></pre></div></pre>
+                        </div>
+                      </div>
+                      <div id="v235-artifact-card" data-testid="artifact-card" class="artifact-card">
+                        <span>Artifact Readiness Report</span>
+                        <button id="v235-proceed-btn" type="button" class="proceed-button agy-button-sm">Proceed</button>
+                      </div>
+                      <div data-testid="changed-files-card">
+                        <div id="v235-changed-files-header" data-testid="changed-files-card-header" class="files-changed-header">2 files changed</div>
+                      </div>
+                    </div>
+
+                    <pre id="v235-standalone-code-pre" class="bg-card" style="margin:0;padding:8px;border:1px solid var(--card-border);border-radius:12px;background-color:var(--card)"><div id="v235-standalone-code-box" class="rounded-xl bg-muted border"><pre style="margin:0"><code><span style="color:#ff8800">const</span> prismV24 = <span style="color:#c3e88d">'standalone'</span>;</code></pre></div></pre>
+
+                    <div id="v235-controls-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0">
+                      <button id="v235-btn-sm" type="button" class="agy-button-sm agy-button-secondary">Compact Control</button>
+                      <input id="v235-input-field" class="agy-field" type="text" value="prism-field" aria-label="Control field" />
+                      <button id="v235-scroll-bottom-btn" type="button" class="agy-scroll-bottom">Jump to latest</button>
+                    </div>
+
+                    <div class="agy-takeover-frame">
+                      <div id="v235-takeover-card" class="agy-takeover-card">Takeover Verification Card</div>
+                    </div>
+
+                    <div id="v235-fastpick-probe" class="agy-fastpick surface-glass" style="display:flex;align-items:center;gap:8px">
+                      <span>Fastpick Glass Surface</span>
+                    </div>
                   </section>
 
                   <div class="composer-dock">
@@ -814,6 +1015,12 @@ export function buildMockAntigravityHubHtml({
                     <div style="opacity:0.78">Stage: z-index -1 · inert · fail-open</div>
                     <div style="opacity:0.78">Browser Cutout: GPU clip-path (12px arc)</div>
                     <div style="opacity:0.78">Code &amp; Modal Floor: WCAG Locked</div>
+                  </div>
+                  <div id="v235-aux-tab-strip" data-side-panel-strip="true" style="display:flex;align-items:center;gap:6px;padding:4px 6px">
+                    <button id="v235-aux-tab" type="button" class="agy-aux-tab active">Inspector</button>
+                    <div data-testid="overlay-scrollbar" style="margin-left:auto;display:flex;align-items:center;padding:2px">
+                      <div id="v235-scrollbar-thumb" data-testid="overlay-scrollbar-thumb"></div>
+                    </div>
                   </div>
                 </div>
               </div>
